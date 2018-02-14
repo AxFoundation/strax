@@ -1,0 +1,27 @@
+# Jupyter
+.ipynb_checkpoints
+
+# Python cache
+*.py[cod]
+__pycache__
+
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+
+# Sphinx
+docs/_build
+
+# Pycharm
+.idea
