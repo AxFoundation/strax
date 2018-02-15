@@ -3,7 +3,7 @@ import shutil
 
 import numpy as np
 
-from .data import save_records
+from .data import save
 
 
 def reader_split(records, output_dir, n_readers=8):
@@ -22,4 +22,4 @@ def reader_split(records, output_dir, n_readers=8):
         reader_data = records[
             (records['channel'] >= first_channel) &
             (records['channel'] < first_channel + channels_per_reader)]
-        save_records(f'{output_dir}/reader_{reader_i}.bin', reader_data)
+        save(f'{output_dir}/reader_{reader_i}.bin', reader_data, compressor='none')

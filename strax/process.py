@@ -3,25 +3,25 @@ import glob
 import numpy as np
 import numba
 
-from .data import load_records, save_records_compressed
+from .data import save, load
 
 
 def process(input_dir, output_filename):
     records = load_from_readers(input_dir)
     _ = baseline(records)
-    save_records_compressed(output_filename, records)
+    save(output_filename, records)
 
 
 def load_from_readers(input_dir):
     """Return concatenated & sorted records from multiple reader data files"""
-    records = [load_records(f)
+    records = [load(f)
                for f in glob.glob(f'{input_dir}/reader_?.bin')]
     records = np.concatenate(records)
     records = sort_by_time(records)
     return records
 
 
-# Considerably faster than np.sort(records, order='time'). Try it.
+# ~7x faster than np.sort(records, order='time'). Try it.
 @numba.jit(nopython=True)
 def sort_by_time(records):
     time = records['time'].copy()

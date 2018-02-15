@@ -1,1 +1,2 @@
-from . import data, fakedaq, frompax, process
+from .data import *
+from . import fakedaq, frompax, process
