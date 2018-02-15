@@ -1,4 +1,8 @@
-from setuptools import setup
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
+
 
 setup(name='strax',
       version='0.0.1',
@@ -7,5 +11,5 @@ setup(name='strax',
       author_email='j.aalbers@uva.nl',
       url='https://github.com/jelleaalbers/strax',
       py_modules=['multihist'],
-      install_requires='numpy numba zstd'.split(),
+      requires=open('requirements.txt').read().splitlines(),
       packages=['strax'])

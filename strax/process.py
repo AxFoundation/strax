@@ -30,16 +30,11 @@ def sort_by_time(records):
 
 
 @numba.jit(nopython=True)
-def baseline(records, n_before=48, n_after=30):
-    """Determine baseline from n_after samples and subtract it from pulses.
-    To be more precise:
-      - Determine mean M of the first n_before samples in pulse
-      - waveform = int(M) - waveform
-      - Zero n_before and n_after samples at start and end of pulse, resp.
-      - Zero any junk padding data
-      - Returns array of M (float32 array) of baseline corr. to each fragment
+def baseline(records, baseline_samples=40):
+    """Subtract pulses from int(baseline), store baseline in baseline field
+    :param baseline_samples: number of samples at start of pulse to average
+    Assumes records are sorted in time (or at least by channel, then time)
     """
-    # TODO: records.data.shape[1] gives a numba error (file issue?)
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -47,34 +42,20 @@ def baseline(records, n_before=48, n_after=30):
     # Array for looking up last baseline seen in channel
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
-    last_bl_in_channel = np.zeros(records['channel'].max() + 1,
-                                  dtype=np.int16)
-
-    all_baselines = np.zeros(len(records), dtype=np.float32)
+    last_bl_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
 
     for d_i, d in enumerate(records):
 
+        # Compute the baseline if we're the first record of the pulse,
+        # otherwise take the last baseline we've seen in the channel
         if d.record_i == 0:
-            # This is the first record of the pulse: determine baseline
-            all_baselines[d_i] = bl = last_bl_in_channel[d.channel] = \
-                d.data[:n_before].mean()
-
+            bl = last_bl_in[d.channel] = d.data[:baseline_samples].mean()
         else:
-            # Secondary record: use baseline from first record
-            all_baselines[d_i] = bl = last_bl_in_channel[d.channel]
+            bl = last_bl_in[d.channel]
 
-        # Do the baseline subtraction
-        d.data[:] = int(bl) - d.data[:]
-
-        # Zero leading baseline
-        if d.record_i == 0:
-            d.data[:n_before] = 0
-
-        # Zero trailing baseline & junk samples
-        in_pulse_clear_from = d.total_length - n_after
-        in_record_clear_from = max(0, in_pulse_clear_from
-                                      - d.record_i * samples_per_record)
-        if in_record_clear_from < samples_per_record:
-            d.data[in_record_clear_from:] = 0
-
-    return all_baselines
+        # Subtract baseline from all data samples in the record
+        # (any additional zeros are already zero)
+        last = min(samples_per_record,
+                   d.total_length - d.record_i * samples_per_record)
+        d.data[:last] = int(bl) - d.data[:last]
+        d.baseline = bl
