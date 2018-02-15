@@ -33,13 +33,13 @@ def sort_by_time(records):
 def baseline(records, n_before=48, n_after=30):
     """Determine baseline from n_after samples and subtract it from pulses.
     To be more precise:
-      - Determine mean M of the first n_before samples
+      - Determine mean M of the first n_before samples in pulse
       - waveform = int(M) - waveform
       - Zero n_before and n_after samples at start and end of pulse, resp.
-      - Zero any junk padding data in fragments.
-      - Returns array of M (float32 array) of pulse corr. to each fragment
+      - Zero any junk padding data
+      - Returns array of M (float32 array) of baseline corr. to each fragment
     """
-    # records.data.shape[1] gives a numba error (file issue?)
+    # TODO: records.data.shape[1] gives a numba error (file issue?)
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
