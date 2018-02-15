@@ -2,14 +2,16 @@
 These slurp / dump very quickly  (I don't really understand why
 they are so much faster than f.write(), np.save, etc)
 """
+import os
 import bz2
 import json
-import mmap
 
 import blosc
 import zstd
 import numpy as np
 import numba
+
+__all__ = 'record_dtype records_needed load save delete load_metadata save_metadata'.split()
 
 # Testing on 300 MB data, after baseline subtraction
 # blosc 1000 MB/sec, 3x reduction
@@ -18,6 +20,7 @@ import numba
 # Other algorithms (zlib, snappy, lzma) are all worse than this
 # (worse = takes longer AND reduces less)
 COMPRESSORS = dict(bz2=bz2, blosc=blosc, zstd=zstd)
+COMPRESS_OPTIONS = dict(blosc=dict(shuffle=False))
 
 
 def record_dtype(samples_per_record):
@@ -43,62 +46,58 @@ def records_needed(pulse_length, samples_per_record):
     return 1 + (pulse_length - 1) // samples_per_record
 
 
-def save_metadata(filename, **metadata):
-    with open(filename + '.json', mode='w') as f:
-        f.write(json.dumps(dict(**metadata)))
+def load(filename, with_meta=False):
+    metadata = load_metadata(filename)
 
+    compressor = metadata['compressor']
+    if compressor == 'none':
+        data = np.load(filename + '.npy')
+    else:
+        with open(f'{filename}.{compressor}', mode='rb') as f:
+            data = COMPRESSORS[compressor].decompress(f.read())
+        data = np.frombuffer(data, dtype=eval(metadata['dtype']))
 
-def read_metadata(filename):
-    with open(filename + '.json', mode='r') as f:
-        metadata = json.loads(f.read())
-    return metadata
-
-
-def load_records(filename, with_meta=False):
-    metadata = read_metadata(filename)
-    # Read array from memory map file
-    fp = np.memmap(filename, mode='r+', dtype=eval(metadata['dtype']))
-    data = np.array(fp)
-    del fp   # There is no close. Just being explicit.
     if with_meta:
         return data, metadata
     return data
 
 
-def save_records(filename, records, **metadata):
+def _ext(compressor):
+    if compressor == 'none':
+        return 'npy'
+    return compressor
+
+
+def delete(filename):
+    metadata = load_metadata(filename)
+    comp = metadata['compressor']
+    os.remove(filename + '.' + ('npy' if comp == 'none' else comp))
+    os.remove(filename + '.json')
+
+
+def save(filename, records, compressor='zstd', **metadata):
     assert isinstance(records, np.ndarray), "Please pass a numpy array"
     save_metadata(filename,
+                  compressor=compressor,
                   dtype=records.dtype.descr.__repr__(),
                   **metadata)
-    # Save array to memmap.
-    fp = np.memmap(filename, mode='w+',
-                   dtype=records.dtype, shape=records.shape)
-    fp[:] = records[:]
-    del fp   # There is no close. Just being explicit.
-    return None
+
+    if compressor == 'none':
+        np.save(filename + '.npy', records)
+    else:
+        d_comp = COMPRESSORS[compressor].compress(
+            records,
+            **COMPRESS_OPTIONS.get(compressor, dict()))
+        with open(f'{filename}.{compressor}', 'wb') as f:
+            f.write(d_comp)
 
 
-def save_records_compressed(filename, data, compressor='zstd', **metadata):
-    save_metadata(filename,
-                  compressor=compressor,
-                  **metadata)
-
-    # With shuffle=True, records w zeroed baselines take quite a lot of space
-    # (compared to using the baseline instead of 0 as the filler value)
-    # Perhaps related to twos-complement representation of signed integers?
-    # shuffle=False + 0 for baseline gives the smallest file.
-    shuffle_kwarg = dict(shuffle=False) if compressor == 'blosc' else dict()
-
-    d_comp = COMPRESSORS[compressor].compress(data, **shuffle_kwarg)
-
-    # Dump it to a memory-map file. Why is this so fast...
-    with open(filename, "w+b") as f:
-        mm = mmap.mmap(f.fileno(), len(d_comp))
-        mm[:] = d_comp
-        mm.close()
+def save_metadata(filename, **metadata):
+    with open(filename + '.json', mode='w') as f:
+        f.write(json.dumps(dict(**metadata)))
 
 
-def load_records_compressed(filename):
-    metadata = read_metadata(filename)
-    compressor = COMPRESSORS[metadata['compressor']]
-    raise NotImplementedError
+def load_metadata(filename):
+    with open(filename + '.json', mode='r') as f:
+        metadata = json.loads(f.read())
+    return metadata
