@@ -1,3 +1,4 @@
+from functools import partial
 import os
 import bz2
 import json
@@ -10,8 +11,17 @@ import numba
 __all__ = ('record_dtype records_needed load save delete '
            'load_metadata save_metadata').split()
 
-COMPRESSORS = dict(bz2=bz2, blosc=blosc, zstd=zstd)
-COMPRESS_OPTIONS = dict(blosc=dict(shuffle=False))
+COMPRESSORS = dict(
+    bz2=dict(
+        compress=bz2.compress, 
+        decompress=bz2.decompress),
+    zstd=dict(
+        compress=zstd.compress, 
+        decompress=zstd.decompress),
+    blosc=dict(
+        compress=partial(blosc.compress, shuffle=False), 
+        decompress=blosc.decompress),
+)
 
 
 def record_dtype(samples_per_record):
@@ -52,9 +62,8 @@ def load(filename, with_meta=False):
         data = np.load(filename + '.npy')
     else:
         with open(_fn(filename, compressor), mode='rb') as f:
-            data = COMPRESSORS[compressor].decompress(f.read())
-        # If I do frombuffer here, I get a readonly thing on windows
-        # Check on linux? Big performance difference?
+            data = COMPRESSORS[compressor]['decompress'](f.read())
+        # frombuffer is much faster, but results in some readonly fields
         data = np.fromstring(data, dtype=eval(metadata['dtype']))
 
     if with_meta:
@@ -78,9 +87,7 @@ def save(filename, records, compressor='zstd', **metadata):
     if compressor == 'none':
         np.save(filename + '.npy', records)
     else:
-        d_comp = COMPRESSORS[compressor].compress(
-            records,
-            **COMPRESS_OPTIONS.get(compressor, dict()))
+        d_comp = COMPRESSORS[compressor]['compress'](records)
         with open(_fn(filename, compressor), 'wb') as f:
             f.write(d_comp)
 
@@ -100,4 +107,4 @@ def _fn(filename, compressor):
     """Get filename (with extension) of data file"""
     if compressor == 'none':
         return filename + '.npy'
-    return filename + '.' + compressor
+    return filename + '.' + COMPRESSORS[compressor].get('extension', compressor)
