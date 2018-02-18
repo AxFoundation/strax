@@ -48,50 +48,13 @@ def growing_result(dtype=np.int, chunk_size=10000):
     return _growing_result
 
 
-# These sorting functions are considerably (5-10x) faster
-# than np.sort with the order argument, as np.sort also looks at all fields
-# in the array. Probably we should make some kind of factory for these instead
-# of hardcoding channel and time.
-
-# I chose to let these operate in-place as almost all strax functions
+# (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
+# TODO: maybe this should be a factory?
+# I chose to let this operate in-place as almost all strax functions
 # are in-place. However, unless numba/llvm does some magic optimization,
-# they do copy the data internally.
-
+# this does copy the data internally.
 @numba.jit(nopython=True)
 def sort_by_time(x):
     time = x['time'].copy()
     sort_i = np.argsort(time)
     x[:] = x[sort_i]
-
-
-@numba.jit(nopython=True)
-def sort_by_channel_then_time(x):
-    result = np.zeros_like(x)
-
-    # Determine indexes that would sort by channel
-    channel = x['channel'].copy()
-    channel_sort_order = np.argsort(channel)
-
-    # Get channel and time, both sorted by channel
-    channel = channel[channel_sort_order]
-    times_sorted_by_channel = x['time'].copy()[channel_sort_order]
-
-    start_i = 0
-    n_in_ch = 1
-    for i in range(1, len(channel)):
-        if channel[i] != channel[i - 1]:
-            # New range of channels
-            end_i = start_i + n_in_ch
-
-            result[start_i:end_i] = x[channel_sort_order[start_i:end_i][
-                np.argsort(times_sorted_by_channel[start_i:end_i])]]
-
-            start_i = i
-            n_in_ch = 1
-        else:
-            n_in_ch += 1
-
-    result[start_i:] = x[channel_sort_order[start_i:][
-        np.argsort(times_sorted_by_channel[start_i:])]]
-
-    x[:] = result
