@@ -23,7 +23,8 @@ def reader_split(records, output_dir, n_readers=8):
         reader_data = records[
             (records['channel'] >= first_channel) &
             (records['channel'] < first_channel + channels_per_reader)]
-        strax.save(f'{output_dir}/reader_{reader_i}.bin', reader_data, compressor='none')
+        strax.save(f'{output_dir}/reader_{reader_i}.bin',
+                   reader_data, compressor='none')
 
 
 def load_from_readers(input_dir):

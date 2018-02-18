@@ -13,13 +13,13 @@ __all__ = ('record_dtype hit_dtype records_needed load save delete '
 
 COMPRESSORS = dict(
     bz2=dict(
-        compress=bz2.compress, 
+        compress=bz2.compress,
         decompress=bz2.decompress),
     zstd=dict(
-        compress=zstd.compress, 
+        compress=zstd.compress,
         decompress=zstd.decompress),
     blosc=dict(
-        compress=partial(blosc.compress, shuffle=False), 
+        compress=partial(blosc.compress, shuffle=False),
         decompress=blosc.decompress),
 )
 

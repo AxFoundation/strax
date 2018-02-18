@@ -8,6 +8,7 @@ from .data import hit_dtype
 
 __all__ = 'sort_by_time baseline coincidence_level find_hits'.split()
 
+
 # ~7x faster than np.sort(records, order='time'). Try it.
 @numba.jit(nopython=True)
 def sort_by_time(records):

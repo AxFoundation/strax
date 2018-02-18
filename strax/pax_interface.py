@@ -12,8 +12,7 @@ from .data import records_needed, record_dtype
 def pax_to_records(input_filename, samples_per_record=110):
     """Return pulse records array from pax zip input_filename"""
     from pax import core   # Pax is not a dependency
-    mypax = core.Processor('XENON1T',
-        config_dict=dict(
+    mypax = core.Processor('XENON1T', config_dict=dict(
             pax=dict(
                 look_for_config_in_runs_db=False,
                 plugin_group_names=['input'],
@@ -24,8 +23,7 @@ def pax_to_records(input_filename, samples_per_record=110):
                 s1_light_yield_map='placeholder_map.json',
                 s2_light_yield_map='placeholder_map.json',
                 s1_patterns_file=None,
-                s2_patterns_file=None))
-    )
+                s2_patterns_file=None)))
 
     def get_events():
         for e in mypax.get_events():

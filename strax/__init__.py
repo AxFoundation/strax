@@ -1,6 +1,5 @@
-from . import daq_interface, pax_interface, pulse_processing, utils
+from . import daq_interface, pax_interface, pulse_processing, utils   # noqa
 
-# Put most useful functions at top level
-from .data import *
-from .data_reduction import *
-from .pulse_processing import *
+from .data import *                 # noqa
+from .data_reduction import *       # noqa
+from .pulse_processing import *     # noqa

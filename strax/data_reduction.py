@@ -30,11 +30,11 @@ def cut_baseline(records, n_before=48, n_after=30):
         if d.record_i == 0:
             d.data[:n_before] = 0
 
-        in_pulse_clear_from = d.total_length - n_after
-        in_record_clear_from = max(0, in_pulse_clear_from
-                                      - d.record_i * samples_per_record)
-        if in_record_clear_from < samples_per_record:
-            d.data[in_record_clear_from:] = 0
+        clear_from = d.total_length - n_after
+        clear_from -= d.record_i * samples_per_record
+        clear_from = max(0, clear_from)
+        if clear_from < samples_per_record:
+            d.data[clear_from:] = 0
 
     records.reduction_level[:] = ReductionLevel.BASELINE_CUT
 
