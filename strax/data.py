@@ -8,7 +8,8 @@ import zstd
 import numpy as np
 import numba
 
-__all__ = ('record_dtype hit_dtype records_needed load save delete '
+__all__ = ('record_dtype hit_dtype peak_dtype '
+           'records_needed load save delete '
            'load_metadata save_metadata').split()
 
 COMPRESSORS = dict(
@@ -30,7 +31,7 @@ def record_dtype(samples_per_record):
         # Waveform data. Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines
         ('data', np.int16, samples_per_record),
-        # Start time of the RECORD (not the pulse!)
+        # Start time of the RECORD -- not the pulse! (ns since unix epoch)
         # After sorting on this, we are guaranteed to see each pulses' records
         # in proper order
         ('time', np.int64),
@@ -46,13 +47,30 @@ def record_dtype(samples_per_record):
 
 
 hit_dtype = np.dtype([
-    # Channel in which this hit was found
+    # Channel in which this interval applies
+    # -1 if applies across channels
     ('channel', '<i2'),
-    # Left bound of the hit, inclusive
-    ('left', '<i8'),
-    # Right bound of the hit, INCLUSIVE!
-    ('right', '<i8'),
+    # Start sample of hit in record
+    ('left', '<i2'),
+    # End sample of hit in record - exclusive bound! (like python ranges)
+    ('right', '<i2'),
+    # Record index in which the hit was found
+    # I assume nobody will process more than 2 147 483 647 pulses at a time
+    ('record_i', '<i4'),
+    # Start and end time of the hit
+    ('time', '<i8'),
+    ('endtime', '<i8')
 ])
+
+
+def peak_dtype(n_channels):
+    return np.dtype([
+        ('time', np.int64),
+        ('endtime', np.int64),
+        ('area_per_channel', (np.float32, n_channels)),
+        ('area', np.float32),
+        ('n_hits', np.uint32),
+    ])
 
 
 @numba.jit

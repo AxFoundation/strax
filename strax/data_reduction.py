@@ -1,8 +1,12 @@
 """Functions to perform in-place pulse-level data reduction"""
+import numpy as np
 import numba
 from enum import IntEnum
 
-__all__ = 'ReductionLevel cut_baseline replace_with_spike'.split()
+from .pulse_processing import NOT_APPLICABLE, record_links
+
+__all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
+          'replace_with_spike'.split()
 
 
 class ReductionLevel(IntEnum):
@@ -37,6 +41,47 @@ def cut_baseline(records, n_before=48, n_after=30):
             d.data[clear_from:] = 0
 
     records.reduction_level[:] = ReductionLevel.BASELINE_CUT
+
+
+@numba.jit(nopython=True)
+def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
+    """Zero record waveforms not within left_extension or right_extension of
+    hits
+    """
+    if not len(records):
+        return  # TODO: better return type?
+    samples_per_record = len(records[0]['data'])
+
+    # For every sample, store if we can cut it or not
+    can_cut = np.ones((len(records), samples_per_record), dtype=np.bool_)
+
+    previous_record, next_record = record_links(records)
+
+    for hit_i in range(len(hits)):
+        h = hits[hit_i]
+        rec_i = h['record_i']
+
+        # Keep required samples in current record
+        start_keep = h['left'] - left_extension
+        end_keep = h['right'] + right_extension
+        can_cut[rec_i][max(0, start_keep):
+                       min(end_keep, samples_per_record)] = 0
+
+        # Keep samples in previous/next record if applicable
+        if start_keep < 0:
+            prev_r = previous_record[rec_i]
+            if prev_r != NOT_APPLICABLE:
+                can_cut[prev_r][start_keep:] = 0
+        if end_keep > samples_per_record:
+            next_r = next_record[rec_i]
+            if next_r != NOT_APPLICABLE:
+                can_cut[next_r][:end_keep - samples_per_record] = 0
+
+    # This is actually quite slow. Perhaps the [:] forces a copy?
+    # Without it, however, numba complains...
+    for i in range(len(can_cut)):
+        records[i]['data'][:] *= ~can_cut[i]
+    records.reduction_level[:] = ReductionLevel.HITS_ONLY
 
 
 @numba.jit(nopython=True)

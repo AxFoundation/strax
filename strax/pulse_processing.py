@@ -1,4 +1,5 @@
-"""Functions that perform basic pulse processing
+"""Functions that perform processing on pulses
+(other than data reduction functions, which are in data_reduction.py)
 """
 import numpy as np
 import numba
@@ -6,15 +7,10 @@ import numba
 from . import utils
 from .data import hit_dtype
 
-__all__ = 'sort_by_time baseline coincidence_level find_hits'.split()
+__all__ = 'baseline coincidence_level find_hits'.split()
 
-
-# ~7x faster than np.sort(records, order='time'). Try it.
-@numba.jit(nopython=True)
-def sort_by_time(records):
-    time = records['time'].copy()
-    sort_i = np.argsort(time)
-    return records[sort_i]
+# Constant for use in record_links, to indicate there is no prev/next record
+NOT_APPLICABLE = -1
 
 
 @numba.jit(nopython=True)
@@ -52,11 +48,11 @@ def baseline(records, baseline_samples=40):
 @numba.jit(nopython=True)
 def coincidence_level(records, dt):
     """Return number of records that start dt samples earlier or later
-     (including itself, i.e. the minimum value is 1)
-     TODO: inclusive or exclusive bounds?
+    (including itself, i.e. the minimum value is 1)
+    TODO: inclusive or exclusive bounds?
 
-     records MUST be sorted by time!
-     """
+    records MUST be sorted by time!
+    """
     i_left = 0
     i_right = 0
     i_center = 0
@@ -87,21 +83,49 @@ def coincidence_level(records, dt):
     return result
 
 
+@numba.jit(nopython=True)
+def record_links(records):
+    """Return (prev_r, next_r), each arrays of indices of previous/next
+    record in the same pulse, or -1 if this is not applicable
+    """
+    n_channels = records['channel'].max() + 1
+    previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
+    next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
+
+    last_record_seen = np.ones(n_channels, dtype=np.int32) * NOT_APPLICABLE
+    for i, r in enumerate(records):
+        ch = r['channel']
+        last_i = last_record_seen[ch]
+        if r['record_i'] == 0:
+            # Record starts a new pulse
+            previous_record[i] = NOT_APPLICABLE
+
+        else:
+            # Continuing record
+            previous_record[i] = last_i
+            assert last_i != NOT_APPLICABLE
+            next_record[last_i] = i
+
+        last_record_seen[ch] = i
+
+    return previous_record, next_record
+
+
 # Chunk size should be at least > 1000,
 # else copying buffers / switching context dominates over actual computation
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True)
-def find_hits(result_buffer, records, threshold=15):
+def find_hits(result_buffer, records, threshold=15, dt=10):
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
     offset = 0
 
-    for r in records:
+    for record_i, r in enumerate(records):
         in_interval = False
         hit_start = -1
 
-        for i in range(len(r['data'])):
+        for i in range(samples_per_record):
             # We can't use enumerate over r['data'], numba gives error
             # TODO: file issue?
             above_threshold = r['data'][i] > threshold
@@ -116,17 +140,23 @@ def find_hits(result_buffer, records, threshold=15):
                 # End of the current hit
                 in_interval = False
 
-                # The hit ended just before this index
+                # We want an exclusive right bound
+                # so report the current sample (first beyond the hit)
                 # ... except if this is the last sample in the record and
-                # we're still above threshold. Then the hit ends right here.
+                # we're still above threshold. Then the hit ends one s later
                 hit_end = i - 1 if not above_threshold else i
 
                 # Add bounds to result buffer
-                result_buffer[offset]['left'] = r['time'] + hit_start
-                result_buffer[offset]['right'] = r['time'] + hit_end
-                result_buffer[offset]['channel'] = r['channel']
+                res = result_buffer[offset]
 
+                res['left'] = hit_start
+                res['right'] = hit_end
+                res['time'] = r['time'] + hit_start * dt
+                res['endtime'] = r['time'] + hit_end * dt
+                res['channel'] = r['channel']
+                res['record_i'] = record_i
                 offset += 1
+
                 if offset == len(result_buffer):
                     yield offset
                     offset = 0

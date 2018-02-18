@@ -47,7 +47,7 @@ def pax_to_records(input_filename, samples_per_record=110):
 
                 records[i]['time'] = event.start_time \
                                      + p.left * 10 \
-                                     + rec_i * samples_per_record
+                                     + rec_i * samples_per_record * 10
                 records[i]['channel'] = p.channel
                 records[i]['total_length'] = p.length
                 records[i]['record_i'] = rec_i
