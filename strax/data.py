@@ -57,19 +57,27 @@ hit_dtype = np.dtype([
     # Record index in which the hit was found
     # I assume nobody will process more than 2 147 483 647 pulses at a time
     ('record_i', '<i4'),
-    # Start and end time of the hit
+    # Start and end time of the hit.
+    # End time = end time of last sample (start time of first sample beyond)
     ('time', '<i8'),
     ('endtime', '<i8')
 ])
 
 
-def peak_dtype(n_channels):
+def peak_dtype(n_channels, n_sum_wv_samples=200):
     return np.dtype([
         ('time', np.int64),
         ('endtime', np.int64),
-        ('area_per_channel', (np.float32, n_channels)),
+        # Area in ADC * samples
+        ('area_per_channel', (np.int32, n_channels)),
+        # Factor with which the sum waveform has been downsampled
+        # (for very long peaks)
+        ('downsample_factor', np.int16),
+        # Sum waveform in PE/bin
+        ('sum_waveform', (np.float32, n_sum_wv_samples)),
+        # Sum area in PE
         ('area', np.float32),
-        ('n_hits', np.uint32),
+        ('n_hits', np.int16)
     ])
 
 

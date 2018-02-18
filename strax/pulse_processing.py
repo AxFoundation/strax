@@ -144,7 +144,8 @@ def find_hits(result_buffer, records, threshold=15, dt=10):
                 # so report the current sample (first beyond the hit)
                 # ... except if this is the last sample in the record and
                 # we're still above threshold. Then the hit ends one s later
-                hit_end = i - 1 if not above_threshold else i
+                # TODO: This makes no sense
+                hit_end = i    # if not above_threshold else i + 1
 
                 # Add bounds to result buffer
                 res = result_buffer[offset]

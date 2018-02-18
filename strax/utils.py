@@ -1,7 +1,7 @@
 import numpy as np
 import numba
 
-__all__ = 'growing_result sort_by_time sort_by_channel_then_time'.split()
+__all__ = 'growing_result sort_by_time'.split()
 
 
 def growing_result(dtype=np.int, chunk_size=10000):
@@ -53,7 +53,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
 # I chose to let this operate in-place as almost all strax functions
 # are in-place. However, unless numba/llvm does some magic optimization,
 # this does copy the data internally.
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
     time = x['time'].copy()
     sort_i = np.argsort(time)
