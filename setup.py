@@ -10,6 +10,5 @@ setup(name='strax',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
       url='https://github.com/jelleaalbers/strax',
-      py_modules=['multihist'],
       requires=open('requirements.txt').read().splitlines(),
       packages=['strax'])

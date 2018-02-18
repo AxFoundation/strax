@@ -1,9 +1,10 @@
 import os
+import glob
 import shutil
 
 import numpy as np
 
-from .data import save
+import strax
 
 
 def reader_split(records, output_dir, n_readers=8):
@@ -22,4 +23,13 @@ def reader_split(records, output_dir, n_readers=8):
         reader_data = records[
             (records['channel'] >= first_channel) &
             (records['channel'] < first_channel + channels_per_reader)]
-        save(f'{output_dir}/reader_{reader_i}.bin', reader_data, compressor='none')
+        strax.save(f'{output_dir}/reader_{reader_i}.bin', reader_data, compressor='none')
+
+
+def load_from_readers(input_dir):
+    """Return concatenated & sorted records from multiple reader data files"""
+    records = [strax.load(f)
+               for f in glob.glob(f'{input_dir}/reader_?.bin')]
+    records = np.concatenate(records)
+    records = strax.sort_by_time(records)
+    return records

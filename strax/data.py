@@ -8,7 +8,7 @@ import zstd
 import numpy as np
 import numba
 
-__all__ = ('record_dtype records_needed load save delete '
+__all__ = ('record_dtype hit_dtype records_needed load save delete '
            'load_metadata save_metadata').split()
 
 COMPRESSORS = dict(
@@ -43,6 +43,16 @@ def record_dtype(samples_per_record):
         # Original baseline in ADC counts.
         ('baseline', np.float32),
     ]
+
+
+hit_dtype = np.dtype([
+    # Channel in which this hit was found
+    ('channel', '<i2'),
+    # Left bound of the hit, inclusive
+    ('left', '<i8'),
+    # Right bound of the hit, INCLUSIVE!
+    ('right', '<i8'),
+])
 
 
 @numba.jit
@@ -107,4 +117,5 @@ def _fn(filename, compressor):
     """Get filename (with extension) of data file"""
     if compressor == 'none':
         return filename + '.npy'
-    return filename + '.' + COMPRESSORS[compressor].get('extension', compressor)
+    return filename + '.' + COMPRESSORS[compressor].get('extension',
+                                                        compressor)
