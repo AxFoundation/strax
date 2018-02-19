@@ -30,7 +30,8 @@ def growing_result(dtype=np.int, chunk_size=10000):
     def _growing_result(f):
         # Do not use functools.wraps, it messes with the signature
         # in ways numba does not appreciate
-        def wrapped_f(*args, **kwargs):
+        # Note we allow user to override chunk_size and dtype after calling
+        def wrapped_f(*args, chunk_size=chunk_size, dtype=dtype, **kwargs):
             buffer = np.zeros(chunk_size, dtype)
 
             # Keep a list of saved buffers to concatenate at the end
