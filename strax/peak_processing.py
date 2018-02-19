@@ -10,7 +10,8 @@ __all__ = 'find_peaks sum_waveform'.split()
 # TODO: remove hardcoded n_channels
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
-def find_peaks(result_buffer, hits, gap_threshold=500, min_hits=3):
+def find_peaks(result_buffer, hits,
+               gap_threshold=500, min_hits=3, max_duration=int(1e9)):
     if not len(hits):
         return
     offset = 0
@@ -21,7 +22,7 @@ def find_peaks(result_buffer, hits, gap_threshold=500, min_hits=3):
 
     for i, hit in enumerate(hits[1:]):
         gap = hit['time'] - peak_end
-        if gap > gap_threshold:
+        if gap > gap_threshold or hit['time'] > peak_start + max_duration:
             # This hit no longer belongs to the same signal
             # store the old signal if it contains enough hits
             if n_hits >= min_hits:
