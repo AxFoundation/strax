@@ -31,18 +31,27 @@ def record_dtype(samples_per_record):
         # Waveform data. Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines
         ('data', np.int16, samples_per_record),
+
         # Start time of the RECORD -- not the pulse! (ns since unix epoch)
         # After sorting on this, we are guaranteed to see each pulses' records
         # in proper order
         ('time', np.int64),
+
+        # TODO: do we have to store these? I'd much rather store
+        # endtime instead, so records, peaks, and hits have a consistent
+        # interval-like API
         # Total number of samples in pulse (not the record!)
         ('total_length', np.int16),
         # Record index in pulse (0=first record, etc)
         ('record_i', np.int16),
-        # Level of data reduction applied (strax.Reduction enum)
-        ('reduction_level', np.uint8),
+
         # Original baseline in ADC counts.
         ('baseline', np.float32),
+        # Integral in ADC x samples
+        ('area', np.int32),
+
+        # Level of data reduction applied (strax.Reduction enum)
+        ('reduction_level', np.uint8),
     ]
 
 
@@ -60,7 +69,7 @@ hit_dtype = np.dtype([
     # Start and end time of the hit.
     # End time = end time of last sample (start time of first sample beyond)
     ('time', '<i8'),
-    ('endtime', '<i8')
+    ('endtime', '<i8'),
 ])
 
 
@@ -68,7 +77,7 @@ def peak_dtype(n_channels, n_sum_wv_samples=200):
     return np.dtype([
         ('time', np.int64),
         ('endtime', np.int64),
-        # Area in ADC * samples
+        # Area per channel in ADC * samples
         ('area_per_channel', (np.int32, n_channels)),
         # Factor with which the sum waveform has been downsampled
         # (for very long peaks)

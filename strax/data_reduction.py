@@ -4,9 +4,11 @@ import numba
 from enum import IntEnum
 
 from .pulse_processing import NOT_APPLICABLE, record_links
+from .utils import fully_in_range
+from .peak_processing import find_large_peaks_roughly
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
-          'replace_with_spike'.split()
+          'replace_with_spike exclude_tails'.split()
 
 
 class ReductionLevel(IntEnum):
@@ -19,7 +21,9 @@ class ReductionLevel(IntEnum):
     # Samples far from a threshold excursion were removed
     HITS_ONLY = 2
     # The record has been replaced with a simpler waveform
-    WAVEFORM_REPLACEMENT = 3
+    WAVEFORM_REPLACED = 3
+    # The raw waveform has been deleted, only metadata survives
+    METADATA_ONLY = 4
 
 
 @numba.jit(nopython=True, nogil=True)
@@ -105,4 +109,18 @@ def replace_with_spike(records, also_for_multirecord_pulses=False):
         d.data[:] = 0
         d.data[center] = integral
 
-    records.reduction_level[:] = ReductionLevel.WAVEFORM_REPLACEMENT
+    records.reduction_level[:] = ReductionLevel.WAVEFORM_REPLACED
+
+
+# Cannot jit this guy, find_large_peaks_roughly is not a jitted function
+def exclude_tails(records, to_pe,
+                  min_area=int(2e5), peak_duration=int(1e4),
+                  tail_duration=int(1e7)):
+    """Return records that are not in tail after a big peak"""
+    cut_ranges = find_large_peaks_roughly(records, to_pe, min_area=min_area)
+    cut_ranges['time'] += peak_duration
+    cut_ranges['endtime'] = cut_ranges['time'] + tail_duration
+    mask = fully_in_range(records, cut_ranges)
+    # TODO: we cannot just cut records like this, it will break record_links
+    # Need to look into pulses at boundaries and fix them?
+    return records[~mask]
