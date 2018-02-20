@@ -1,7 +1,7 @@
 import numpy as np
 import numba
 
-__all__ = 'growing_result sort_by_time'.split()
+__all__ = 'growing_result sort_by_time fully_in_range'.split()
 
 
 def growing_result(dtype=np.int, chunk_size=10000):
@@ -51,11 +51,31 @@ def growing_result(dtype=np.int, chunk_size=10000):
 
 # (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
 # TODO: maybe this should be a factory?
-# I chose to let this operate in-place as almost all strax functions
-# are in-place. However, unless numba/llvm does some magic optimization,
-# this does copy the data internally.
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
-    time = x['time'].copy()
+    time = x['time'].copy()    # This increases speed even more
     sort_i = np.argsort(time)
-    x[:] = x[sort_i]
+    return x[sort_i]
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def fully_in_range(records, peaks, dt=10):
+    """Return bool array saying which records are fully in range of peaks"""
+    result = np.zeros(len(records), dtype=np.bool_)
+    endtime = records['time'] + len(records[0]['data']) * dt
+
+    p_i = 0
+    for r_i, r in enumerate(records):
+        # Skip ahead one or more peaks if we're beyond them
+        while (p_i < len(peaks)
+               and records[r_i]['time'] > peaks[p_i]['endtime']):
+            p_i += 1
+        if p_i == len(peaks):
+            break
+
+        p = peaks[p_i]
+        result[r_i] = (r['time'] >= p['time']
+                       and endtime[r_i] <= p['endtime'])
+        r_i += 1
+
+    return result

@@ -4,17 +4,21 @@ from strax import utils
 
 from strax.data import peak_dtype
 
-__all__ = 'find_peaks sum_waveform'.split()
+__all__ = 'find_peaks find_large_peaks_roughly sum_waveform'.split()
 
 
-# TODO: remove hardcoded n_channels
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
 def find_peaks(result_buffer, hits,
+               left_extension=20,
+               right_extension=150,
                gap_threshold=500, min_hits=3, max_duration=int(1e9)):
+    # TODO: track area per channel too, so you can do posrec later
+    # Meh, can wait until we have posrec and care
     if not len(hits):
         return
     offset = 0
+    assert gap_threshold > left_extension + right_extension
 
     peak_start = hits[0]['time']
     peak_end = hits[0]['endtime']
@@ -27,8 +31,8 @@ def find_peaks(result_buffer, hits,
             # store the old signal if it contains enough hits
             if n_hits >= min_hits:
                 res = result_buffer[offset]
-                res['time'] = peak_start
-                res['endtime'] = peak_end
+                res['time'] = peak_start - left_extension
+                res['endtime'] = peak_end + right_extension
                 res['n_hits'] = n_hits
 
                 offset += 1
@@ -43,6 +47,61 @@ def find_peaks(result_buffer, hits,
             # Hit continues the current signal
             peak_end = max(hit['endtime'], peak_end)
             n_hits += 1
+
+    yield offset
+
+
+@utils.growing_result(dtype=peak_dtype(0), chunk_size=int(1e4))
+@numba.jit(nopython=True, nogil=True)
+def find_large_peaks_roughly(
+        result_buffer, records, to_pe,
+        dt=10,
+        gap_threshold=300,
+        min_area=int(2e5),
+        max_duration=1000):
+    # This is a copy-pasted version of find_peaks, modified to work on records
+    # and keep track of integral area instead of n_hits
+    # TODO: find some way to avoid duplicated logic
+    if not len(records):
+        return
+    offset = 0
+
+    time = records['time']
+    endtime = records['time'] + len(records[0]['data']) * dt
+
+    # TODO: Hm, there's duplication here as well...
+    peak_start = time[0]
+    peak_end = endtime[0]
+    area = records[0]['area'] * to_pe[records[0]['channel']]
+
+    for r_i, r in enumerate(records[1:]):
+        t = time[r_i]
+        et = endtime[r_i]
+        ar = r['area'] * to_pe[r['channel']]
+
+        gap = t - peak_end
+
+        if gap > gap_threshold or t > peak_start + max_duration:
+            # This hit no longer belongs to the same signal
+            # store the old signal if it contains enough hits
+            if area >= min_area:
+                res = result_buffer[offset]
+                res['time'] = peak_start
+                res['endtime'] = peak_end
+                res['area'] = area
+
+                offset += 1
+                if offset == len(result_buffer):
+                    yield offset
+                    offset = 0
+            peak_start = t
+            peak_end = et
+            area = ar
+
+        else:
+            # Hit continues the current signal
+            peak_end = max(et, peak_end)
+            area += ar
 
     yield offset
 
@@ -94,6 +153,7 @@ def sum_waveform(peaks, records, adc_to_pe):
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
             # TODO Do we need .astype(np.int32).sum() ??
+            # p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
 
             # Range of peak that receives record

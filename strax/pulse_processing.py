@@ -7,7 +7,7 @@ import numba
 from . import utils
 from .data import hit_dtype
 
-__all__ = 'baseline coincidence_level find_hits'.split()
+__all__ = 'baseline integrate find_hits'.split()
 
 # Constant for use in record_links, to indicate there is no prev/next record
 NOT_APPLICABLE = -1
@@ -19,6 +19,8 @@ def baseline(records, baseline_samples=40):
     :param baseline_samples: number of samples at start of pulse to average
     Assumes records are sorted in time (or at least by channel, then time)
     """
+    # TODO: we cannot assume the record_i information is accurate
+    # after cutting tails. Best not to rely on it
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -45,42 +47,10 @@ def baseline(records, baseline_samples=40):
         d.baseline = bl
 
 
-@numba.jit(nopython=True)
-def coincidence_level(records, dt):
-    """Return number of records that start dt samples earlier or later
-    (including itself, i.e. the minimum value is 1)
-    TODO: inclusive or exclusive bounds?
-
-    records MUST be sorted by time!
-    """
-    i_left = 0
-    i_right = 0
-    i_center = 0
-    t = records['time']
-    n_max = len(records) - 1
-    result = np.zeros(len(records))
-
-    while True:
-        if t[i_right] - dt < t[i_center] and i_right < n_max:
-            i_right += 1
-            continue
-        # If here, right edge is beyond coincidence limit
-        # (or cannot extend)
-
-        if t[i_left] + dt < t[i_center] and i_left < n_max:
-            i_left += 1
-            continue
-        # If here, left edge is inside coincidence limit
-        # (or cannot extend - should never happen -- assert?)
-
-        # Note no +1: right edge is one too far
-        result[i_center] = i_right - i_left
-        if i_center < n_max:
-            i_center += 1
-        else:
-            break
-
-    return result
+@numba.jit(nopython=True, nogil=True)
+def integrate(records):
+    for i, r in enumerate(records):
+        records[i]['area'] = r['data'].sum()
 
 
 @numba.jit(nopython=True)
@@ -88,6 +58,8 @@ def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
     record in the same pulse, or -1 if this is not applicable
     """
+    # TODO: we cannot assume the record_i information is accurate
+    # after cutting tails. Best not to rely on it
     n_channels = records['channel'].max() + 1
     previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
     next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
@@ -168,3 +140,4 @@ find_hits.__doc__ = """
 Return hits (intervals above threshold) found in records.
 Hits that straddle record boundaries are split (TODO: fix this?)
 """
+
