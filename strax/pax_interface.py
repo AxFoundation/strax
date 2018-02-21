@@ -6,7 +6,8 @@ Convert pax .zip files to flat records format
 """
 import numpy as np
 
-from .data import records_needed, record_dtype
+from strax.dtypes import record_dtype
+from strax.utils import records_needed
 
 
 def pax_to_records(input_filename, samples_per_record=110):

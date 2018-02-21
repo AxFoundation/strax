@@ -5,7 +5,7 @@ import numpy as np
 import numba
 
 from . import utils
-from .data import hit_dtype
+from .dtypes import hit_dtype
 
 __all__ = 'baseline integrate find_hits'.split()
 
@@ -144,4 +144,3 @@ find_hits.__doc__ = """
 Return hits (intervals above threshold) found in records.
 Hits that straddle record boundaries are split (TODO: fix this?)
 """
-

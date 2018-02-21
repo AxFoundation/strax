@@ -1,7 +1,14 @@
 import numpy as np
 import numba
 
-__all__ = 'growing_result sort_by_time fully_in_range'.split()
+__all__ = 'records_needed growing_result sort_by_time ' \
+          'fully_contained_in'.split()
+
+
+@numba.jit
+def records_needed(pulse_length, samples_per_record):
+    """Return records needed to store pulse_length samples"""
+    return 1 + (pulse_length - 1) // samples_per_record
 
 
 def growing_result(dtype=np.int, chunk_size=10000):
