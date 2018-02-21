@@ -59,23 +59,27 @@ def sort_by_time(x):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def fully_in_range(records, peaks, dt=10):
-    """Return bool array saying which records are fully in range of peaks"""
-    result = np.zeros(len(records), dtype=np.bool_)
-    endtime = records['time'] + len(records[0]['data']) * dt
+def fully_contained_in(a_intervals, b_intervals, dt=10):
+    """Return array of len(a_intervals) with index of interval in b_intervals
+    for which the interval a is fully contained, or -1 if no such exists.
+    We assume all intervals are sorted by time, and b_intervals nonoverlapping.
+    # TODO: OFF BY ONE TESTS!
+    """
+    result = np.zeros(len(a_intervals), dtype=np.bool_)
+    a_starts = a_intervals['time']
+    b_starts = b_intervals['time']
+    a_ends = a_starts + a_intervals['length'] * a_intervals['dt']
+    b_ends = b_starts+ b_intervals['length'] * b_intervals['dt']
 
-    p_i = 0
-    for r_i, r in enumerate(records):
-        # Skip ahead one or more peaks if we're beyond them
-        while (p_i < len(peaks)
-               and records[r_i]['time'] > peaks[p_i]['endtime']):
-            p_i += 1
-        if p_i == len(peaks):
+    b_i = 0
+    for a_i in range(len(a_intervals)):
+        # Skip ahead one or more b's if we're beyond them
+        while (b_i < len(b_intervals) and b_ends[b_i] < a_starts[a_i]):
+            b_i += 1
+        if b_i == len(b_intervals):
             break
 
-        p = peaks[p_i]
-        result[r_i] = (r['time'] >= p['time']
-                       and endtime[r_i] <= p['endtime'])
-        r_i += 1
+        result[a_i] = (a_starts[a_i] >= b_starts[b_i]
+                       and a_ends[a_i] <= b_ends[b_i])
 
     return result

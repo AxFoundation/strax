@@ -13,113 +13,81 @@ def find_peaks(result_buffer, hits,
                left_extension=20,
                right_extension=150,
                gap_threshold=500, min_hits=3, max_duration=int(1e9)):
-    # TODO: track area per channel too, so you can do posrec later
-    # Meh, can wait until we have posrec and care
+    """Return peaks made from grouping hits together
+    Assumes all hits have the same dt
+    :param hits:
+    :param left_extension: Extend peaks by this many ns left
+    :param right_extension: Extend peaks by this many ns right
+    :param gap_threshold: No hits for this much ns means new peak
+    :param min_hits: Peaks with less than min_hits are not saved
+    :param max_duration: Peaks are forcefully ended after this many ns
+    """
     if not len(hits):
         return
     offset = 0
     assert gap_threshold > left_extension + right_extension
+    hit_starts = hits['time']
+    hit_ends = hit_starts + hits['length'] * hits['dt']
 
-    peak_start = hits[0]['time']
-    peak_end = hits[0]['endtime']
+    peak_start = hit_starts[0]
+    peak_end = hit_ends[0]
+    area = 0
     n_hits = 0
 
     for i, hit in enumerate(hits[1:]):
-        gap = hit['time'] - peak_end
-        if gap > gap_threshold or hit['time'] > peak_start + max_duration:
+        t0 = hit_starts[i]
+        t1 = hit_starts[i]
+        dt = hit['dt']
+        ar = hit['area']
+
+        gap = t0 - peak_end
+
+        if gap > gap_threshold or t0 > peak_start + max_duration:
             # This hit no longer belongs to the same signal
             # store the old signal if it contains enough hits
             if n_hits >= min_hits:
                 res = result_buffer[offset]
                 res['time'] = peak_start - left_extension
-                res['endtime'] = peak_end + right_extension
+                res['length'] = (peak_end - peak_start + right_extension) / dt
                 res['n_hits'] = n_hits
-
-                offset += 1
-                if offset == len(result_buffer):
-                    yield offset
-                    offset = 0
-            n_hits = 0
-            peak_start = hit['time']
-            peak_end = hit['endtime']
-
-        else:
-            # Hit continues the current signal
-            peak_end = max(hit['endtime'], peak_end)
-            n_hits += 1
-
-    yield offset
-
-
-@utils.growing_result(dtype=peak_dtype(0), chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True)
-def find_large_peaks_roughly(
-        result_buffer, records, to_pe,
-        dt=10,
-        gap_threshold=300,
-        min_area=int(2e5),
-        max_duration=1000):
-    # This is a copy-pasted version of find_peaks, modified to work on records
-    # and keep track of integral area instead of n_hits
-    # TODO: find some way to avoid duplicated logic
-    if not len(records):
-        return
-    offset = 0
-
-    time = records['time']
-    endtime = records['time'] + len(records[0]['data']) * dt
-
-    # TODO: Hm, there's duplication here as well...
-    peak_start = time[0]
-    peak_end = endtime[0]
-    area = records[0]['area'] * to_pe[records[0]['channel']]
-
-    for r_i, r in enumerate(records[1:]):
-        t = time[r_i]
-        et = endtime[r_i]
-        ar = r['area'] * to_pe[r['channel']]
-
-        gap = t - peak_end
-
-        if gap > gap_threshold or t > peak_start + max_duration:
-            # This hit no longer belongs to the same signal
-            # store the old signal if it contains enough hits
-            if area >= min_area:
-                res = result_buffer[offset]
-                res['time'] = peak_start
-                res['endtime'] = peak_end
+                res['dt'] = dt
                 res['area'] = area
 
                 offset += 1
                 if offset == len(result_buffer):
                     yield offset
                     offset = 0
-            peak_start = t
-            peak_end = et
+            n_hits = 1
             area = ar
+            peak_start = t0
+            peak_end = t1
 
         else:
             # Hit continues the current signal
-            peak_end = max(et, peak_end)
+            peak_end = max(t1, peak_end)
+            n_hits += 1
             area += ar
 
     yield offset
 
 
-# TODO: remove hardcoded 10
 @numba.jit(nopython=True, nogil=True)
 def sum_waveform(peaks, records, adc_to_pe):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
+
+    Assumes all peaks and pulses have the same dt
     """
-    peak_lengths = (peaks['endtime'] - peaks['time']) // 10
+    if not len(records):
+        return
     samples_per_record = len(records[0]['data'])
-    time_per_record = samples_per_record * 10
-    sum_wv_samples = len(peaks[0]['sum_waveform'])
+    dt = records[0]['dt']
+    time_per_record = samples_per_record * dt
+    sum_wv_samples = len(peaks[0]['data'])
 
     # Big buffer to hold even largest sum waveforms
     # Need a little more even for downsampling..
-    swv_buffer = np.zeros(peak_lengths.max() * 2, dtype=np.float32)
+    swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
 
     # Indices to a window of records
     left_r_i = 0
@@ -128,7 +96,7 @@ def sum_waveform(peaks, records, adc_to_pe):
     for peak_i, p in enumerate(peaks):
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
-        p_length = peak_lengths[peak_i]
+        p_length = p['length']
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
 
         # Find first record that contributes to peak
@@ -141,7 +109,7 @@ def sum_waveform(peaks, records, adc_to_pe):
             r = records[right_r_i]
             ch = r['channel']
 
-            s = int((p['time'] - r['time']) // 10)
+            s = int((p['time'] - r['time']) // dt)
             n_r = samples_per_record
             n_p = p_length
 
@@ -168,10 +136,12 @@ def sum_waveform(peaks, records, adc_to_pe):
 
         # Store the sum waveform
         # Do we need to downsample the swv to store it?
-        ds = p['downsample_factor'] = int(np.ceil(p_length / sum_wv_samples))
-        if ds > 1:
-            new_ns = int(np.ceil(p_length / ds)) * ds
-            p['sum_waveform'][:new_ns // ds] = \
-                swv_buffer[:new_ns].reshape(-1, ds).sum(axis=1)
+        downs_f = int(np.ceil(p_length / sum_wv_samples))
+        if downs_f > 1:
+            # New number of samples in the peak
+            new_ns = p['length'] = int(np.ceil(p_length / downs_f))
+            p['data'][:new_ns] = \
+                swv_buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
+            p['dt'] *= downs_f
         else:
-            p['sum_waveform'][:p_length] = swv_buffer[:p_length]
+            p['data'][:p_length] = swv_buffer[:p_length]
