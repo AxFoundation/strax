@@ -1,72 +1,84 @@
 import numpy as np
 import numba
+
 from strax import utils
+from strax.dtypes import peak_dtype, DIGITAL_SUM_WAVEFORM_CHANNEL
 
-from strax.data import peak_dtype
-
-__all__ = 'find_peaks find_large_peaks_roughly sum_waveform'.split()
+__all__ = 'find_peaks sum_waveform'.split()
 
 
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
-def find_peaks(result_buffer, hits,
-               left_extension=20,
-               right_extension=150,
-               gap_threshold=500, min_hits=3, max_duration=int(1e9)):
+def find_peaks(result_buffer, hits, to_pe,
+               gap_threshold=500,
+               left_extension=20, right_extension=150,
+               min_hits=3, min_area=0,
+               max_duration=int(1e9)):
     """Return peaks made from grouping hits together
     Assumes all hits have the same dt
-    :param hits:
+    :param hits: Hit (or any interval) to group
     :param left_extension: Extend peaks by this many ns left
     :param right_extension: Extend peaks by this many ns right
     :param gap_threshold: No hits for this much ns means new peak
-    :param min_hits: Peaks with less than min_hits are not saved
+    :param min_hits: Peaks with less than min_hits are not returned
+    :param min_area: Peaks with less than min_area are not returned
     :param max_duration: Peaks are forcefully ended after this many ns
     """
+    offset = 0
     if not len(hits):
         return
-    offset = 0
+    assert min_hits > 0
     assert gap_threshold > left_extension + right_extension
-    hit_starts = hits['time']
-    hit_ends = hit_starts + hits['length'] * hits['dt']
 
-    peak_start = hit_starts[0]
-    peak_end = hit_ends[0]
+    # Properties of signal we're currently building
     area = 0
+    area_per_channel = np.zeros(len(result_buffer[0]['area_per_channel']),
+                                dtype=np.int32)
     n_hits = 0
+    peak_start = 0
+    peak_end = 0
 
-    for i, hit in enumerate(hits[1:]):
-        t0 = hit_starts[i]
-        t1 = hit_starts[i]
+    for hit_i, hit in enumerate(hits):
+        t0 = hit['time']
+        t1 = t0 + hit['length'] + hit['dt']
         dt = hit['dt']
         ar = hit['area']
+        ch = hit['channel']
 
         gap = t0 - peak_end
-
-        if gap > gap_threshold or t0 > peak_start + max_duration:
+        new_signal = (hit_i == 0
+                      or gap > gap_threshold
+                      or t0 > peak_start + max_duration)
+        if new_signal:
             # This hit no longer belongs to the same signal
             # store the old signal if it contains enough hits
-            if n_hits >= min_hits:
+            if n_hits >= min_hits and area >= min_area:
                 res = result_buffer[offset]
                 res['time'] = peak_start - left_extension
                 res['length'] = (peak_end - peak_start + right_extension) / dt
                 res['n_hits'] = n_hits
                 res['dt'] = dt
                 res['area'] = area
+                res['channel'] = DIGITAL_SUM_WAVEFORM_CHANNEL
 
+                # Save signal, yield buffer to caller if needed
                 offset += 1
                 if offset == len(result_buffer):
                     yield offset
                     offset = 0
-            n_hits = 1
-            area = ar
+
+            # Reset the signal cumulants
+            area = 0
+            area_per_channel *= 0
+            n_hits = 0
             peak_start = t0
             peak_end = t1
 
-        else:
-            # Hit continues the current signal
-            peak_end = max(t1, peak_end)
-            n_hits += 1
-            area += ar
+        # Continue the current signal
+        peak_end = max(t1, peak_end)
+        n_hits += 1
+        area += ar * to_pe[ch]
+        area_per_channel[hit['channel']] += hit['area']
 
     yield offset
 
@@ -145,3 +157,4 @@ def sum_waveform(peaks, records, adc_to_pe):
             p['dt'] *= downs_f
         else:
             p['data'][:p_length] = swv_buffer[:p_length]
+

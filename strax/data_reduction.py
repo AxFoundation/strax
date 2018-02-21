@@ -3,9 +3,9 @@ import numpy as np
 import numba
 from enum import IntEnum
 
-import strax
-from .pulse_processing import NOT_APPLICABLE, record_links
-from .utils import fully_contained_in
+from strax.pulse_processing import NOT_APPLICABLE, record_links
+from strax.peak_processing import find_peaks
+from strax.utils import fully_contained_in
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
           'replace_with_spike exclude_tails'.split()
@@ -124,10 +124,10 @@ def exclude_tails(records, to_pe,
                   ):
     """Return records that do not lie fully in tail after a big peak"""
     # Find peaks using the records as "hits". This is rough, but good enough.
-    cut = strax.peak_processing.find_peaks(records, to_pe,
-                                           gap_threshold=gap_threshold,
-                                           min_area=min_area,
-                                           max_duration=peak_duration)
+    cut = find_peaks(records, to_pe,
+                     gap_threshold=gap_threshold,
+                     min_area=min_area,
+                     max_duration=peak_duration)
     # Transform these 'peaks' to ranges to cut.
     # We want to cut tails after peaks, not the peaks themselves.
     cut['time'] += peak_duration        # Don't cut the actual peak
