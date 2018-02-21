@@ -3,9 +3,9 @@ import numpy as np
 import numba
 from enum import IntEnum
 
+import strax
 from .pulse_processing import NOT_APPLICABLE, record_links
-from .utils import fully_in_range
-from .peak_processing import find_large_peaks_roughly
+from .utils import fully_contained_in
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
           'replace_with_spike exclude_tails'.split()
@@ -28,7 +28,8 @@ class ReductionLevel(IntEnum):
 
 @numba.jit(nopython=True, nogil=True)
 def cut_baseline(records, n_before=48, n_after=30):
-    """"Replace first n_before and last n_after samples of pulses by 0"""
+    """"Replace first n_before and last n_after samples of pulses by 0
+    """
     # TODO: records.data.shape[1] gives a numba error (file issue?)
     if not len(records):
         return
@@ -38,7 +39,7 @@ def cut_baseline(records, n_before=48, n_after=30):
         if d.record_i == 0:
             d.data[:n_before] = 0
 
-        clear_from = d.total_length - n_after
+        clear_from = d.pulse_length - n_after
         clear_from -= d.record_i * samples_per_record
         clear_from = max(0, clear_from)
         if clear_from < samples_per_record:
@@ -51,9 +52,11 @@ def cut_baseline(records, n_before=48, n_after=30):
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     """Zero record waveforms not within left_extension or right_extension of
     hits
+
+    TODO: Currently assumes records have not been cut!
     """
     if not len(records):
-        return  # TODO: better return type?
+        return
     samples_per_record = len(records[0]['data'])
 
     # For every sample, store if we can cut it or not
@@ -112,15 +115,21 @@ def replace_with_spike(records, also_for_multirecord_pulses=False):
     records.reduction_level[:] = ReductionLevel.WAVEFORM_REPLACED
 
 
-# Cannot jit this guy, find_large_peaks_roughly is not a jitted function
+# Cannot jit this guy, find_peaks is not a jitted function
 def exclude_tails(records, to_pe,
-                  min_area=int(2e5), peak_duration=int(1e4),
-                  tail_duration=int(1e7)):
-    """Return records that are not in tail after a big peak"""
-    cut_ranges = find_large_peaks_roughly(records, to_pe, min_area=min_area)
-    cut_ranges['time'] += peak_duration
-    cut_ranges['endtime'] = cut_ranges['time'] + tail_duration
-    mask = fully_in_range(records, cut_ranges)
-    # TODO: we cannot just cut records like this, it will break record_links
-    # Need to look into pulses at boundaries and fix them?
-    return records[~mask]
+                  min_area=int(2e5),
+                  peak_duration=int(1e4),
+                  tail_duration=int(1e7),
+                  gap_threshold=300,
+                  ):
+    """Return records that do not lie fully in tail after a big peak"""
+    # Find peaks using the records as "hits". This is rough, but good enough.
+    cut = strax.peak_processing.find_peaks(records, to_pe,
+                                           gap_threshold=gap_threshold,
+                                           min_area=min_area,
+                                           max_duration=peak_duration)
+    # Transform these 'peaks' to ranges to cut.
+    # We want to cut tails after peaks, not the peaks themselves.
+    cut['time'] += peak_duration        # Don't cut the actual peak
+    cut['length'] = cut['time'] + tail_duration / cut['dt']
+    return records[~fully_contained_in(records, cut)]

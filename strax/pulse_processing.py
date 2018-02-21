@@ -13,14 +13,15 @@ __all__ = 'baseline integrate find_hits'.split()
 NOT_APPLICABLE = -1
 
 
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, nogil=True)
 def baseline(records, baseline_samples=40):
     """Subtract pulses from int(baseline), store baseline in baseline field
     :param baseline_samples: number of samples at start of pulse to average
     Assumes records are sorted in time (or at least by channel, then time)
+
+    Assumes record_i information is accurate (so don't cut pulses before
+    baselining them!)
     """
-    # TODO: we cannot assume the record_i information is accurate
-    # after cutting tails. Best not to rely on it
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -42,7 +43,7 @@ def baseline(records, baseline_samples=40):
         # Subtract baseline from all data samples in the record
         # (any additional zeros are already zero)
         last = min(samples_per_record,
-                   d.total_length - d.record_i * samples_per_record)
+                   d.pulse_length - d.record_i * samples_per_record)
         d.data[:last] = int(bl) - d.data[:last]
         d.baseline = bl
 
@@ -57,9 +58,11 @@ def integrate(records):
 def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
     record in the same pulse, or -1 if this is not applicable
+
+    Currently assumes records have not been cut!
     """
     # TODO: we cannot assume the record_i information is accurate
-    # after cutting tails. Best not to rely on it
+    # after cutting tails!
     n_channels = records['channel'].max() + 1
     previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
     next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
@@ -83,11 +86,11 @@ def record_links(records):
     return previous_record, next_record
 
 
-# Chunk size should be at least > 1000,
+# Chunk size should be at least a thousand,
 # else copying buffers / switching context dominates over actual computation
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True)
-def find_hits(result_buffer, records, threshold=15, dt=10):
+def find_hits(result_buffer, records, threshold=15):
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -124,8 +127,9 @@ def find_hits(result_buffer, records, threshold=15, dt=10):
 
                 res['left'] = hit_start
                 res['right'] = hit_end
-                res['time'] = r['time'] + hit_start * dt
-                res['endtime'] = r['time'] + hit_end * dt
+                res['time'] = r['time'] + hit_start * r['dt']
+                res['length'] = (hit_end - hit_start + 1)
+                res['dt'] = r['dt']
                 res['channel'] = r['channel']
                 res['record_i'] = record_i
                 offset += 1
