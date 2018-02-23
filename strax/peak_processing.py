@@ -9,7 +9,7 @@ __all__ = 'find_peaks sum_waveform'.split()
 
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
-def find_peaks(result_buffer, hits, to_pe,
+def find_peaks(peaks_buffer, hits, to_pe,
                gap_threshold=500,
                left_extension=20, right_extension=150,
                min_hits=3, min_area=0,
@@ -30,55 +30,55 @@ def find_peaks(result_buffer, hits, to_pe,
     assert min_hits > 0
     assert gap_threshold > left_extension + right_extension
 
-    # Properties of signal we're currently building
-    area = 0
-    area_per_channel = np.zeros(len(result_buffer[0]['area_per_channel']),
+    area_per_channel = np.zeros(len(peaks_buffer[0]['area_per_channel']),
                                 dtype=np.int32)
-    n_hits = 0
-    peak_start = 0
-    peak_end = 0
+    in_peak = False
+    peak_endtime = 0
 
     for hit_i, hit in enumerate(hits):
+        p = peaks_buffer[offset]
         t0 = hit['time']
-        t1 = t0 + hit['length'] + hit['dt']
         dt = hit['dt']
-        ar = hit['area']
-        ch = hit['channel']
+        t1 = hit['time'] + dt * hit['length']
 
-        gap = t0 - peak_end
-        new_signal = (hit_i == 0
-                      or gap > gap_threshold
-                      or t0 > peak_start + max_duration)
-        if new_signal:
-            # This hit no longer belongs to the same signal
-            # store the old signal if it contains enough hits
-            if n_hits >= min_hits and area >= min_area:
-                res = result_buffer[offset]
-                res['time'] = peak_start - left_extension
-                res['length'] = (peak_end - peak_start + right_extension) / dt
-                res['n_hits'] = n_hits
-                res['dt'] = dt
-                res['area'] = area
-                res['channel'] = DIGITAL_SUM_WAVEFORM_CHANNEL
-
-                # Save signal, yield buffer to caller if needed
-                offset += 1
-                if offset == len(result_buffer):
-                    yield offset
-                    offset = 0
-
-            # Reset the signal cumulants
-            area = 0
+        if not in_peak:
+            # This hit starts a new peak candidate
             area_per_channel *= 0
-            n_hits = 0
-            peak_start = t0
-            peak_end = t1
+            peak_endtime = t1
+            p['time'] = t0 - left_extension
+            p['channel'] = DIGITAL_SUM_WAVEFORM_CHANNEL
+            p['dt'] = dt
+            # These are necessary as prev peak may have been rejected:
+            p['n_hits'] = 0
+            p['area'] = 0
+            in_peak = True
 
-        # Continue the current signal
-        peak_end = max(t1, peak_end)
-        n_hits += 1
-        area += ar * to_pe[ch]
-        area_per_channel[hit['channel']] += ar
+        # Add hit's properties to the current peak candidate
+        p['n_hits'] += 1
+        peak_endtime = max(peak_endtime, t1)
+        p['area_per_channel'][hit['channel']] += hit['area']
+        p['area'] += hit['area'] * to_pe[hit['channel']]
+
+        # Look at the next hit to see if THIS hit is the last in a peak.
+        # If this is the final hit, it is last by definition.
+        if (hit_i == len(hits) - 1
+                or hits[hit_i+1]['time'] - peak_endtime >= gap_threshold):
+            # Next hit (if it exists) will initialize the new peak candidate
+            in_peak = False
+
+            # Do not save if tests are not met. Next hit will erase temp info
+            if not p['n_hits'] >= min_hits and p['area'] >= min_area:
+                continue
+
+            # Compute final quantities
+            p['length'] = (peak_endtime - p['time'] + right_extension) / dt
+            p['area_per_channel'][:] = area_per_channel
+
+            # Save the current peak, advance the buffer
+            offset += 1
+            if offset == len(peaks_buffer):
+                yield offset
+                offset = 0
 
     yield offset
 
