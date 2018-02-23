@@ -1,12 +1,22 @@
 # Jupyter
 .ipynb_checkpoints
 
+# Data (temporary?)
+*.json
+*.bz2
+*.zstd
+*.npy
+*.blosc
+
 # Python cache
 *.py[cod]
 __pycache__
 
+# Pytest cache
+.pytest_cache
 
 # Packages
+.eggs
 *.egg
 *.egg-info
 dist
