@@ -2,3 +2,5 @@ numpy
 numba
 blosc
 zstd
+boltons
+hypothesis

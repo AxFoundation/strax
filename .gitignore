@@ -12,8 +12,9 @@
 *.py[cod]
 __pycache__
 
-# Pytest cache
+# Testing caches
 .pytest_cache
+.hypothesis
 
 # Packages
 .eggs
