@@ -3,6 +3,7 @@ try:
 except ImportError:
     from distutils.core import setup
 
+requires = open('requirements.txt').read().splitlines()
 
 setup(name='strax',
       version='0.0.1',
@@ -10,5 +11,6 @@ setup(name='strax',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
       url='https://github.com/jelleaalbers/strax',
-      requires=open('requirements.txt').read().splitlines(),
+      setup_requires=requires + ['pytest-runner'],
+      tests_require=requires + ['pytest'],
       packages=['strax'])

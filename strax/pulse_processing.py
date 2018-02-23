@@ -97,6 +97,7 @@ def find_hits(result_buffer, records, threshold=15):
     offset = 0
 
     for record_i, r in enumerate(records):
+        # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
 
@@ -104,39 +105,47 @@ def find_hits(result_buffer, records, threshold=15):
             # We can't use enumerate over r['data'], numba gives error
             # TODO: file issue?
             above_threshold = r['data'][i] > threshold
+            # print(r['data'][i], above_threshold, in_interval, hit_start)
 
             if not in_interval and above_threshold:
                 # Start of a hit
                 in_interval = True
                 hit_start = i
 
-            if in_interval and (not above_threshold
-                                or i == samples_per_record):
-                # End of the current hit
-                in_interval = False
+            if in_interval:
+                if not above_threshold:
+                    # Hit ends at the start of this sample
+                    hit_end = i
+                    in_interval = False
 
-                # We want an exclusive right bound
-                # so report the current sample (first beyond the hit)
-                # ... except if this is the last sample in the record and
-                # we're still above threshold. Then the hit ends one s later
-                # TODO: This makes no sense
-                hit_end = i    # if not above_threshold else i + 1
+                elif i == samples_per_record - 1:
+                    # Hit ends at the end of this sample
+                    # (because the record ends)
+                    hit_end = i + 1
+                    in_interval = False
 
-                # Add bounds to result buffer
-                res = result_buffer[offset]
+                if not in_interval:
+                    # print('saving hit')
+                    # Hit is done, add it to the result
+                    res = result_buffer[offset]
+                    res['left'] = hit_start
+                    res['right'] = hit_end
+                    res['time'] = r['time'] + hit_start * r['dt']
+                    # Note right bound is exclusive, no + 1 here:
+                    res['length'] = hit_end - hit_start
+                    res['dt'] = r['dt']
+                    res['channel'] = r['channel']
+                    res['record_i'] = record_i
 
-                res['left'] = hit_start
-                res['right'] = hit_end
-                res['time'] = r['time'] + hit_start * r['dt']
-                res['length'] = (hit_end - hit_start + 1)
-                res['dt'] = r['dt']
-                res['channel'] = r['channel']
-                res['record_i'] = record_i
-                offset += 1
+                    # Yield buffer to caller if needed
+                    offset += 1
+                    if offset == len(result_buffer):
+                        yield offset
+                        offset = 0
 
-                if offset == len(result_buffer):
-                    yield offset
-                    offset = 0
+                    # Clear stuff, just for easier debugging
+                    # hit_start = 0
+                    # hit_end = 0
     yield offset
 
 

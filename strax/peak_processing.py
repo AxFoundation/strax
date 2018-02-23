@@ -78,7 +78,7 @@ def find_peaks(result_buffer, hits, to_pe,
         peak_end = max(t1, peak_end)
         n_hits += 1
         area += ar * to_pe[ch]
-        area_per_channel[hit['channel']] += hit['area']
+        area_per_channel[hit['channel']] += ar
 
     yield offset
 
@@ -157,4 +157,3 @@ def sum_waveform(peaks, records, adc_to_pe):
             p['dt'] *= downs_f
         else:
             p['data'][:p_length] = swv_buffer[:p_length]
-

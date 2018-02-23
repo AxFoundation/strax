@@ -19,20 +19,8 @@ def growing_result(dtype=np.int, chunk_size=10000):
      - function is responsible for tracking offset and calling yield on time!
     The buffer is not explicitly cleared.
 
-    Silly example:
-    >>> @growing_result(np.int, chunk_size=2)
-    >>> def bla(buffer):
-    >>>     offset = 0
-    >>>     for i in range(5):
-    >>>         buffer[offset] = i
-    >>>         offset += 1
-    >>>         if offset == len(buffer):
-    >>>             yield offset
-    >>>             offset = 0
-    >>>     yield offset
-    >>> bla()
-    np.array([0, 1, 2, 3, 4])
-
+    See test_utils.py for a simple example (I can't get it to run as a doctest
+    unfortunately)
     """
     def _growing_result(f):
         # Do not use functools.wraps, it messes with the signature
@@ -76,7 +64,7 @@ def fully_contained_in(a_intervals, b_intervals, dt=10):
     a_starts = a_intervals['time']
     b_starts = b_intervals['time']
     a_ends = a_starts + a_intervals['length'] * a_intervals['dt']
-    b_ends = b_starts+ b_intervals['length'] * b_intervals['dt']
+    b_ends = b_starts + b_intervals['length'] * b_intervals['dt']
 
     b_i = 0
     for a_i in range(len(a_intervals)):
