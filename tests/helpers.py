@@ -1,6 +1,8 @@
+from itertools import accumulate
+from functools import partial
+
 import numpy as np
 from boltons import iterutils
-from itertools import accumulate
 from hypothesis import strategies as st
 
 import strax
@@ -46,8 +48,8 @@ def sorted_bounds(disjoint=False,
 # Fake intervals
 ##
 
-def bounds_to_intervals(bs):
-    x = np.zeros(len(bs), dtype=strax.interval_dtype)
+def bounds_to_intervals(bs, dtype=strax.interval_dtype):
+    x = np.zeros(len(bs), dtype=dtype)
     x['time'] = [x[0] for x in bs]
     # Remember: exclusive right bound...
     x['length'] = [x[1] - x[0] for x in bs]
@@ -56,9 +58,12 @@ def bounds_to_intervals(bs):
 
 
 sorted_intervals = sorted_bounds().map(bounds_to_intervals)
+
 disjoint_sorted_intervals = sorted_bounds(disjoint=True).\
     map(bounds_to_intervals)
 
+fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
+                                        dtype=strax.hit_dtype))
 
 ##
 # Fake pulses with 0 or 1 as waveform (e.g. to test hitfinder)
@@ -81,4 +86,3 @@ def bounds_to_pulse(bs):
 
 
 single_fake_pulse = sorted_bounds(max_value=50).map(bounds_to_pulse)
-
