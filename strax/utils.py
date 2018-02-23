@@ -46,7 +46,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
 
 # (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
 # TODO: maybe this should be a factory?
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.jit(nopython=True, nogil=True)
 def sort_by_time(x):
     time = x['time'].copy()    # This increases speed even more
     sort_i = np.argsort(time)
@@ -54,27 +54,27 @@ def sort_by_time(x):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def fully_contained_in(a_intervals, b_intervals, dt=10):
-    """Return array of len(a_intervals) with index of interval in b_intervals
-    for which the interval a is fully contained, or -1 if no such exists.
-    We assume all intervals are sorted by time, and b_intervals nonoverlapping.
-    # TODO: OFF BY ONE TESTS!
+def fully_contained_in(things, containers):
+    """Return array of len(things) with index of interval in containers
+    for which things are fully contained in a container, or -1 if no such
+    exists. We assume all intervals are sorted by time, and b_intervals
+    nonoverlapping.
     """
-    result = np.zeros(len(a_intervals), dtype=np.bool_)
-    a_starts = a_intervals['time']
-    b_starts = b_intervals['time']
-    a_ends = a_starts + a_intervals['length'] * a_intervals['dt']
-    b_ends = b_starts + b_intervals['length'] * b_intervals['dt']
+    result = np.ones(len(things), dtype=np.int32) * -1
+    a_starts = things['time']
+    b_starts = containers['time']
+    a_ends = a_starts + things['length'] * things['dt']
+    b_ends = b_starts + containers['length'] * containers['dt']
 
     b_i = 0
-    for a_i in range(len(a_intervals)):
+    for a_i in range(len(things)):
         # Skip ahead one or more b's if we're beyond them
-        while (b_i < len(b_intervals) and b_ends[b_i] < a_starts[a_i]):
+        while b_i < len(containers) and b_ends[b_i] < a_starts[a_i]:
             b_i += 1
-        if b_i == len(b_intervals):
+        if b_i == len(containers):
             break
 
-        result[a_i] = (a_starts[a_i] >= b_starts[b_i]
-                       and a_ends[a_i] <= b_ends[b_i])
+        if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
+            result[a_i] = b_i
 
     return result

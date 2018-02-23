@@ -132,4 +132,4 @@ def exclude_tails(records, to_pe,
     # We want to cut tails after peaks, not the peaks themselves.
     cut['time'] += peak_duration        # Don't cut the actual peak
     cut['length'] = cut['time'] + tail_duration / cut['dt']
-    return records[~fully_contained_in(records, cut)]
+    return records[fully_contained_in(records, cut) != -1]

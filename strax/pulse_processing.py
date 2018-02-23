@@ -88,8 +88,9 @@ def record_links(records):
 
 # Chunk size should be at least a thousand,
 # else copying buffers / switching context dominates over actual computation
+# cache=True actually gives a pickle error when used with hypothesis :-(
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, nogil=True)
 def find_hits(result_buffer, records, threshold=15):
     if not len(records):
         return
