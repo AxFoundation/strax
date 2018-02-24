@@ -23,7 +23,11 @@ interval_dtype = [
 
 
 def record_dtype(samples_per_record):
-    """Data type for a waveform record"""
+    """Data type for a waveform record.
+
+    Length can be shorter than the number of samples in data,
+    this indicates a record with zero-padding at the end.
+    """
     return interval_dtype + [
         # Integral in ADC x samples
         ('area', np.int32),

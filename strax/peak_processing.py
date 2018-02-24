@@ -101,37 +101,45 @@ def sum_waveform(peaks, records, adc_to_pe):
     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
 
-    # Indices to a window of records
+    # Index to a window of records
     left_r_i = 0
-    right_r_i = 0
 
     for peak_i, p in enumerate(peaks):
+        # print("Peak ", peak_i)
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
 
-        # Find first record that contributes to peak
-        while records[left_r_i]['time'] + time_per_record <= p['time']:
-            left_r_i += 1
+        # Find first record that could contribute to peak
+        for left_r_i in range(left_r_i, len(records)):
+            if records[left_r_i]['time'] + time_per_record >= p['time']:
+                break
+
+        if left_r_i == len(records):
+            # No record contributes to the last peak!
+            break
 
         # Scan ahead over records that contribute
-        right_r_i = left_r_i
-        while True:
+        for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
+            # print("record ", right_r_i, ' [', r['time'], ',',
+            # r['time'] + r['length'], ')')
 
             s = int((p['time'] - r['time']) // dt)
             n_r = samples_per_record
             n_p = p_length
 
             if s < -n_p:
+                # print("out of range! s is ", s)
                 # Record is fully out of range
                 break
 
             # Range of record that contributes to peak
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
+
             # TODO Do we need .astype(np.int32).sum() ??
             # p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
@@ -141,10 +149,12 @@ def sum_waveform(peaks, records, adc_to_pe):
             p_end = min(n_p, -s + n_r)
 
             assert p_end - p_start == r_end - r_start, "Ouch, off-by-one error"
-            swv_buffer[p_start:p_end] += \
-                r['data'][r_start:r_end] * adc_to_pe[ch]
 
-            right_r_i += 1
+            # print("contributes ", r_start, " to ", r_end)
+            # print("insert in ", p_start, " to ", p_end)
+            if p_end - p_start > 0:
+                swv_buffer[p_start:p_end] += \
+                    r['data'][r_start:r_end] * adc_to_pe[ch]
 
         # Store the sum waveform
         # Do we need to downsample the swv to store it?
@@ -157,3 +167,6 @@ def sum_waveform(peaks, records, adc_to_pe):
             p['dt'] *= downs_f
         else:
             p['data'][:p_length] = swv_buffer[:p_length]
+
+        # Store the total area
+        p['area'] = (p['area_per_channel'] * adc_to_pe).sum()

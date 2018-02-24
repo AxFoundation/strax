@@ -1,8 +1,10 @@
+from .helpers import fake_hits, several_fake_records
+
 import numpy as np
 from hypothesis import given
+import hypothesis.strategies as st
 
 import strax
-from .helpers import fake_hits
 
 
 @given(fake_hits)
@@ -26,3 +28,42 @@ def test_find_peaks(hits):
     assert np.all(starts == np.sort(starts))
 
     # TODO: add more tests, preferably test against a second algorithm
+
+
+@given(several_fake_records,
+       st.integers(min_value=0, max_value=100),
+       st.integers(min_value=1, max_value=100)
+       )
+def test_sum_waveform(records, peak_left, peak_length):
+
+    # Make a single big peak to contain all the records
+    n_ch = 100
+    peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200))
+    p = peaks[0]
+    p['time'] = peak_left
+    p['length'] = peak_length
+    p['dt'] = 0
+
+    strax.sum_waveform(peaks, records, np.ones(n_ch))
+
+    # Area measures must be consistent
+    area = p['area']
+    assert area >= 0
+    assert p['data'].sum() == area
+    assert p['area_per_channel'].sum() == area
+
+    # Create a simple sum waveform
+    # TODO: currently adds also data outside time!
+    if not len(records):
+        max_sample = 3   # Whatever
+    else:
+        max_sample = (records['time'] + records['length']).max()
+    max_sample = max(max_sample, peak_left + peak_length)
+    sum_wv = np.zeros(max_sample + 1, dtype=np.float32)
+    for r in records:
+        sum_wv[r['time']:r['time'] + r['length']] += r['data'][:r['length']]
+    # Select the part inside the peak
+    sum_wv = sum_wv[peak_left:peak_left + peak_length]
+
+    assert len(sum_wv) == peak_length
+    assert np.all(p['data'][:peak_length] == sum_wv)

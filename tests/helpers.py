@@ -1,3 +1,17 @@
+##
+# Hack to disable numba.jit
+# For the mini-examples run during testing numba actually causes a massive
+# performance drop. Moreover, if you make a buffer overrun bug, jitted fs
+# respond "slightly" less nicer (giving you junk data or segfaulting)
+# Once in a while you should test without this...
+##
+class FakeNumba:                        # noqa
+    @staticmethod
+    def jit(*args, **kwargs):
+        return lambda f: f
+import sys                              # noqa
+sys.modules['numba'] = FakeNumba        # noqa
+
 from itertools import accumulate
 from functools import partial
 
@@ -69,7 +83,8 @@ fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
 # Fake pulses with 0 or 1 as waveform (e.g. to test hitfinder)
 ##
 
-def bounds_to_pulse(bs):
+
+def bounds_to_records(bs, single=False):
     if not len(bs):
         n_samples = 0
     else:
@@ -78,11 +93,30 @@ def bounds_to_pulse(bs):
             # Make sure we sometimes end in zero
             # TODO: not a great way to do it, you miss other cases..
             n_samples += 1
-    rec = np.zeros(1, dtype=strax.record_dtype(n_samples))
-    rec['dt'] = 1
-    for l, r in bs:
-        rec[0]['data'][l:r] = 1
-    return rec
+    if not single:
+        # Each bound gets its own pulse, in its own channel
+        recs = np.zeros(len(bs), dtype=strax.record_dtype(n_samples))
+        for i, (l, r) in enumerate(bs):
+            # Add waveform roughly in the center
+            length = r - l  # Exclusive right bound, no + 1
+            pad = (n_samples - (r - l)) // 2
+            recs[i]['time'] = l
+            recs[i]['length'] = pad + length
+            recs[i]['data'][pad:pad+length] = 1
+            assert recs[i]['data'].sum() == length
+            recs[i]['channel'] = i
+        assert len(np.unique(recs['channel'])) == len(bs)
+    else:
+        # Make a single pulse with 1 inside the bounds, 0 outside
+        recs = np.zeros(1, dtype=strax.record_dtype(n_samples))
+        for l, r in bs:
+            recs[0]['data'][l:r] = 1
+
+    recs['dt'] = 1
+    return recs
 
 
-single_fake_pulse = sorted_bounds(max_value=50).map(bounds_to_pulse)
+single_fake_pulse = sorted_bounds(max_value=50)\
+    .map(partial(bounds_to_records, single=True))
+
+several_fake_records = sorted_bounds(max_value=50).map(bounds_to_records)
