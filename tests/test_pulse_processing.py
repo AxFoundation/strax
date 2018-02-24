@@ -55,6 +55,6 @@ def test_find_hits_randomize(records):
 
     # Check for false negatives
     for i in range(len(results) - 1):
-        l = results[i][1]
-        r = results[i + 1][0]
-        assert not np.any(w[l:r] == 1)
+        l_ = results[i][1]
+        r_ = results[i + 1][0]
+        assert not np.any(w[l_:r_] == 1)
