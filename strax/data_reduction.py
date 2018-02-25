@@ -51,9 +51,12 @@ def cut_baseline(records, n_before=48, n_after=30):
 @numba.jit(nopython=True, nogil=True)
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     """Zero record waveforms not within left_extension or right_extension of
-    hits
+    hits.
+    These extensions properly account for breaking of pulses into records.
 
-    TODO: Currently assumes records have not been cut!
+    If you pass an incomplete (e.g. cut) set of records, we will not save
+    data around hits found in the removed records, even if this stretches
+    into records that you did pass.
     """
     if not len(records):
         return
@@ -131,5 +134,5 @@ def exclude_tails(records, to_pe,
     # Transform these 'peaks' to ranges to cut.
     # We want to cut tails after peaks, not the peaks themselves.
     cut['time'] += peak_duration        # Don't cut the actual peak
-    cut['length'] = cut['time'] + tail_duration / cut['dt']
+    cut['length'] = tail_duration / cut['dt']
     return records[fully_contained_in(records, cut) != -1]

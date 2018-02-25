@@ -29,6 +29,8 @@ def find_peaks(peaks_buffer, hits, to_pe,
         return
     assert min_hits > 0
     assert gap_threshold > left_extension + right_extension
+    # Length of peaks must fit in int32:
+    assert max_duration < np.iinfo(np.int32).max * hits[0]['dt']
 
     area_per_channel = np.zeros(len(peaks_buffer[0]['area_per_channel']),
                                 dtype=np.int32)
@@ -67,7 +69,7 @@ def find_peaks(peaks_buffer, hits, to_pe,
             in_peak = False
 
             # Do not save if tests are not met. Next hit will erase temp info
-            if not p['n_hits'] >= min_hits and p['area'] >= min_area:
+            if not (p['n_hits'] >= min_hits and p['area'] >= min_area):
                 continue
 
             # Compute final quantities

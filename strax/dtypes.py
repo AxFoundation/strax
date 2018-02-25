@@ -15,7 +15,8 @@ interval_dtype = [
     # Start time of the interval (ns since unix epoch)
     ('time', np.int64),
     # Length of the interval in samples
-    ('length', np.int16),
+    # Don't try to make O(second) long intervals!
+    ('length', np.int32),
     # Sub-dtypes MUST contain an area field
     # However, the type varies: float for sum waveforms (area in PE)
     # and int32 for per-channel waveforms (area in ADC x samples)

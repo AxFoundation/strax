@@ -1,8 +1,9 @@
+from .helpers import sorted_intervals, disjoint_sorted_intervals
+
 import numpy as np
 import strax
 
 from hypothesis import given
-from .helpers import sorted_intervals, disjoint_sorted_intervals
 
 
 def test_growing_result():
