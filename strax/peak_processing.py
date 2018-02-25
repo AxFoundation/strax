@@ -143,7 +143,6 @@ def sum_waveform(peaks, records, adc_to_pe):
             r_end = min(n_r, s + n_p)
 
             # TODO Do we need .astype(np.int32).sum() ??
-            # p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
 
             # Range of peak that receives record
