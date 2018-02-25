@@ -27,10 +27,16 @@ def find_peaks(peaks_buffer, hits, to_pe,
     offset = 0
     if not len(hits):
         return
-    assert min_hits > 0
-    assert gap_threshold > left_extension + right_extension
-    # Length of peaks must fit in int32:
-    assert max_duration < np.iinfo(np.int32).max * hits[0]['dt']
+    assert hits[0]['dt'] > 0, "Hit does not indicate sampling time"
+    assert min_hits > 0, "min_hits must be > 1"
+    assert gap_threshold > left_extension + right_extension, \
+        "gap_threshold must be larger than left + right extension"
+    assert max_duration / hits[0]['dt'] < np.iinfo(np.int32).max, \
+        "Max duration must fit in a 32-bit signed integer"
+    # If you write it like below, you get integer wraparound errors
+    # TODO :-( File numba issue?
+    # assert max_duration < np.iinfo(np.int32).max * hits[0]['dt'], \
+    #   "Max duration must fit in a 32-bit signed integer"
 
     area_per_channel = np.zeros(len(peaks_buffer[0]['area_per_channel']),
                                 dtype=np.int32)

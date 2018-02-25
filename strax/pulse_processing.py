@@ -41,7 +41,7 @@ def baseline(records, baseline_samples=40):
             bl = last_bl_in[d.channel]
 
         # Subtract baseline from all data samples in the record
-        # (any additional zeros are already zero)
+        # (any additional zeros should be kept at zero)
         last = min(samples_per_record,
                    d.pulse_length - d.record_i * samples_per_record)
         d.data[:last] = int(bl) - d.data[:last]
@@ -58,8 +58,6 @@ def integrate(records):
 def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
     record in the same pulse, or -1 if this is not applicable
-
-    Currently assumes records have not been cut!
     """
     # TODO: needs tests
     if not len(records):

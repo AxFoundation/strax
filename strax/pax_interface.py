@@ -45,13 +45,14 @@ def pax_to_records(input_filename, samples_per_record=110):
 
             n_records = records_needed(p.length, samples_per_record)
             for rec_i in range(n_records):
-
-                records[i]['time'] = event.start_time \
-                                     + p.left * 10 \
-                                     + rec_i * samples_per_record * 10
-                records[i]['channel'] = p.channel
-                records[i]['total_length'] = p.length
-                records[i]['record_i'] = rec_i
+                r = records[i]
+                r['time'] = event.start_time \
+                            + p.left * 10 \
+                            + rec_i * samples_per_record * 10
+                r['channel'] = p.channel
+                r['pulse_length'] = p.length
+                r['record_i'] = rec_i
+                r['dt'] = 10
 
                 # How much are we storing in this record?
                 if rec_i != n_records - 1:
@@ -59,10 +60,12 @@ def pax_to_records(input_filename, samples_per_record=110):
                     n_store = samples_per_record
                 else:
                     # Just enough to store the rest of the data
-                    n_store = p.length % samples_per_record
+                    # Note it's not p.length % samples_per_record!!!
+                    # (that would be zero if we have to store a full record)
+                    n_store = p.length - samples_per_record * rec_i
 
                 offset = rec_i * samples_per_record
-                records[i]['data'][:n_store] = \
+                r['data'][:n_store] = \
                     p.raw_data[offset:offset + n_store]
                 i += 1
 
