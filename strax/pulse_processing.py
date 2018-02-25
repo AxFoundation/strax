@@ -61,13 +61,19 @@ def record_links(records):
 
     Currently assumes records have not been cut!
     """
-    # TODO: we cannot assume the record_i information is accurate
-    # after cutting tails!
+    # TODO: needs tests
+    if not len(records):
+        return
     n_channels = records['channel'].max() + 1
+    samples_per_record = len(records[0]['data'])
     previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
     next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
 
+    # What was the index of the last record seen in each channel?
     last_record_seen = np.ones(n_channels, dtype=np.int32) * NOT_APPLICABLE
+    # What would the start time be of a record that continues that record?
+    expected_next_start = np.zeros(n_channels, dtype=np.int64)
+
     for i, r in enumerate(records):
         ch = r['channel']
         last_i = last_record_seen[ch]
@@ -75,13 +81,16 @@ def record_links(records):
             # Record starts a new pulse
             previous_record[i] = NOT_APPLICABLE
 
-        else:
-            # Continuing record
+        elif r['time'] == expected_next_start[ch]:
+            # Continuing record.
             previous_record[i] = last_i
-            assert last_i != NOT_APPLICABLE
             next_record[last_i] = i
 
+        # (If neither matches, this is a continuing record, but the starting
+        #  record has been cut away (e.g. for data reduction))
+
         last_record_seen[ch] = i
+        expected_next_start[ch] = samples_per_record * r['dt']
 
     return previous_record, next_record
 
@@ -89,6 +98,8 @@ def record_links(records):
 # Chunk size should be at least a thousand,
 # else copying buffers / switching context dominates over actual computation
 # cache=True actually gives a pickle error when used with hypothesis :-(
+# No max_duration argument: hits terminate at record boundaries, and
+# anyone insane enough to try O(sec) long records deserves to be punished
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
 def find_hits(result_buffer, records, threshold=15):

@@ -7,18 +7,31 @@ import hypothesis.strategies as st
 import strax
 
 
-@given(fake_hits)
-def test_find_peaks(hits):
+@given(fake_hits,
+       st.one_of(st.just(1), st.just(3)),
+       st.one_of(st.just(0), st.just(3)))
+def test_find_peaks(hits, min_hits, min_area):
     gap_threshold = 10
     peaks = strax.find_peaks(hits,
                              to_pe=np.ones(1),
                              right_extension=0, left_extension=0,
                              gap_threshold=gap_threshold,
-                             min_hits=1)
+                             min_hits=min_hits,
+                             min_area=min_area)
+    # Check sanity
+    assert np.all(peaks['length'] > 0)
 
-    # Since min_hits = 1, all hits must occur in a peak
-    assert np.sum(peaks['n_hits']) == len(hits)
-    assert np.all(strax.fully_contained_in(hits, peaks) > -1)
+    # Check if requirements satisfied
+    if min_area != 0:
+        assert np.all(peaks['area'] >= min_area)
+    if min_hits != 1:
+        assert np.all(peaks['n_hits'] >= min_hits)
+
+    # Without requirements, all hits must occur in a peak
+    if min_area == 0 and min_hits == 1:
+
+        assert np.sum(peaks['n_hits']) == len(hits)
+        assert np.all(strax.fully_contained_in(hits, peaks) > -1)
 
     # Since no extensions, peaks must be at least gap_threshold apart
     starts = peaks['time']
@@ -35,7 +48,6 @@ def test_find_peaks(hits):
        st.integers(min_value=1, max_value=100)
        )
 def test_sum_waveform(records, peak_left, peak_length):
-
     # Make a single big peak to contain all the records
     n_ch = 100
     peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200))
@@ -53,7 +65,6 @@ def test_sum_waveform(records, peak_left, peak_length):
     assert p['area_per_channel'].sum() == area
 
     # Create a simple sum waveform
-    # TODO: currently adds also data outside time!
     if not len(records):
         max_sample = 3   # Whatever
     else:
