@@ -131,7 +131,7 @@ def find_hits(result_buffer, records, threshold=15):
                     in_interval = False
 
                 elif i == samples_per_record - 1:
-                    # Hit ends at the end of this sample
+                    # Hit ends at the *end* of this sample
                     # (because the record ends)
                     hit_end = i + 1
                     in_interval = False
