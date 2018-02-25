@@ -10,7 +10,7 @@ __all__ = 'find_peaks sum_waveform'.split()
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True)
 def find_peaks(peaks_buffer, hits, to_pe,
-               gap_threshold=500,
+               gap_threshold=300,
                left_extension=20, right_extension=150,
                min_hits=3, min_area=0,
                max_duration=int(1e9)):
