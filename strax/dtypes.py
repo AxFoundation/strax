@@ -34,6 +34,7 @@ def record_dtype(samples_per_record):
         ('area', np.int32),
         # Total samples in the PULSE to which this record belongs
         # (excluding zero-padding in the last record)
+        # Don't try more than 32 767 samples/pulse...
         ('pulse_length', np.int16),
         # Position of this record in the pulse
         ('record_i', np.int16),
