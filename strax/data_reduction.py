@@ -123,8 +123,7 @@ def exclude_tails(records, to_pe,
                   min_area=int(2e5),
                   peak_duration=int(1e4),
                   tail_duration=int(1e7),
-                  gap_threshold=300,
-                  ):
+                  gap_threshold=300):
     """Return records that do not lie fully in tail after a big peak"""
     # Find peaks using the records as "hits". This is rough, but good enough.
     cut = find_peaks(records, to_pe,
