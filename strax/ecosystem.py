@@ -3,6 +3,103 @@ import dask
 
 import strax
 
+
+class StraxExtension:
+    __version__: str
+    depends_on: tuple = ()    # Auto-filled from compute kwargs?
+    provides: str
+    store: False
+
+    # Instance attributes that hold state temporarily
+    run_name: str
+    lineage: dict
+
+    def version(self, run_id=None):
+        """Return version number applicable to the run_id.
+        Most extensions just have a single version (in __version__),
+        but some may be at different versions for different runs
+        (e.g. time-dependent corrections).
+        """
+        return self.__version__
+
+    def key(self, run_id):
+        """Return key identifying computation tasks in the task graph
+        This is usually (ClassName, versionstring)
+        """
+        return self.__class__.__name__, self.version(run_id)
+
+    def task_graph(self, run_id, provides):
+        """Return the taskgraph for computing this extension for run_id.
+
+        The task graph follows the dask specification.
+        Keys are provided by the 'key' method of each extension,
+        the values are the task tuples:
+         - the computation task (_compute method of extension to run)
+         - run_id
+         - lineage   --  set of keys that this extension depends on
+         - *dependencies -- any further arguments to compute
+        """
+        # Which extensions are providing the dependencies?
+        depends_on = [provides[k] for k in self.depends_on]
+        keys_of_deps = [k.key(run_id) for k in depends_on]
+
+        # Get and merge their task graphs
+        d = {}
+        for k in depends_on:
+            d.update(k.task_graph(run_id))
+
+        # Compute lineage of this extension
+        lineage = set(keys_of_deps).union(*[set(d[k][2])
+                                            for k in keys_of_deps])
+
+        # Get the task to compute this extension, and add it to the task graph
+        task = (self._compute,
+                run_id,
+                lineage,
+                *[k.key(run_id) for k in depends_on])
+        d[self.key(run_id)] = task
+        return d
+
+    def _compute(self, run_id, lineage, *dependencies):
+        # Store run_id and lineage in attributes
+        # so user-defined compute-function does not need to take them
+        self.run_id = run_id
+        self.lineage = lineage
+
+        result = self.compute(*dependencies)
+
+        # Store result on disk (if desired)
+        if self.store:
+            # Key for use in the cache
+            ext_key = (run_id, self.key(run_id), lineage)
+
+            # Request a new filename from the cache
+            filename = CACHE.new_filename(*ext_key)
+
+            # Do the actual saving ourselves (only we know our file format)
+            self.save_to_cache(filename, result)
+
+            # Let the cache know the save actually completed
+            CACHE.register(filename, *ext_key)
+
+        return result
+
+    def compute(self, *dependencies):
+        raise NotImplementedError
+
+    @staticmethod
+    def save_to_cache(filename, result):
+        strax.save(result, filename)
+
+    @staticmethod
+    def load_from_cache(filename):
+        return strax.load(filename)
+
+
+##
+# Example extensions
+##
+
 # ADC -> PE conversion factors
 # This should go to some configuration file!!
 to_pe = 1e-3 * np.array(
@@ -34,35 +131,6 @@ samples_per_record = 110
 n_channels = len(to_pe)
 
 
-class StraxExtension:
-    __version__: str
-    depends_on: tuple = ()    # Auto-filled from compute kwargs?
-    provides: str
-    store: str = 'never'
-
-    # Instance attributes that hold state
-    run_name: str
-
-    def key(self):
-        return self.__class__.__name__, self.__version__
-
-    def task_graph(self, run_name):
-        depends_on = [PROVIDES[k] for k in self.depends_on]
-        d = {self.key(): (self._compute,
-                          run_name,
-                          *[k.key() for k in depends_on])}
-        # Update automatically overwrites, ensuring each extension
-        # only appears once in the task graph
-        # (even if it's requested multiple times)
-        for k in self.depends_on:
-            d.update(PROVIDES[k].task_graph(run_name))
-        return d
-
-    def _compute(self, run_name, *args):
-        self.run_name = run_name
-        return self.compute(*args)
-
-
 class RawRecords(StraxExtension):
     __version__ = strax.__version__
     provides = 'raw_records'
@@ -76,7 +144,7 @@ class RawRecords(StraxExtension):
         return raw_records
 
 
-# TODO: support for providing multiple things?
+# TODO: support for providing multiple things? Something else splits?
 class PeakDetails(StraxExtension):
     __version__ = strax.__version__
     store = 'always'
@@ -105,15 +173,130 @@ class PeakWidths(StraxExtension):
                       ('width_full', np.float32)])
 
     def compute(self, peak_details):
-        d = np.zeros(len(peak_details), dtype=self.provides['peak_details'])
+        d = np.zeros(len(peak_details), dtype=self.dtype)
         d['width_full'] = peak_details['length'] * peak_details['dt']
         return d
 
 
+##
+# Loading
+##
 
-# TODO: fill automatically with some register method
-PROVIDES = dict(
-    raw_records=RawRecords(),
-    peak_details=PeakDetails(),
-    peak_widths=PeakWidths(),
-)
+def load_task(run_id, extensions_to_load, provides=None):
+    if provides is None:
+        provides = dict()
+    provides = {**PROVIDES, **provides}
+
+    # Get the task graph for the extensions to load
+    final_targets = []
+    task_graph = dict()
+    for e in extensions_to_load:
+        ext = provides[e]
+        final_targets.append(ext.key(run_id))
+
+        task_graph.update(ext.task_graph(run_id, provides))
+
+    # Remove unneeded deps (possible?), map direct dependencies for each
+    task_graph, direct_deps_of = dask.optimization.cull(task_graph,
+                                                        final_targets)
+
+    # Build a new task graph with computes replaced by load_from_cache
+    # as far downstream as possible.
+    new_graph = {}
+    stack = final_targets.copy()
+    while len(stack):
+        key = stack.pop()
+        lineage = task_graph[key][2]
+        if key in new_graph:
+            continue
+
+        # Do we have this on ice?
+        # If so, replace the compute with a load from cache
+        filename = CACHE.find(run_id, key, lineage)
+        if filename:
+            new_graph[key] = (provides[key[0]].load_from_cache, filename)
+        else:
+            new_graph[key] = task_graph[key]
+            # Walk further upstream: check if we can load dependencies
+            stack.extend(direct_deps_of[key])
+
+    # If we loaded some things from cache, many computations are now obsolete
+    task_graph, _ = dask.optimization.cull(task_graph, final_targets)
+    return task_graph
+
+
+
+##
+# Cache
+##
+
+from hashlib import sha1
+import os
+import json
+
+class FolderBasedCache:
+    """Simple cache that stores everything in a single folder
+    Results are placed in subfolders named by run_id,
+    with files named named EXT_VERSION_HASH, where HASH identifies lineage
+    """
+
+    def __init__(self, folder):
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        self.folder = folder
+
+    def new_filename(self, *ext_key):
+        """Return filename where new result should be placed"""
+        return self._filename(*ext_key)
+
+    def find(self, *ext_key):
+        """Return filename for existing result of key,
+        or None if no such exists"""
+        filename = self._filename(*ext_key)
+        if os.path.exists(filename):
+            return filename
+
+    def delete(self, *ext_key):
+        filename = self.find(*ext_key)
+        if filename is None:
+            raise KeyError("Cannot delete, file does not exist")
+        os.remove(filename)
+
+    def register(self, filename, *ext_key):
+        """Register filename as a result for key"""
+        pass
+
+    def _filename(self, run_id, key, lineage):
+        # Create a hash of the json of the (key, lineage) tuple
+        h = sha1(json.dumps((key, tuple(sorted(lineage.items())))))
+        # Version string often has dots, which could be interpreted as
+        # extension separators. I'll replace them with '-' and reserve '_'
+        # for the separator between fields in the filename
+        filename = '_'.join([str(x) for x in key] + [h]).replace('.', '-')
+        return os.path.join(self.folder, filename)
+
+
+# TODO: combinedcache cache type
+# Track writeability. If you request a new filename, only returns one if it is
+# actually writeable.
+CACHE = FolderBasedCache('strax_data')
+
+
+
+##
+# Extension registry
+##
+
+PROVIDES = dict()
+
+def register_extension(ext, result_name):
+    global PROVIDES
+    inst = ext()
+    PROVIDES[ext.__class__.__name__] = inst
+    PROVIDES[result_name] = inst
+
+
+for ext, result_name in [(RawRecords, 'raw_records'),
+                         (PeakDetails, 'peak_details'),
+                         (PeakWidths, 'peak_widths')]:
+    register_extension(ext, result_name)

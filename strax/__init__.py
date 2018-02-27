@@ -1,3 +1,5 @@
+__version__ = '0.0.1'
+
 from .dtypes import *               # noqa
 from .io import *                   # noqa
 from .data_reduction import *       # noqa
