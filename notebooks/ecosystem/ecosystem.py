@@ -22,7 +22,7 @@ class StraxExtension:
         """
         return self.__version__
 
-    def key(self, run_id):
+    def task_key(self, run_id):
         """Return key identifying computation tasks in the task graph
         This is usually (ClassName, versionstring)
         """
@@ -41,7 +41,7 @@ class StraxExtension:
         """
         # Which extensions are providing the dependencies?
         depends_on = [provides[k] for k in self.depends_on]
-        keys_of_deps = [k.key(run_id) for k in depends_on]
+        keys_of_deps = [k.task_key(run_id) for k in depends_on]
 
         # Get and merge their task graphs
         d = {}
@@ -49,15 +49,16 @@ class StraxExtension:
             d.update(k.task_graph(run_id))
 
         # Compute lineage of this extension
-        lineage = set(keys_of_deps).union(*[set(d[k][2])
-                                            for k in keys_of_deps])
+        lineage = set(keys_of_deps)
+        for k in keys_of_deps:
+            lineage |= d[k][2]
 
         # Get the task to compute this extension, and add it to the task graph
         task = (self._compute,
                 run_id,
                 lineage,
-                *[k.key(run_id) for k in depends_on])
-        d[self.key(run_id)] = task
+                *[k.task_key(run_id) for k in depends_on])
+        d[self.task_key(run_id)] = task
         return d
 
     def _compute(self, run_id, lineage, *dependencies):
@@ -68,19 +69,13 @@ class StraxExtension:
 
         result = self.compute(*dependencies)
 
-        # Store result on disk (if desired)
         if self.store:
-            # Key for use in the cache
-            ext_key = (run_id, self.key(run_id), lineage)
+            key_for_cache = (run_id, self.task_key(run_id), lineage)
+            CACHE.save(key_for_cache, self.save_to_cache, result)
 
-            # Request a new filename from the cache
-            filename = CACHE.new_filename(*ext_key)
-
-            # Do the actual saving ourselves (only we know our file format)
+            filename = CACHE.request_new_filename(*key_for_cache)
             self.save_to_cache(filename, result)
-
-            # Let the cache know the save actually completed
-            CACHE.register(filename, *ext_key)
+            CACHE.register_file(filename, *key_for_cache)
 
         return result
 
@@ -88,8 +83,8 @@ class StraxExtension:
         raise NotImplementedError
 
     @staticmethod
-    def save_to_cache(filename, result):
-        strax.save(result, filename)
+    def save_to_cache(result, filename):
+        strax.save(filename, result)
 
     @staticmethod
     def load_from_cache(filename):
@@ -182,48 +177,37 @@ class PeakWidths(StraxExtension):
 # Loading
 ##
 
-def load_task(run_id, extensions_to_load, provides=None):
-    if provides is None:
-        provides = dict()
-    provides = {**PROVIDES, **provides}
 
-    # Get the task graph for the extensions to load
-    final_targets = []
+def task_graph(run_id, extensions_to_load, who_provides=None):
+
+    if who_provides is None:
+        who_provides = dict()
+    who_provides = {**WHO_PROVIDES, **who_provides}
+    extensions_to_load = [who_provides[e] for e in extensions_to_load]
+    final_targets = [e.task_key(run_id) for e in extensions_to_load]
     task_graph = dict()
     for e in extensions_to_load:
-        ext = provides[e]
-        final_targets.append(ext.key(run_id))
-
-        task_graph.update(ext.task_graph(run_id, provides))
-
-    # Remove unneeded deps (possible?), map direct dependencies for each
-    task_graph, direct_deps_of = dask.optimization.cull(task_graph,
-                                                        final_targets)
+        task_graph.update(e.task_graph(run_id, who_provides))
 
     # Build a new task graph with computes replaced by load_from_cache
     # as far downstream as possible.
     new_graph = {}
     stack = final_targets.copy()
     while len(stack):
-        key = stack.pop()
-        lineage = task_graph[key][2]
+        key = stack.pop()       # key = (ExtensionClassName, version)
         if key in new_graph:
             continue
-
-        # Do we have this on ice?
-        # If so, replace the compute with a load from cache
-        filename = CACHE.find(run_id, key, lineage)
+        old_task = task_graph[key]
+        filename = CACHE.find(run_id, key, old_task[2])
         if filename:
-            new_graph[key] = (provides[key[0]].load_from_cache, filename)
+            new_graph[key] = (who_provides[key[0]].load_from_cache, filename)
         else:
-            new_graph[key] = task_graph[key]
+            new_graph[key] = old_task
             # Walk further upstream: check if we can load dependencies
-            stack.extend(direct_deps_of[key])
+            stack.extend(old_task[3:])
 
     # If we loaded some things from cache, many computations are now obsolete
-    task_graph, _ = dask.optimization.cull(task_graph, final_targets)
-    return task_graph
-
+    return dask.optimization.cull(new_graph, final_targets)[0]
 
 
 ##
@@ -233,6 +217,8 @@ def load_task(run_id, extensions_to_load, provides=None):
 from hashlib import sha1
 import os
 import json
+
+
 
 class FolderBasedCache:
     """Simple cache that stores everything in a single folder
@@ -245,24 +231,27 @@ class FolderBasedCache:
             os.makedirs(folder)
         self.folder = folder
 
-    def new_filename(self, *ext_key):
-        """Return filename where new result should be placed"""
-        return self._filename(*ext_key)
+    def request_new_filename(self, run_id, key, lineage):
+        """Return filename where new result should be placed
+        The file is not registered yet, call register_file after you've
+        saved the file successfully.
+        """
+        return self._filename(run_id, key, lineage)
 
-    def find(self, *ext_key):
+    def find(self, run_id, key, lineage):
         """Return filename for existing result of key,
         or None if no such exists"""
-        filename = self._filename(*ext_key)
+        filename = self._filename(run_id, key, lineage)
         if os.path.exists(filename):
             return filename
 
-    def delete(self, *ext_key):
-        filename = self.find(*ext_key)
+    def delete(self, run_id, key, lineage):
+        filename = self.find(run_id, key, lineage)
         if filename is None:
             raise KeyError("Cannot delete, file does not exist")
         os.remove(filename)
 
-    def register(self, filename, *ext_key):
+    def register_file(self, filename, run_id, key, lineage):
         """Register filename as a result for key"""
         pass
 
@@ -273,7 +262,7 @@ class FolderBasedCache:
         # extension separators. I'll replace them with '-' and reserve '_'
         # for the separator between fields in the filename
         filename = '_'.join([str(x) for x in key] + [h]).replace('.', '-')
-        return os.path.join(self.folder, filename)
+        return os.path.join(self.folder, run_id, filename)
 
 
 # TODO: combinedcache cache type
@@ -287,13 +276,13 @@ CACHE = FolderBasedCache('strax_data')
 # Extension registry
 ##
 
-PROVIDES = dict()
+WHO_PROVIDES = dict()
 
 def register_extension(ext, result_name):
-    global PROVIDES
+    global WHO_PROVIDES
     inst = ext()
-    PROVIDES[ext.__class__.__name__] = inst
-    PROVIDES[result_name] = inst
+    WHO_PROVIDES[ext.__class__.__name__] = inst
+    WHO_PROVIDES[result_name] = inst
 
 
 for ext, result_name in [(RawRecords, 'raw_records'),

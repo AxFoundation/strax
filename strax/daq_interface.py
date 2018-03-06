@@ -29,8 +29,9 @@ def reader_split(records, output_dir, n_readers=8):
 
 def load_from_readers(input_dir):
     """Return concatenated & sorted records from multiple reader data files"""
+    # TODO: BAD: hardcodes extension in glob.
     records = [strax.load(f)
-               for f in glob.glob(f'{input_dir}/reader_?.bin')]
+               for f in glob.glob(f'{input_dir}/reader_?.bin.json')]
     records = np.concatenate(records)
     records = strax.sort_by_time(records)
     return records
