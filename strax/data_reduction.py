@@ -4,7 +4,7 @@ import numba
 from enum import IntEnum
 
 from strax.pulse_processing import NOT_APPLICABLE, record_links
-from strax.peak_processing import find_peaks
+from strax.peak_building import find_peaks
 from strax.utils import fully_contained_in
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
