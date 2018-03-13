@@ -46,9 +46,9 @@ def pax_to_records(input_filename, samples_per_record=110):
             n_records = records_needed(p.length, samples_per_record)
             for rec_i in range(n_records):
                 r = records[i]
-                r['time'] = event.start_time \
-                            + p.left * 10 \
-                            + rec_i * samples_per_record * 10
+                r['time'] = (event.start_time
+                             + p.left * 10
+                             + rec_i * samples_per_record * 10)
                 r['channel'] = p.channel
                 r['pulse_length'] = p.length
                 r['record_i'] = rec_i

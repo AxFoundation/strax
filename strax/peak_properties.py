@@ -1,14 +1,18 @@
 import numpy as np
 import numba
 
-__all__ = 'peak_widths '.split()
+__all__ = 'compute_widths'.split()
 
-# nopython complains about zeros...
-# but object mode is really fast as well, not sure why
-@numba.jit
+
 def index_of_fraction(peaks, fractions_desired):
+    # nopython does not allow this dynamic allocation:
     results = np.zeros((len(peaks), len(fractions_desired)), dtype=np.float)
+    _index_of_fraction(peaks, fractions_desired, results)
+    return results
 
+
+@numba.jit(nopython=True, nogil=True)
+def _index_of_fraction(peaks, fractions_desired, results):
     for p_i, p in enumerate(peaks):
         area_tot = p['area']
         if area_tot <= 0:
@@ -51,14 +55,24 @@ def index_of_fraction(peaks, fractions_desired):
     return results
 
 
-def peak_widths(peaks, desired_widths):
+def compute_widths(peaks):
+    """Compute widths in ns at desired area fractions for peaks
+    returns (n_peaks, n_widths) array
+    """
+    if not len(peaks):
+        return
+
+    desired_widths = np.linspace(0, 1, len(peaks[0]['width']))
+    # 0% are width is 0 by definition, and it messes up the calculation below
+    desired_widths = desired_widths[1:]
+
     # Which area fractions do we need times for?
-    desired_widths = np.asarray(desired_widths)
     desired_fr = np.concatenate([0.5 - desired_widths / 2,
                                  0.5 + desired_widths / 2])
     desired_fr = np.sort(np.unique(desired_fr))
+
     fr_times = index_of_fraction(peaks, desired_fr)
     fr_times *= peaks['dt'].reshape(-1, 1)
 
     i = len(desired_fr) // 2
-    return fr_times[:, i:] - fr_times[:, :i]
+    peaks['width'][:, 1:] = fr_times[:, i:] - fr_times[:, :i]

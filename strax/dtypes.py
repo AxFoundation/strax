@@ -64,7 +64,7 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def peak_dtype(n_channels, n_sum_wv_samples=200):
+def peak_dtype(n_channels, n_sum_wv_samples=200, n_widths=11):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
     """
@@ -74,7 +74,10 @@ def peak_dtype(n_channels, n_sum_wv_samples=200):
         # Area per channel in ADC * samples
         ('area_per_channel', (np.int32, n_channels)),
         # Number of hits from which this peak was constructed
+        # (zero if peak was split afterwards)
         ('n_hits', np.int16),
         # Waveform data in PE/sample
         ('data', np.float32, n_sum_wv_samples),
+        # Peak widths (range_area_decile)
+        ('width', np.float32, n_widths)
     ]
