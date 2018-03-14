@@ -13,7 +13,7 @@ __all__ = 'baseline integrate find_hits'.split()
 NOT_APPLICABLE = -1
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def baseline(records, baseline_samples=40):
     """Subtract pulses from int(baseline), store baseline in baseline field
     :param baseline_samples: number of samples at start of pulse to average
@@ -48,13 +48,13 @@ def baseline(records, baseline_samples=40):
         d.baseline = bl
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
     for i, r in enumerate(records):
         records[i]['area'] = r['data'].sum()
 
 
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
     record in the same pulse, or -1 if this is not applicable
@@ -99,8 +99,9 @@ def record_links(records):
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True)
-def find_hits(result_buffer, records, threshold=15):
+@numba.jit(nopython=True, nogil=True, cache=True)
+def find_hits(records, threshold=15, _result_buffer=None):
+    buffer = _result_buffer
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -137,7 +138,7 @@ def find_hits(result_buffer, records, threshold=15):
                 if not in_interval:
                     # print('saving hit')
                     # Hit is done, add it to the result
-                    res = result_buffer[offset]
+                    res = buffer[offset]
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
@@ -149,7 +150,7 @@ def find_hits(result_buffer, records, threshold=15):
 
                     # Yield buffer to caller if needed
                     offset += 1
-                    if offset == len(result_buffer):
+                    if offset == len(buffer):
                         yield offset
                         offset = 0
 

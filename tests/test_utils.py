@@ -8,7 +8,8 @@ from hypothesis import given
 
 def test_growing_result():
     @strax.growing_result(np.int, chunk_size=2)
-    def bla(buffer):
+    def bla(_result_buffer=None):
+        buffer = _result_buffer
         offset = 0
 
         for i in range(5):
