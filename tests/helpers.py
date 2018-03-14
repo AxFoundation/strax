@@ -2,15 +2,16 @@
 # Hack to disable numba.jit
 # For the mini-examples run during testing numba actually causes a massive
 # performance drop. Moreover, if you make a buffer overrun bug, jitted fs
-# respond "slightly" less nicer (giving you junk data or segfaulting)
+# respond "slightly" less nice (giving you junk data or segfaulting)
 # Once in a while you should test without this...
 ##
-class FakeNumba:                        # noqa
-    @staticmethod
-    def jit(*args, **kwargs):
-        return lambda f: f
-import sys                              # noqa
-sys.modules['numba'] = FakeNumba        # noqa
+from unittest.mock import MagicMock
+class FakeNumba:                          # noqa
+    def jit(self, *args, **kwargs):
+        return lambda x: x
+FakeNumba.caching = MagicMock()           # noqa
+import sys                                # noqa
+sys.modules['numba'] = FakeNumba()        # noqa
 
 from itertools import accumulate
 from functools import partial

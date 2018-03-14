@@ -1,8 +1,15 @@
 import numpy as np
 import numba
+import dill
+from functools import wraps
 
 __all__ = 'records_needed growing_result sort_by_time ' \
           'fully_contained_in'.split()
+
+# Change numba's caching backend from pickle to dill
+# I'm sure they don't mind...
+# Otherwise we get strange errors while caching the @growing_result functions
+numba.caching.pickle = dill
 
 
 def records_needed(pulse_length, samples_per_record):
@@ -13,7 +20,9 @@ def records_needed(pulse_length, samples_per_record):
 def growing_result(dtype=np.int, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
     Functions must obey following API:
-     - first argument is buffer array of specified dtype and length chunk_size
+     - accept _result_buffer keyword argument with default None;
+       this will be the buffer array of specified dtype and length chunk_size
+       (it's an optional argument so this decorator preserves signature)
      - 'yield N' from function will cause first elements to be saved
      - function is responsible for tracking offset and calling yield on time!
     The buffer is not explicitly cleared.
@@ -22,15 +31,15 @@ def growing_result(dtype=np.int, chunk_size=10000):
     unfortunately)
     """
     def _growing_result(f):
-        # Do not use functools.wraps, it messes with the signature
-        # in ways numba does not appreciate
         # Note we allow user to override chunk_size and dtype after calling
+        # This just sets the defaults.
+        @wraps(f)
         def wrapped_f(*args, chunk_size=chunk_size, dtype=dtype, **kwargs):
             buffer = np.zeros(chunk_size, dtype)
 
             # Keep a list of saved buffers to concatenate at the end
             saved_buffers = []
-            for n_added in f(buffer, *args, **kwargs):
+            for n_added in f(*args, _result_buffer=buffer, **kwargs):
                 saved_buffers.append(buffer[:n_added].copy())
 
             # If nothing returned, return an empty array of the right dtype
@@ -45,7 +54,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
 
 # (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
 # TODO: maybe this should be a factory?
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
     time = x['time'].copy()    # This increases speed even more
     sort_i = np.argsort(time)

@@ -26,7 +26,7 @@ class ReductionLevel(IntEnum):
     METADATA_ONLY = 4
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def cut_baseline(records, n_before=48, n_after=30):
     """"Replace first n_before and last n_after samples of pulses by 0
     """
@@ -48,7 +48,7 @@ def cut_baseline(records, n_before=48, n_after=30):
     records.reduction_level[:] = ReductionLevel.BASELINE_CUT
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     """Zero record waveforms not within left_extension or right_extension of
     hits.
@@ -94,7 +94,7 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     records.reduction_level[:] = ReductionLevel.HITS_ONLY
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def replace_with_spike(records, also_for_multirecord_pulses=False):
     """Replaces the waveform in each record with a spike of the same integral
     :param also_for_multirecord_pulses: if True, does this even if the pulse
