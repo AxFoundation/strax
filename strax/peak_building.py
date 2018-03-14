@@ -8,12 +8,13 @@ __all__ = 'find_peaks sum_waveform'.split()
 
 
 @utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True)
-def find_peaks(peaks_buffer, hits, to_pe,
+@numba.jit(nopython=True, nogil=True, cache=True)
+def find_peaks(hits, to_pe,
                gap_threshold=300,
                left_extension=20, right_extension=150,
                min_hits=3, min_area=0,
-               max_duration=int(1e9)):
+               max_duration=int(1e9),
+               _result_buffer=None):
     """Return peaks made from grouping hits together
     Assumes all hits have the same dt
     :param hits: Hit (or any interval) to group
@@ -24,6 +25,7 @@ def find_peaks(peaks_buffer, hits, to_pe,
     :param min_area: Peaks with less than min_area are not returned
     :param max_duration: Peaks are forcefully ended after this many ns
     """
+    buffer = _result_buffer
     offset = 0
     if not len(hits):
         return
@@ -38,13 +40,13 @@ def find_peaks(peaks_buffer, hits, to_pe,
     # assert max_duration < np.iinfo(np.int32).max * hits[0]['dt'], \
     #   "Max duration must fit in a 32-bit signed integer"
 
-    area_per_channel = np.zeros(len(peaks_buffer[0]['area_per_channel']),
+    area_per_channel = np.zeros(len(buffer[0]['area_per_channel']),
                                 dtype=np.int32)
     in_peak = False
     peak_endtime = 0
 
     for hit_i, hit in enumerate(hits):
-        p = peaks_buffer[offset]
+        p = buffer[offset]
         t0 = hit['time']
         dt = hit['dt']
         t1 = hit['time'] + dt * hit['length']
@@ -84,14 +86,14 @@ def find_peaks(peaks_buffer, hits, to_pe,
 
             # Save the current peak, advance the buffer
             offset += 1
-            if offset == len(peaks_buffer):
+            if offset == len(buffer):
                 yield offset
                 offset = 0
 
     yield offset
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(peaks, records, adc_to_pe):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
