@@ -11,7 +11,7 @@ def index_of_fraction(peaks, fractions_desired):
     return results
 
 
-@numba.jit(nopython=True, nogil=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def _index_of_fraction(peaks, fractions_desired, results):
     for p_i, p in enumerate(peaks):
         area_tot = p['area']
