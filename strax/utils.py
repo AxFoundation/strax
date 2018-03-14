@@ -5,7 +5,6 @@ __all__ = 'records_needed growing_result sort_by_time ' \
           'fully_contained_in'.split()
 
 
-@numba.jit
 def records_needed(pulse_length, samples_per_record):
     """Return records needed to store pulse_length samples"""
     return 1 + (pulse_length - 1) // samples_per_record

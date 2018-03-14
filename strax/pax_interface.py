@@ -39,13 +39,13 @@ def pax_to_records(input_filename, samples_per_record=110):
     n_records = records_needed(pulse_lengths, samples_per_record).sum()
     records = np.zeros(n_records, dtype=record_dtype(samples_per_record))
 
-    i = 0  # Record offset in data
+    output_record_index = 0  # Record offset in data
     for event in get_events():
         for p in event.pulses:
 
             n_records = records_needed(p.length, samples_per_record)
             for rec_i in range(n_records):
-                r = records[i]
+                r = records[output_record_index]
                 r['time'] = (event.start_time
                              + p.left * 10
                              + rec_i * samples_per_record * 10)
@@ -58,16 +58,19 @@ def pax_to_records(input_filename, samples_per_record=110):
                 if rec_i != n_records - 1:
                     # There's more chunks coming, so we store a full chunk
                     n_store = samples_per_record
+                    assert p.length > samples_per_record * (rec_i + 1)
                 else:
                     # Just enough to store the rest of the data
                     # Note it's not p.length % samples_per_record!!!
                     # (that would be zero if we have to store a full record)
                     n_store = p.length - samples_per_record * rec_i
 
+                assert 0 <= n_store <= samples_per_record
+                r['length'] = n_store
+
                 offset = rec_i * samples_per_record
-                r['data'][:n_store] = \
-                    p.raw_data[offset:offset + n_store]
-                i += 1
+                r['data'][:n_store] = p.raw_data[offset:offset + n_store]
+                output_record_index += 1
 
     mypax.shutdown()
     return records
