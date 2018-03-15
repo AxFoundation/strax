@@ -12,5 +12,5 @@ setup(name='strax',
       author_email='j.aalbers@uva.nl',
       url='https://github.com/jelleaalbers/strax',
       setup_requires=requires + ['pytest-runner'],
-      tests_require=requires + ['pytest'],
+      tests_require=requires + ['pytest', 'boltons', 'hypothesis'],
       packages=['strax'])

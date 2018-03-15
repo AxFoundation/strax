@@ -1,6 +1,5 @@
 numpy
 numba
+pandas
 blosc
 zstd
-boltons
-hypothesis
