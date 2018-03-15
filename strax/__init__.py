@@ -11,5 +11,6 @@ from .peak_splitting import *       # noqa
 from .peak_properties import *      # noqa
 from .utils import *                # noqa
 
-# Separate interfaces
-from . import daq_interface, pax_interface          # noqa
+from . import daq_interface
+from . import pax_interface
+from . import io_chunked
