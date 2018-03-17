@@ -6,8 +6,27 @@ import numpy as np
 
 import strax
 
-__all__ = ('StraxPlugin',)
+__all__ = ('StraxPlugin', 'register_plugin')
 
+
+##
+# Plugin registry
+# This global dict tracks which plugin provides which data
+##
+
+REGISTRY = dict()
+
+
+def register_plugin(plugin_class):
+    global REGISTRY
+    inst = plugin_class()
+    REGISTRY[inst.provides] = inst
+    return plugin_class
+
+
+##
+# Base plugin
+##
 
 class StraxPlugin:
     depends_on: tuple
@@ -30,14 +49,14 @@ class StraxPlugin:
             self.chunking = self.provides
 
     def iter(self, input_dir, pbar=True):
-        """Yield result chunks for processing data_dir"""
+        """Yield result chunks for processing input_dir"""
         # Get iterator over dependency chunks
         # i.e. something that gives {'dep1': array, 'dep2': array} on each iter
         dep_dirs = [os.path.join(input_dir, k) for k in self.depends_on]
-        dep_chunks = {k: strax.io_chunked.read_chunks(dirname)
-                      for k, dirname in zip(self.depends_on, dep_dirs)}
-        my_it = (dict(zip(dep_chunks, col))
-                 for col in zip(*dep_chunks.values()))
+        dep_chunk_iters = {k: strax.io_chunked.read_chunks(dirname)
+                           for k, dirname in zip(self.depends_on, dep_dirs)}
+        my_it = (dict(zip(dep_chunk_iters, col))
+                 for col in zip(*dep_chunk_iters.values()))
 
         if pbar:
             # Make a progress bar if we have tqdm installed
@@ -83,3 +102,24 @@ def camel_to_snake(x):
     # From https://stackoverflow.com/questions/1175208
     x = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', x).lower()
+
+
+##
+# Specialized plugins
+##
+
+class MergePlugin(strax.StraxPlugin):
+    """Plugin that merges data from its dependencies
+    """
+
+    def __init__(self):
+        # TODO: check data type is the same
+        # TODO: check chunking is the same (until multi-chunk looping properly
+        # supported)
+        self.dtype = sum([REGISTRY[x].dtype
+                          for x in self.depends_on],
+                         [])
+        super().__init__()
+
+    def compute(self, **kwargs):
+        return strax.merge_arrs(list(kwargs.values()))
