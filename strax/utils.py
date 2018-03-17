@@ -4,7 +4,8 @@ import dill
 from functools import wraps
 
 __all__ = 'records_needed growing_result sort_by_time ' \
-          'fully_contained_in unpack_dtype merge_arrs'.split()
+          'first_index_beyond endtime fully_contained_in ' \
+          'unpack_dtype merge_arrs'.split()
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -71,6 +72,21 @@ def sort_by_time(x):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
+def first_index_beyond(arr, t):
+    """Return first index of array beyond t, or len(arr) if no such found"""
+    for i, x in enumerate(arr):
+        if x > t:
+            return i
+    return len(arr)
+
+
+def endtime(x):
+    """Return endtime of intervals x"""
+    if 'endtime' in x.dtype.names:
+        return x['endtime']
+    return x['time'] + x['length'] * x['dt']
+
+
 def fully_contained_in(things, containers):
     """Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
@@ -80,32 +96,34 @@ def fully_contained_in(things, containers):
     result = np.ones(len(things), dtype=np.int32) * -1
     a_starts = things['time']
     b_starts = containers['time']
-    a_ends = a_starts + things['length'] * things['dt']
-    b_ends = b_starts + containers['length'] * containers['dt']
+    a_ends = endtime(things)
+    b_ends = endtime(containers)
+    _fc_in(a_starts, b_starts, a_ends, b_ends, result)
+    return result
 
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
     b_i = 0
-    for a_i in range(len(things)):
+    for a_i in range(len(a_starts)):
         # Skip ahead one or more b's if we're beyond them
-        while b_i < len(containers) and b_ends[b_i] < a_starts[a_i]:
+        while b_i < len(b_starts) and b_ends[b_i] < a_starts[a_i]:
             b_i += 1
-        if b_i == len(containers):
+        if b_i == len(b_starts):
             break
 
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
 
-    return result
 
+def unpack_dtype(dtype):
+    """Return list of tuples needed to construct the dtype
 
-def unpack_dtype(arr):
-    """Return list of tuples needed to construct the dtype of structured array arr
-
-    arr.dtype == np.dtype(unpack_dtype(arr))
+    dtype == np.dtype(unpack_dtype(dtype))
     """
-    dt = arr.dtype
     result = []
-    fields = dt.fields
-    for field_name in dt.names:
+    fields = dtype.fields
+    for field_name in dtype.names:
         fieldinfo = fields[field_name]
         if len(fieldinfo) == 3:
             # The field has a "titles" attribute.
@@ -125,7 +143,7 @@ def merge_arrs(arrs):
     n = len(arrs[0])
     if not all(np.array([len(x) for x in arrs]) == n):
         raise ValueError("Arrays must all have the same length")
-    result_dtype = sum([unpack_dtype(x) for x in arrs], [])
+    result_dtype = sum([unpack_dtype(x.dtype) for x in arrs], [])
     result = np.zeros(n, dtype=result_dtype)
     for arr in arrs:
         for fn in arr.dtype.names:

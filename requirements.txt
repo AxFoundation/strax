@@ -3,3 +3,4 @@ numba
 pandas
 blosc
 zstd
+tqdm
