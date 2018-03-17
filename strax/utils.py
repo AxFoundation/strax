@@ -24,18 +24,27 @@ def growing_result(dtype=np.int, chunk_size=10000):
        this will be the buffer array of specified dtype and length chunk_size
        (it's an optional argument so this decorator preserves signature)
      - 'yield N' from function will cause first elements to be saved
-     - function is responsible for tracking offset and calling yield on time!
-    The buffer is not explicitly cleared.
+     - function is responsible for tracking offset, calling yield on time,
+       and clearing the buffer afterwards.
+     - optionally, accept result_dtype argument with default None;
+       this allows function user to specify return dtype
 
     See test_utils.py for a simple example (I can't get it to run as a doctest
     unfortunately)
     """
     def _growing_result(f):
-        # Note we allow user to override chunk_size and dtype after calling
-        # This just sets the defaults.
         @wraps(f)
-        def wrapped_f(*args, chunk_size=chunk_size, dtype=dtype, **kwargs):
-            buffer = np.zeros(chunk_size, dtype)
+        def wrapped_f(*args, **kwargs):
+
+            if '_result_buffer' in kwargs:
+                raise ValueError("_result_buffer argument is internal-only")
+
+            _dtype = kwargs.get('result_dtype')
+            if _dtype is None:
+                _dtype = dtype
+            else:
+                del kwargs['result_dtype']   # Don't pass it on to function
+            buffer = np.zeros(chunk_size, _dtype)
 
             # Keep a list of saved buffers to concatenate at the end
             saved_buffers = []
@@ -44,7 +53,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
 
             # If nothing returned, return an empty array of the right dtype
             if not len(saved_buffers):
-                return np.zeros(0, dtype)
+                return np.zeros(0, _dtype)
             return np.concatenate(saved_buffers)
 
         return wrapped_f

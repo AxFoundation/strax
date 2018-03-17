@@ -20,16 +20,17 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
                              min_height=min_height,
                              min_ratio=min_ratio,
                              orig_dt=records[0]['dt'],
-                             is_split=is_split)
+                             is_split=is_split,
+                             result_dtype=peaks.dtype)
     strax.sum_waveform(new_peaks, records, to_pe)
     return strax.sort_by_time(np.concatenate([peaks[~is_split],
                                               new_peaks]))
 
 
-@strax.utils.growing_result(dtype=strax.peak_dtype(260), chunk_size=10)
+@strax.utils.growing_result(dtype=strax.peak_dtype(100), chunk_size=10)
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
-                 _result_buffer=None):
+                 _result_buffer=None, result_dtype=None):
     new_peaks = _result_buffer
     offset = 0
 
