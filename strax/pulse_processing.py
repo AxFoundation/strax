@@ -95,12 +95,14 @@ def record_links(records):
 
 # Chunk size should be at least a thousand,
 # else copying buffers / switching context dominates over actual computation
-# cache=True actually gives a pickle error when used with hypothesis :-(
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
 @utils.growing_result(hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_hits(records, threshold=15, _result_buffer=None):
+    """Return hits (intervals above threshold) found in records.
+    Hits that straddle record boundaries are split (TODO: fix this?)
+    """
     buffer = _result_buffer
     if not len(records):
         return
@@ -158,9 +160,3 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
-
-
-find_hits.__doc__ = """
-Return hits (intervals above threshold) found in records.
-Hits that straddle record boundaries are split (TODO: fix this?)
-"""
