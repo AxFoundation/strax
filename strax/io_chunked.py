@@ -38,7 +38,7 @@ class Saver:
 
         # TODO: is this right? is this the right place?
         metadata = dict()
-        if 'time' in r[0]:
+        if 'time' in r[0].dtype.names:
             metadata['first_time'] = int(r[0]['time'])
 
         strax.save(fn, r,
@@ -80,7 +80,7 @@ class ThresholdSizeSaver(Saver):
     you expect.
     """
 
-    def __init__(self, *args, threshold_bytes=100 * int(1e6), **kwargs):
+    def __init__(self, *args, threshold_bytes=1 * int(1e6), **kwargs):
         self.threshold_bytes = threshold_bytes
         super().__init__(*args, **kwargs)
 

@@ -6,7 +6,7 @@ import numpy as np
 
 import strax
 
-__all__ = ('StraxPlugin', 'register_plugin')
+__all__ = 'register_plugin StraxPlugin MergePlugin'.split()
 
 
 ##
@@ -48,29 +48,49 @@ class StraxPlugin:
             # No chunking scheme specified: start a new one
             self.chunking = self.provides
 
-    def iter(self, input_dir, pbar=True):
-        """Yield result chunks for processing input_dir"""
-        # Get iterator over dependency chunks
-        # i.e. something that gives {'dep1': array, 'dep2': array} on each iter
-        dep_dirs = [os.path.join(input_dir, k) for k in self.depends_on]
-        dep_chunk_iters = {k: strax.io_chunked.read_chunks(dirname)
-                           for k, dirname in zip(self.depends_on, dep_dirs)}
-        my_it = (dict(zip(dep_chunk_iters, col))
-                 for col in zip(*dep_chunk_iters.values()))
+    def iter(self, input_dir, pacemaker=None, pbar=True):
+        """Yield result chunks for processing input_dir
+        """
+        # Which dependency decides the chunking?
+        if pacemaker is None:
+            if self.chunking in self.depends_on:
+                # We have to chunk output like one of the dependencies,
+                # so let's use that one and save the Saver some trouble
+                pacemaker = self.chunking
+            else:
+                pacemaker = self.depends_on[0]
+        other_deps = [k for k in self.depends_on if k != pacemaker]
 
+        dirnames = {k: os.path.join(input_dir, k) for k in self.depends_on}
+        chunk_iters = {k: strax.io_chunked.read_chunks(dn)
+                       for k, dn in dirnames.items()}
+        my_iter = chunk_iters[pacemaker]
+
+        # Add a progress bar if we have tqdm installed and pbar=True
         if pbar:
-            # Make a progress bar if we have tqdm installed
             try:
                 from tqdm import tqdm         # noqa
-                n_chunks = len(strax.io_chunked.chunk_files(dep_dirs[0]))
-                my_it = tqdm(my_it,
+                n_chunks = len(strax.io_chunked.chunk_files(
+                    dirnames[pacemaker]))
+                my_iter = tqdm(my_iter,
                              total=n_chunks,
                              desc=f"Computing {self.provides} of {input_dir}")
             except ImportError:
                 pass
 
-        for x in my_it:
-            yield self.compute(**x)
+        buffers = {k: next(chunk_iters[k]) for k in other_deps}
+        for x in my_iter:
+            dep_data = {pacemaker: x}
+            for k in other_deps:
+
+                while len(buffers[k]) < len(x):
+                    buffers[k] = np.concatenate((buffers[k],
+                                                 next(chunk_iters[k])))
+
+                dep_data[k] = buffers[k][:len(x)]
+                buffers[k] = buffers[k][len(x):]
+
+            yield self.compute(**dep_data)
 
     def process_and_slurp(self, input_dir, **kwargs):
         """Return results for processing data_dir"""
@@ -108,7 +128,7 @@ def camel_to_snake(x):
 # Specialized plugins
 ##
 
-class MergePlugin(strax.StraxPlugin):
+class MergePlugin(StraxPlugin):
     """Plugin that merges data from its dependencies
     """
 
