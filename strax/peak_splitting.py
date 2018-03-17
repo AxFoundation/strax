@@ -26,6 +26,38 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
                                               new_peaks]))
 
 
+@strax.utils.growing_result(dtype=strax.peak_dtype(260), chunk_size=10)
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
+                 _result_buffer=None):
+    new_peaks = _result_buffer
+    offset = 0
+
+    for p_i, p in enumerate(peaks):
+        prev_split_i = 0
+
+        for split_i in find_split_points(p['data'][:p['length']],
+                                         min_height=min_height * p['dt'],
+                                         min_ratio=min_ratio):
+            is_split[p_i] = True
+
+            r = new_peaks[offset]
+            r['time'] = p['time'] + prev_split_i * p['dt']
+            r['channel'] = p['channel']
+            r['dt'] = orig_dt
+            r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+
+            offset += 1
+            if offset == len(new_peaks):
+                yield offset
+                offset = 0
+
+            prev_split_i = split_i
+
+    yield offset
+
+
+
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_split_points(w, min_height=0, min_ratio=0):
     """"Yield indices of prominent local minima in w
@@ -62,34 +94,3 @@ def find_split_points(w, min_height=0, min_ratio=0):
 
     if found_one:
         yield len(w) - 1
-
-
-@strax.utils.growing_result(dtype=strax.peak_dtype(260), chunk_size=10)
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
-                 _result_buffer=None):
-    new_peaks = _result_buffer
-    offset = 0
-
-    for p_i, p in enumerate(peaks):
-        prev_split_i = 0
-
-        for split_i in find_split_points(p['data'][:p['length']],
-                                         min_height=min_height * p['dt'],
-                                         min_ratio=min_ratio):
-            is_split[p_i] = True
-
-            r = new_peaks[offset]
-            r['time'] = p['time'] + prev_split_i * p['dt']
-            r['channel'] = p['channel']
-            r['dt'] = orig_dt
-            r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-
-            offset += 1
-            if offset == len(new_peaks):
-                yield offset
-                offset = 0
-
-            prev_split_i = split_i
-
-    yield offset
