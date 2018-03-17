@@ -29,7 +29,7 @@ interval_dtype = [
 ]
 
 
-def record_dtype(samples_per_record):
+def record_dtype(samples_per_record=110):
     """Data type for a waveform record.
 
     Length can be shorter than the number of samples in data,

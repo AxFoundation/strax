@@ -7,14 +7,14 @@ from strax.dtypes import peak_dtype, DIGITAL_SUM_WAVEFORM_CHANNEL
 __all__ = 'find_peaks sum_waveform'.split()
 
 
-@utils.growing_result(dtype=peak_dtype(260), chunk_size=int(1e4))
+@utils.growing_result(dtype=peak_dtype(100), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_peaks(hits, to_pe,
                gap_threshold=300,
                left_extension=20, right_extension=150,
                min_hits=3, min_area=0,
                max_duration=int(1e9),
-               _result_buffer=None):
+               _result_buffer=None, result_dtype=None):
     """Return peaks made from grouping hits together
     Assumes all hits have the same dt
     :param hits: Hit (or any interval) to group
