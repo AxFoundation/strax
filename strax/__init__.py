@@ -10,6 +10,7 @@ from .peak_building import *        # noqa
 from .peak_splitting import *       # noqa
 from .peak_properties import *      # noqa
 from .utils import *                # noqa
+from .plugin import *               # noqa
 
 from . import daq_interface
 from . import pax_interface

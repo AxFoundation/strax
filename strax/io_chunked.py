@@ -35,9 +35,15 @@ class Saver:
     def write(self):
         fn = os.path.join(self.dir, '%06d' % self.chunks_saved)
         r = np.concatenate(self.buffer)
+
+        # TODO: is this right? is this the right place?
+        metadata = dict()
+        if 'time' in r[0]:
+            metadata['first_time'] = int(r[0]['time'])
+
         strax.save(fn, r,
                    compressor=self.compressor,
-                   first_time=int(r[0]['time']))
+                   **metadata)
 
         self.buffer = []
         self.chunks_saved += 1

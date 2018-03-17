@@ -6,6 +6,8 @@ import numpy as np
 
 import strax
 
+__all__ = ('StraxPlugin',)
+
 
 class StraxPlugin:
     depends_on: tuple
@@ -27,44 +29,50 @@ class StraxPlugin:
             # No chunking scheme specified: start a new one
             self.chunking = self.provides
 
-    def iter(self, data_dir):
+    def iter(self, input_dir, pbar=True):
         """Yield result chunks for processing data_dir"""
         # Get iterator over dependency chunks
         # i.e. something that gives {'dep1': array, 'dep2': array} on each iter
-        dep_chunks = {k: strax.io_chunked.read_chunks(
-                        os.path.join(data_dir, k))
-                      for k in self.depends_on}
-        dep_chunks_tr = (dict(zip(dep_chunks, col))
-                         for col in zip(*dep_chunks.values()))
+        dep_dirs = [os.path.join(input_dir, k) for k in self.depends_on]
+        dep_chunks = {k: strax.io_chunked.read_chunks(dirname)
+                      for k, dirname in zip(self.depends_on, dep_dirs)}
+        my_it = (dict(zip(dep_chunks, col))
+                 for col in zip(*dep_chunks.values()))
 
-        # TODO: progress bar ETA: need to fetch total n_chunks
-        for ch in dep_chunks_tr:
-            yield self.compute(**ch)
+        if pbar:
+            # Make a progress bar if we have tqdm installed
+            try:
+                from tqdm import tqdm         # noqa
+                n_chunks = len(strax.io_chunked.chunk_files(dep_dirs[0]))
+                my_it = tqdm(my_it,
+                             total=n_chunks,
+                             desc=f"Computing {self.provides} of {input_dir}")
+            except ImportError:
+                pass
 
-    def process_and_slurp(self, data_dir):
+        for x in my_it:
+            yield self.compute(**x)
+
+    def process_and_slurp(self, input_dir, **kwargs):
         """Return results for processing data_dir"""
-        return np.concatenate(list(self.iter(data_dir)))
+        return np.concatenate(list(self.iter(input_dir, **kwargs)))
 
-    def _get_saver(self, data_dir):
-        out_dir = os.path.join(data_dir, self.provides)
+    def _saver(self, output_dir):
+        out_dir = os.path.join(output_dir, self.provides)
         if self.chunking in self.depends_on:
             # Chunk like our dependencies
             return strax.io_chunked.Saver(out_dir)
         else:
-            # Make our own chunks
+            # Make fixed-size chunks
             return strax.io_chunked.ThresholdSizeSaver(out_dir)
 
-    def process_and_save(self, data_dir):
+    def save(self, input_dir, output_dir=None, **kwargs):
         """Process data_dir and save the results there"""
-        with self._get_saver(data_dir) as saver:
-            for out in self.iter(data_dir):
+        if output_dir is None:
+            output_dir = input_dir
+        with self._saver(output_dir) as saver:
+            for out in self.iter(input_dir, **kwargs):
                 saver.feed(out)
-
-    def iter_and_save(self, data_dir):
-        with self._get_saver(data_dir) as saver:
-            for out in self.iter(data_dir):
-                saver.feed(out)
-                yield out
 
     def compute(self, **kwargs):
         raise NotImplementedError
