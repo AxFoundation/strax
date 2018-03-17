@@ -4,7 +4,7 @@ import dill
 from functools import wraps
 
 __all__ = 'records_needed growing_result sort_by_time ' \
-          'fully_contained_in'.split()
+          'fully_contained_in unpack_dtype merge_arrs'.split()
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -94,4 +94,40 @@ def fully_contained_in(things, containers):
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
 
+    return result
+
+
+def unpack_dtype(arr):
+    """Return list of tuples needed to construct the dtype of structured array arr
+
+    arr.dtype == np.dtype(unpack_dtype(arr))
+    """
+    dt = arr.dtype
+    result = []
+    fields = dt.fields
+    for field_name in dt.names:
+        fieldinfo = fields[field_name]
+        if len(fieldinfo) == 3:
+            # The field has a "titles" attribute.
+            # In this case, the tuple returned by .fields
+            # is inconsistent with the tuple expected by np.dtype constructor :-(
+            field_dtype, some_number, field_title = fieldinfo
+            result.append(((field_title, field_name), field_dtype))
+        else:
+            field_dtype, some_number = fieldinfo
+            result.append((field_name, field_dtype))
+    return result
+
+
+def merge_arrs(arrs):
+    """Merge structured arrays of equal length. Assumes no field collisions.
+    """
+    n = len(arrs[0])
+    if not all(np.array([len(x) for x in arrs]) == n):
+        raise ValueError("Arrays must all have the same length")
+    result_dtype = sum([unpack_dtype(x) for x in arrs], [])
+    result = np.zeros(n, dtype=result_dtype)
+    for arr in arrs:
+        for fn in arr.dtype.names:
+            result[fn] = arr[fn]
     return result
