@@ -8,7 +8,7 @@ from hypothesis import given
 
 def test_growing_result():
     @strax.growing_result(np.int, chunk_size=2)
-    def bla(_result_buffer=None):
+    def bla(_result_buffer=None, result_dtype=None):
         buffer = _result_buffer
         offset = 0
 
@@ -23,9 +23,13 @@ def test_growing_result():
 
     result = np.array([0, 1, 2, 3, 4], dtype=np.int)
     np.testing.assert_equal(bla(), result)
-    np.testing.assert_equal(bla(chunk_size=1), result)
-    np.testing.assert_equal(bla(chunk_size=7), result)
-    np.testing.assert_equal(bla(dtype=np.float), result.astype(np.float))
+    # TODO: re-enable chunk size spec?
+    # np.testing.assert_equal(bla(chunk_size=1), result)
+    # np.testing.assert_equal(bla(chunk_size=7), result)
+    should_get = result.astype(np.float)
+    got = bla(result_dtype=np.float)
+    np.testing.assert_equal(got, should_get)
+    assert got.dtype == should_get.dtype
 
 
 @given(sorted_intervals, disjoint_sorted_intervals)
