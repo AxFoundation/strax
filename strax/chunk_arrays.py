@@ -37,17 +37,6 @@ class ChunkPacer:
         self.buffer_items = len(b)
         return result
 
-    def __iter__(self):
-        """Fetch one chunk (if possible), then return entire buffer"""
-        done = False
-        while not done:
-            try:
-                self._fetch_another()
-            except StopIteration:
-                done = True
-                pass
-            yield self._take_from_buffer(self.buffer_items)
-
     def get_n(self, n: int):
         """Return array of the next n elements produced by source,
         or (if this is less) as many as the source can still produce.
