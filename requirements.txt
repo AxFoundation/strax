@@ -1,6 +1,6 @@
 numpy
-numba
 pandas
+numba
 blosc
 zstd
 tqdm

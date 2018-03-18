@@ -11,6 +11,7 @@ from tqdm import tqdm
 import numpy as np
 
 import strax
+from strax import chunk_arrays
 
 __all__ = 'register_plugin StraxPlugin MergePlugin LoopPlugin'.split()
 
@@ -29,14 +30,6 @@ def register_plugin(plugin_class):
     REGISTRY[inst.provides] = inst
     return plugin_class
 
-##
-# These should go to utils
-##
-import numba
-
-
-
-
 
 ##
 # Base plugin
@@ -46,7 +39,6 @@ class StraxPlugin:
     data_kind: str
     depends_on: tuple
     provides: str
-    chunking: str
 
     def __init__(self):
         self.dtype = np.dtype(self.dtype)
@@ -65,152 +57,88 @@ class StraxPlugin:
             snake_name = camel_to_snake(self.__class__.__name__)
             self.provides = snake_name
 
-        if not hasattr(self, 'chunking'):
-            # No chunking scheme specified: start a new one
-            self.chunking = self.provides
-
     def iter(self, input_dir, pbar=True, n_per_iter=None):
         """Yield result chunks for processing input_dir
         """
-        # Which dependency decides the chunking? Call this the 'pacemaker'
-        if self.chunking in self.depends_on:
-            # We have to chunk output like one of the dependencies
-            if n_per_iter:
-                raise ValueError("Will get into trouble, saver just passes on")
-            pacemaker = self.chunking
-        else:
-            pacemaker = self.depends_on[0]
+        # Group dependencies by data kind
+        # {kind: [dep, dep, ..], ...}
+        from collections import OrderedDict
+        deps_of_kind = OrderedDict()
+        kind_of = dict()
+        for d in self.depends_on:
+            kind_of[d] = k = REGISTRY[d].data_kind
+            deps_of_kind.setdefault(k, [])
+            deps_of_kind[k].append(d)
 
-        dep_plugins = {k: REGISTRY[k] for k in self.depends_on}
-        data_kinds = list(set([p.data_kind
-                              for p in dep_plugins.values()]))
-        multi_kind = len(data_kinds) > 1
+        # At least one dependency of each kind should have time information.
+        # (which we need to sync among different data kinds)
+        # We'll call this the "key dependency" of that type.
+        key_for = OrderedDict()
+        for k, ds in deps_of_kind.items():
+            for d in ds:
+                if 'time' in REGISTRY[d].dtype.names:
+                    key_for[k] = d
+            if k not in key_for:
+                raise ValueError(f"One of the dependencies {ds} of the kind "
+                                 f"{k} must provide time information!")
 
-        if multi_kind:
-            # We depend on several data kinds (e.g. peaks and events).
-            # At least one dependency of each kind should have time information
-            # necessary to chunk consistently.
-            # We'll call these "key dependencies".
-            key_of = dict()
-            for k in data_kinds:
-                deps_this_kind = [depname
-                                  for depname, p in dep_plugins.items()
-                                  if p.data_kind == k]
-                for d in deps_this_kind:
-                    if 'time' in dep_plugins[d].dtype.names:
-                        key_of[k] = d
-                if k not in key_of:
-                    raise ValueError("One of the dependencies "
-                                     f"{deps_this_kind} of the kind {k} "
-                                     "must provide time information!")
+        # Key dependency of first datatype becomes the master iterator
+        master = key_for[list(deps_of_kind.keys())[0]]
 
-            key_deps = list(key_of.values())
-            if pacemaker not in key_deps:
-                raise ValueError(f"Pacemaker {pacemaker} should have been a "
-                                 "dependency that provides time info (like "
-                                 f"{key_deps}.")
-            other_deps = [k for k in self.depends_on
-                          if k not in key_deps]
+        # Grab iterators/pacers for each dependency
+        pacers = dict()
+        master_iter = None
+        for d in self.depends_on:
+            dn = os.path.join(input_dir, d)
+            it = strax.io_chunked.read_chunks(dn)
+            if d != master:
+                pacers[d] = chunk_arrays.ChunkPacer(it)
+                continue
 
-        else:
-            key_of = {dep_plugins[pacemaker].data_kind: pacemaker}
-            key_deps = []
-            other_deps = [k for k in self.depends_on
-                          if k != pacemaker]
+            master_iter = it
+            if pbar:
+                n_chunks = len(strax.io_chunked.chunk_files(dn))
+                desc = f"Computing {self.provides} of {input_dir}"
+                master_iter = iter(tqdm(master_iter,
+                                        total=n_chunks,
+                                        desc=desc))
+            if n_per_iter is not None:
+                master_iter = chunk_arrays.fixed_length_chunks(master_iter,
+                                                               n_per_iter)
 
-        # Get iterators over chunk files for each dependency
-        dirnames = {k: os.path.join(input_dir, k) for k in self.depends_on}
-        chunk_iters = {k: strax.io_chunked.read_chunks(dn)
-                       for k, dn in dirnames.items()}
-        pacemaker_iter = chunk_iters[pacemaker]
+        for i, x in enumerate(master_iter):
+            result = {master: x}
 
-        if pbar:
-            # Add progress bar
-            n_chunks = len(strax.io_chunked.chunk_files(
-                dirnames[pacemaker]))
-            desc = f"Computing {self.provides} of {input_dir}"
-            pacemaker_iter = tqdm(pacemaker_iter, total=n_chunks, desc=desc)
+            # Add key dependencies
+            for d in key_for.values():
+                if d == master:
+                    continue
+                # TODO: assumed sorted on endtime: only true if nonoverlapping!
+                result[d] = pacers[d].get_until(strax.endtime(x[-1]),
+                                                f=strax.endtime)
 
-        if n_per_iter is not None:
-            # Use a maximum chunk size for processing
-            def _make_my_iter():
-                for y in pacemaker_iter:
-                    while len(y) > n_per_iter:
-                        # print("Emmiting constrained chunk")
-                        res, y = np.split(y, [n_per_iter])
-                        yield res
-                    if len(y):
-                        # print("Emmiting tail chunk")
-                        yield y
-            my_iter = _make_my_iter()
-        else:
-            # Process whole chunks from disk at once
-            my_iter = pacemaker_iter
+            # Add rest now that syncing is known
+            for d in self.depends_on:
+                if d in key_for.values():
+                    continue
+                key_dep = key_for[kind_of[d]]
+                result[d] = pacers[d].get_n(len(result[key_dep]))
 
-        buffers = {k: next(chunk_iters[k])
-                   for k in self.depends_on if k != pacemaker}
-        for x in my_iter:
-            dep_data = {pacemaker: x}
-
-            if multi_kind:
-                # Grab the right chunks of the key dependencies
-                last_endtime = strax.endtime(x[-1])
-
-                for k in key_deps:
-                    if k == pacemaker:
-                        continue
-                    b = buffers[k]
-
-                    # Assemble enough data
-                    while True:
-                        last = strax.endtime(b[-1])
-                        if last > last_endtime:
-                            break
-                        try:
-                            new = next(chunk_iters[k])
-                            b = np.concatenate((b, new))
-                        except StopIteration:
-                            break
-
-                    n = strax.first_index_beyond(strax.endtime(b),
-                                                 last_endtime)
-                    dep_data[k], buffers[k] = np.split(b, [n])
-
-            # Grab right chunks of other dependencies (which probably do not
-            # have time information, like the key dependencies)
-            for k in other_deps:
-                data_kind = dep_plugins[k].data_kind
-                key_dep = key_of[data_kind]
-                n = len(dep_data[key_dep])
-                b = buffers[k]
-
-                while len(b) < n:
-                    b = np.concatenate((b, next(chunk_iters[k])))
-
-                dep_data[k], buffers[k] = np.split(b, [n])
-
-            yield self.compute(**dep_data)
+            yield self.compute(**result)
 
     def process_and_slurp(self, input_dir, **kwargs):
         """Return results for processing data_dir"""
         return np.concatenate(list(self.iter(input_dir, **kwargs)))
 
-    def _saver(self, output_dir):
-        out_dir = os.path.join(output_dir, self.provides)
-        if self.chunking in self.depends_on:
-            # Chunk like our dependencies (taken care of during iter)
-            return strax.io_chunked.Saver(out_dir)
-        else:
-            # Make fixed-size chunks
-            return strax.io_chunked.ThresholdSizeSaver(out_dir)
-
-    def save(self, input_dir, output_dir=None, **kwargs):
+    def save(self, input_dir, output_dir=None, chunk_size=int(1e7), **kwargs):
         """Process data_dir and save the results there"""
         if output_dir is None:
             output_dir = input_dir
-        with self._saver(output_dir) as saver:
-            for out in self.iter(input_dir, **kwargs):
-                saver.feed(out)
+        out_dir = os.path.join(output_dir, self.provides)
+
+        it = self.iter(input_dir, **kwargs)
+        it = strax.chunk_arrays.fixed_size_chunks(it, chunk_size)
+        strax.io_chunked.save_to_dir(it, out_dir)
 
     def compute(self, **kwargs):
         raise NotImplementedError
@@ -261,7 +189,7 @@ class LoopPlugin(StraxPlugin):
         results = np.zeros(len(base), dtype=self.dtype)
         for i in range(len(base)):
             r = self.compute_loop(
-                base,
+                base[i],
                 **{k: merged[k][which_base[k] == i]
                    for k in all_kinds if k != self.loop_over})
 
