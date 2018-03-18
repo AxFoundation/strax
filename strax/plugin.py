@@ -9,11 +9,13 @@ import os
 from tqdm import tqdm
 
 import numpy as np
+import pandas as pd
 
 import strax
 from strax import chunk_arrays
 
-__all__ = 'register_plugin StraxPlugin MergePlugin LoopPlugin'.split()
+__all__ = ('register_plugin provider data_info '
+           'StraxPlugin MergePlugin LoopPlugin').split()
 
 
 ##
@@ -29,6 +31,23 @@ def register_plugin(plugin_class):
     inst = plugin_class()
     REGISTRY[inst.provides] = inst
     return plugin_class
+
+
+def provider(data_name):
+    return REGISTRY[data_name]
+
+
+def data_info(data_name):
+    p = provider(data_name)
+    display_headers = ['Field name', 'Data type', 'Comment']
+    result = []
+    for name, dtype in strax.utils.unpack_dtype(p.dtype):
+        if isinstance(name, tuple):
+            title, name = name
+        else:
+            title = ''
+        result.append([name, dtype, title])
+    return pd.DataFrame(result, columns=display_headers)
 
 
 ##
@@ -50,7 +69,7 @@ class StraxPlugin:
 
         if not hasattr(self, 'data_kind'):
             # Assume data kind is the same as the first dependency
-            self.data_kind = REGISTRY[self.depends_on[0]].data_kind
+            self.data_kind = provider(self.depends_on[0]).data_kind
 
         if not hasattr(self, 'provides'):
             # No output name specified: construct one from the class name
@@ -66,7 +85,7 @@ class StraxPlugin:
         deps_of_kind = OrderedDict()
         kind_of = dict()
         for d in self.depends_on:
-            kind_of[d] = k = REGISTRY[d].data_kind
+            kind_of[d] = k = provider(d).data_kind
             deps_of_kind.setdefault(k, [])
             deps_of_kind[k].append(d)
 
@@ -76,7 +95,7 @@ class StraxPlugin:
         key_for = OrderedDict()
         for k, ds in deps_of_kind.items():
             for d in ds:
-                if 'time' in REGISTRY[d].dtype.names:
+                if 'time' in provider(d).dtype.names:
                     key_for[k] = d
             if k not in key_for:
                 raise ValueError(f"One of the dependencies {ds} of the kind "
@@ -130,7 +149,7 @@ class StraxPlugin:
         """Return results for processing data_dir"""
         return np.concatenate(list(self.iter(input_dir, **kwargs)))
 
-    def save(self, input_dir, output_dir=None, chunk_size=int(1e7), **kwargs):
+    def save(self, input_dir, output_dir=None, chunk_size=int(5e7), **kwargs):
         """Process data_dir and save the results there"""
         if output_dir is None:
             output_dir = input_dir
@@ -169,7 +188,7 @@ class LoopPlugin(StraxPlugin):
 
     def compute(self, **kwargs):
         # Merge arguments of each data kind
-        data_kind = {d: REGISTRY[d].data_kind
+        data_kind = {d: provider(d).data_kind
                      for d in self.depends_on}
         merged = dict()
         all_kinds = set(list(data_kind.values()))
@@ -210,7 +229,7 @@ class MergePlugin(StraxPlugin):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for MergePlugin')
 
-        ps = [REGISTRY[x] for x in self.depends_on]
+        ps = [provider(x) for x in self.depends_on]
 
         data_kinds = set([p.data_kind for p in ps])
         if len(data_kinds) > 1:
