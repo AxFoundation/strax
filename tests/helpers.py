@@ -5,14 +5,6 @@
 # respond "slightly" less nice (giving you junk data or segfaulting)
 # Once in a while you should test without this...
 ##
-from unittest.mock import MagicMock
-class FakeNumba:                          # noqa
-    def jit(self, *args, **kwargs):
-        return lambda x: x
-FakeNumba.caching = MagicMock()           # noqa
-import sys                                # noqa
-sys.modules['numba'] = FakeNumba()        # noqa
-
 from itertools import accumulate
 from functools import partial
 
@@ -20,6 +12,22 @@ import numpy as np
 from boltons import iterutils
 from hypothesis import strategies as st
 
+
+def mock_numba():
+    from unittest.mock import MagicMock
+
+    class FakeNumba:                          # noqa
+
+        def jit(self, *args, **kwargs):
+            return lambda x: x
+
+    FakeNumba.caching = MagicMock()
+
+    import sys                                # noqa
+    sys.modules['numba'] = FakeNumba()        # noqa
+
+
+mock_numba()
 import strax
 
 
