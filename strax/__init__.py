@@ -15,3 +15,4 @@ from .plugin import *               # noqa
 from . import daq_interface
 from . import pax_interface
 from . import io_chunked
+from . import chunk_arrays

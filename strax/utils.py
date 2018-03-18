@@ -4,7 +4,7 @@ import dill
 from functools import wraps
 
 __all__ = 'records_needed growing_result sort_by_time ' \
-          'first_index_beyond endtime fully_contained_in ' \
+          'first_index_not_below endtime fully_contained_in ' \
           'unpack_dtype merge_arrs'.split()
 
 # Change numba's caching backend from pickle to dill
@@ -72,10 +72,10 @@ def sort_by_time(x):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def first_index_beyond(arr, t):
-    """Return first index of array beyond t, or len(arr) if no such found"""
+def first_index_not_below(arr, t):
+    """Return first index of array >= t, or len(arr) if no such found"""
     for i, x in enumerate(arr):
-        if x > t:
+        if x >= t:
             return i
     return len(arr)
 

@@ -14,79 +14,23 @@ except ImportError:
 import strax
 
 
-class Saver:
-    def __init__(self, dirpath, compressor='blosc'):
-        self.compressor = compressor
-        self.buffer = []
-        self.dir = dirpath
-        # Clean the dir if it already exists.
-        # Hmm, a little dangerous. What if someone tries '.'?
-        if os.path.exists(self.dir):
-            shutil.rmtree(self.dir)
-        os.makedirs(self.dir)
+def save_to_dir(source, dirname, compressor='blosc'):
+    """Iterate over source and save results to dirname"""
+    # Clean the dir if it already exists.
+    # Hmm, a little dangerous. What if someone tries '.'?
+    if os.path.exists(dirname):
+        shutil.rmtree(dirname)
+    os.makedirs(dirname)
 
-        self.chunks_saved = 0
-
-    def feed(self, x):
-        self.buffer.append(x)
-        if self.ready_to_write():
-            self.write()
-
-    def write(self):
-        fn = os.path.join(self.dir, '%06d' % self.chunks_saved)
-        r = np.concatenate(self.buffer)
+    for n_saved, x in enumerate(source):
+        fn = os.path.join(dirname, '%06d' % n_saved)
 
         # TODO: is this right? is this the right place?
         metadata = dict()
-        if 'time' in r[0].dtype.names:
-            metadata['first_time'] = int(r[0]['time'])
+        if 'time' in x[0].dtype.names:
+            metadata['first_time'] = int(x[0]['time'])
 
-        strax.save(fn, r,
-                   compressor=self.compressor,
-                   **metadata)
-
-        self.buffer = []
-        self.chunks_saved += 1
-
-    def flush(self):
-        if len(self.buffer):
-            self.write()
-        self.chunks_saved += 1
-
-    def ready_to_write(self):
-        return True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.flush()
-
-
-class GroupNSaver(Saver):
-
-    def __init__(self, *args, group_chunks=5, **kwargs):
-        self.group_chunks = group_chunks
-        super().__init__(*args, **kwargs)
-
-    def ready_to_write(self):
-        return len(self.buffer) > self.group_chunks
-
-
-class ThresholdSizeSaver(Saver):
-    """
-    Note the threshold size is on the *raw* buffered data, but saving is
-    compressed (blosc) by default, so you'll get much smaller files than
-    you expect.
-    """
-
-    def __init__(self, *args, threshold_bytes=1 * int(1e6), **kwargs):
-        self.threshold_bytes = threshold_bytes
-        super().__init__(*args, **kwargs)
-
-    def ready_to_write(self):
-        buffer_bytes = sum(x.nbytes for x in self.buffer)
-        return buffer_bytes >= self.threshold_bytes
+        strax.save(fn, x, compressor=compressor, **metadata)
 
 
 def chunk_files(dn):
