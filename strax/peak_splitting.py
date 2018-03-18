@@ -58,7 +58,6 @@ def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
     yield offset
 
 
-
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_split_points(w, min_height=0, min_ratio=0):
     """"Yield indices of prominent local minima in w

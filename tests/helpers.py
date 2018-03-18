@@ -16,7 +16,7 @@ from hypothesis import strategies as st
 def mock_numba():
     from unittest.mock import MagicMock
 
-    class FakeNumba:                          # noqa
+    class FakeNumba:
 
         def jit(self, *args, **kwargs):
             return lambda x: x
@@ -24,11 +24,12 @@ def mock_numba():
     FakeNumba.caching = MagicMock()
 
     import sys                                # noqa
-    sys.modules['numba'] = FakeNumba()        # noqa
+    sys.modules['numba'] = FakeNumba()
 
 
+# Mock numba before importing strax
 mock_numba()
-import strax
+import strax    # noqa
 
 
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff

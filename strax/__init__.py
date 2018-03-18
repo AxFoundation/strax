@@ -12,7 +12,7 @@ from .peak_properties import *      # noqa
 from .utils import *                # noqa
 from .plugin import *               # noqa
 
-from . import daq_interface
-from . import pax_interface
-from . import io_chunked
-from . import chunk_arrays
+from . import daq_interface         # noqa
+from . import pax_interface         # noqa
+from . import io_chunked            # noqa
+from . import chunk_arrays          # noqa
