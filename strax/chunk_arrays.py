@@ -117,7 +117,9 @@ def fixed_size_chunks(source, n_bytes=int(1e7)):
     except StopIteration:
         return
 
+
 # The functions below are not (yet?) used in strax:
+
 
 def equal_chunks(*sources):
     """Yield tuples of arrays of the same number of items"""

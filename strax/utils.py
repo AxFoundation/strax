@@ -127,8 +127,8 @@ def unpack_dtype(dtype):
         fieldinfo = fields[field_name]
         if len(fieldinfo) == 3:
             # The field has a "titles" attribute.
-            # In this case, the tuple returned by .fields
-            # is inconsistent with the tuple expected by np.dtype constructor :-(
+            # In this case, the tuple returned by .fields is inconsistent
+            # with the tuple expected by np.dtype constructor :-(
             field_dtype, some_number, field_title = fieldinfo
             result.append(((field_title, field_name), field_dtype))
         else:

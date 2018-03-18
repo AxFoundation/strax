@@ -39,7 +39,7 @@ def chunk_files(dn):
     """
     if not os.path.exists(dn):
         raise FileNotFoundError(dn)
-    files = sorted(glob.glob(os.path.join(dn,'*.json')))
+    files = sorted(glob.glob(os.path.join(dn, '*.json')))
     return [os.path.splitext(f)[0] for f in files]
 
 

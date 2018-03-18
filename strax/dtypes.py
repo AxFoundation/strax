@@ -39,7 +39,7 @@ def record_dtype(samples_per_record=110):
         (("Integral in ADC x samples",
             'area'), np.int32),
         # np.int16 is not enough for some PMT flashes...
-        (('Length of pulse to which this record belongs (without zero-padding)',
+        (('Length of pulse to which the record belongs (without zero-padding)',
             'pulse_length'), np.int32),
         (('Fragment number in the pulse',
             'record_i'), np.int16),
@@ -61,7 +61,7 @@ hit_dtype = interval_dtype + [
     (('Index of sample in record in which hit starts',
         'left'), np.int16),
     (('Index of first sample in record just beyond hit (exclusive bound)',
-          'right'), np.int16),
+        'right'), np.int16),
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
 ]
