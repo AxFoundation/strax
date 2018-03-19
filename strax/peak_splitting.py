@@ -27,7 +27,7 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
                                               new_peaks]))
 
 
-@strax.utils.growing_result(dtype=strax.peak_dtype(100), chunk_size=10)
+@strax.utils.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
                  _result_buffer=None, result_dtype=None):
