@@ -58,6 +58,7 @@ class StraxPlugin:
     data_kind: str
     depends_on: tuple
     provides: str
+    compressor: str = 'blosc'
 
     def __init__(self):
         self.dtype = np.dtype(self.dtype)
@@ -157,7 +158,7 @@ class StraxPlugin:
 
         it = self.iter(input_dir, **kwargs)
         it = strax.chunk_arrays.fixed_size_chunks(it, chunk_size)
-        strax.io_chunked.save_to_dir(it, out_dir)
+        strax.io_chunked.save_to_dir(it, out_dir, compressor=self.compressor)
 
     def compute(self, **kwargs):
         raise NotImplementedError
