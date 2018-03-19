@@ -107,11 +107,14 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
     b_i = 0
     for a_i in range(len(a_starts)):
         # Skip ahead one or more b's if we're beyond them
-        while b_i < len(b_starts) and b_ends[b_i] < a_starts[a_i]:
+        # Note <= in second condition: end is an exclusive bound
+        while b_i < len(b_starts) and b_ends[b_i] <= a_starts[a_i]:
             b_i += 1
         if b_i == len(b_starts):
             break
 
+        # Check for containment. We only need to check one b, since bs
+        # are nonoverlapping
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
 
