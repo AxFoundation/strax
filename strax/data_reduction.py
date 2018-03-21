@@ -6,6 +6,7 @@ from enum import IntEnum
 from strax.pulse_processing import NOT_APPLICABLE, record_links
 from strax.peak_building import find_peaks
 from strax.utils import fully_contained_in
+from strax.dtypes import peak_dtype
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
           'replace_with_spike exclude_tails'.split()
@@ -129,6 +130,7 @@ def exclude_tails(records, to_pe,
     cut = find_peaks(records, to_pe,
                      gap_threshold=gap_threshold,
                      min_area=min_area,
+                     result_dtype=peak_dtype(records['channel'].max() + 1),
                      max_duration=peak_duration)
     # Transform these 'peaks' to ranges to cut.
     # We want to cut tails after peaks, not the peaks themselves.

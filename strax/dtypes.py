@@ -67,7 +67,7 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def peak_dtype(n_channels=260, n_sum_wv_samples=200, n_widths=11):
+def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
     """
