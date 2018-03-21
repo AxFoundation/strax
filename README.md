@@ -1,6 +1,8 @@
 # strax
 Stream analysis for XENON (experimental)
 
+[![Build Status](https://travis-ci.org/JelleAalbers/strax.svg?branch=master)](https://travis-ci.org/JelleAalbers/strax)
+
 Strax is a processor for pulse-only digitization data, 
 specialized for live data reduction at speeds of 50-100 MB(raw) / core / sec. 
 
