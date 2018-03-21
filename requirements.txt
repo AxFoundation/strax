@@ -4,3 +4,4 @@ numba
 blosc
 zstd
 tqdm
+dill
