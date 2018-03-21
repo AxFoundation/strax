@@ -66,8 +66,15 @@ def growing_result(dtype=np.int, chunk_size=10000):
 # TODO: maybe this should be a factory?
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
-    time = x['time'].copy()    # This increases speed even more
-    sort_i = np.argsort(time)
+    """Sort pulses by time, then channel.
+
+    Assumes you have no more than 10k channels, and records don't span
+    more than 100 days. TODO: FIX this
+    """
+    # I couldn't get fast argsort on multiple keys to work in numba
+    # So, let's make a single key...
+    sort_key = (x['time'] - x['time'].min()) * 10000 + x['channel']
+    sort_i = np.argsort(sort_key)
     return x[sort_i]
 
 
