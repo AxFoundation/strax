@@ -4,15 +4,14 @@ __version__ = '0.0.1'
 
 from .dtypes import *               # noqa
 from .io import *                   # noqa
-from .data_reduction import *       # noqa
-from .pulse_processing import *     # noqa
-from .peak_building import *        # noqa
-from .peak_splitting import *       # noqa
-from .peak_properties import *      # noqa
+from strax.processing.data_reduction import *       # noqa
+from strax.processing.pulse_processing import *     # noqa
+from strax.processing.peak_building import *        # noqa
+from strax.processing.peak_splitting import *       # noqa
+from strax.processing.peak_properties import *      # noqa
 from .utils import *                # noqa
 from .plugin import *               # noqa
 
-from . import daq_interface         # noqa
-from . import pax_interface         # noqa
+from strax.external import pax_interface
 from . import io_chunked            # noqa
 from . import chunk_arrays          # noqa

@@ -4,8 +4,8 @@
 import numpy as np
 import numba
 
-from . import utils
-from .dtypes import hit_dtype
+from strax import utils
+from strax.dtypes import hit_dtype
 
 __all__ = 'baseline integrate find_hits'.split()
 
