@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 import strax
+from collections import OrderedDict
 from strax import chunk_arrays
 
 __all__ = ('register_plugin provider data_info '
@@ -80,9 +81,8 @@ class StraxPlugin:
     def iter(self, input_dir, pbar=True, n_per_iter=None):
         """Yield result chunks for processing input_dir
         """
-        # Group dependencies by data kind
-        # {kind: [dep, dep, ..], ...}
-        from collections import OrderedDict
+        # deps_of_kind = {kind: [dep, dep, ..], ...}
+        # kind_of provides reverse lookup: dep -> kind
         deps_of_kind = OrderedDict()
         kind_of = dict()
         for d in self.depends_on:
@@ -93,6 +93,7 @@ class StraxPlugin:
         # At least one dependency of each kind should have time information.
         # (which we need to sync among different data kinds)
         # We'll call this the "key dependency" of that type.
+        # key_for = {kind: key_dep, ...}
         key_for = OrderedDict()
         for k, ds in deps_of_kind.items():
             for d in ds:
