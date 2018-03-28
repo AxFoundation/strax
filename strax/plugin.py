@@ -4,16 +4,15 @@ A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
 import inspect
+from functools import partial
 import re
 import os
-from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
 
 import strax
-from collections import OrderedDict
-from strax import chunk_arrays
+from strax.chunk_arrays import sync_iters, same_length, same_stop
 
 __all__ = ('register_plugin provider data_info '
            'StraxPlugin MergePlugin LoopPlugin').split()
@@ -35,7 +34,10 @@ def register_plugin(plugin_class):
 
 
 def provider(data_name):
-    return REGISTRY[data_name]
+    try:
+        return REGISTRY[data_name]
+    except KeyError:
+        raise KeyError(f"No plugin registered that provides {data_name}")
 
 
 def data_info(data_name):
@@ -78,74 +80,60 @@ class StraxPlugin:
             snake_name = camel_to_snake(self.__class__.__name__)
             self.provides = snake_name
 
-    def iter(self, input_dir, pbar=True, n_per_iter=None):
+    def get(self, data_dir):
+        out_dir = os.path.join(data_dir, self.provides)
+        if os.path.exists(out_dir):
+            print(f"{self.provides} already exists, yielding")
+            yield from strax.io_chunked.read_chunks(out_dir)
+        else:
+            print(f"{self.provides} does not exist, processing")
+            yield from self.iter(data_dir)
+
+    def iter(self, data_dir, pbar=True, n_per_iter=None):
         """Yield result chunks for processing input_dir
         """
-        # deps_of_kind = {kind: [dep, dep, ..], ...}
-        # kind_of provides reverse lookup: dep -> kind
-        deps_of_kind = OrderedDict()
-        kind_of = dict()
+        # Get iterators over the dependencies
+        # For each data kind, identify a 'key dependency' that contains
+        # time information. We use this to sync the iteration over all
+        # dependencies of that data kind.
+        iters = dict()
+        deps_by_kind = dict()
+        key_deps = []
         for d in self.depends_on:
-            kind_of[d] = k = provider(d).data_kind
-            deps_of_kind.setdefault(k, [])
-            deps_of_kind[k].append(d)
+            p = provider(d)
+            iters[d] = p.get(data_dir)
 
-        # At least one dependency of each kind should have time information.
-        # (which we need to sync among different data kinds)
-        # We'll call this the "key dependency" of that type.
-        # key_for = {kind: key_dep, ...}
-        key_for = OrderedDict()
-        for k, ds in deps_of_kind.items():
-            for d in ds:
-                if 'time' in provider(d).dtype.names:
-                    key_for[k] = d
-            if k not in key_for:
-                raise ValueError(f"One of the dependencies {ds} of the kind "
-                                 f"{k} must provide time information!")
+            k = p.data_kind
+            deps_by_kind.setdefault(k, [])
 
-        # Key dependency of first datatype becomes the master iterator
-        master = key_for[list(deps_of_kind.keys())[0]]
+            # If this has time information, put it first in the list
+            # so we can use it for syncing the others
+            if 'time' in p.dtype.names:
+                key_deps.append(d)
+                deps_by_kind[k].insert(0, d)
+            else:
+                deps_by_kind[k].append(d)
 
-        # Grab iterators/pacers for each dependency
-        pacers = dict()
-        master_iter = None
-        for d in self.depends_on:
-            dn = os.path.join(input_dir, d)
-            it = strax.io_chunked.read_chunks(dn)
-            if d != master:
-                pacers[d] = chunk_arrays.ChunkPacer(it)
-                continue
+        for k, d in deps_by_kind.items():
+            if not d[0] in key_deps:
+                raise ValueError("missing key dep for %s" % k)
 
-            master_iter = it
-            if pbar:
-                n_chunks = len(strax.io_chunked.chunk_files(dn))
-                desc = f"Computing {self.provides} of {input_dir}"
-                master_iter = iter(tqdm(master_iter,
-                                        total=n_chunks,
-                                        desc=desc))
-            if n_per_iter is not None:
-                master_iter = chunk_arrays.fixed_length_chunks(master_iter,
-                                                               n_per_iter)
+        # Sync the iterators of the key dependencies by endtime
+        iters.update(sync_iters(partial(same_stop, func=strax.endtime),
+                                {d[0]: iters[d[0]]
+                                 for d in deps_by_kind.values()}))
 
-        for i, x in enumerate(master_iter):
-            result = {master: x}
+        # Sync the remaining iterators to the key dependencies
+        for deps in deps_by_kind.values():
+            iters.update(sync_iters(same_length,
+                                    {d: iters[d] for d in deps}))
 
-            # Add key dependencies
-            for d in key_for.values():
-                if d == master:
-                    continue
-                # TODO: assumed sorted on endtime: only true if nonoverlapping!
-                result[d] = pacers[d].get_until(strax.endtime(x[-1]),
-                                                f=strax.endtime)
-
-            # Add rest now that syncing is known
-            for d in self.depends_on:
-                if d in key_for.values():
-                    continue
-                key_dep = key_for[kind_of[d]]
-                result[d] = pacers[d].get_n(len(result[key_dep]))
-
-            yield self.compute(**result)
+        while True:
+            try:
+                yield self.compute(**{d: next(iters[d])
+                                      for d in self.depends_on})
+            except StopIteration:
+                return
 
     def process_and_slurp(self, input_dir, **kwargs):
         """Return results for processing data_dir"""

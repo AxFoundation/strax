@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 from . import helpers   # Mocks numba    # noqa
-from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, equal_chunks
-from strax.chunk_arrays import synchronized_chunks
+from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, same_length
+from strax.chunk_arrays import same_stop
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_fixed_size_chunks(source):
 
 
 def test_equal_chunks(source, source_2):
-    result = list(equal_chunks(source, source_2))
+    result = list(same_length(source, source_2))
     assert all(len(x[0]) == len(x[1]) for x in result)
     _check_mangling([x[0] for x in result])
     _check_mangling([x[1] for x in result])
@@ -82,7 +82,7 @@ def source_skipper():
 
 
 def test_synchronized_chunks(source, source_skipper):
-    result = list(synchronized_chunks(source, source_skipper))
+    result = list(same_stop(source, source_skipper))
     _check_mangling([x[0] for x in result])
     _check_mangling([x[1] for x in result], total_length=500, diff=2)
     assert all([r[1][-1] < r[0][-1] for r in result])
