@@ -4,12 +4,7 @@ import glob
 import shutil
 
 import numpy as np
-try:
-    from tqdm import tqdm
-except ImportError:
-    # Mock out tqdm. Not necessary to add it as dependency
-    def tqdm(x, *args, **kwargs):
-        return x
+from tqdm import tqdm
 
 import strax
 
@@ -50,7 +45,7 @@ def read_chunks(dn, desc=None, **kwargs):
         # Add progress bar
         it = tqdm(it, desc=desc)
     for f in it:
-        yield strax.load(f)
+        yield strax.load(f, **kwargs)
 
 
 def get_chunk_starts(dn):
