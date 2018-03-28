@@ -41,6 +41,8 @@ def chunk_files(dn):
 def read_chunks(dn, desc=None, **kwargs):
     """Iteratively read strax chunk files in directory path dn"""
     it = chunk_files(dn)
+    if not len(it):
+        print(f"No strax files in {dn}?")
     if desc is not None:
         # Add progress bar
         it = tqdm(it, desc=desc)
