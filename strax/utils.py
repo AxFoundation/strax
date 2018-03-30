@@ -3,9 +3,10 @@ import numba
 import dill
 from functools import wraps
 
-__all__ = 'records_needed growing_result sort_by_time ' \
-          'first_index_not_below endtime fully_contained_in ' \
-          'unpack_dtype merge_arrs'.split()
+__all__ = ('records_needed', 'growing_result', 'sort_by_time',
+           'first_index_not_below', 'endtime',
+           'fully_contained_in', 'split_by_containment',
+           'unpack_dtype', 'merge_arrs')
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -124,6 +125,34 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
         # are nonoverlapping
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
+
+
+def split_by_containment(things, containers):
+    """Return list of thing-arrays contained in each container
+
+    Assumes everything is sorted, and containers are nonoverlapping
+    TODO: needs tests!
+    """
+    if not len(containers):
+        return []
+
+    which_container = fully_contained_in(things, containers)
+
+    mask = which_container != -1
+    things = things[mask]
+    which_container = which_container[mask]
+    things_split = np.split(
+        things,
+        np.where(np.diff(which_container))[0] + 1)
+
+    # Insert empties for containers with nothing
+    for c in np.setdiff1d(np.arange(len(containers)),
+                          np.unique(which_container)):
+        if c == 0:
+            continue   # np.split already produces an empty in this case?
+        things_split.insert(c, things[:0])
+
+    return things_split
 
 
 def unpack_dtype(dtype):

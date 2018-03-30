@@ -40,17 +40,31 @@ def test_fully_contained_in(things, containers):
     if len(result):
         assert result.max() < len(containers)
 
-    def is_contained(_thing, _container):
-        return _container['time'] \
-               <= _thing['time'] \
-               <= _thing['time'] + _thing['length'] \
-               <= _container['time'] + _container['length']
-
     for i, thing in enumerate(things):
         if result[i] == -1:
             # Check for false negative
             for c in containers:
-                assert not is_contained(thing, c)
+                assert not _is_contained(thing, c)
         else:
             # Check for false positives
-            assert is_contained(thing, containers[result[i]])
+            assert _is_contained(thing, containers[result[i]])
+
+
+@given(sorted_intervals, disjoint_sorted_intervals)
+def test_split_by_containment(things, containers):
+    result = strax.split_by_containment(things, containers)
+
+    assert len(result) == len(containers)
+
+    for container_i, things_in in enumerate(result):
+        for t in things:
+            assert ((t in things_in)
+                    == _is_contained(t, containers[container_i]))
+
+
+def _is_contained(_thing, _container):
+    # Assumes dt = 1
+    return _container['time'] \
+           <= _thing['time'] \
+           <= _thing['time'] + _thing['length'] \
+           <= _container['time'] + _container['length']

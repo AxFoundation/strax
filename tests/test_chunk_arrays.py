@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 from . import helpers   # Mocks numba    # noqa
-from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, equal_chunks
-from strax.chunk_arrays import synchronized_chunks
+from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, same_length
+from strax.chunk_arrays import same_stop, sync_iters
 
 
 @pytest.fixture
@@ -66,8 +66,8 @@ def test_fixed_size_chunks(source):
     _check_mangling(result)
 
 
-def test_equal_chunks(source, source_2):
-    result = list(equal_chunks(source, source_2))
+def test_same_length(source, source_2):
+    result = list(same_length(source, source_2))
     assert all(len(x[0]) == len(x[1]) for x in result)
     _check_mangling([x[0] for x in result])
     _check_mangling([x[1] for x in result])
@@ -81,10 +81,26 @@ def source_skipper():
     return f()
 
 
-def test_synchronized_chunks(source, source_skipper):
-    result = list(synchronized_chunks(source, source_skipper))
-    _check_mangling([x[0] for x in result])
-    _check_mangling([x[1] for x in result], total_length=500, diff=2)
-    assert all([r[1][-1] < r[0][-1] for r in result])
-    assert all([result[i + 1][1][-1] > result[i][0][-1]
-                for i in range(len(result) - 1)])
+def test_same_stop(source, source_skipper):
+    result = list(same_stop(source, source_skipper))
+
+    _do_sync_check([x[0] for x in result],
+                   [x[1] for x in result])
+
+
+def _do_sync_check(r1, r2):
+    _check_mangling(r1)
+    _check_mangling(r2, total_length=500, diff=2)
+    for i in range(len(r1)):
+        assert r2[i][-1] <= r1[i][-1]
+        if i != len(r1) - 1:
+            assert r2[i + 1][-1] > r1[i][-1]
+
+
+def test_sync_iters(source, source_skipper):
+    synced = sync_iters(same_stop, dict(s1=source, s2=source_skipper))
+    assert len(synced) == 2
+    assert 's1' in synced and 's2' in synced
+
+    _do_sync_check(list(synced['s1']),
+                   list(synced['s2']))
