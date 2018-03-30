@@ -1,12 +1,12 @@
 """Utilities for dealing with streams of numpy (record) arrays
 maybe this should become its own package?
 """
+__all__ = 'ChunkPacer fixed_size_chunks equal_chunks sync_iters'.split()
+
 import itertools
 
 import numpy as np
 from strax.utils import first_index_not_below
-
-__all__ = 'ChunkPacer fixed_size_chunks equal_chunks'.split()
 
 
 class ChunkPacer:
@@ -56,14 +56,14 @@ class ChunkPacer:
 
         return self._take_from_buffer(n)
 
-    def get_until(self, threshold, f=None):
+    def get_until(self, threshold, func=None):
         """Return remaining elements of source below or at threshold,
         assuming source gives sorted arrays.
 
-        :param f: computation to do on array elements before comparison
+        :param func: computation to do on array elements before comparison
         """
-        if f is None:
-            def f(x):
+        if func is None:
+            def func(x):
                 return x
 
         if not len(self.buffer):
@@ -71,12 +71,12 @@ class ChunkPacer:
         assert len(self.buffer) == 1
 
         try:
-            while not f(self.buffer[-1][-1]) > threshold:
+            while not func(self.buffer[-1][-1]) > threshold:
                 self._fetch_another()
         except StopIteration:
             pass
 
-        n = first_index_not_below(f(self.buffer[-1]), threshold)
+        n = first_index_not_below(func(self.buffer[-1]), threshold)
         n += sum(len(x) for x in self.buffer[:-1])
         return self._take_from_buffer(n)
 
@@ -137,15 +137,23 @@ def same_stop(*sources, field=None, func=None):
             threshold = threshold[field]
         if func is not None:
             threshold = func(threshold)
-        yield tuple([x] + [s.get_until(threshold) for s in others])
+        yield tuple([x] + [s.get_until(threshold, func=func)
+                           for s in others])
 
 
 def sync_iters(chunker, sources):
     """Return dict of iterators over sources (dict name -> iter),
     synchronized using chunker
     """
-    names, sources = zip(*sources.items())
+    names = list(sources.keys())
+    sources = list(sources.values())
+
     teed = itertools.tee(chunker(*sources),
                          len(sources))
-    return {names[i]: (x[i] for x in teed[i])
+
+    def get_item(iterable, index):
+        for x in iterable:
+            yield x[index]
+
+    return {names[i]: get_item(teed[i], i)
             for i in range(len(names))}
