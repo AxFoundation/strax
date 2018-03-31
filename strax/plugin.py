@@ -3,10 +3,10 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
-import inspect
 from functools import partial
-import re
+import inspect
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -26,14 +26,23 @@ __all__ = ('register_plugin provider data_info '
 REGISTRY = dict()
 
 
-def register_plugin(plugin_class):
+def register_plugin(plugin_class, provides=None):
+    """Register plugin_class as provider for plugin_class.provides and
+    other data types listed in provides.
+    :param plugin_class: class inheriting from StraxPlugin
+    :param provides: list of additional data types which this plugin provides.
+    """
+    if provides is None:
+        provides = []
     global REGISTRY
     inst = plugin_class()
-    REGISTRY[inst.provides] = inst
+    for p in [inst.provides] + provides:
+        REGISTRY[p] = inst
     return plugin_class
 
 
 def provider(data_name):
+    """Return instance of plugin that provides data_name"""
     try:
         return REGISTRY[data_name]
     except KeyError:
@@ -41,6 +50,7 @@ def provider(data_name):
 
 
 def data_info(data_name):
+    """Return pandas DataFrame describing fields in data_name"""
     p = provider(data_name)
     display_headers = ['Field name', 'Data type', 'Comment']
     result = []
@@ -61,7 +71,7 @@ class StraxPlugin:
     data_kind: str
     depends_on: tuple
     provides: str
-    compressor: str = 'blosc'
+    compressor: str = 'blosc'       # Compressor to use for files
 
     def __init__(self):
         self.dtype = np.dtype(self.dtype)
@@ -130,6 +140,7 @@ class StraxPlugin:
                  for d in self.depends_on}
 
         if n_per_iter is not None:
+            # Apply additional flow control
             for kind, deps in deps_by_kind.items():
                 d = deps[0]
                 iters[d] = ca.fixed_length_chunks(iters[d], n=n_per_iter)
