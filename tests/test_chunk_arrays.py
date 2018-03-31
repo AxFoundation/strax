@@ -9,7 +9,7 @@ from strax.chunk_arrays import same_stop, sync_iters
 def source():
     def f():
         for i in range(10):
-            yield np.arange(100) + 100 * i
+            yield np.arange(100, dtype=np.int64) + 100 * i
     return f()
 
 
@@ -17,7 +17,7 @@ def source():
 def source_2():
     def f():
         for i in range(100):
-            yield np.arange(10) + 10 * i
+            yield np.arange(10, dtype=np.int64) + 10 * i
     return f()
 
 
@@ -30,7 +30,8 @@ def test_get_next(source):
         except StopIteration:
             break
 
-    assert all([len(x) == 42 for x in result[:-1]])
+    assert np.all(np.array([len(x) for x in result[:-1]])
+                  == 42)
     assert len(result[-1]) == 1000 % 42
     _check_mangling(result)
 
@@ -61,7 +62,8 @@ def test_get_until(source):
 
 def test_fixed_size_chunks(source):
     result = list(fixed_size_chunks(source, 42 * 8))
-    assert all([len(x) == 42 for x in result[:-1]])
+    assert np.all(np.array([len(x) for x in result[:-1]])
+                  == 42)
     assert len(result[-1]) == 1000 % 42
     _check_mangling(result)
 
