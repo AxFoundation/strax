@@ -1,7 +1,7 @@
 numpy==1.14.2
 pandas==0.22.0
 numba==0.37.0
-blosc
+blosc==1.5.1
 zstd
 tqdm
 dill
