@@ -15,6 +15,6 @@ from strax.processing.peak_building import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
 
-from strax.external import pax_interface
+from strax.external import pax_interface, daq_interface
 from . import io_chunked
 from . import chunk_arrays
