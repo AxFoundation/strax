@@ -7,7 +7,7 @@ def req_file(filename):
     with open(filename) as f:
         content = f.readlines()
     # you may also want to remove whitespace characters like `\n` at the end of each line
-    return [x.strip() for x in content] 
+    return [x.strip().split('=')[0] for x in content] 
     
 setup(name='strax',
       version='0.0.1',
