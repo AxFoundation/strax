@@ -17,5 +17,5 @@ setup(name='strax',
       url='https://github.com/jelleaalbers/strax',
       setup_requires=['pytest-runner'],
       install_requires=req_file('requirements.txt'),
-      tests_require=requires + ['pytest', 'boltons', 'hypothesis'],
+      tests_require=req_file('requirements.txt') + req_file('requirements_tests.txt'),
       packages=['strax'])
