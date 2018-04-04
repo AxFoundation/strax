@@ -8,6 +8,7 @@ from .dtypes import *
 from .io import *
 from .utils import *
 from .plugin import *
+from .mailbox import *
 
 from strax.processing.data_reduction import *
 from strax.processing.pulse_processing import *
