@@ -16,12 +16,15 @@ sudo: false
 matrix:
     include:
         - os: osx
+          python: 3.6
           env: PYTHON=3.6.5
         - env: PYTHON=3.6.5
-        
+          python: 3.6
         - os: osx
+          python: 3.6
           env: PYTHON=3.6
         - env: PYTHON=3.6
+          python: 3.6
         
 
 # Based on:
