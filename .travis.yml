@@ -31,6 +31,8 @@ before_install:
   
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p $HOME/miniconda
+    - ls $HOME/miniconda/bin
+    - echo $PATH
     
     # Based on XENON1T/pax's .travis.yml
     - export PATH=$HOME/miniconda/bin:$PATH
