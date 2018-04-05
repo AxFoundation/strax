@@ -3,8 +3,7 @@
 # see: https://travis-ci.org
 
 dist: trusty # Ubuntu distribution
-language: python
-python: 3.6 # This gets overwritten by Anaconda
+language: generic
 
 # Caching the Python dependencies speeds up builds and lightens
 # the load on TravisCI
@@ -27,8 +26,9 @@ matrix:
 # Based on:
 #   https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
 before_install:
-    - unamestr=`uname`
-    - if [[ "$unamestr" == 'Linux' ]]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh elif [[ "$unamestr" == 'Darwin' ]]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh else echo Error fi
+    - if [ "${TRAVIS_OS_NAME}" == "osx" ]; then curl --silent http://repo.continuum.io/miniconda/Miniconda-latest-MacOSX-x86_64.sh -o miniconda.sh; fi
+    - if [ "${TRAVIS_OS_NAME}" == "linux" ]; then wget -nv http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh; fi
+  
     - chmod +x miniconda.sh
     - ./miniconda.sh -b
     
