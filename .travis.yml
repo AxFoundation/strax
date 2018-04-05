@@ -12,12 +12,31 @@ cache: pip
 # Everything should work in userspace
 sudo: false
 
-python:
-  - 3.6
-  
-os:
-  - linux
-  - osx
+
+matrix:
+    include:
+        - os: osx
+          env: PYTHON=3.6.5
+        - env: PYTHON=3.6.5
+        
+        - os: osx
+          env: PYTHON=3.6
+        - env: PYTHON=3.6
+        
+
+# Based on:
+#   https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
+before_install:
+    - unamestr=`uname`
+    - if [[ "$unamestr" == 'Linux' ]]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh elif [[ "$unamestr" == 'Darwin' ]]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh else echo Error fi
+    - chmod +x miniconda.sh
+    - ./miniconda.sh -b
+    
+    # Based on XENON1T/pax's .travis.yml
+    - export PATH=$HOME/miniconda3/bin:$PATH
+    - conda config --set always_yes yes --set changeps1 no
+    - conda create -q -n strax python=${PYTHON}
+    - source activate strax
 
 install:
   - pip install -r requirements.txt
