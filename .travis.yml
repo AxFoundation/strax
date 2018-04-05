@@ -31,7 +31,7 @@ before_install:
     - ls
     - pwd
     - chmod +x miniconda.sh
-    - ./miniconda.sh -b -p $HOME/miniconda
+    - ./miniconda.sh -b
     - ls
     - ls $HOME
     - ls $HOME/miniconda
