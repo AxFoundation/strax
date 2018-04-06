@@ -13,4 +13,10 @@ setup(name='strax',
       url='https://github.com/jelleaalbers/strax',
       setup_requires=requires + ['pytest-runner'],
       tests_require=requires + ['pytest', 'boltons', 'hypothesis'],
-      packages=['strax'])
+      packages=['strax'],
+      classifiers=[
+        'Development Status :: 3 - Alpha',
+        'License :: OSI Approved :: BSD License',
+        'Natural Language :: English',
+        'Programming Language :: Python :: 3.6',
+    ],)
