@@ -4,9 +4,12 @@ __version__ = '0.0.1'
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
 
+
+from .utils import *
+from .core import *
+
 from .dtypes import *
 from .io import *
-from .utils import *
 from .plugin import *
 from .mailbox import *
 

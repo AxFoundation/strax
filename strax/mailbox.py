@@ -1,28 +1,36 @@
 import heapq
 import threading
+import logging
 
-__all__ = ('MailboxReadTimeout', 'MailboxFullTimeout',
-           'InvalidMessageNumber', 'OrderedMailbox')
+from strax.utils import exporter, setup_logger
+export, __all__ = exporter()
 
 
+@export
 class MailboxReadTimeout(Exception):
     pass
 
 
+@export
 class MailboxFullTimeout(Exception):
     pass
 
 
+@export
 class InvalidMessageNumber(Exception):
     pass
 
 
+@export
 class OrderedMailbox:
     """A publish-subscribe mailbox, whose subscribers iterate
     over messages set by monotonously incrementing message numbers.
     """
 
-    def __init__(self, max_messages=float('inf')):
+    def __init__(self, name='mailbox', max_messages=float('inf')):
+        self.name = name
+        self.log = setup_logger(self.name)
+
         self.mailbox = []
         self.subscribers_have_read = []
         self.sent_messages = 0
@@ -30,7 +38,9 @@ class OrderedMailbox:
         self.read_condition = threading.Condition()
         self.write_condition = threading.Condition()
 
-    def send(self, msg, number=None, timeout=None):
+        self.log.debug("Initialized")
+
+    def send(self, msg, number=None, timeout=30):
         """Send a message.
 
         If the mailbox is currently full, sleep until there
@@ -55,12 +65,20 @@ class OrderedMailbox:
                     raise MailboxFullTimeout
 
             heapq.heappush(self.mailbox, (number, msg))
+            self.log.debug(f"Wrote {number}")
             self.sent_messages += 1
 
         with self.read_condition:
             self.read_condition.notify_all()
 
-    def subscribe(self, pass_msg_number=False, timeout=None):
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
+
+    def close(self):
+        self.log.debug(f"Closing")
+        self.send(StopIteration)
+
+    def subscribe(self, pass_msg_number=False, timeout=30):
         """Iterate over incoming messages in order.
 
         Your thread will sleep until the next message is available, or timeout
@@ -87,7 +105,7 @@ class OrderedMailbox:
 
                     if msg_number > next_number:
                         break
-                    print(f"Subscriber {subscriber_i} grabbed {msg_number}")
+                    self.log.debug(f"Read {msg_number}")
                     if msg is StopIteration:
                         last_message = True
                     to_yield.append((msg_number, msg))
@@ -103,10 +121,10 @@ class OrderedMailbox:
                         heapq.heappop(self.mailbox)
                     self.write_condition.notify_all()
 
-            for x in to_yield:
-                if x[1] is StopIteration:
+            for msg_number, msg in to_yield:
+                if msg is StopIteration:
                     return
                 if pass_msg_number:
-                    yield x
+                    yield msg_number, msg
                 else:
-                    yield x[1]
+                    yield msg
