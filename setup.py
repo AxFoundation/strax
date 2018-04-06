@@ -17,4 +17,10 @@ setup(name='strax',
       setup_requires=['pytest-runner'],
       install_requires=requires,
       tests_require=requires + ['pytest', 'boltons', 'hypothesis'],
-      packages=['strax'])
+      packages=['strax'],
+      classifiers=[
+        'Development Status :: 3 - Alpha',
+        'License :: OSI Approved :: BSD License',
+        'Natural Language :: English',
+        'Programming Language :: Python :: 3.6',
+    ],)
