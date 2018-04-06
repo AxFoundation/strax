@@ -7,7 +7,7 @@ import pytest
 
 from strax import OrderedMailbox, MailboxReadTimeout, MailboxFullTimeout
 
-SHORT_TIMEOUT = 0.01
+SHORT_TIMEOUT = 0.1
 LONG_TIMEOUT = 5 * SHORT_TIMEOUT
 
 
