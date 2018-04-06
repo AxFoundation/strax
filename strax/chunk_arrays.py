@@ -100,7 +100,7 @@ def fixed_length_chunks(source, n=10):
 
 
 @export
-def fixed_size_chunks(source, n_bytes=int(1e7)):
+def fixed_size_chunks(source, n_bytes=int(1e8)):
     """Yield arrays of maximum size n_bytes"""
     p = ChunkPacer(source)
 

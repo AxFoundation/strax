@@ -3,6 +3,7 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
+from enum import IntEnum
 from functools import partial
 from itertools import count
 import inspect
@@ -19,12 +20,22 @@ export, __all__ = exporter()
 
 
 @export
+class SavePreference(IntEnum):
+    """Plugin's preference for having it's data saved"""
+    NEVER = 0         # Throw an error if the user lists it
+    GRUDGINGLY = 1    # Save ONLY if the user lists it explicitly
+    PREFERABLY = 2    # Save if the user lists it as a final target
+    ALWAYS = 3        # Save even if the user does not list it
+
+
+@export
 class StraxPlugin:
     __version__: str
     data_kind: str
     depends_on: tuple
     provides: str
     compressor: str = 'blosc'       # Compressor to use for files
+    save_preference: int = SavePreference.PREFERABLY
 
     def __init__(self):
         self.log = strax.setup_logger(self.__class__.__name__)
@@ -192,6 +203,7 @@ class LoopPlugin(StraxPlugin):
 class MergePlugin(StraxPlugin):
     """Plugin that merges data from its dependencies
     """
+    save_preference = SavePreference.GRUDGINGLY
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -220,6 +232,7 @@ class MergePlugin(StraxPlugin):
 class PlaceholderPlugin(StraxPlugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
+    save_preference = SavePreference.NEVER
 
     def compute(self):
         raise NotImplementedError("No plugin registered that "

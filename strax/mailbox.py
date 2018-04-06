@@ -49,7 +49,10 @@ class OrderedMailbox:
         # Determine / validate the message number
         if number is None:
             number = self.sent_messages
-        read_until = min(self.subscribers_have_read)
+        if not len(self.subscribers_have_read):
+            read_until = -1
+        else:
+            read_until = min(self.subscribers_have_read)
         if number <= read_until:
             raise InvalidMessageNumber(
                 f'Attempt to send message {number} while '

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from . import helpers   # Mocks numba    # noqa
 from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, same_length
+from strax.chunk_arrays import fixed_length_chunks
 from strax.chunk_arrays import same_stop, sync_iters
 
 
@@ -43,7 +44,6 @@ def _check_mangling(result, total_length=1000, diff=1):
 
 
 def test_get_until(source):
-
     p = ChunkPacer(source)
     result = []
     thresholds = [123.5, 321.5, 456.5]
@@ -60,11 +60,25 @@ def test_get_until(source):
                 for i in range(len(thresholds) - 1)])
 
 
+def test_fixed_length_chunks(source):
+    # TODO: test chunk size < array
+    # test chunk size > array
+    result = list(fixed_length_chunks(source, int(1e9)))
+    _check_mangling(result)
+
+
 def test_fixed_size_chunks(source):
+    # test chunk size < array
     result = list(fixed_size_chunks(source, 42 * 8))
     assert np.all(np.array([len(x) for x in result[:-1]])
                   == 42)
     assert len(result[-1]) == 1000 % 42
+    _check_mangling(result)
+
+
+def test_fixed_size_chunks_oversized(source):
+    # test chunk size > array
+    result = list(fixed_size_chunks(source, int(1e9)))
     _check_mangling(result)
 
 

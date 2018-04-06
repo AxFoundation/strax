@@ -1,6 +1,9 @@
-import strax
+import threading
+
+import numpy as np
 import pandas as pd
 
+import strax
 export, __all__ = strax.exporter()
 
 ##
@@ -65,26 +68,53 @@ CacheKey = namedtuple('CacheKey',
                       ('run_id', 'data_type', 'lineage'))
 
 
-class FakeCache:
+class FileCache:
+    def __init__(self):
+        self.log = strax.setup_logger('cache')
+
+    @staticmethod
+    def _dirname(key):
+        return os.path.join(key.run_id, key.data_type)
+
     def get(self, key):
-        dirn = os.path.join(key.run_id, key.data_type)
-        if os.path.exists(dirn):
-            print(f"{key} is in cache!")
-            return lambda: strax.io_chunked.read_chunks(dirn)
-        print(f"{key} not in cache.")
+        dirname = self._dirname(key)
+        if os.path.exists(dirname):
+            # TODO: we currently read from cache multiple times
+            # if a cached dependency is required multiple times.
+            # Better to read once and fill a mailbox?
+            self.log.debug(f"{key} is in cache.")
+            return lambda: strax.io_chunked.read_chunks(dirname)
+        self.log.debug(f"{key} is NOT in cache.")
         raise NotCachedException
 
+    def save(self, key, source):
+        dirname = os.path.join(key.run_id, key.data_type)
+        source = strax.chunk_arrays.fixed_size_chunks(source)
+        strax.io_chunked.save_to_dir(source, dirname)
 
-cache = FakeCache()
+
+cache = FileCache()
 
 
 @export
-def get(run_id, target):
-    # Plugins and mailboxes for just the things we have to load
+def get(run_id, target, save=None):
+    if isinstance(save, str):
+        save = [save]
+    elif save is None:
+        if provider(target).save_preference > strax.SavePreference.GRUDGINGLY:
+            save = [target]
+        else:
+            save = []
+    elif isinstance(save, tuple):
+        save = list(save)
+
+    # For just the things we have to load:
     plugins = dict()
     mailboxes = dict()
-    # Iterator-factories for all things we need (cached or not)
-    sources = dict()
+    keys = dict()           # Cache keys
+
+    # For all things we need (cached or not)
+    sources = dict()        # Iterator factories
 
     stack = [target]
     while len(stack):
@@ -93,7 +123,7 @@ def get(run_id, target):
             continue
         p = provider(d)
 
-        key = CacheKey(run_id, d, p.lineage(run_id))
+        key = keys[d] = CacheKey(run_id, d, p.lineage(run_id))
         try:
             sources[d] = cache.get(key)
             if d == target:
@@ -107,16 +137,48 @@ def get(run_id, target):
             plugins[d] = p
             mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
             sources[d] = mailboxes[d].subscribe
+            if p.save_preference == strax.SavePreference.ALWAYS:
+                save.append(d)
             # And we should check it's dependencies
             stack.extend(p.depends_on)
 
-    threads = {}
-    import threading
+    saver_threads = {}
+    for d in set(save):
+        assert d in plugins
+        if plugins[d].save_preference == strax.SavePreference.NEVER:
+            raise ValueError("Plugin forbids saving data for {d}")
+        saver_threads[d] = t = threading.Thread(
+            target=cache.save,
+            name=d + '_saver',
+            args=(keys[d], sources[d]()))
+        t.start()
+
+    plugin_threads = {}
     for d, p in plugins.items():
-        iters = {d: sources[d]() for d in p.depends_on}
-        threads[d] = threading.Thread(target=p.iter,
-                                      name=d,
-                                      args=(iters, mailboxes[d]))
-        threads[d].start()
+        iters = {d: sources[d]()
+                 for d in p.depends_on}
+        plugin_threads[d] = t = threading.Thread(
+            target=p.iter,
+            name=d,
+            args=(iters, mailboxes[d]))
+        t.start()
 
     yield from mailboxes[target].subscribe()
+
+
+# TODO: fix signatures
+
+@export
+def make(*args, **kwargs):
+    for _ in get(*args, **kwargs):
+        pass
+
+
+@export
+def get_array(*args, **kwargs):
+    return np.concatenate(list(get(*args, **kwargs)))
+
+
+@export
+def get_df(*args, **kwargs):
+    return pd.DataFrame.from_records(get_array(*args, **kwargs))
