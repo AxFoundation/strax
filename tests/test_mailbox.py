@@ -1,5 +1,5 @@
 import concurrent.futures
-from functools import partial
+import threading
 import time
 
 import numpy as np
@@ -10,6 +10,15 @@ from strax import OrderedMailbox, MailboxReadTimeout, MailboxFullTimeout
 SHORT_TIMEOUT = 0.1
 LONG_TIMEOUT = 5 * SHORT_TIMEOUT
 
+
+def reader(source, reader_sleeps=0, name=''):
+    result = []
+    for x in source:
+        print(f"Reader {name} got {x}, sleeping for {reader_sleeps}")
+        time.sleep(reader_sleeps)
+        print(f"Reader {name} awoke")
+        result.append(x)
+    return result
 
 def mailbox_tester(messages,
                    numbers=None,
@@ -22,25 +31,18 @@ def mailbox_tester(messages,
 
     mb = OrderedMailbox(max_messages=max_messages)
 
-    def reader(name=''):
-        result = []
-        for x in mb.subscribe(timeout=timeout):
-            print(f"Reader {name} got {x}, sleeping for {reader_sleeps}")
-            time.sleep(reader_sleeps)
-            print(f"Reader {name} awoke")
-            result.append(x)
-        return result
-
     n_readers = 2
     with concurrent.futures.ThreadPoolExecutor() as tp:
-        futures = [tp.submit(partial(reader, i))
+        futures = [tp.submit(reader,
+                             source=mb.subscribe(timeout=timeout),
+                             reader_sleeps=reader_sleeps)
                    for i in range(n_readers)]
 
         for i in range(len(messages)):
-            mb.send(messages[i], number=numbers[i], timeout=timeout)
+            mb.send(messages[i], msg_number=numbers[i], timeout=timeout)
             print(f"Sent message {i}. Now {len(mb.mailbox)} ms in mailbox.")
-            time.sleep(0.01 * SHORT_TIMEOUT)
-        mb.send(StopIteration, timeout=timeout)
+
+        mb.close()
 
         # Results must be equal
         for f in futures:
@@ -73,3 +75,27 @@ def test_write_timeout():
 def test_reversed():
     """Mailbox sorts messages properly"""
     mailbox_tester(np.arange(10), numbers=np.arange(10)[::-1])
+
+
+def test_deadlock_regression():
+    """A reader thread may start after the first message is processed"""
+    mb = OrderedMailbox()
+    mb.send(0)
+
+    readers = [
+        threading.Thread(target=reader,
+                         kwargs=dict(
+                             source=mb.subscribe(timeout=SHORT_TIMEOUT),
+                             name=str(i)))
+        for i in range(2)
+    ]
+    readers[0].start()
+    time.sleep(SHORT_TIMEOUT)
+
+    readers[1].start()
+    mb.send(1)
+    mb.close()
+
+    for t in readers:
+        t.join(SHORT_TIMEOUT)
+        assert not t.is_alive()
