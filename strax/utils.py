@@ -1,5 +1,5 @@
 from functools import wraps
-import logging
+import re
 
 import numpy as np
 import numba
@@ -210,3 +210,11 @@ def merge_arrs(arrs):
         for fn in arr.dtype.names:
             result[fn] = arr[fn]
     return result
+
+
+@export
+def camel_to_snake(x):
+    """Convert x from CamelCase to snake_case"""
+    # From https://stackoverflow.com/questions/1175208
+    x = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', x).lower()

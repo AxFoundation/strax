@@ -20,6 +20,7 @@ def reader(source, reader_sleeps=0, name=''):
         result.append(x)
     return result
 
+
 def mailbox_tester(messages,
                    numbers=None,
                    reader_sleeps=0.,
