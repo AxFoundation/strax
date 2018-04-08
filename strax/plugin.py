@@ -5,19 +5,12 @@ from one or more other plugins.
 """
 from enum import IntEnum
 from functools import partial
-from itertools import count
-import inspect
-import logging
-import re
 
 import numpy as np
 
 import strax
 import strax.chunk_arrays as ca
-from strax.core import provider, register_plugin
-
-from strax.utils import exporter
-export, __all__ = exporter()
+export, __all__ = strax.exporter()
 
 
 @export
@@ -31,6 +24,10 @@ class SavePreference(IntEnum):
 
 @export
 class StraxPlugin:
+    """Plugin containing strax computation
+
+    You should NOT instantiate plugins directly.
+    """
     __version__: str
     data_kind: str
     depends_on: tuple
@@ -38,24 +35,17 @@ class StraxPlugin:
     compressor: str = 'blosc'       # Compressor to use for files
     save_preference: int = SavePreference.PREFERABLY
 
-    def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
-        self.dtype = np.dtype(self.dtype)
+    dependency_kinds: dict
+    dependency_dtypes: dict
 
-        if not hasattr(self, 'depends_on'):
-            # Infer dependencies from self.compute's argument names
-            process_params = inspect.signature(self.compute).parameters.keys()
-            process_params = [p for p in process_params if p != 'kwargs']
-            self.depends_on = tuple(process_params)
+    def startup(self):
+        """Hook if plugin wants to do something after initialization."""
+        pass
 
-        if not hasattr(self, 'data_kind'):
-            # Assume data kind is the same as the first dependency
-            self.data_kind = provider(self.depends_on[0]).data_kind
-
-        if not hasattr(self, 'provides'):
-            # No output name specified: construct one from the class name
-            snake_name = camel_to_snake(self.__class__.__name__)
-            self.provides = snake_name
+    def infer_dtype(self):
+        """Return dtype of computed data;
+        used only if no dtype attribute defined"""
+        raise NotImplementedError
 
     def version(self, run_id=None):
         """Return version number applicable to the run_id.
@@ -78,13 +68,12 @@ class StraxPlugin:
         deps_by_kind = dict()
         key_deps = []
         for d in self.depends_on:
-            p = provider(d)
-
-            k = p.data_kind
+            k = self.dependency_kinds[d]
             deps_by_kind.setdefault(k, [])
 
             # If this has time information, put it first in the list
-            if require_time and 'time' in p.dtype.names:
+            if (require_time
+                    and 'time' in self.dependency_dtypes[d].names):
                 key_deps.append(d)
                 deps_by_kind[k].insert(0, d)
             else:
@@ -140,13 +129,6 @@ class StraxPlugin:
         raise NotImplementedError
 
 
-def camel_to_snake(x):
-    """Convert x from CamelCase to snake_case"""
-    # From https://stackoverflow.com/questions/1175208
-    x = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', x).lower()
-
-
 ##
 # Special plugins
 ##
@@ -159,13 +141,16 @@ class LoopPlugin(StraxPlugin):
     def __init__(self):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for LoopPlugin')
-
-        # Data kind to look over is set by first dependency
-        self.loop_over = provider(self.depends_on[0]).data_kind
-
         super().__init__()
 
     def compute(self, **kwargs):
+        # If not otherwise specified, data kind to loop over
+        # is that of the first dependency (e.g. events)
+        if hasattr(self, 'loop_over'):
+            loop_over = self.loop_over
+        else:
+            loop_over = self.dependency_kinds[self.depends_on[0]]
+
         # Merge data of each data kind
         deps_by_kind = self.dependencies_by_kind()
         things_by_kind = {
@@ -175,9 +160,9 @@ class LoopPlugin(StraxPlugin):
 
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
-        base = things_by_kind[self.loop_over]
+        base = things_by_kind[loop_over]
         for k, things in things_by_kind.items():
-            if k != self.loop_over:
+            if k != loop_over:
                 things_by_kind[k] = strax.split_by_containment(things, base)
 
         results = np.zeros(len(base), dtype=self.dtype)
@@ -185,7 +170,7 @@ class LoopPlugin(StraxPlugin):
             r = self.compute_loop(base[i],
                                   **{k: things_by_kind[k][i]
                                      for k in deps_by_kind
-                                     if k != self.loop_over})
+                                     if k != loop_over})
 
             # Convert from dict to array row:
             for k, v in r.items():
@@ -207,20 +192,15 @@ class MergePlugin(StraxPlugin):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for MergePlugin')
 
+    def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
         if len(deps_by_kind) != 1:
             raise ValueError("MergePlugins can only merge data of the same "
                              "kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        for k in deps_by_kind:
-            self.data_kind = k
-            # No break needed, there's just one item
-
-        self.dtype = sum([strax.unpack_dtype(provider(d).dtype)
-                          for d in self.depends_on], [])
-
-        super().__init__()
+        return sum([strax.unpack_dtype(self.dependency_dtypes[d])
+                    for d in self.depends_on], [])
 
     def compute(self, **kwargs):
         return strax.merge_arrs(list(kwargs.values()))
@@ -237,7 +217,7 @@ class PlaceholderPlugin(StraxPlugin):
                                   f"provides {self.provides}")
 
 
-@register_plugin
+@strax.register_default
 class Records(PlaceholderPlugin):
     """Placeholder plugin for something (e.g. a DAQ or simulator) that
     provides strax records.

@@ -1,5 +1,4 @@
 """Utilities for dealing with streams of numpy (record) arrays
-maybe this should become its own package?
 """
 import itertools
 
