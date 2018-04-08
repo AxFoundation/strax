@@ -1,12 +1,9 @@
+from functools import wraps
+import re
+
 import numpy as np
 import numba
 import dill
-from functools import wraps
-
-__all__ = ('records_needed', 'growing_result', 'sort_by_time',
-           'first_index_not_below', 'endtime',
-           'fully_contained_in', 'split_by_containment',
-           'unpack_dtype', 'merge_arrs')
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -14,11 +11,29 @@ __all__ = ('records_needed', 'growing_result', 'sort_by_time',
 numba.caching.pickle = dill
 
 
+def exporter(export_self=False):
+    """Export utility modified from https://stackoverflow.com/a/41895194"""
+    all_ = []
+    if export_self:
+        all_.append('exporter')
+
+    def decorator(obj):
+        all_.append(obj.__name__)
+        return obj
+
+    return decorator, all_
+
+
+export, __all__ = exporter(export_self=True)
+
+
+@export
 def records_needed(pulse_length, samples_per_record):
     """Return records needed to store pulse_length samples"""
     return 1 + (pulse_length - 1) // samples_per_record
 
 
+@export
 def growing_result(dtype=np.int, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
     Functions must obey following API:
@@ -65,6 +80,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
 
 # (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
 # TODO: maybe this should be a factory?
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
     """Sort pulses by time, then channel.
@@ -79,6 +95,7 @@ def sort_by_time(x):
     return x[sort_i]
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def first_index_not_below(arr, t):
     """Return first index of array >= t, or len(arr) if no such found"""
@@ -88,6 +105,7 @@ def first_index_not_below(arr, t):
     return len(arr)
 
 
+@export
 def endtime(x):
     """Return endtime of intervals x"""
     if 'endtime' in x.dtype.names:
@@ -95,6 +113,7 @@ def endtime(x):
     return x['time'] + x['length'] * x['dt']
 
 
+@export
 def fully_contained_in(things, containers):
     """Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
@@ -127,6 +146,7 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
             result[a_i] = b_i
 
 
+@export
 def split_by_containment(things, containers):
     """Return list of thing-arrays contained in each container
 
@@ -155,6 +175,7 @@ def split_by_containment(things, containers):
     return things_split
 
 
+@export
 def unpack_dtype(dtype):
     """Return list of tuples needed to construct the dtype
 
@@ -176,6 +197,7 @@ def unpack_dtype(dtype):
     return result
 
 
+@export
 def merge_arrs(arrs):
     """Merge structured arrays of equal length. Assumes no field collisions.
     """
@@ -188,3 +210,11 @@ def merge_arrs(arrs):
         for fn in arr.dtype.names:
             result[fn] = arr[fn]
     return result
+
+
+@export
+def camel_to_snake(x):
+    """Convert x from CamelCase to snake_case"""
+    # From https://stackoverflow.com/questions/1175208
+    x = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', x).lower()

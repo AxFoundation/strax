@@ -1,14 +1,24 @@
 import concurrent.futures
-from functools import partial
+import threading
 import time
 
 import numpy as np
 import pytest
 
-from strax import OrderedMailbox, MailboxReadTimeout, MailboxFullTimeout
+import strax
 
-SHORT_TIMEOUT = 0.01
+SHORT_TIMEOUT = 0.1
 LONG_TIMEOUT = 5 * SHORT_TIMEOUT
+
+
+def reader(source, reader_sleeps=0, name=''):
+    result = []
+    for x in source:
+        print(f"Reader {name} got {x}, sleeping for {reader_sleeps}")
+        time.sleep(reader_sleeps)
+        print(f"Reader {name} awoke")
+        result.append(x)
+    return result
 
 
 def mailbox_tester(messages,
@@ -20,27 +30,20 @@ def mailbox_tester(messages,
     if numbers is None:
         numbers = np.arange(len(messages))
 
-    mb = OrderedMailbox(max_messages=max_messages)
-
-    def reader(name=''):
-        result = []
-        for x in mb.subscribe(timeout=timeout):
-            print(f"Reader {name} got {x}, sleeping for {reader_sleeps}")
-            time.sleep(reader_sleeps)
-            print(f"Reader {name} awoke")
-            result.append(x)
-        return result
+    mb = strax.OrderedMailbox(max_messages=max_messages)
 
     n_readers = 2
     with concurrent.futures.ThreadPoolExecutor() as tp:
-        futures = [tp.submit(partial(reader, i))
+        futures = [tp.submit(reader,
+                             source=mb.subscribe(timeout=timeout),
+                             reader_sleeps=reader_sleeps)
                    for i in range(n_readers)]
 
         for i in range(len(messages)):
-            mb.send(messages[i], number=numbers[i], timeout=timeout)
+            mb.send(messages[i], msg_number=numbers[i], timeout=timeout)
             print(f"Sent message {i}. Now {len(mb.mailbox)} ms in mailbox.")
-            time.sleep(0.01 * SHORT_TIMEOUT)
-        mb.send(StopIteration, timeout=timeout)
+
+        mb.close()
 
         # Results must be equal
         for f in futures:
@@ -50,7 +53,7 @@ def mailbox_tester(messages,
 
 def test_result_timeout():
     """Test that our mailbox tester actually times out.
-    Without this the other tests might hang indefinitely.
+    (if not, the other tests might hang indefinitely if something is broken)
     """
     with pytest.raises(concurrent.futures.TimeoutError):
         mailbox_tester([0, 1], numbers=[1, 2], timeout=2 * LONG_TIMEOUT)
@@ -58,13 +61,13 @@ def test_result_timeout():
 
 def test_read_timeout():
     """Subscribers time out if we cannot read for too long"""
-    with pytest.raises(MailboxReadTimeout):
+    with pytest.raises(strax.MailboxReadTimeout):
         mailbox_tester([0, 1], numbers=[1, 2])
 
 
 def test_write_timeout():
     """Writers time out if we cannot write for too long"""
-    with pytest.raises(MailboxFullTimeout):
+    with pytest.raises(strax.MailboxFullTimeout):
         mailbox_tester([0, 1, 2, 3, 4],
                        max_messages=1,
                        reader_sleeps=LONG_TIMEOUT)
@@ -73,3 +76,44 @@ def test_write_timeout():
 def test_reversed():
     """Mailbox sorts messages properly"""
     mailbox_tester(np.arange(10), numbers=np.arange(10)[::-1])
+
+
+def test_deadlock_regression():
+    """A reader thread may start after the first message is processed"""
+    mb = strax.OrderedMailbox()
+    mb.send(0)
+
+    readers = [
+        threading.Thread(target=reader,
+                         kwargs=dict(
+                             source=mb.subscribe(timeout=SHORT_TIMEOUT),
+                             name=str(i)))
+        for i in range(2)
+    ]
+    readers[0].start()
+    time.sleep(SHORT_TIMEOUT)
+
+    readers[1].start()
+    mb.send(1)
+    mb.close()
+
+    for t in readers:
+        t.join(SHORT_TIMEOUT)
+        assert not t.is_alive()
+
+
+def test_close_protection():
+    """Cannot send messages to a closed mailbox"""
+    mb = strax.OrderedMailbox()
+    mb.close()
+    with pytest.raises(strax.MailBoxAlreadyClosed):
+        mb.send(0)
+
+
+def test_valid_msg_number():
+    """Message numbers are non-negative integers"""
+    mb = strax.OrderedMailbox()
+    with pytest.raises(strax.InvalidMessageNumber):
+        mb.send(0, msg_number=-1)
+    with pytest.raises(strax.InvalidMessageNumber):
+        mb.send(0, msg_number='???')

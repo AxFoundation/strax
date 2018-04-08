@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 import glob
 import shutil
 
@@ -63,13 +62,3 @@ def get_chunk_starts(dn):
                             dtype=np.int64)
     np.save(info_fn, chunk_starts)
     return chunk_starts
-
-
-def slurp(dn):
-    """Return concatenated array with data of all chunks in dn"""
-    return np.concatenate(list(read_chunks(dn)))
-
-
-def slurp_df(dn):
-    """Return concatenated dataframe with data of all chunks in dn"""
-    return pd.DataFrame.from_records(slurp(dn))

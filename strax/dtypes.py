@@ -45,7 +45,7 @@ def record_dtype(samples_per_record=110):
             'record_i'), np.int16),
         (('Baseline in ADC counts. data = int(baseline) - data_orig',
             'baseline'), np.float32),
-        (('Level of data reduction applies (strax.ReductionLevel enum)',
+        (('Level of data reduction applied (strax.ReductionLevel enum)',
             'reduction_level'), np.uint8),
         # Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines

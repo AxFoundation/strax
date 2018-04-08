@@ -1,14 +1,15 @@
 """Utilities for dealing with streams of numpy (record) arrays
-maybe this should become its own package?
 """
-__all__ = 'ChunkPacer fixed_size_chunks equal_chunks sync_iters'.split()
-
 import itertools
 
 import numpy as np
 from strax.utils import first_index_not_below
 
+from strax.utils import exporter
+export, __all__ = exporter()
 
+
+@export
 class ChunkPacer:
 
     def __init__(self, source):
@@ -86,6 +87,7 @@ class ChunkPacer:
         self._squash_buffer()
 
 
+@export
 def fixed_length_chunks(source, n=10):
     """Yield arrays of maximum length n"""
     p = ChunkPacer(source)
@@ -96,7 +98,8 @@ def fixed_length_chunks(source, n=10):
         return
 
 
-def fixed_size_chunks(source, n_bytes=int(1e7)):
+@export
+def fixed_size_chunks(source, n_bytes=int(1e8)):
     """Yield arrays of maximum size n_bytes"""
     p = ChunkPacer(source)
 
@@ -113,6 +116,7 @@ def fixed_size_chunks(source, n_bytes=int(1e7)):
         return
 
 
+@export
 def same_length(*sources):
     """Yield tuples of arrays of the same number of items
     """
@@ -123,6 +127,7 @@ def same_length(*sources):
         yield tuple([x] + [s.get_n(len(x)) for s in others])
 
 
+@export
 def same_stop(*sources, field=None, func=None):
     """Yield tuples of arrays whose values (of field_name) are below common
     thresholds (set by the chunking of sources[0])
@@ -141,6 +146,7 @@ def same_stop(*sources, field=None, func=None):
                            for s in others])
 
 
+@export
 def sync_iters(chunker, sources):
     """Return dict of iterators over sources (dict name -> iter),
     synchronized using chunker
