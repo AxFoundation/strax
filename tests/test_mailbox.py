@@ -5,7 +5,7 @@ import time
 import numpy as np
 import pytest
 
-from strax import OrderedMailbox, MailboxReadTimeout, MailboxFullTimeout
+import strax
 
 SHORT_TIMEOUT = 0.1
 LONG_TIMEOUT = 5 * SHORT_TIMEOUT
@@ -29,7 +29,7 @@ def mailbox_tester(messages,
     if numbers is None:
         numbers = np.arange(len(messages))
 
-    mb = OrderedMailbox(max_messages=max_messages)
+    mb = strax.OrderedMailbox(max_messages=max_messages)
 
     n_readers = 2
     with concurrent.futures.ThreadPoolExecutor() as tp:
@@ -60,13 +60,13 @@ def test_result_timeout():
 
 def test_read_timeout():
     """Subscribers time out if we cannot read for too long"""
-    with pytest.raises(MailboxReadTimeout):
+    with pytest.raises(strax.MailboxReadTimeout):
         mailbox_tester([0, 1], numbers=[1, 2])
 
 
 def test_write_timeout():
     """Writers time out if we cannot write for too long"""
-    with pytest.raises(MailboxFullTimeout):
+    with pytest.raises(strax.MailboxFullTimeout):
         mailbox_tester([0, 1, 2, 3, 4],
                        max_messages=1,
                        reader_sleeps=LONG_TIMEOUT)
@@ -79,7 +79,7 @@ def test_reversed():
 
 def test_deadlock_regression():
     """A reader thread may start after the first message is processed"""
-    mb = OrderedMailbox()
+    mb = strax.OrderedMailbox()
     mb.send(0)
 
     readers = [
@@ -99,3 +99,20 @@ def test_deadlock_regression():
     for t in readers:
         t.join(SHORT_TIMEOUT)
         assert not t.is_alive()
+
+
+def test_close_protection():
+    """Cannot send messages to a closed mailbox"""
+    mb = strax.OrderedMailbox()
+    mb.close()
+    with pytest.raises(strax.MailBoxAlreadyClosed):
+        mb.send(0)
+
+
+def test_valid_msg_number():
+    """Message numbers are non-negative integers"""
+    mb = strax.OrderedMailbox()
+    with pytest.raises(strax.InvalidMessageNumber):
+        mb.send(0, msg_number=-1)
+    with pytest.raises(strax.InvalidMessageNumber):
+        mb.send(0, msg_number='???')

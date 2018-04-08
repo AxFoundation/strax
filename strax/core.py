@@ -170,7 +170,7 @@ def get(run_id, target, save=None):
     for t in threads:
         t.start()
 
-    log.debug("Retrieving results")
+    log.debug("Yielding results")
     yield from final_generator
 
     log.debug("Closing threads")
