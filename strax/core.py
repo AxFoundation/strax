@@ -1,4 +1,6 @@
+from itertools import chain
 import threading
+import logging
 
 import numpy as np
 import pandas as pd
@@ -70,25 +72,25 @@ CacheKey = namedtuple('CacheKey',
 
 class FileCache:
     def __init__(self):
-        self.log = strax.setup_logger('cache')
+        self.log = logging.getLogger(self.__class__.__name__)
 
     @staticmethod
     def _dirname(key):
         return os.path.join(key.run_id, key.data_type)
 
     def get(self, key):
+        """Return iterator factory over cached results,
+        or raise NotCachedException if we have not cached the results yet
+        """
         dirname = self._dirname(key)
         if os.path.exists(dirname):
-            # TODO: we currently read from cache multiple times
-            # if a cached dependency is required multiple times.
-            # Better to read once and fill a mailbox?
             self.log.debug(f"{key} is in cache.")
-            return lambda: strax.io_chunked.read_chunks(dirname)
+            return strax.io_chunked.read_chunks(dirname)
         self.log.debug(f"{key} is NOT in cache.")
         raise NotCachedException
 
     def save(self, key, source):
-        dirname = os.path.join(key.run_id, key.data_type)
+        dirname = self._dirname(key)
         source = strax.chunk_arrays.fixed_size_chunks(source)
         strax.io_chunked.save_to_dir(source, dirname)
 
@@ -98,6 +100,7 @@ cache = FileCache()
 
 @export
 def get(run_id, target, save=None):
+    log = logging.getLogger('get')
     if isinstance(save, str):
         save = [save]
     elif save is None:
@@ -108,63 +111,73 @@ def get(run_id, target, save=None):
     elif isinstance(save, tuple):
         save = list(save)
 
-    # For just the things we have to load:
-    plugins = dict()
     mailboxes = dict()
-    keys = dict()           # Cache keys
+    plugins_to_run = dict()
+    threads = []
+    keys = dict()    # Cache keys of the things we're building
 
-    # For all things we need (cached or not)
-    sources = dict()        # Iterator factories
-
-    stack = [target]
-    while len(stack):
-        d = stack.pop()
-        if d in sources:
+    log.debug("Walking dependency graph")
+    to_check = [target]
+    while len(to_check):
+        d = to_check.pop()
+        if d in mailboxes:
             continue
-        p = provider(d)
 
-        key = keys[d] = CacheKey(run_id, d, p.lineage(run_id))
+        p = provider(d)
+        mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
+        keys[d] = CacheKey(run_id, d, p.lineage(run_id))
         try:
-            sources[d] = cache.get(key)
-            if d == target:
-                # We actually have the main target in cache!
-                # No need to go any further
-                yield from sources[d]()
-                return
+            cache_iterator = cache.get(keys[d])
 
         except NotCachedException:
-            # We'll make this data
-            plugins[d] = p
-            mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
-            sources[d] = mailboxes[d].subscribe
+            # We have to make this data
+            plugins_to_run[d] = p
             if p.save_preference == strax.SavePreference.ALWAYS:
                 save.append(d)
             # And we should check it's dependencies
-            stack.extend(p.depends_on)
+            to_check.extend(p.depends_on)
 
-    saver_threads = {}
+        else:
+            # Already in cache, read it from disk
+            threads.append(threading.Thread(
+                target=mailboxes[d].send_from,
+                name='read:' + d,
+                args=(cache_iterator,)))
+
+    log.debug("Creating stream")
+
     for d in set(save):
-        assert d in plugins
-        if plugins[d].save_preference == strax.SavePreference.NEVER:
+        assert d in plugins_to_run
+        if plugins_to_run[d].save_preference == strax.SavePreference.NEVER:
             raise ValueError("Plugin forbids saving data for {d}")
-        saver_threads[d] = t = threading.Thread(
+        threads.append(threading.Thread(
             target=cache.save,
-            name=d + '_saver',
-            args=(keys[d], sources[d]()))
+            name='save:' + d,
+            kwargs=dict(key=keys[d],
+                        source=mailboxes[d].subscribe())))
+
+    for d, p in plugins_to_run.items():
+        threads.append(threading.Thread(
+            target=mailboxes[d].send_from,
+            name='build:' + d,
+            args=(p.iter(iters={d: mailboxes[d].subscribe()
+                                for d in p.depends_on}),)))
+
+    final_generator = mailboxes[target].subscribe()
+
+    # NB: start threads AFTER we've put in all subscriptions!
+    log.debug("Starting threads")
+    for t in threads:
         t.start()
 
-    plugin_threads = {}
-    for d, p in plugins.items():
-        iters = {d: sources[d]()
-                 for d in p.depends_on}
-        plugin_threads[d] = t = threading.Thread(
-            target=p.iter,
-            name=d,
-            args=(iters, mailboxes[d]))
-        t.start()
+    log.debug("Retrieving results")
+    yield from final_generator
 
-    yield from mailboxes[target].subscribe()
-
+    log.debug("Closing threads")
+    for t in threads:
+        t.join(timeout=10)
+        if t.is_alive():
+            raise RuntimeError("Thread %s did not terminate!" % t.name)
 
 # TODO: fix signatures
 

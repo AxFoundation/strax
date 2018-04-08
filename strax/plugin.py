@@ -7,6 +7,7 @@ from enum import IntEnum
 from functools import partial
 from itertools import count
 import inspect
+import logging
 import re
 
 import numpy as np
@@ -38,7 +39,7 @@ class StraxPlugin:
     save_preference: int = SavePreference.PREFERABLY
 
     def __init__(self):
-        self.log = strax.setup_logger(self.__class__.__name__)
+        self.log = logging.getLogger(self.__class__.__name__)
         self.dtype = np.dtype(self.dtype)
 
         if not hasattr(self, 'depends_on'):
@@ -97,10 +98,9 @@ class StraxPlugin:
 
         return deps_by_kind
 
-    def iter(self, iters, output_mailbox, n_per_iter=None):
+    def iter(self, iters, n_per_iter=None):
         """Yield result chunks for processing input_dir
         :param iters: dict with iterators over dependencies
-        :param output_mailbox: mailbox to send results to
         :param n_per_iter: pass at most this many rows to compute
         """
         deps_by_kind = self.dependencies_by_kind()
@@ -127,16 +127,14 @@ class StraxPlugin:
                     ca.same_length,
                     {d: iters[d] for d in deps}))
 
-        for result_i in count():
+        while True:
             try:
                 compute_kwargs = {d: next(iters[d])
                                   for d in self.depends_on}
             except StopIteration:
-                output_mailbox.close()
                 return
-            # We might punt the compute to a processpool in the future
-            r = self.compute(**compute_kwargs)
-            output_mailbox.send(r, number=result_i)
+            # We might punt the compute to a ProcessPool in the future
+            yield self.compute(**compute_kwargs)
 
     def compute(self, **kwargs):
         raise NotImplementedError
