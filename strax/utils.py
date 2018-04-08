@@ -28,18 +28,6 @@ export, __all__ = exporter(export_self=True)
 
 
 @export
-def setup_logger(name):
-    log = logging.getLogger(name)
-    log_formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: "
-        "%(message)s [%(threadName)s] ")
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(log_formatter)
-    log.addHandler(console_handler)
-    return log
-
-
-@export
 def records_needed(pulse_length, samples_per_record):
     """Return records needed to store pulse_length samples"""
     return 1 + (pulse_length - 1) // samples_per_record
