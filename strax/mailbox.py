@@ -8,17 +8,27 @@ export, __all__ = exporter()
 
 
 @export
-class MailboxReadTimeout(Exception):
+class MailboxException(Exception):
     pass
 
 
 @export
-class MailboxFullTimeout(Exception):
+class MailboxReadTimeout(MailboxException):
     pass
 
 
 @export
-class InvalidMessageNumber(Exception):
+class MailboxFullTimeout(MailboxException):
+    pass
+
+
+@export
+class InvalidMessageNumber(MailboxException):
+    pass
+
+
+@export
+class AlreadyClosedException(MailboxException):
     pass
 
 
@@ -28,14 +38,19 @@ class OrderedMailbox:
     over messages set by monotonously incrementing message numbers.
     """
 
-    def __init__(self, name='mailbox', max_messages=20):
+    def __init__(self,
+                 name='mailbox',
+                 default_send_timeout=20,
+                 max_messages=20):
         self.name = name
-        self.log = logging.getLogger(self.name)
+        self.default_send_timeout = default_send_timeout
+        self.max_messages = max_messages
 
+        self.log = logging.getLogger(self.name)
         self.mailbox = []
         self.subscribers_have_read = []
         self.sent_messages = 0
-        self.max_messages = max_messages
+        self.closed = False
 
         self.lock = threading.RLock()
         self.read_condition = threading.Condition(lock=self.lock)
@@ -43,44 +58,47 @@ class OrderedMailbox:
 
         self.log.debug("Initialized")
 
-    def send(self, msg, number=None, timeout=20):
+    def send(self, msg, msg_number=None, timeout=None):
         """Send a message.
 
         If the mailbox is currently full, sleep until there
         is room for your message (or timeout occurs)
         """
+        if timeout is None:
+            timeout = self.default_send_timeout
+
         with self.lock:
+            if self.closed:
+                raise AlreadyClosedException(
+                    f"Can't send to {self.name} anymore")
+
             # Determine / validate the message number
-            if number is None:
-                number = self.sent_messages
+            if msg_number is None:
+                msg_number = self.sent_messages
             if not len(self.subscribers_have_read):
                 read_until = -1
             else:
                 read_until = min(self.subscribers_have_read)
-            if number <= read_until:
+            if msg_number <= read_until:
                 raise InvalidMessageNumber(
-                    f'Attempt to send message {number} while '
+                    f'Attempt to send message {msg_number} while '
                     f'subscribers already read {read_until}.')
 
-            def can_write():
-                return len(self.mailbox) < self.max_messages
+            if not self.write_condition.wait_for(
+                    lambda: len(self.mailbox) < self.max_messages,
+                    timeout=timeout):
+                raise MailboxFullTimeout(f"{self.name} emptied too slow")
 
-            if not self.write_condition.wait_for(can_write, timeout=timeout):
-                raise MailboxFullTimeout
-
-            heapq.heappush(self.mailbox, (number, msg))
-            if msg is StopIteration:
-                self.log.debug(
-                    f"Sent {number}"
-                    + (' (StopIteration)' if msg is StopIteration else ''))
-            else:
-                self.log.debug(f"Sent {number}")
+            heapq.heappush(self.mailbox, (msg_number, msg))
+            self.log.debug(f"Sent {msg_number}")
             self.sent_messages += 1
             self.read_condition.notify_all()
 
-    def close(self):
-        self.log.debug(f"Input stream ended")
-        self.send(StopIteration)
+    def close(self, timeout=None):
+        with self.lock:
+            self.send(StopIteration, timeout=timeout)
+            self.closed = True
+        self.log.debug(f"Closed to incoming messages")
 
     def send_from(self, iterable):
         for x in iterable:
@@ -130,7 +148,7 @@ class OrderedMailbox:
                         partial(self._has_msg, next_number),
                         timeout):
                     raise MailboxReadTimeout(
-                        f"{self.name} lost message {next_number}?")
+                        f"{self.name} did not get msg {next_number} in time")
 
                 # Grab all messages we can yield
                 to_yield = []
