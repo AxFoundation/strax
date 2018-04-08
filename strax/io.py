@@ -7,7 +7,8 @@ import numpy as np
 import blosc
 import zstd
 
-__all__ = ('load save delete load_metadata save_metadata').split()
+import strax
+export, __all__ = strax.exporter()
 
 
 COMPRESSORS = dict(
@@ -23,6 +24,7 @@ COMPRESSORS = dict(
 )
 
 
+@export
 def load(filename, with_meta=False):
     # Remove extension from filename (if present)
     # Let's hope nobody puts extra dots in the filename...
@@ -43,12 +45,14 @@ def load(filename, with_meta=False):
     return data
 
 
+@export
 def delete(filename):
     metadata = load_metadata(filename)
     os.remove(_fn(filename, metadata['compressor']))
     os.remove(filename + '.json')
 
 
+@export
 def save(filename, records, compressor='zstd', **metadata):
     assert isinstance(records, np.ndarray), "Please pass a numpy array"
     save_metadata(filename,
@@ -64,17 +68,20 @@ def save(filename, records, compressor='zstd', **metadata):
             f.write(d_comp)
 
 
+@export
 def save_metadata(filename, **metadata):
     with open(filename + '.json', mode='w') as f:
         f.write(json.dumps(dict(**metadata)))
 
 
+@export
 def load_metadata(filename):
     with open(filename + '.json', mode='r') as f:
         metadata = json.loads(f.read())
     return metadata
 
 
+@export
 def _fn(filename, compressor):
     """Get filename (with extension) of data file"""
     if compressor == 'none':
