@@ -28,7 +28,7 @@ class InvalidMessageNumber(MailboxException):
 
 
 @export
-class AlreadyClosedException(MailboxException):
+class MailBoxAlreadyClosed(MailboxException):
     pass
 
 
@@ -69,16 +69,19 @@ class OrderedMailbox:
 
         with self.lock:
             if self.closed:
-                raise AlreadyClosedException(
-                    f"Can't send to {self.name} anymore")
+                raise MailBoxAlreadyClosed(f"Can't send to closed {self.name}")
 
-            # Determine / validate the message number
+            # We accept int numbers or anything which equals to it's int(...)
+            # (like numpy integers)
             if msg_number is None:
                 msg_number = self.sent_messages
-            if not len(self.subscribers_have_read):
-                read_until = -1
-            else:
-                read_until = min(self.subscribers_have_read)
+            try:
+                int(msg_number)
+                assert msg_number == int(msg_number)
+            except (ValueError, AssertionError):
+                raise InvalidMessageNumber("Msg numbers must be integers")
+
+            read_until = min(self.subscribers_have_read, default=-1)
             if msg_number <= read_until:
                 raise InvalidMessageNumber(
                     f'Attempt to send message {msg_number} while '
