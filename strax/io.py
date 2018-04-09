@@ -1,3 +1,4 @@
+from ast import literal_eval
 from functools import partial
 import os
 import bz2
@@ -25,47 +26,57 @@ COMPRESSORS = dict(
 
 
 @export
-def load(filename, with_meta=False):
+def load(filename, compressor=None, dtype=None, return_meta=False):
+    """Read and return data from filename
+
+    :param compressor: compressor to use for decompressing. If not passed,
+    will try to load it from json metadata file.
+    :param return_meta: if True, return (data, metadata) tuple
+    """
     # Remove extension from filename (if present)
     # Let's hope nobody puts extra dots in the filename...
     filename = os.path.splitext(filename)[0]
 
-    metadata = load_metadata(filename)
-    compressor = metadata['compressor']
+    if compressor is None or dtype is None:
+        metadata = load_metadata(filename)
+        compressor = metadata['compressor']
+        dtype = literal_eval(metadata['dtype'])
     if compressor == 'none':
-        data = np.load(filename + '.npy')
+        data = np.load(filename)
     else:
-        with open(_fn(filename, compressor), mode='rb') as f:
+        with open(filename, mode='rb') as f:
             data = COMPRESSORS[compressor]['decompress'](f.read())
         # frombuffer is much faster, but results in some readonly fields
-        data = np.fromstring(data, dtype=eval(metadata['dtype']))
+        data = np.fromstring(data, dtype=dtype)
 
-    if with_meta:
+    if return_meta:
         return data, metadata
     return data
 
 
 @export
-def delete(filename):
-    metadata = load_metadata(filename)
-    os.remove(_fn(filename, metadata['compressor']))
-    os.remove(filename + '.json')
-
-
-@export
-def save(filename, records, compressor='zstd', **metadata):
+def save(filename, records, compressor='zstd', save_meta=True, **metadata):
+    """Save records to filename, return filesize in bytes
+    :param compressor: compressor to use
+    :param save_meta: If False, just save to filename.
+    If True, save data to filename and metadata to filename + .json.
+    Metadata includes dtype, compressor, and any
+    additional kwargs passed to save.
+    """
     assert isinstance(records, np.ndarray), "Please pass a numpy array"
-    save_metadata(filename,
-                  compressor=compressor,
-                  dtype=records.dtype.descr.__repr__(),
-                  **metadata)
-
+    if save_meta:
+        save_metadata(filename,
+                      compressor=compressor,
+                      dtype=records.dtype.descr.__repr__(),
+                      **metadata)
     if compressor == 'none':
-        np.save(filename + '.npy', records)
+        np.save(filename, records)
     else:
         d_comp = COMPRESSORS[compressor]['compress'](records)
-        with open(_fn(filename, compressor), 'wb') as f:
+        with open(filename, 'wb') as f:
             f.write(d_comp)
+
+    return os.path.getsize(filename)
 
 
 @export
@@ -79,12 +90,3 @@ def load_metadata(filename):
     with open(filename + '.json', mode='r') as f:
         metadata = json.loads(f.read())
     return metadata
-
-
-@export
-def _fn(filename, compressor):
-    """Get filename (with extension) of data file"""
-    if compressor == 'none':
-        return filename + '.npy'
-    return filename + '.' + COMPRESSORS[compressor].get('extension',
-                                                        compressor)

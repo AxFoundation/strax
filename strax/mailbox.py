@@ -41,7 +41,7 @@ class OrderedMailbox:
     def __init__(self,
                  name='mailbox',
                  default_send_timeout=20,
-                 max_messages=20):
+                 max_messages=3):
         self.name = name
         self.default_send_timeout = default_send_timeout
         self.max_messages = max_messages
@@ -87,9 +87,11 @@ class OrderedMailbox:
                     f'Attempt to send message {msg_number} while '
                     f'subscribers already read {read_until}.')
 
-            if not self.write_condition.wait_for(
-                    lambda: len(self.mailbox) < self.max_messages,
-                    timeout=timeout):
+            def can_write():
+                return len(self.mailbox) < self.max_messages
+            if not can_write():
+                self.log.debug(f"Mailbox full, wait to send {msg_number}")
+            if not self.write_condition.wait_for(can_write, timeout=timeout):
                 raise MailboxFullTimeout(f"{self.name} emptied too slow")
 
             heapq.heappush(self.mailbox, (msg_number, msg))
@@ -108,7 +110,7 @@ class OrderedMailbox:
             self.send(x)
         self.close()
 
-    def subscribe(self, pass_msg_number=False, timeout=5):
+    def subscribe(self, pass_msg_number=False, timeout=10):
         with self.lock:
             subscriber_i = len(self.subscribers_have_read)
             self.subscribers_have_read.append(-1)
@@ -146,23 +148,27 @@ class OrderedMailbox:
         while not last_message:
             with self.lock:
                 # Wait until new messages are ready
-                self.log.debug(f"Checking for message {next_number}")
-                if not self.read_condition.wait_for(
-                        partial(self._has_msg, next_number),
-                        timeout):
+                next_ready = partial(self._has_msg, next_number)
+                if not next_ready():
+                    self.log.debug(f"Checking/waiting for {next_number}")
+                if not self.read_condition.wait_for(next_ready, timeout):
                     raise MailboxReadTimeout(
-                        f"{self.name} did not get msg {next_number} in time")
+                        f"{self.name} did not get {next_number} in time")
 
                 # Grab all messages we can yield
                 to_yield = []
                 while self._has_msg(next_number):
                     msg = self._get_msg(next_number)
-                    self.log.debug(f"Read {next_number}")
                     if msg is StopIteration:
-                        self.log.debug(f"Read StopIteration ({next_number})")
+                        self.log.debug(f"{next_number} is StopIteration")
                         last_message = True
                     to_yield.append((next_number, msg))
                     next_number += 1
+
+                if len(to_yield) > 1:
+                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}")
+                else:
+                    self.log.debug(f"Read {to_yield[0][0]}")
 
                 self.subscribers_have_read[subscriber_i] = next_number - 1
 
@@ -170,7 +176,6 @@ class OrderedMailbox:
                 while (len(self.mailbox)
                        and (min(self.subscribers_have_read)
                             >= self._lowest_msg_number)):
-                    self.log.debug(f"Cleaning {self._lowest_msg_number}")
                     heapq.heappop(self.mailbox)
                 self.write_condition.notify_all()
 

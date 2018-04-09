@@ -23,12 +23,12 @@ class SavePreference(IntEnum):
 
 
 @export
-class StraxPlugin:
+class Plugin:
     """Plugin containing strax computation
 
     You should NOT instantiate plugins directly.
     """
-    __version__: str
+    __version__ = '0.0.0'
     data_kind: str
     depends_on: tuple
     provides: str
@@ -58,6 +58,17 @@ class StraxPlugin:
     def lineage(self, run_id):
         # TODO: Implement this
         return None
+
+    def metadata(self, run_id):
+        """Metadata to save along with produced data"""
+        return dict(
+            run_id=run_id,
+            data_kind=self.data_kind,
+            compressor=self.compressor,
+            dtype=self.dtype,
+            version=self.version(run_id),
+            lineage=self.lineage(run_id)
+        )
 
     def dependencies_by_kind(self, require_time=True):
         """Return dependencies grouped by data kind
@@ -134,7 +145,7 @@ class StraxPlugin:
 ##
 
 @export
-class LoopPlugin(StraxPlugin):
+class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
 
@@ -183,7 +194,7 @@ class LoopPlugin(StraxPlugin):
 
 
 @export
-class MergePlugin(StraxPlugin):
+class MergePlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
     save_preference = SavePreference.GRUDGINGLY
@@ -207,7 +218,7 @@ class MergePlugin(StraxPlugin):
 
 
 @export
-class PlaceholderPlugin(StraxPlugin):
+class PlaceholderPlugin(Plugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
     save_preference = SavePreference.NEVER
