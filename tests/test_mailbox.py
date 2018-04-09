@@ -25,19 +25,24 @@ def mailbox_tester(messages,
                    numbers=None,
                    reader_sleeps=0.,
                    max_messages=100,
+                   expected_result=None,
                    timeout=SHORT_TIMEOUT,
                    result_timeout=LONG_TIMEOUT):
     if numbers is None:
         numbers = np.arange(len(messages))
+    if expected_result is None:
+        messages = np.asarray(messages)
+        expected_result = messages[np.argsort(numbers)]
 
     mb = strax.OrderedMailbox(max_messages=max_messages)
 
     n_readers = 2
+
     with concurrent.futures.ThreadPoolExecutor() as tp:
         futures = [tp.submit(reader,
                              source=mb.subscribe(timeout=timeout),
                              reader_sleeps=reader_sleeps)
-                   for i in range(n_readers)]
+                   for _ in range(n_readers)]
 
         for i in range(len(messages)):
             mb.send(messages[i], msg_number=numbers[i], timeout=timeout)
@@ -48,7 +53,7 @@ def mailbox_tester(messages,
         # Results must be equal
         for f in futures:
             np.testing.assert_equal(f.result(timeout=result_timeout),
-                                    messages[np.argsort(numbers)])
+                                    expected_result)
 
 
 def test_result_timeout():
@@ -117,3 +122,24 @@ def test_valid_msg_number():
         mb.send(0, msg_number=-1)
     with pytest.raises(strax.InvalidMessageNumber):
         mb.send(0, msg_number='???')
+
+
+# Task for in the next test, must be global since we're using ProcessPool
+# (which must pickle)
+def _task(i):
+    time.sleep(SHORT_TIMEOUT)
+    return i
+
+
+def test_futures():
+    """Test awaiting of Future's as messages
+
+    Timeouts are longer for this example, since they involve creating
+    subprocesses.
+    """
+    exc = concurrent.futures.ProcessPoolExecutor()
+    futures = [exc.submit(_task, i) for i in range(3)]
+    mailbox_tester(futures,
+                   expected_result=[0, 1, 2],
+                   result_timeout=5 * LONG_TIMEOUT,
+                   timeout=5 * LONG_TIMEOUT)

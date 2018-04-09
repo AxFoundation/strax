@@ -1,3 +1,4 @@
+from concurrent.futures import Future, TimeoutError
 from functools import partial
 import heapq
 import threading
@@ -61,6 +62,9 @@ class OrderedMailbox:
     def send(self, msg, msg_number=None, timeout=None):
         """Send a message.
 
+        If the message is a future, receivers will be passed its result.
+        (possibly waiting for completion if needed)
+
         If the mailbox is currently full, sleep until there
         is room for your message (or timeout occurs)
         """
@@ -108,7 +112,7 @@ class OrderedMailbox:
             self.send(x)
         self.close()
 
-    def subscribe(self, pass_msg_number=False, timeout=5):
+    def subscribe(self, pass_msg_number=False, timeout=20):
         with self.lock:
             subscriber_i = len(self.subscribers_have_read)
             self.subscribers_have_read.append(-1)
@@ -157,10 +161,13 @@ class OrderedMailbox:
                 to_yield = []
                 while self._has_msg(next_number):
                     msg = self._get_msg(next_number)
-                    self.log.debug(f"Read {next_number}")
+
                     if msg is StopIteration:
-                        self.log.debug(f"Read StopIteration ({next_number})")
                         last_message = True
+                        self.log.debug(f"Read StopIteration ({next_number})")
+                    else:
+                        self.log.debug(f"Read {next_number}")
+
                     to_yield.append((next_number, msg))
                     next_number += 1
 
@@ -177,6 +184,14 @@ class OrderedMailbox:
             for msg_number, msg in to_yield:
                 if msg is StopIteration:
                     return
+                elif isinstance(msg, Future):
+                    print(f"Got future {msg_number}, done is {msg.done()}")
+                    try:
+                        msg = msg.result(timeout=10 * timeout)                                  # HACK
+                    except TimeoutError:
+                        raise TimeoutError(f"Future {msg_number} timed out!")
+                    print(f"Future {msg_number} done!")
+
                 if pass_msg_number:
                     yield msg_number, msg
                 else:
