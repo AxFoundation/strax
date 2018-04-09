@@ -17,8 +17,8 @@ export, __all__ = strax.exporter()
 class SavePreference(IntEnum):
     """Plugin's preference for having it's data saved"""
     NEVER = 0         # Throw an error if the user lists it
-    GRUDGINGLY = 1    # Save ONLY if the user lists it explicitly
-    PREFERABLY = 2    # Save if the user lists it as a final target
+    IF_EXPLICIT = 1   # Save ONLY if the user lists it explicitly
+    IF_MAIN = 2       # Save if the user lists it as a final target
     ALWAYS = 3        # Save even if the user does not list it
 
 
@@ -32,11 +32,11 @@ class StraxPlugin:
     data_kind: str
     depends_on: tuple
     provides: str
-    compressor: str = 'blosc'       # Compressor to use for files
-    save_preference: int = SavePreference.PREFERABLY
-
     dependency_kinds: dict
     dependency_dtypes: dict
+
+    save_preference = SavePreference.IF_MAIN
+    multiprocess = False    # If True, compute() work is submitted to pool
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -87,10 +87,12 @@ class StraxPlugin:
 
         return deps_by_kind
 
-    def iter(self, iters, n_per_iter=None):
+    def iter(self, iters, n_per_iter=None, executor=None):
         """Yield result chunks for processing input_dir
         :param iters: dict with iterators over dependencies
         :param n_per_iter: pass at most this many rows to compute
+        :param executor: Executor to punt computation tass to.
+            If None, will compute inside the plugin's thread.
         """
         deps_by_kind = self.dependencies_by_kind()
 
@@ -122,10 +124,13 @@ class StraxPlugin:
                                   for d in self.depends_on}
             except StopIteration:
                 return
-            # We might punt the compute to a ProcessPool in the future
-            yield self.compute(**compute_kwargs)
+            if self.multiprocess and executor is not None:
+                yield executor.submit(self.compute, **compute_kwargs)
+            else:
+                yield self.compute(**compute_kwargs)
 
-    def compute(self, **kwargs):
+    @staticmethod
+    def compute(**kwargs):
         raise NotImplementedError
 
 
@@ -186,7 +191,7 @@ class LoopPlugin(StraxPlugin):
 class MergePlugin(StraxPlugin):
     """Plugin that merges data from its dependencies
     """
-    save_preference = SavePreference.GRUDGINGLY
+    save_preference = SavePreference.IF_EXPLICIT
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
