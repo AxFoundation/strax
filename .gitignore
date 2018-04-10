@@ -7,6 +7,7 @@
 *.zstd
 *.npy
 *.blosc
+strax_data
 
 # Python cache
 *.py[cod]
