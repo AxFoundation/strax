@@ -17,11 +17,11 @@ class Strax:
     # Yes, that's a class-level mutable, so register_default works
     _plugin_class_registry = dict()
 
-    def __init__(self, max_workers=4, storage_backends=None):
+    def __init__(self, max_workers=4, storage=None):
         self.log = logging.getLogger('strax')
-        if storage_backends is None:
-            storage_backends = [strax.FileStorage()]
-        self.storage_backends = storage_backends
+        if storage is None:
+            storage = [strax.FileStorage()]
+        self.storage = storage
         self._plugin_class_registry = copy(self._plugin_class_registry)
         self._plugin_instance_cache = dict()
         self.executor = ProcessPoolExecutor(max_workers=max_workers)
@@ -50,7 +50,7 @@ class Strax:
 
         return plugin_class
 
-    def provider(self, data_name):
+    def provider(self, data_name: str) -> strax.Plugin:
         """Return instance of plugin that provides data_name
 
         This is the only way plugins should be instantiated.
@@ -86,7 +86,7 @@ class Strax:
 
         return p
 
-    def data_info(self, data_name):
+    def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name"""
         p = self.provider(data_name)
         display_headers = ['Field name', 'Data type', 'Comment']
@@ -99,7 +99,7 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get(self, run_id, target, save=None):
+    def get(self, run_id: str, target: str, save=None):
         """Compute target for run_id and iterate over results
         :param run_id: run id to get
         :param target: data type to yield results for
@@ -112,7 +112,6 @@ class Strax:
             save = list(save)
         elif save is None:
             save = []
-        SAVEPREF = strax.SavePreference   # Just a shorthand
 
         mailboxes = dict()
         plugins_to_run = dict()
@@ -127,12 +126,18 @@ class Strax:
                 continue
 
             p = self.provider(d)
-            if d in save and p.save_preference == strax.SavePreference.NEVER:
-                raise ValueError("Plugin forbids saving of {d}")
+            if d in save:
+                if p.save_when == strax.SaveWhen.NEVER:
+                    raise ValueError("Plugin forbids saving of {d}")
+            else:
+                if (d == target and p.save_when == strax.SaveWhen.TARGET
+                        or p.save_when == strax.SaveWhen.ALWAYS):
+                    save.append(d)
+
             mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
             keys[d] = strax.CacheKey(run_id, d, p.lineage(run_id))
 
-            for sb in self.storage_backends:
+            for sb in self.storage:
                 try:
                     cache_iterator = sb.get(keys[d])
                 except strax.NotCachedException:
@@ -151,9 +156,8 @@ class Strax:
                 to_check.extend(p.depends_on)
 
                 # Create saver threads
-                if (d in save
-                        or p.save_preference == strax.SavePreference.ALWAYS):
-                    for sb_i, sb in enumerate(self.storage_backends):
+                if d in save:
+                    for sb_i, sb in enumerate(self.storage):
                         if not sb.provides(d):
                             continue
                         threads.append(threading.Thread(
@@ -205,3 +209,12 @@ def register_default(plugin_class, provides=None):
     Does not affect Strax'es already initialized
     """
     return Strax.register(Strax, plugin_class, provides)
+
+
+@register_default
+class Records(strax.PlaceholderPlugin):
+    """Placeholder plugin for something (e.g. a DAQ or simulator) that
+    provides strax records.
+    """
+    data_kind = 'records'
+    dtype = strax.record_dtype()

@@ -14,11 +14,11 @@ export, __all__ = strax.exporter()
 
 
 @export
-class SavePreference(IntEnum):
+class SaveWhen(IntEnum):
     """Plugin's preference for having it's data saved"""
     NEVER = 0         # Throw an error if the user lists it
-    IF_EXPLICIT = 1   # Save ONLY if the user lists it explicitly
-    IF_MAIN = 2       # Save if the user lists it as a final target
+    EXPLICIT = 1      # Save ONLY if the user lists it explicitly
+    TARGET = 2        # Save if the user asks for it as a final target
     ALWAYS = 3        # Save even if the user does not list it
 
 
@@ -35,7 +35,7 @@ class Plugin:
     dependency_kinds: dict
     dependency_dtypes: dict
 
-    save_preference = SavePreference.IF_MAIN
+    save_when = SaveWhen.TARGET
     multiprocess = False    # If True, compute() work is submitted to pool
 
     def startup(self):
@@ -202,7 +202,7 @@ class LoopPlugin(Plugin):
 class MergePlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_preference = SavePreference.IF_EXPLICIT
+    save_when = SaveWhen.EXPLICIT
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -226,17 +226,8 @@ class MergePlugin(Plugin):
 class PlaceholderPlugin(Plugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
-    save_preference = SavePreference.NEVER
+    save_when = SaveWhen.NEVER
 
     def compute(self):
         raise NotImplementedError("No plugin registered that "
                                   f"provides {self.provides}")
-
-
-@strax.register_default
-class Records(PlaceholderPlugin):
-    """Placeholder plugin for something (e.g. a DAQ or simulator) that
-    provides strax records.
-    """
-    data_kind = 'records'
-    dtype = strax.record_dtype()
