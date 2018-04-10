@@ -1,7 +1,7 @@
 """Storage backends for strax.
 
 Currently only filesystem-based storage; later probably also
-data-base backed storage.
+database backed storage.
 """
 from ast import literal_eval
 from collections import namedtuple
