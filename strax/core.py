@@ -184,7 +184,17 @@ class Strax:
             t.start()
 
         self.log.debug("Yielding results")
-        yield from final_generator
+
+        return_value = yield from final_generator
+
+        if isinstance(return_value, strax.MailboxKilled):
+            self.log.debug(f"Main thread received SilentKiller")
+            for m in mailboxes.values():
+                self.log.debug(f"Killing {m}")
+                m.kill()
+        elif return_value is not None:
+            raise RuntimeError(f"Unexpected return value {return_value} from "
+                               "main generator")
 
         self.log.debug("Closing threads")
         for t in threads:
