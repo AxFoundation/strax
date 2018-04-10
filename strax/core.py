@@ -183,7 +183,7 @@ class Strax:
             self.log.debug(f"Main thread received MailboxKilled")
             for m in mailboxes.values():
                 self.log.debug(f"Killing {m}")
-                m.kill(force=True,
+                m.kill(upstream=True,
                        reason="Strax terminating due to downstream exception")
 
         self.log.debug("Closing threads")
