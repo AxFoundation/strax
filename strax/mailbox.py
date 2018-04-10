@@ -34,6 +34,11 @@ class MailBoxAlreadyClosed(MailboxException):
 
 
 @export
+class MailboxKilled(MailboxException):
+    pass
+
+
+@export
 class OrderedMailbox:
     """A publish-subscribe mailbox, whose subscribers iterate
     over messages set by monotonously incrementing message numbers.
@@ -52,12 +57,30 @@ class OrderedMailbox:
         self.subscribers_have_read = []
         self.sent_messages = 0
         self.closed = False
+        self.killed = False
 
         self.lock = threading.RLock()
         self.read_condition = threading.Condition(lock=self.lock)
         self.write_condition = threading.Condition(lock=self.lock)
 
         self.log.debug("Initialized")
+
+    def send_from(self, iterable):
+        """Send to mailbox from iterable, exiting appropriately if an
+        exception is thrown"""
+        try:
+            for x in iterable:
+                self.send(x)
+        except MailboxKilled:
+            # The iterable was reading from a mailbox, which has been killed.
+            # Kill this mailbox too. Eventually the final iterable pulling
+            # results will return with MailboxKilled
+            self.kill()
+        except Exception:
+            self.kill()
+            raise
+        else:
+            self.close()
 
     def send(self, msg, msg_number=None, timeout=None):
         """Send a message.
@@ -68,12 +91,15 @@ class OrderedMailbox:
         If the mailbox is currently full, sleep until there
         is room for your message (or timeout occurs)
         """
+
         if timeout is None:
             timeout = self.default_send_timeout
 
         with self.lock:
             if self.closed:
                 raise MailBoxAlreadyClosed(f"Can't send to closed {self.name}")
+            if self.killed:
+                raise MailboxKilled()
 
             # We accept int numbers or anything which equals to it's int(...)
             # (like numpy integers)
@@ -109,10 +135,11 @@ class OrderedMailbox:
             self.closed = True
         self.log.debug(f"Closed to incoming messages")
 
-    def send_from(self, iterable):
-        for x in iterable:
-            self.send(x)
-        self.close()
+    def kill(self):
+        with self.lock:
+            self.killed = True
+            self.read_condition.notify_all()
+            return
 
     def subscribe(self, pass_msg_number=False, timeout=20):
         with self.lock:
@@ -130,8 +157,17 @@ class OrderedMailbox:
         for msg_number, msg in self.mailbox:
             if msg_number == number:
                 return msg
+        else:
+            raise RuntimeError(f"Could not find message {number}")
 
     def _has_msg(self, number):
+        """Return if mailbox has message number.
+
+        Also returns True if mailbox is killed, so be sure to check
+        self.killed after this!
+        """
+        if self.killed:
+            return True
         return any([msg_number == number
                     for msg_number, _ in self.mailbox])
 
@@ -152,12 +188,15 @@ class OrderedMailbox:
         while not last_message:
             with self.lock:
                 # Wait until new messages are ready
-                next_ready = partial(self._has_msg, next_number)
+                next_ready = lambda: self._has_msg(next_number) or self.killed
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
                 if not self.read_condition.wait_for(next_ready, timeout):
                     raise MailboxReadTimeout(
                         f"{self.name} did not get {next_number} in time")
+                if self.killed:
+                    self.log.debug(f"Killed")
+                    return MailboxKilled()
 
                 # Grab all messages we can yield
                 to_yield = []
