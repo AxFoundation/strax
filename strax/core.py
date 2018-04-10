@@ -1,4 +1,5 @@
 from copy import copy
+from concurrent.futures import ProcessPoolExecutor
 import threading
 import logging
 import inspect
@@ -16,12 +17,14 @@ class Strax:
     # Yes, that's a class-level mutable, so register_default works
     _plugin_class_registry = dict()
 
-    def __init__(self):
-        # TODO: accept config
+    def __init__(self, max_workers=4, storage_backends=None):
         self.log = logging.getLogger('strax')
-        self.cache = strax.FileCache()
+        if storage_backends is None:
+            storage_backends = [strax.FileStorage()]
+        self.storage_backends = storage_backends
         self._plugin_class_registry = copy(self._plugin_class_registry)
         self._plugin_instance_cache = dict()
+        self.executor = ProcessPoolExecutor(max_workers=max_workers)
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -97,27 +100,26 @@ class Strax:
         return pd.DataFrame(result, columns=display_headers)
 
     def get(self, run_id, target, save=None):
-        """Compute target (data type) for run_id and iterate over results
+        """Compute target for run_id and iterate over results
+        :param run_id: run id to get
+        :param target: data type to yield results for
         :param save: str or list of str of data types you would like to save
         to cache, if they occur in intermediate computations
         """
         if isinstance(save, str):
             save = [save]
-        elif save is None:
-            if (self.provider(target).save_preference
-                    > strax.SavePreference.GRUDGINGLY):
-                save = [target]
-            else:
-                save = []
         elif isinstance(save, tuple):
             save = list(save)
+        elif save is None:
+            save = []
+        SAVEPREF = strax.SavePreference   # Just a shorthand
 
         mailboxes = dict()
         plugins_to_run = dict()
         threads = []
         keys = dict()    # Cache keys of the things we're building
 
-        self.log.debug("Walking dependency graph")
+        self.log.debug("Creating saver/loader threads and mailboxes")
         to_check = [target]
         while len(to_check):
             d = to_check.pop()
@@ -125,49 +127,54 @@ class Strax:
                 continue
 
             p = self.provider(d)
+            if d in save and p.save_preference == strax.SavePreference.NEVER:
+                raise ValueError("Plugin forbids saving of {d}")
             mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
             keys[d] = strax.CacheKey(run_id, d, p.lineage(run_id))
-            try:
-                cache_iterator = self.cache.get(keys[d])
 
-            except strax.NotCachedException:
-                # We have to make this data
-                plugins_to_run[d] = p
-                if p.save_preference == strax.SavePreference.ALWAYS:
-                    save.append(d)
-                # And we should check it's dependencies
-                to_check.extend(p.depends_on)
+            for sb in self.storage_backends:
+                try:
+                    cache_iterator = sb.get(keys[d])
+                except strax.NotCachedException:
+                    continue
+                else:
+                    # Create reader thread
+                    threads.append(threading.Thread(
+                        target=mailboxes[d].send_from,
+                        name='read:' + d,
+                        args=(cache_iterator,)))
+                    break
 
             else:
-                # Already in cache, read it from disk
-                threads.append(threading.Thread(
-                    target=mailboxes[d].send_from,
-                    name='read:' + d,
-                    args=(cache_iterator,)))
+                # We have to make this data, and possibly its dependencies
+                plugins_to_run[d] = p
+                to_check.extend(p.depends_on)
 
-        self.log.debug("Creating stream")
+                # Create saver threads
+                if (d in save
+                        or p.save_preference == strax.SavePreference.ALWAYS):
+                    for sb_i, sb in enumerate(self.storage_backends):
+                        if not sb.provides(d):
+                            continue
+                        threads.append(threading.Thread(
+                            target=sb.save,
+                            name=f'save_{sb_i}:{d}',
+                            kwargs=dict(key=keys[d],
+                                        source=mailboxes[d].subscribe(),
+                                        metadata=p.metadata(run_id))))
 
-        for d in set(save):
-            assert d in plugins_to_run, "Main target plugin not loaded??"
-            if (plugins_to_run[d].save_preference
-                    == strax.SavePreference.NEVER):
-                raise ValueError("Plugin forbids saving data for {d}")
-            threads.append(threading.Thread(
-                target=self.cache.save,
-                name='save:' + d,
-                kwargs=dict(key=keys[d],
-                            source=mailboxes[d].subscribe())))
-
+        self.log.debug("Creating builder threads")
         for d, p in plugins_to_run.items():
             threads.append(threading.Thread(
                 target=mailboxes[d].send_from,
                 name='build:' + d,
                 args=(p.iter(iters={d: mailboxes[d].subscribe()
-                                    for d in p.depends_on}),)))
+                                    for d in p.depends_on},
+                             executor=self.executor),)))
 
         final_generator = mailboxes[target].subscribe()
 
-        # NB: start threads AFTER we've put in all subscriptions!
+        # NB: do this AFTER we've put in all subscriptions!
         self.log.debug("Starting threads")
         for t in threads:
             t.start()

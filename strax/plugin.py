@@ -17,26 +17,26 @@ export, __all__ = strax.exporter()
 class SavePreference(IntEnum):
     """Plugin's preference for having it's data saved"""
     NEVER = 0         # Throw an error if the user lists it
-    GRUDGINGLY = 1    # Save ONLY if the user lists it explicitly
-    PREFERABLY = 2    # Save if the user lists it as a final target
+    IF_EXPLICIT = 1   # Save ONLY if the user lists it explicitly
+    IF_MAIN = 2       # Save if the user lists it as a final target
     ALWAYS = 3        # Save even if the user does not list it
 
 
 @export
-class StraxPlugin:
+class Plugin:
     """Plugin containing strax computation
 
     You should NOT instantiate plugins directly.
     """
-    __version__: str
+    __version__ = '0.0.0'
     data_kind: str
     depends_on: tuple
     provides: str
-    compressor: str = 'blosc'       # Compressor to use for files
-    save_preference: int = SavePreference.PREFERABLY
-
     dependency_kinds: dict
     dependency_dtypes: dict
+
+    save_preference = SavePreference.IF_MAIN
+    multiprocess = False    # If True, compute() work is submitted to pool
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -58,6 +58,17 @@ class StraxPlugin:
     def lineage(self, run_id):
         # TODO: Implement this
         return None
+
+    def metadata(self, run_id):
+        """Metadata to save along with produced data"""
+        return dict(
+            run_id=run_id,
+            data_kind=self.data_kind,
+            compressor=self.compressor,
+            dtype=self.dtype,
+            version=self.version(run_id),
+            lineage=self.lineage(run_id)
+        )
 
     def dependencies_by_kind(self, require_time=True):
         """Return dependencies grouped by data kind
@@ -87,10 +98,12 @@ class StraxPlugin:
 
         return deps_by_kind
 
-    def iter(self, iters, n_per_iter=None):
+    def iter(self, iters, n_per_iter=None, executor=None):
         """Yield result chunks for processing input_dir
         :param iters: dict with iterators over dependencies
         :param n_per_iter: pass at most this many rows to compute
+        :param executor: Executor to punt computation tass to.
+            If None, will compute inside the plugin's thread.
         """
         deps_by_kind = self.dependencies_by_kind()
 
@@ -122,10 +135,13 @@ class StraxPlugin:
                                   for d in self.depends_on}
             except StopIteration:
                 return
-            # We might punt the compute to a ProcessPool in the future
-            yield self.compute(**compute_kwargs)
+            if self.multiprocess and executor is not None:
+                yield executor.submit(self.compute, **compute_kwargs)
+            else:
+                yield self.compute(**compute_kwargs)
 
-    def compute(self, **kwargs):
+    @staticmethod
+    def compute(**kwargs):
         raise NotImplementedError
 
 
@@ -134,7 +150,7 @@ class StraxPlugin:
 ##
 
 @export
-class LoopPlugin(StraxPlugin):
+class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
 
@@ -183,10 +199,10 @@ class LoopPlugin(StraxPlugin):
 
 
 @export
-class MergePlugin(StraxPlugin):
+class MergePlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_preference = SavePreference.GRUDGINGLY
+    save_preference = SavePreference.IF_EXPLICIT
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -207,7 +223,7 @@ class MergePlugin(StraxPlugin):
 
 
 @export
-class PlaceholderPlugin(StraxPlugin):
+class PlaceholderPlugin(Plugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
     save_preference = SavePreference.NEVER
