@@ -1,4 +1,5 @@
 from copy import copy
+from concurrent.futures import ProcessPoolExecutor
 import threading
 import logging
 import inspect
@@ -16,13 +17,14 @@ class Strax:
     # Yes, that's a class-level mutable, so register_default works
     _plugin_class_registry = dict()
 
-    def __init__(self, storage_backends=None):
+    def __init__(self, max_workers=4, storage_backends=None):
         self.log = logging.getLogger('strax')
         if storage_backends is None:
             storage_backends = [strax.FileStorage()]
         self.storage_backends = storage_backends
         self._plugin_class_registry = copy(self._plugin_class_registry)
         self._plugin_instance_cache = dict()
+        self.executor = ProcessPoolExecutor(max_workers=max_workers)
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -106,14 +108,11 @@ class Strax:
         """
         if isinstance(save, str):
             save = [save]
-        elif save is None:
-            if (self.provider(target).save_preference
-                    > strax.SavePreference.GRUDGINGLY):
-                save = [target]
-            else:
-                save = []
         elif isinstance(save, tuple):
             save = list(save)
+        elif save is None:
+            save = []
+        SAVEPREF = strax.SavePreference   # Just a shorthand
 
         mailboxes = dict()
         plugins_to_run = dict()
@@ -170,7 +169,8 @@ class Strax:
                 target=mailboxes[d].send_from,
                 name='build:' + d,
                 args=(p.iter(iters={d: mailboxes[d].subscribe()
-                                    for d in p.depends_on}),)))
+                                    for d in p.depends_on},
+                             executor=self.executor),)))
 
         final_generator = mailboxes[target].subscribe()
 
