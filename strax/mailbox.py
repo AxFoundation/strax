@@ -40,7 +40,7 @@ class MailboxKilled(MailboxException):
 @export
 class Mailbox:
     """Publish/subscribe mailbox for builing complex pipelines
-    out of simple iterators.
+    out of simple iterators, using multithreading.
 
     A sender can be any iterable. To read from the mailbox, either:
      1. Use .subscribe() to get an iterator.
@@ -51,9 +51,18 @@ class Mailbox:
 
     Each sender and receiver is wrapped in a thread, so they can be paused:
      - senders, if the mailbox is full;
-     - readers, if they call next() but the next message is not yet available
+     - readers, if they call next() but the next message is not yet available.
 
     Any futures sent in are awaited before they are passed to receivers.
+
+    Exceptions in a sender cause MailboxKilled to be raised in each reader.
+    If the reader doesn't catch this, and it writes to another mailbox,
+    this therefore kills that mailbox (raises MailboxKilled for each reader)
+    as well. Thus MailboxKilled exceptions travel downstream in pipelines.
+
+    Sender threads are not killed by exceptions raise in readers.
+    To kill sender threads too, use .kill(force=True). Even this does not
+    propagate further upstream.
     """
 
     def __init__(self,
@@ -65,7 +74,9 @@ class Mailbox:
         self.max_messages = max_messages
 
         self.closed = False
+        self.force_killed = False
         self.killed = False
+        self.killed_because = None
 
         self._mailbox = []
         self._subscribers_have_read = []
@@ -108,7 +119,7 @@ class Mailbox:
                              kwargs=kwargs)
         self._threads.append(t)
 
-    def subscribe(self, pass_msg_number=False):
+    def subscribe(self, pass_msg_number=False,):
         """Return generator over messages in the mailbox
         :param pass_msg_number: if True, yield (msg_number, msg) instead of
         just messages
@@ -124,11 +135,13 @@ class Mailbox:
         for t in self._threads:
             t.start()
 
-    def kill(self):
+    def kill(self, force=True, reason=None):
         with self._lock:
+            if force:
+                self.force_killed = True
             self.killed = True
+            self.killed_because = reason
             self._read_condition.notify_all()
-            return
 
     def cleanup(self):
         for t in self._threads:
@@ -143,13 +156,14 @@ class Mailbox:
         try:
             for x in iterable:
                 self._send(x)
-        except MailboxKilled:
+        except MailboxKilled as e:
             # The iterable was reading from a mailbox, which has been killed.
-            # Kill this mailbox too. Eventually the final iterable pulling
-            # results will return with MailboxKilled
-            self.kill()
-        except Exception:
-            self.kill()
+            # Kill this mailbox too.
+            self.kill(reason=e.args[0])
+            # Do NOT raise! One traceback on the screen is enough.
+        except Exception as e:
+            self.kill(reason=f"{e.__class__.__name__}('{e.args[0]}') "
+                             f'in {threading.current_thread().name}')
             raise
         else:
             self._close()
@@ -166,8 +180,9 @@ class Mailbox:
         with self._lock:
             if self.closed:
                 raise MailBoxAlreadyClosed(f"Can't send to closed {self.name}")
-            if self.killed:
-                raise MailboxKilled()
+            if self.force_killed:
+                self.log.debug(f"Sender found {self.name} force-killed")
+                raise MailboxKilled(self.killed_because)
 
             # We accept int numbers or anything which equals to it's int(...)
             # (like numpy integers)
@@ -216,17 +231,20 @@ class Mailbox:
 
         while not last_message:
             with self._lock:
+
                 # Wait until new messages are ready
-                next_ready = lambda: self._has_msg(next_number) or self.killed
+                def next_ready():
+                    return self._has_msg(next_number) or self.killed
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
                 if not self._read_condition.wait_for(next_ready,
                                                      self.timeout):
                     raise MailboxReadTimeout(
                         f"{self.name} did not get {next_number} in time")
+
                 if self.killed:
-                    self.log.debug(f"Killed")
-                    return MailboxKilled()
+                    self.log.debug(f"Reader finds {self.name} killed")
+                    raise MailboxKilled(self.killed_because)
 
                 # Grab all messages we can yield
                 to_yield = []
