@@ -1,6 +1,5 @@
 from copy import copy
 from concurrent.futures import ProcessPoolExecutor
-import threading
 import logging
 import inspect
 
@@ -142,7 +141,8 @@ class Strax:
                 except strax.NotCachedException:
                     continue
                 else:
-                    mailboxes[d].add_sender(cache_iterator, name=d)
+                    mailboxes[d].add_sender(cache_iterator,
+                                            name=f'get_from_cache:{d}')
                     break
 
             else:
@@ -160,12 +160,14 @@ class Strax:
                             key=keys[d],
                             metadata=p.metadata(run_id))
 
+        # Must do this AFTER creating mailboxes for dependencies
         self.log.debug("Creating builder threads")
         for d, p in plugins_to_run.items():
             mailboxes[d].add_sender(
                 p.iter(iters={d: mailboxes[d].subscribe()
                               for d in p.depends_on},
-                       executor=self.executor))
+                       executor=self.executor),
+                name=f'build:{d}')
 
         final_generator = mailboxes[target].subscribe()
 
@@ -175,16 +177,14 @@ class Strax:
             m.start()
 
         self.log.debug("Yielding results")
-        return_value = yield from final_generator
-
-        if isinstance(return_value, strax.MailboxKilled):
-            self.log.debug(f"Main thread received SilentKiller")
+        try:
+            yield from final_generator
+        except strax.MailboxKilled:
+            self.log.debug(f"Main thread received MailboxKilled")
             for m in mailboxes.values():
                 self.log.debug(f"Killing {m}")
-                m.kill()
-        elif return_value is not None:
-            raise RuntimeError(f"Unexpected return value {return_value} from "
-                               "main generator")
+                m.kill(force=True,
+                       reason="Strax terminating due to downstream exception")
 
         self.log.debug("Closing threads")
         for m in mailboxes.values():
