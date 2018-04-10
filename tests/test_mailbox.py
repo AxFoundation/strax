@@ -34,21 +34,21 @@ def mailbox_tester(messages,
         messages = np.asarray(messages)
         expected_result = messages[np.argsort(numbers)]
 
-    mb = strax.OrderedMailbox(max_messages=max_messages)
+    mb = strax.Mailbox(max_messages=max_messages, timeout=timeout)
 
     n_readers = 2
 
     with concurrent.futures.ThreadPoolExecutor() as tp:
         futures = [tp.submit(reader,
-                             source=mb.subscribe(timeout=timeout),
+                             source=mb.subscribe(),
                              reader_sleeps=reader_sleeps)
                    for _ in range(n_readers)]
 
         for i in range(len(messages)):
-            mb.send(messages[i], msg_number=numbers[i], timeout=timeout)
-            print(f"Sent message {i}. Now {len(mb.mailbox)} ms in mailbox.")
+            mb._send(messages[i], msg_number=numbers[i])
+            print(f"Sent message {i}. Now {len(mb._mailbox)} ms in mailbox.")
 
-        mb.close()
+        mb._close()
 
         # Results must be equal
         for f in futures:
@@ -56,12 +56,33 @@ def mailbox_tester(messages,
                                     expected_result)
 
 
+def test_highlevel():
+    """Test highlevel mailbox API"""
+    mb = strax.Mailbox()
+    mb.add_sender(range(10))
+
+    def test_reader(source):
+        test_reader.got = r = []
+        for s in source:
+            r.append(s)
+
+    mb.add_reader(test_reader)
+    mb.start()
+    time.sleep(SHORT_TIMEOUT)
+    assert hasattr(test_reader, 'got')
+    assert test_reader.got == list(range(10))
+    mb.cleanup()
+    assert len(threading.enumerate()) == 1, "Not all threads died"
+
+
 def test_result_timeout():
     """Test that our mailbox tester actually times out.
     (if not, the other tests might hang indefinitely if something is broken)
     """
     with pytest.raises(concurrent.futures.TimeoutError):
-        mailbox_tester([0, 1], numbers=[1, 2], timeout=2 * LONG_TIMEOUT)
+        mailbox_tester([0, 1],
+                       numbers=[1, 2],
+                       timeout=2 * LONG_TIMEOUT)
 
 
 def test_read_timeout():
@@ -85,13 +106,13 @@ def test_reversed():
 
 def test_deadlock_regression():
     """A reader thread may start after the first message is processed"""
-    mb = strax.OrderedMailbox()
-    mb.send(0)
+    mb = strax.Mailbox(timeout=SHORT_TIMEOUT)
+    mb._send(0)
 
     readers = [
         threading.Thread(target=reader,
                          kwargs=dict(
-                             source=mb.subscribe(timeout=SHORT_TIMEOUT),
+                             source=mb.subscribe(),
                              name=str(i)))
         for i in range(2)
     ]
@@ -99,8 +120,8 @@ def test_deadlock_regression():
     time.sleep(SHORT_TIMEOUT)
 
     readers[1].start()
-    mb.send(1)
-    mb.close()
+    mb._send(1)
+    mb._close()
 
     for t in readers:
         t.join(SHORT_TIMEOUT)
@@ -109,19 +130,19 @@ def test_deadlock_regression():
 
 def test_close_protection():
     """Cannot send messages to a closed mailbox"""
-    mb = strax.OrderedMailbox()
-    mb.close()
+    mb = strax.Mailbox()
+    mb._close()
     with pytest.raises(strax.MailBoxAlreadyClosed):
-        mb.send(0)
+        mb._send(0)
 
 
 def test_valid_msg_number():
     """Message numbers are non-negative integers"""
-    mb = strax.OrderedMailbox()
+    mb = strax.Mailbox()
     with pytest.raises(strax.InvalidMessageNumber):
-        mb.send(0, msg_number=-1)
+        mb._send(0, msg_number=-1)
     with pytest.raises(strax.InvalidMessageNumber):
-        mb.send(0, msg_number='???')
+        mb._send(0, msg_number='???')
 
 
 # Task for in the next test, must be global since we're using ProcessPool
@@ -132,11 +153,9 @@ def _task(i):
 
 
 def test_futures():
-    """Test awaiting of Future's as messages
-
-    Timeouts are longer for this example, since they involve creating
-    subprocesses.
-    """
+    """Mailbox awaits futures before passing them to readers."""
+    # Timeouts are longer for this example,
+    # since they involve creating subprocesses.
     exc = concurrent.futures.ProcessPoolExecutor()
     futures = [exc.submit(_task, i) for i in range(3)]
     mailbox_tester(futures,
