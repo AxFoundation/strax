@@ -183,6 +183,9 @@ class Mailbox:
             if self.force_killed:
                 self.log.debug(f"Sender found {self.name} force-killed")
                 raise MailboxKilled(self.killed_because)
+            if self.killed:
+                self.log.debug("Send to killed mailbox: message lost")
+                return
 
             # We accept int numbers or anything which equals to it's int(...)
             # (like numpy integers)
