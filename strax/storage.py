@@ -39,7 +39,7 @@ class FileStorage:
         :param data_dirs: List of data directories to use.
         Entries are preferred for use from first to last. Each entry can be:
          - string: use the specified directory for all data types
-         - a tuple (data_types: list/tuple/str, filename: str):
+         - a tuple (data_types: list/tuple, filename: str):
            use the directory only if the data type is in data_types.
 
         When writing, we save in the highest-preference directory
@@ -114,6 +114,7 @@ class FileStorage:
         """Iterate over source and save the results under key
         along with metadata"""
         metadata.setdefault('compressor', 'blosc')
+        metadata['strax_version'] = strax.__version__
         if 'dtype' in metadata:
             metadata['dtype'] = metadata['dtype'].descr.__repr__()
 

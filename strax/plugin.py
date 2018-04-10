@@ -100,10 +100,10 @@ class Plugin:
         return deps_by_kind
 
     def iter(self, iters, n_per_iter=None, executor=None):
-        """Yield result chunks for processing input_dir
+        """Iterate over dependencies and yield results
         :param iters: dict with iterators over dependencies
         :param n_per_iter: pass at most this many rows to compute
-        :param executor: Executor to punt computation tass to.
+        :param executor: Executor to punt computation tasks to.
             If None, will compute inside the plugin's thread.
         """
         deps_by_kind = self.dependencies_by_kind()

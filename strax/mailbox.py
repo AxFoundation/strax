@@ -61,8 +61,8 @@ class Mailbox:
     as well. Thus MailboxKilled exceptions travel downstream in pipelines.
 
     Sender threads are not killed by exceptions raise in readers.
-    To kill sender threads too, use .kill(force=True). Even this does not
-    propagate further upstream.
+    To kill sender threads too, use .kill(upstream=True). Even this does not
+    propagate further upstream than the immediate sender threads.
     """
 
     def __init__(self,
@@ -92,6 +92,7 @@ class Mailbox:
     def add_sender(self, source, name=None):
         """Configure mailbox to read from an iterable source
 
+        :param source: Iterable to read from
         :param name: Name of the thread in which the function will run.
         Defaults to source:<mailbox_name>
         """
@@ -119,25 +120,22 @@ class Mailbox:
                              kwargs=kwargs)
         self._threads.append(t)
 
-    def subscribe(self, pass_msg_number=False,):
+    def subscribe(self):
         """Return generator over messages in the mailbox
-        :param pass_msg_number: if True, yield (msg_number, msg) instead of
-        just messages
         """
         with self._lock:
             subscriber_i = self._n_subscribers
             self._subscribers_have_read.append(-1)
             self.log.debug("Subscribed")
-            return self._read(subscriber_i=subscriber_i,
-                              pass_msg_number=pass_msg_number)
+            return self._read(subscriber_i=subscriber_i)
 
     def start(self):
         for t in self._threads:
             t.start()
 
-    def kill(self, force=True, reason=None):
+    def kill(self, upstream=True, reason=None):
         with self._lock:
-            if force:
+            if upstream:
                 self.force_killed = True
             self.killed = True
             self.killed_because = reason
@@ -222,11 +220,11 @@ class Mailbox:
             self.closed = True
         self.log.debug(f"Closed to incoming messages")
 
-    def _read(self, subscriber_i, pass_msg_number):
+    def _read(self, subscriber_i):
         """Iterate over incoming messages in order.
 
         Your thread will sleep until the next message is available, or timeout
-        expires (in which case MailboxTimeout is raised)
+        expires (in which case MailboxReadTimeout is raised)
         """
         self.log.debug("Start reading")
         next_number = 0
@@ -235,7 +233,7 @@ class Mailbox:
         while not last_message:
             with self._lock:
 
-                # Wait until new messages are ready
+                # Wait for new messages
                 def next_ready():
                     return self._has_msg(next_number) or self.killed
                 if not next_ready():
@@ -277,15 +275,10 @@ class Mailbox:
                 if msg is StopIteration:
                     return
                 elif isinstance(msg, Future):
-                    print(f"Got future {msg_number}, done is {msg.done()}")
                     try:
-                        msg = msg.result(timeout=self.timeout)
+                        yield msg.result(timeout=self.timeout)
                     except TimeoutError:
                         raise TimeoutError(f"Future {msg_number} timed out!")
-                    print(f"Future {msg_number} done!")
-
-                if pass_msg_number:
-                    yield msg_number, msg
                 else:
                     yield msg
 
