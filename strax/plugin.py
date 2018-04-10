@@ -34,6 +34,7 @@ class Plugin:
     provides: str
     dependency_kinds: dict
     dependency_dtypes: dict
+    compressor = 'blosc'
 
     save_when = SaveWhen.TARGET
     multiprocess = False    # If True, compute() work is submitted to pool

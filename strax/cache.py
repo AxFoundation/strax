@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import shutil
+import traceback
 import time
 import typing
 
@@ -51,9 +52,9 @@ class FileStorage:
             try:
                 os.makedirs(d)
             except FileExistsError:
-                self.log.debug("Data dir {d} already exists")
+                pass
             else:
-                self.log.debug("Created data dir {d}")
+                self.log.debug(f"Created data dir {d}")
 
     def provides(self, data_type):
         """Return whether this backend will store this datatype"""
@@ -89,7 +90,7 @@ class FileStorage:
         for d in self.data_dirs:
             if isinstance(d, tuple):
                 dtypes, dirname = d
-                if not key.data_type in dtypes:
+                if key.data_type not in dtypes:
                     continue
             else:
                 dirname = d
@@ -109,7 +110,7 @@ class FileStorage:
                              dtype=literal_eval(metadata['dtype']),
                              compressor=metadata['compressor'])
 
-    def save(self, key: CacheKey, source: typing.Generator, metadata: dict):
+    def save(self, source: typing.Generator, key: CacheKey, metadata: dict):
         """Iterate over source and save the results under key
         along with metadata"""
         metadata.setdefault('compressor', 'blosc')
@@ -136,22 +137,26 @@ class FileStorage:
 
         source = strax.chunk_arrays.fixed_size_chunks(source)
 
-        with JSONFileMetadata(dirname, metadata) as md:
-            for chunk_i, x in enumerate(source):
-                fn = '%06d' % chunk_i
+        try:
+            with JSONFileMetadata(dirname, metadata) as md:
+                for chunk_i, x in enumerate(source):
+                    fn = '%06d' % chunk_i
 
-                chunk_nfo = dict(chunk_i=chunk_i,
-                                  filename=fn,
-                                  n=len(x),
-                                  nbytes=x.nbytes)
-                if 'time' in x[0].dtype.names:
-                    for desc, i in (('first', 0), ('last', -1)):
-                        chunk_nfo[f'{desc}_time'] = int(x[i]['time'])
-                        chunk_nfo[f'{desc}_endtime'] = int(strax.endtime(x[i]))
+                    chunk_info = dict(chunk_i=chunk_i,
+                                      filename=fn,
+                                      n=len(x),
+                                      nbytes=x.nbytes)
+                    if 'time' in x[0].dtype.names:
+                        for desc, i in (('first', 0), ('last', -1)):
+                            chunk_info[f'{desc}_time'] = int(x[i]['time'])
+                            chunk_info[f'{desc}_endtime'] = int(strax.endtime(x[i]))    # noqa
 
-                fn = os.path.join(dirname, fn)
-                chunk_nfo['filesize'] = strax.save(fn, x, save_meta=False)
-                md.add_chunk_info(chunk_nfo)
+                    fn = os.path.join(dirname, fn)
+                    chunk_info['filesize'] = strax.save(fn, x, save_meta=False)
+                    md.add_chunk_info(chunk_info)
+
+        except strax.MailboxKilled:
+            pass
 
 
 class JSONFileMetadata:
@@ -182,8 +187,8 @@ class JSONFileMetadata:
             self.md['exception'] = dict(
                 type=str(exc_type),
                 value=str(exc_val),
-                traceback=str(exc_tb)
-            )
+                traceback=traceback.format_exception(
+                    exc_type, exc_val, exc_tb))
 
         self.f.write(json.dumps(self.md, sort_keys=True, indent=4))
         self.f.close()
