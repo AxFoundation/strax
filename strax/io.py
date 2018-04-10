@@ -55,24 +55,24 @@ def load(filename, compressor=None, dtype=None, return_meta=False):
 
 
 @export
-def save(filename, records, compressor='zstd', save_meta=True, **metadata):
-    """Save records to filename, return filesize in bytes
+def save(filename, data, compressor='zstd', save_meta=True, **metadata):
+    """Save data to filename, return filesize in bytes
     :param compressor: compressor to use
     :param save_meta: If False, just save to filename.
     If True, save data to filename and metadata to filename + .json.
     Metadata includes dtype, compressor, and any
     additional kwargs passed to save.
     """
-    assert isinstance(records, np.ndarray), "Please pass a numpy array"
+    assert isinstance(data, np.ndarray), "Please pass a numpy array"
     if save_meta:
         save_metadata(filename,
                       compressor=compressor,
-                      dtype=records.dtype.descr.__repr__(),
+                      dtype=data.dtype.descr.__repr__(),
                       **metadata)
     if compressor == 'none':
-        np.save(filename, records)
+        np.save(filename, data)
     else:
-        d_comp = COMPRESSORS[compressor]['compress'](records)
+        d_comp = COMPRESSORS[compressor]['compress'](data)
         with open(filename, 'wb') as f:
             f.write(d_comp)
 
