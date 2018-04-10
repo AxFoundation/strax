@@ -1,5 +1,4 @@
 from concurrent.futures import Future, TimeoutError
-from functools import partial
 import heapq
 import threading
 import logging
@@ -39,38 +38,111 @@ class MailboxKilled(MailboxException):
 
 
 @export
-class OrderedMailbox:
-    """A publish-subscribe mailbox, whose subscribers iterate
-    over messages set by monotonously incrementing message numbers.
+class Mailbox:
+    """Publish/subscribe mailbox for builing complex pipelines
+    out of simple iterators.
+
+    A sender can be any iterable. To read from the mailbox, either:
+     1. Use .subscribe() to get an iterator.
+        You can only use one of these per thread.
+     2. Use .add_subscriber(f) to subscribe the function f.
+        f should take an iterator as its first argument
+        (and actually iterate over it, of course).
+
+    Each sender and receiver is wrapped in a thread, so they can be paused:
+     - senders, if the mailbox is full;
+     - readers, if they call next() but the next message is not yet available
+
+    Any futures sent in are awaited before they are passed to receivers.
     """
 
     def __init__(self,
                  name='mailbox',
-                 default_send_timeout=20,
+                 timeout=30,
                  max_messages=3):
         self.name = name
-        self.default_send_timeout = default_send_timeout
+        self.timeout = timeout
         self.max_messages = max_messages
 
-        self.log = logging.getLogger(self.name)
-        self.mailbox = []
-        self.subscribers_have_read = []
-        self.sent_messages = 0
         self.closed = False
         self.killed = False
 
-        self.lock = threading.RLock()
-        self.read_condition = threading.Condition(lock=self.lock)
-        self.write_condition = threading.Condition(lock=self.lock)
+        self._mailbox = []
+        self._subscribers_have_read = []
+        self._n_sent = 0
+        self._threads = []
+        self._lock = threading.RLock()
+        self._read_condition = threading.Condition(lock=self._lock)
+        self._write_condition = threading.Condition(lock=self._lock)
 
+        self.log = logging.getLogger(self.name)
         self.log.debug("Initialized")
 
-    def send_from(self, iterable):
+    def add_sender(self, source, name=None):
+        """Configure mailbox to read from an iterable source
+
+        :param name: Name of the thread in which the function will run.
+        Defaults to source:<mailbox_name>
+        """
+        if name is None:
+            name = f'source:{self.name}'
+        t = threading.Thread(target=self._send_from,
+                             name=name,
+                             args=(source,))
+        self._threads.append(t)
+
+    def add_reader(self, subscriber, name=None, **kwargs):
+        """Subscribe a function to the mailbox.
+
+        Function should accept the generator over messages as first argument.
+        kwargs will be passed to function.
+
+        :param name: Name of the thread in which the function will run.
+        Defaults to read_<number>:<mailbox_name>
+        """
+        if name is None:
+            name = f'read_{self._n_subscribers}:{self.name}'
+        t = threading.Thread(target=subscriber,
+                             name=name,
+                             args=(self.subscribe(),),
+                             kwargs=kwargs)
+        self._threads.append(t)
+
+    def subscribe(self, pass_msg_number=False):
+        """Return generator over messages in the mailbox
+        :param pass_msg_number: if True, yield (msg_number, msg) instead of
+        just messages
+        """
+        with self._lock:
+            subscriber_i = self._n_subscribers
+            self._subscribers_have_read.append(-1)
+            self.log.debug("Subscribed")
+            return self._read(subscriber_i=subscriber_i,
+                              pass_msg_number=pass_msg_number)
+
+    def start(self):
+        for t in self._threads:
+            t.start()
+
+    def kill(self):
+        with self._lock:
+            self.killed = True
+            self._read_condition.notify_all()
+            return
+
+    def cleanup(self):
+        for t in self._threads:
+            t.join(timeout=self.timeout)
+            if t.is_alive():
+                raise RuntimeError("Thread %s did not terminate!" % t.name)
+
+    def _send_from(self, iterable):
         """Send to mailbox from iterable, exiting appropriately if an
-        exception is thrown"""
+        exception is thrown
+        """
         try:
             for x in iterable:
-                self.send(x)
+                self._send(x)
         except MailboxKilled:
             # The iterable was reading from a mailbox, which has been killed.
             # Kill this mailbox too. Eventually the final iterable pulling
@@ -80,9 +152,9 @@ class OrderedMailbox:
             self.kill()
             raise
         else:
-            self.close()
+            self._close()
 
-    def send(self, msg, msg_number=None, timeout=None):
+    def _send(self, msg, msg_number=None):
         """Send a message.
 
         If the message is a future, receivers will be passed its result.
@@ -91,11 +163,7 @@ class OrderedMailbox:
         If the mailbox is currently full, sleep until there
         is room for your message (or timeout occurs)
         """
-
-        if timeout is None:
-            timeout = self.default_send_timeout
-
-        with self.lock:
+        with self._lock:
             if self.closed:
                 raise MailBoxAlreadyClosed(f"Can't send to closed {self.name}")
             if self.killed:
@@ -104,78 +172,39 @@ class OrderedMailbox:
             # We accept int numbers or anything which equals to it's int(...)
             # (like numpy integers)
             if msg_number is None:
-                msg_number = self.sent_messages
+                msg_number = self._n_sent
             try:
                 int(msg_number)
                 assert msg_number == int(msg_number)
             except (ValueError, AssertionError):
                 raise InvalidMessageNumber("Msg numbers must be integers")
 
-            read_until = min(self.subscribers_have_read, default=-1)
+            read_until = min(self._subscribers_have_read, default=-1)
             if msg_number <= read_until:
                 raise InvalidMessageNumber(
                     f'Attempt to send message {msg_number} while '
                     f'subscribers already read {read_until}.')
 
             def can_write():
-                return len(self.mailbox) < self.max_messages
+                return len(self._mailbox) < self.max_messages
             if not can_write():
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
-            if not self.write_condition.wait_for(can_write, timeout=timeout):
+            if not self._write_condition.wait_for(can_write,
+                                                  timeout=self.timeout):
                 raise MailboxFullTimeout(f"{self.name} emptied too slow")
 
-            heapq.heappush(self.mailbox, (msg_number, msg))
+            heapq.heappush(self._mailbox, (msg_number, msg))
             self.log.debug(f"Sent {msg_number}")
-            self.sent_messages += 1
-            self.read_condition.notify_all()
+            self._n_sent += 1
+            self._read_condition.notify_all()
 
-    def close(self, timeout=None):
-        with self.lock:
-            self.send(StopIteration, timeout=timeout)
+    def _close(self):
+        with self._lock:
+            self._send(StopIteration)
             self.closed = True
         self.log.debug(f"Closed to incoming messages")
 
-    def kill(self):
-        with self.lock:
-            self.killed = True
-            self.read_condition.notify_all()
-            return
-
-    def subscribe(self, pass_msg_number=False, timeout=20):
-        with self.lock:
-            subscriber_i = len(self.subscribers_have_read)
-            self.subscribers_have_read.append(-1)
-            self.log.debug("Subscribed")
-            return self._read(subscriber_i=subscriber_i,
-                              pass_msg_number=pass_msg_number,
-                              timeout=timeout)
-
-    def __repr__(self):
-        return f"<{self.__class__.__name__}: {self.name}>"
-
-    def _get_msg(self, number):
-        for msg_number, msg in self.mailbox:
-            if msg_number == number:
-                return msg
-        else:
-            raise RuntimeError(f"Could not find message {number}")
-
-    def _has_msg(self, number):
-        """Return if mailbox has message number.
-
-        Also returns True if mailbox is killed, so be sure to check
-        self.killed after this!
-        """
-        if self.killed:
-            return True
-        return any([msg_number == number
-                    for msg_number, _ in self.mailbox])
-
-    @property
-    def _lowest_msg_number(self):
-        return self.mailbox[0][0]
-
-    def _read(self, subscriber_i, pass_msg_number, timeout):
+    def _read(self, subscriber_i, pass_msg_number):
         """Iterate over incoming messages in order.
 
         Your thread will sleep until the next message is available, or timeout
@@ -186,12 +215,13 @@ class OrderedMailbox:
         last_message = False
 
         while not last_message:
-            with self.lock:
+            with self._lock:
                 # Wait until new messages are ready
                 next_ready = lambda: self._has_msg(next_number) or self.killed
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
-                if not self.read_condition.wait_for(next_ready, timeout):
+                if not self._read_condition.wait_for(next_ready,
+                                                     self.timeout):
                     raise MailboxReadTimeout(
                         f"{self.name} did not get {next_number} in time")
                 if self.killed:
@@ -213,14 +243,14 @@ class OrderedMailbox:
                 else:
                     self.log.debug(f"Read {to_yield[0][0]}")
 
-                self.subscribers_have_read[subscriber_i] = next_number - 1
+                self._subscribers_have_read[subscriber_i] = next_number - 1
 
                 # Clean up the mailbox
-                while (len(self.mailbox)
-                       and (min(self.subscribers_have_read)
+                while (len(self._mailbox)
+                       and (min(self._subscribers_have_read)
                             >= self._lowest_msg_number)):
-                    heapq.heappop(self.mailbox)
-                self.write_condition.notify_all()
+                    heapq.heappop(self._mailbox)
+                self._write_condition.notify_all()
 
             for msg_number, msg in to_yield:
                 if msg is StopIteration:
@@ -228,7 +258,7 @@ class OrderedMailbox:
                 elif isinstance(msg, Future):
                     print(f"Got future {msg_number}, done is {msg.done()}")
                     try:
-                        msg = msg.result(timeout=10 * timeout)                                  # HACK
+                        msg = msg.result(timeout=self.timeout)
                     except TimeoutError:
                         raise TimeoutError(f"Future {msg_number} timed out!")
                     print(f"Future {msg_number} done!")
@@ -239,3 +269,32 @@ class OrderedMailbox:
                     yield msg
 
         self.log.debug("Done reading")
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
+
+    def _get_msg(self, number):
+        for msg_number, msg in self._mailbox:
+            if msg_number == number:
+                return msg
+        else:
+            raise RuntimeError(f"Could not find message {number}")
+
+    def _has_msg(self, number):
+        """Return if mailbox has message number.
+
+        Also returns True if mailbox is killed, so be sure to check
+        self.killed after this!
+        """
+        if self.killed:
+            return True
+        return any([msg_number == number
+                    for msg_number, _ in self._mailbox])
+
+    @property
+    def _n_subscribers(self):
+        return len(self._subscribers_have_read)
+
+    @property
+    def _lowest_msg_number(self):
+        return self._mailbox[0][0]
