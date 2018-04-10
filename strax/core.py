@@ -115,7 +115,6 @@ class Strax:
 
         mailboxes = dict()
         plugins_to_run = dict()
-        threads = []
         keys = dict()    # Cache keys of the things we're building
 
         self.log.debug("Creating saver/loader threads and mailboxes")
@@ -134,7 +133,7 @@ class Strax:
                         or p.save_when == strax.SaveWhen.ALWAYS):
                     save.append(d)
 
-            mailboxes[d] = strax.OrderedMailbox(name=d + '_mailbox')
+            mailboxes[d] = strax.Mailbox(name=d + '_mailbox')
             keys[d] = strax.CacheKey(run_id, d, p.lineage(run_id))
 
             for sb in self.storage:
@@ -143,11 +142,7 @@ class Strax:
                 except strax.NotCachedException:
                     continue
                 else:
-                    # Create reader thread
-                    threads.append(threading.Thread(
-                        target=mailboxes[d].send_from,
-                        name='read:' + d,
-                        args=(cache_iterator,)))
+                    mailboxes[d].add_sender(cache_iterator, name=d)
                     break
 
             else:
@@ -155,36 +150,31 @@ class Strax:
                 plugins_to_run[d] = p
                 to_check.extend(p.depends_on)
 
-                # Create saver threads
                 if d in save:
                     for sb_i, sb in enumerate(self.storage):
                         if not sb.provides(d):
                             continue
-                        threads.append(threading.Thread(
-                            target=sb.save,
+                        mailboxes[d].add_reader(
+                            sb.save,
                             name=f'save_{sb_i}:{d}',
-                            kwargs=dict(key=keys[d],
-                                        source=mailboxes[d].subscribe(),
-                                        metadata=p.metadata(run_id))))
+                            key=keys[d],
+                            metadata=p.metadata(run_id))
 
         self.log.debug("Creating builder threads")
         for d, p in plugins_to_run.items():
-            threads.append(threading.Thread(
-                target=mailboxes[d].send_from,
-                name='build:' + d,
-                args=(p.iter(iters={d: mailboxes[d].subscribe()
-                                    for d in p.depends_on},
-                             executor=self.executor),)))
+            mailboxes[d].add_sender(
+                p.iter(iters={d: mailboxes[d].subscribe()
+                              for d in p.depends_on},
+                       executor=self.executor))
 
         final_generator = mailboxes[target].subscribe()
 
         # NB: do this AFTER we've put in all subscriptions!
         self.log.debug("Starting threads")
-        for t in threads:
-            t.start()
+        for m in mailboxes.values():
+            m.start()
 
         self.log.debug("Yielding results")
-
         return_value = yield from final_generator
 
         if isinstance(return_value, strax.MailboxKilled):
@@ -197,10 +187,8 @@ class Strax:
                                "main generator")
 
         self.log.debug("Closing threads")
-        for t in threads:
-            t.join(timeout=10)
-            if t.is_alive():
-                raise RuntimeError("Thread %s did not terminate!" % t.name)
+        for m in mailboxes.values():
+            m.cleanup()
 
     # TODO: fix signatures
     def make(self, *args, **kwargs):

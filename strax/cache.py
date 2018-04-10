@@ -51,9 +51,9 @@ class FileStorage:
             try:
                 os.makedirs(d)
             except FileExistsError:
-                self.log.debug("Data dir {d} already exists")
+                pass
             else:
-                self.log.debug("Created data dir {d}")
+                self.log.debug(f"Created data dir {d}")
 
     def provides(self, data_type):
         """Return whether this backend will store this datatype"""
@@ -109,7 +109,7 @@ class FileStorage:
                              dtype=literal_eval(metadata['dtype']),
                              compressor=metadata['compressor'])
 
-    def save(self, key: CacheKey, source: typing.Generator, metadata: dict):
+    def save(self, source: typing.Generator, key: CacheKey, metadata: dict):
         """Iterate over source and save the results under key
         along with metadata"""
         metadata.setdefault('compressor', 'blosc')
