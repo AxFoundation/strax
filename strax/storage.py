@@ -28,7 +28,8 @@ class NotCachedException(Exception):
 
 @export
 class FileStorage:
-    def __init__(self, provides='all', data_dirs=('./strax_data',)):
+    def __init__(self, provides='all', data_dirs=('./strax_data',),
+                 executor=None):
         """File-based storage backend for strax.
 
         :param wants: List of data types this backend stores.
@@ -44,8 +45,12 @@ class FileStorage:
 
         When writing, we save in the highest-preference directory
         in which we have write permission.
+
+        :param executor: concurrent.futures executor for parallelizing result
+        computations.
         """
         self.data_dirs = data_dirs
+        self.executor = executor
         self._provides = provides
         self.log = logging.getLogger(self.__class__.__name__)
         for d in data_dirs:
@@ -104,11 +109,15 @@ class FileStorage:
         metadata = JSONFileMetadata(dirname).read()
         if not len(metadata['chunks']):
             self.log.warning(f"No data files in {dirname}?")
+        dtype = literal_eval(metadata['dtype'])
+        compressor = metadata['compressor']
+        kwargs = dict(dtype=dtype, compressor=compressor)
         for chunk_info in metadata['chunks']:
             fn = os.path.join(dirname, chunk_info['filename'])
-            yield strax.load(fn,
-                             dtype=literal_eval(metadata['dtype']),
-                             compressor=metadata['compressor'])
+            if self.executor is None:
+                yield strax.load(fn, **kwargs)
+            else:
+                yield self.executor.submit(strax.load, fn, **kwargs)
 
     def save(self, source: typing.Generator, key: CacheKey, metadata: dict):
         """Iterate over source and save the results under key

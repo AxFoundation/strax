@@ -1,10 +1,17 @@
 from copy import copy
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 
 import numpy as np
 import pandas as pd
+
+# Yappi for threaded profiling
+# Do not make this a dependency - it doesn't officially support py3.6...
+try:
+    import yappi
+except ImportError:
+    yappi = None
 
 import strax
 __all__ = 'Strax', 'register_default'
@@ -16,14 +23,17 @@ class Strax:
     # Yes, that's a class-level mutable, so register_default works
     _plugin_class_registry = dict()
 
-    def __init__(self, max_workers=4, storage=None):
+    def __init__(self, max_workers=None, storage=None):
         self.log = logging.getLogger('strax')
         if storage is None:
             storage = [strax.FileStorage()]
         self.storage = storage
         self._plugin_class_registry = copy(self._plugin_class_registry)
         self._plugin_instance_cache = dict()
-        self.executor = ProcessPoolExecutor(max_workers=max_workers)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        # Hmm...
+        for s in storage:
+            s.executor = self.executor
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -98,12 +108,14 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get(self, run_id: str, target: str, save=None):
+    def get(self, run_id: str, target: str, save=None, profile_to=None):
         """Compute target for run_id and iterate over results
         :param run_id: run id to get
         :param target: data type to yield results for
         :param save: str or list of str of data types you would like to save
         to cache, if they occur in intermediate computations
+        :param profile_to: filename to save profiling results to. If not
+        specified, will not profile.
         """
         if isinstance(save, str):
             save = [save]
@@ -171,24 +183,27 @@ class Strax:
 
         final_generator = mailboxes[target].subscribe()
 
-        # NB: do this AFTER we've put in all subscriptions!
-        self.log.debug("Starting threads")
-        for m in mailboxes.values():
-            m.start()
+        with ThreadedProfiler(profile_to):
 
-        self.log.debug("Yielding results")
-        try:
-            yield from final_generator
-        except strax.MailboxKilled:
-            self.log.debug(f"Main thread received MailboxKilled")
+            # NB: do this AFTER we've put in all subscriptions!
+            self.log.debug("Starting threads")
             for m in mailboxes.values():
-                self.log.debug(f"Killing {m}")
-                m.kill(upstream=True,
-                       reason="Strax terminating due to downstream exception")
+                m.start()
 
-        self.log.debug("Closing threads")
-        for m in mailboxes.values():
-            m.cleanup()
+            self.log.debug("Yielding results")
+            try:
+                yield from final_generator
+            except strax.MailboxKilled:
+                self.log.debug(f"Main thread received MailboxKilled")
+                for m in mailboxes.values():
+                    self.log.debug(f"Killing {m}")
+                    m.kill(upstream=True,
+                           reason="Strax terminating due to "
+                                  "downstream exception")
+
+            self.log.debug("Closing threads")
+            for m in mailboxes.values():
+                m.cleanup()
 
     # TODO: fix signatures
     def make(self, *args, **kwargs):
@@ -216,3 +231,27 @@ class Records(strax.PlaceholderPlugin):
     """
     data_kind = 'records'
     dtype = strax.record_dtype()
+
+
+class ThreadedProfiler:
+
+    def __init__(self, filename):
+        self.filename = filename
+        if filename is not None and yappi is None:
+            raise ValueError("Yappi did not import -- cannot profile")
+
+    @property
+    def enabled(self):
+        return not (self.filename is None or yappi is None)
+
+    def __enter__(self):
+        if self.enabled:
+            yappi.start()
+
+    def __exit__(self, *args):
+        if not self.enabled:
+            return
+        yappi.stop()
+        p = yappi.get_func_stats()
+        p = yappi.convert2pstats(p)
+        p.dump_stats(self.filename)

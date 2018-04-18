@@ -37,7 +37,7 @@ class Plugin:
     compressor = 'blosc'
 
     save_when = SaveWhen.TARGET
-    multiprocess = False    # If True, compute() work is submitted to pool
+    parallel = False    # If True, compute() work is submitted to pool
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -136,7 +136,7 @@ class Plugin:
                                   for d in self.depends_on}
             except StopIteration:
                 return
-            if self.multiprocess and executor is not None:
+            if self.parallel and executor is not None:
                 yield executor.submit(self.compute, **compute_kwargs)
             else:
                 yield self.compute(**compute_kwargs)
