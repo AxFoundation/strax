@@ -9,6 +9,9 @@
 *.blosc
 strax_data
 
+# cProfile output
+*.prof
+
 # Python cache
 *.py[cod]
 __pycache__
