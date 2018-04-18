@@ -162,8 +162,18 @@ class FileStorage:
                             chunk_info[f'{desc}_endtime'] = int(strax.endtime(x[i]))    # noqa
 
                     fn = os.path.join(dirname, fn)
-                    chunk_info['filesize'] = strax.save(fn, x, save_meta=False)
-                    md.add_chunk_info(chunk_info)
+
+                    kwargs = dict(filename=fn,
+                                  data=x,
+                                  compressor=metadata['compressor'],
+                                  save_meta=False)
+                    if self.executor is None:
+                        chunk_info['filesize'] = strax.save(**kwargs)
+                    else:
+                        # TODO: add callback or something to get
+                        # filesizes?
+                        self.executor.submit(strax.save, **kwargs)
+                        md.add_chunk_info(chunk_info)
 
         except strax.MailboxKilled:
             pass
