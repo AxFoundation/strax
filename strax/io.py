@@ -12,6 +12,9 @@ import strax
 export, __all__ = strax.exporter()
 
 
+blosc.set_releasegil(True)
+
+
 COMPRESSORS = dict(
     bz2=dict(
         compress=bz2.compress,
