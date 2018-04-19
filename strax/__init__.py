@@ -23,3 +23,5 @@ from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
 
 from strax.external import pax_interface, daq_interface
+
+from . import xenon
