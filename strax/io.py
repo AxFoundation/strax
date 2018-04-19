@@ -50,7 +50,7 @@ def load(filename, compressor=None, dtype=None, return_meta=False):
         with open(filename, mode='rb') as f:
             data = COMPRESSORS[compressor]['decompress'](f.read())
         # frombuffer is much faster, but results in some readonly fields
-        data = np.fromstring(data, dtype=dtype)
+        data = np.frombuffer(data, dtype=dtype)
 
     if return_meta:
         return data, metadata
