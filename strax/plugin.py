@@ -35,6 +35,7 @@ class Plugin:
     dependency_kinds: dict
     dependency_dtypes: dict
     compressor = 'blosc'
+    n_per_iter = None
 
     save_when = SaveWhen.TARGET
     parallel = False    # If True, compute() work is submitted to pool
@@ -99,20 +100,19 @@ class Plugin:
 
         return deps_by_kind
 
-    def iter(self, iters, n_per_iter=None, executor=None):
+    def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
         :param iters: dict with iterators over dependencies
-        :param n_per_iter: pass at most this many rows to compute
         :param executor: Executor to punt computation tasks to.
             If None, will compute inside the plugin's thread.
         """
         deps_by_kind = self.dependencies_by_kind()
 
-        if n_per_iter is not None:
+        if self.n_per_iter is not None:
             # Apply additional flow control
             for kind, deps in deps_by_kind.items():
                 d = deps[0]
-                iters[d] = ca.fixed_length_chunks(iters[d], n=n_per_iter)
+                iters[d] = ca.fixed_length_chunks(iters[d], n=self.n_per_iter)
                 break
 
         if len(deps_by_kind) > 1:
