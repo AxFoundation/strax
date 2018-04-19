@@ -11,6 +11,7 @@ class ReducedRecords(strax.Plugin):
     data_kind = 'records'
     compressor = 'zstd'
     parallel = True
+    rechunk = False
     dtype = strax.record_dtype()
 
     def compute(self, records):
