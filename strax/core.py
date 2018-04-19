@@ -30,7 +30,8 @@ class Strax:
         self.storage = storage
         self._plugin_class_registry = copy(self._plugin_class_registry)
         self._plugin_instance_cache = dict()
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers,
+                                           thread_name_prefix='pool_')
         # Hmm...
         for s in storage:
             s.executor = self.executor
@@ -46,15 +47,17 @@ class Strax:
 
         Returns plugin_class (so this can be used as a decorator)
         """
-        if provides is None:
-            provides = []
-
         if not hasattr(plugin_class, 'provides'):
             # No output name specified: construct one from the class name
             snake_name = strax.camel_to_snake(plugin_class.__name__)
             plugin_class.provides = snake_name
 
-        for p in [plugin_class.provides] + list(provides):
+        if provides is not None:
+            provides += [plugin_class.provides]
+        else:
+            provides = [plugin_class.provides]
+
+        for p in provides:
             self._plugin_class_registry[p] = plugin_class
 
         return plugin_class
@@ -184,7 +187,6 @@ class Strax:
         final_generator = mailboxes[target].subscribe()
 
         with ThreadedProfiler(profile_to):
-
             # NB: do this AFTER we've put in all subscriptions!
             self.log.debug("Starting threads")
             for m in mailboxes.values():
@@ -255,3 +257,4 @@ class ThreadedProfiler:
         p = yappi.get_func_stats()
         p = yappi.convert2pstats(p)
         p.dump_stats(self.filename)
+        yappi.clear_stats()
