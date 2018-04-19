@@ -68,7 +68,7 @@ class Mailbox:
     def __init__(self,
                  name='mailbox',
                  timeout=30,
-                 max_messages=3):
+                 max_messages=15):
         self.name = name
         self.timeout = timeout
         self.max_messages = max_messages
@@ -275,10 +275,17 @@ class Mailbox:
                 if msg is StopIteration:
                     return
                 elif isinstance(msg, Future):
-                    try:
-                        yield msg.result(timeout=self.timeout)
-                    except TimeoutError:
-                        raise TimeoutError(f"Future {msg_number} timed out!")
+                    if not msg.done():
+                        self.log.debug(f"Waiting for future {msg_number}")
+                        try:
+                            res = msg.result(timeout=self.timeout)
+                        except TimeoutError:
+                            raise TimeoutError(f"Future {msg_number} timed out!")
+                        self.log.debug(f"Future {msg_number} completed")
+                    else:
+                        res = msg.result()
+                        self.log.debug(f"Future {msg_number} was already done")
+                    yield res
                 else:
                     yield msg
 
