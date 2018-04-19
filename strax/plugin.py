@@ -36,6 +36,7 @@ class Plugin:
     dependency_dtypes: dict
     compressor = 'blosc'
     n_per_iter = None
+    rechunk = True
 
     save_when = SaveWhen.TARGET
     parallel = False    # If True, compute() work is submitted to pool
@@ -180,7 +181,12 @@ class LoopPlugin(Plugin):
         base = things_by_kind[loop_over]
         for k, things in things_by_kind.items():
             if k != loop_over:
-                things_by_kind[k] = strax.split_by_containment(things, base)
+                r = strax.split_by_containment(things, base)
+                if len(r) != len(base):
+                    print(f"Last base: {base[-1]['time']}-{strax.endtime(base[-1])}")
+                    print(f"Last ting: {things[-1]['time']}-{strax.endtime(things[-1])}")
+                    raise RuntimeError(f"Split {k} into {len(r)}, should be {len(base)}!")
+                things_by_kind[k] = r
 
         results = np.zeros(len(base), dtype=self.dtype)
         for i in range(len(base)):

@@ -174,7 +174,8 @@ class Strax:
                             sb.save,
                             name=f'save_{sb_i}:{d}',
                             key=keys[d],
-                            metadata=p.metadata(run_id))
+                            metadata=p.metadata(run_id),
+                            rechunk=p.rechunk)
 
         # Must do this AFTER creating mailboxes for dependencies
         self.log.debug("Creating builder threads")

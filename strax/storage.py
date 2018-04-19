@@ -119,7 +119,11 @@ class FileStorage:
             else:
                 yield self.executor.submit(strax.load, fn, **kwargs)
 
-    def save(self, source: typing.Generator, key: CacheKey, metadata: dict):
+    def save(self,
+             source: typing.Generator,
+             key: CacheKey,
+             metadata: dict,
+             rechunk=True):
         """Iterate over source and save the results under key
         along with metadata"""
         metadata.setdefault('compressor', 'blosc')
@@ -145,7 +149,8 @@ class FileStorage:
             shutil.rmtree(dirname)
         os.makedirs(dirname)
 
-        source = strax.chunk_arrays.fixed_size_chunks(source)
+        if rechunk:
+            source = strax.chunk_arrays.fixed_size_chunks(source)
 
         try:
             with JSONFileMetadata(dirname, metadata) as md:
