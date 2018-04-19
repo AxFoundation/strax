@@ -195,8 +195,8 @@ class LoopPlugin(Plugin):
 
         return results
 
-    def compute_loop(self, base, **kwargs):
-        raise ValueError
+    def compute_loop(self, *args, **kwargs):
+        raise NotImplementedError
 
 
 @export

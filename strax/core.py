@@ -14,9 +14,10 @@ except ImportError:
     yappi = None
 
 import strax
-__all__ = 'Strax', 'register_default'
+export, __all__ = strax.exporter()
 
 
+@export
 class Strax:
     """Streaming data processor"""
 
@@ -217,6 +218,24 @@ class Strax:
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
 
+@export
+def register_all(module, register_with=None):
+    """Register all plugins from a module
+    :param register_with: Strax processor to register with
+    If left empty, register as defaults for future straxes.
+    """
+    for x in dir(module):
+        x = getattr(module, x)
+        if type(x) != type(type):
+            continue
+        if issubclass(x, strax.Plugin):
+            if register_with is None:
+                register_default(x)
+            else:
+                register_with.register(x)
+
+
+@export
 def register_default(plugin_class, provides=None):
     """Register plugin_class with all Strax processors created afterwards.
     Does not affect Strax'es already initialized
@@ -233,6 +252,7 @@ class Records(strax.PlaceholderPlugin):
     dtype = strax.record_dtype()
 
 
+@export
 class ThreadedProfiler:
 
     def __init__(self, filename):
