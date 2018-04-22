@@ -8,8 +8,6 @@ import numpy as np
 from tqdm import tqdm
 import strax
 
-mystrax = strax.Strax()
-
 parser = argparse.ArgumentParser(
     description='Fake DAQ to test XENONnT eventbuilder prototype')
 parser.add_argument('--rate', default=100, type=int,
@@ -34,9 +32,10 @@ if os.path.exists(output_dir):
 os.makedirs(output_dir)
 
 print("Preparing payload data")
+mystrax = strax.Strax()
 chunk_sizes = []
 chunk_data_compressed = []
-for records in tqdm(strax.chunk_arrays.fixed_size_chunks(
+for records in tqdm(strax.fixed_size_chunks(
         mystrax.get('180219_2005', 'records'),
         args.chunk_size * 1e6)):
     chunk_sizes.append(records.nbytes)

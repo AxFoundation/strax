@@ -150,7 +150,7 @@ class FileStorage:
         os.makedirs(dirname)
 
         if rechunk:
-            source = strax.chunk_arrays.fixed_size_chunks(source)
+            source = strax.fixed_size_chunks(source)
 
         try:
             with JSONFileMetadata(dirname, metadata) as md:
