@@ -68,16 +68,16 @@ class PeakBasics(strax.Plugin):
         r = np.zeros(len(p), self.dtype)
         r['area'] = p['area']
         r['n_channels'] = (p['area_per_channel'] > 0).sum(axis=1)
-        r['range_50p_area'] = p['width'][:,5]
+        r['range_50p_area'] = p['width'][:, 5]
         r['max_pmt'] = np.argmax(p['area_per_channel'], axis=1)
         r['time'] = p['time']
         r['endtime'] = p['time'] + p['dt'] * p['length']
 
         # TODO: get n_top_pmts from some config...
-        area_top = (p['area_per_channel'][:,:127]
-                    * to_pe[:127].reshape(1, -1)
-                   ).sum(axis=1)
-        r['area_fraction_top'] = area_top/p['area']
+        area_top = (p['area_per_channel'][:, :127]
+                    * to_pe[:127].reshape(1, -1)).sum(axis=1)
+        m = p['area'] > 0
+        r['area_fraction_top'][m] = area_top[m]/p['area'][m]
         return r
 
 
@@ -128,7 +128,8 @@ class Events(strax.Plugin):
 
         # TODO: this can be done much faster
         event_ranges = []
-        split_indices = np.where(np.diff(large_peaks['time']) > left_ext + right_ext)[0] + 1
+        split_indices = np.where(np.diff(large_peaks['time'])
+                                 > left_ext + right_ext)[0] + 1
         for ps in np.split(large_peaks, split_indices):
             start = ps[0]['time'] - left_ext
             stop = ps[-1]['time'] + right_ext
@@ -138,7 +139,8 @@ class Events(strax.Plugin):
 
         result = np.zeros(len(event_ranges), self.dtype)
         result['time'], result['endtime'] = event_ranges.T
-        result['event_number'] = np.arange(len(event_ranges)) + self.events_seen
+        result['event_number'] = (np.arange(len(event_ranges))
+                                  + self.events_seen)
         return result
 
 

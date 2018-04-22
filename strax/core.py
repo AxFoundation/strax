@@ -1,6 +1,7 @@
 from copy import copy
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import threading
 import inspect
 
 import numpy as np
@@ -74,6 +75,7 @@ class Strax:
             return self._plugin_instance_cache[data_name]
 
         p = self._plugin_class_registry[data_name]()
+
         p.log = logging.getLogger(p.__class__.__name__)
 
         if not hasattr(p, 'depends_on'):
@@ -83,8 +85,13 @@ class Strax:
             p.depends_on = tuple(process_params)
 
         if not hasattr(p, 'data_kind'):
-            # Assume data kind is the same as the first dependency
-            p.data_kind = self.provider(p.depends_on[0]).data_kind
+            if len(p.depends_on):
+                # Assume data kind is the same as the first dependency
+                p.data_kind = self.provider(p.depends_on[0]).data_kind
+            else:
+                # No dependencies: assume provided data kind and
+                # data type are synonymous
+                p.data_kind = p.provides
 
         p.dependency_kinds = {d: self.provider(d).data_kind
                               for d in p.depends_on}
@@ -96,7 +103,6 @@ class Strax:
         p.dtype = np.dtype(p.dtype)
 
         p.startup()
-
         return p
 
     def data_info(self, data_name: str) -> pd.DataFrame:
@@ -121,6 +127,32 @@ class Strax:
         :param profile_to: filename to save profiling results to. If not
         specified, will not profile.
         """
+        final_generator, mailboxes, plugins_to_run = self._prepare(
+            run_id, target, save)
+        yield from self._run(final_generator, mailboxes, profile_to)
+
+    def online(self, run_id: str, target: str,
+               save=None, profile_to=None):
+        """Return OnlineProcessor for computing target for run_id
+        See .get for argument documentation. # TODO: fix
+        """
+        final_generator, mailboxes, plugins_to_run = self._prepare(
+            run_id, target, save)
+
+        source_plugins = {d: p for d, p in plugins_to_run.items()
+                          if isinstance(p, strax.ReceiverPlugin)}
+        if not len(source_plugins):
+            raise ValueError("get_online is only needed if you have "
+                             "online input sources.")
+
+        def _spin():
+            for _ in self._run(final_generator, mailboxes, profile_to):
+                pass
+        t = threading.Thread(target=_spin)
+        t.start()
+        return OnlineProcessor(t, source_plugins)
+
+    def _prepare(self, run_id, target, save):
         if isinstance(save, str):
             save = [save]
         elif isinstance(save, tuple):
@@ -138,8 +170,8 @@ class Strax:
             d = to_check.pop()
             if d in mailboxes:
                 continue
-
             p = self.provider(d)
+
             if d in save:
                 if p.save_when == strax.SaveWhen.NEVER:
                     raise ValueError("Plugin forbids saving of {d}")
@@ -180,14 +212,21 @@ class Strax:
         # Must do this AFTER creating mailboxes for dependencies
         self.log.debug("Creating builder threads")
         for d, p in plugins_to_run.items():
-            mailboxes[d].add_sender(
-                p.iter(iters={d: mailboxes[d].subscribe()
-                              for d in p.depends_on},
-                       executor=self.executor),
-                name=f'build:{d}')
+            if isinstance(p, strax.ReceiverPlugin):
+                p.mailbox = mailboxes[d]
+                # Unbounded mailbox? Hm...
+                p.mailbox.max_messages = float('inf')
+            else:
+                mailboxes[d].add_sender(
+                    p.iter(iters={d: mailboxes[d].subscribe()
+                                  for d in p.depends_on},
+                           executor=self.executor),
+                    name=f'build:{d}')
 
         final_generator = mailboxes[target].subscribe()
+        return final_generator, mailboxes, plugins_to_run
 
+    def _run(self, final_generator, mailboxes, profile_to):
         with ThreadedProfiler(profile_to):
             # NB: do this AFTER we've put in all subscriptions!
             self.log.debug("Starting threads")
@@ -279,3 +318,25 @@ class ThreadedProfiler:
         p = yappi.convert2pstats(p)
         p.dump_stats(self.filename)
         yappi.clear_stats()
+
+
+class OnlineProcessor:
+    """Interface for online processor running in a background thread.
+    Use send to submit in new values for inputs, close to terminate.
+    """
+    def __init__(self, t, source_plugins):
+        self.t = t
+        self.source_plugins = source_plugins
+
+    def send(self, data_type: str, chunk_i: int, data):
+        """Send a new chunk (numbered chunk_i) of data_type"""
+        self.source_plugins[data_type].send(chunk_i, data)
+
+    def close(self, timeout=30):
+        for s in self.source_plugins.values():
+            s.close()
+        # Now it needs some time to finish processing stuff that was waiting
+        # in buffers
+        self.t.join(timeout=timeout)
+        if self.t.is_alive():
+            raise RuntimeError("Online processing did not terminate on time!")
