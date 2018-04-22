@@ -22,21 +22,23 @@ export, __all__ = strax.exporter()
 class Strax:
     """Streaming data processor"""
 
-    # Yes, that's a class-level mutable, so register_default works
-    _plugin_class_registry = dict()
-
     def __init__(self, max_workers=None, storage=None):
         self.log = logging.getLogger('strax')
         if storage is None:
             storage = [strax.FileStorage()]
         self.storage = storage
-        self._plugin_class_registry = copy(self._plugin_class_registry)
+        self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
         self.executor = ThreadPoolExecutor(max_workers=max_workers,
                                            thread_name_prefix='pool_')
         # Hmm...
         for s in storage:
             s.executor = self.executor
+
+        # Register placeholder for records
+        # TODO: Hm, why exactly? And do I have to do this for all source
+        # plugins?
+        self.register(Records)
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -63,6 +65,15 @@ class Strax:
             self._plugin_class_registry[p] = plugin_class
 
         return plugin_class
+
+    def register_all(self, module):
+        """Register all plugins defined in module"""
+        for x in dir(module):
+            x = getattr(module, x)
+            if type(x) != type(type):
+                continue
+            if issubclass(x, strax.Plugin):
+                self.register(x)
 
     def provider(self, data_name: str) -> strax.Plugin:
         """Return instance of plugin that provides data_name
@@ -260,32 +271,7 @@ class Strax:
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
 
-@export
-def register_all(module, register_with=None):
-    """Register all plugins from a module
-    :param register_with: Strax processor to register with
-    If left empty, register as defaults for future straxes.
-    """
-    for x in dir(module):
-        x = getattr(module, x)
-        if type(x) != type(type):
-            continue
-        if issubclass(x, strax.Plugin):
-            if register_with is None:
-                register_default(x)
-            else:
-                register_with.register(x)
 
-
-@export
-def register_default(plugin_class, provides=None):
-    """Register plugin_class with all Strax processors created afterwards.
-    Does not affect Strax'es already initialized
-    """
-    return Strax.register(Strax, plugin_class, provides)
-
-
-@register_default
 class Records(strax.PlaceholderPlugin):
     """Placeholder plugin for something (e.g. a DAQ or simulator) that
     provides strax records.
@@ -320,6 +306,7 @@ class ThreadedProfiler:
         yappi.clear_stats()
 
 
+@export
 class OnlineProcessor:
     """Interface for online processor running in a background thread.
     Use send to submit in new values for inputs, close to terminate.
@@ -332,7 +319,7 @@ class OnlineProcessor:
         """Send a new chunk (numbered chunk_i) of data_type"""
         self.source_plugins[data_type].send(chunk_i, data)
 
-    def close(self, timeout=30):
+    def close(self, timeout=None):
         for s in self.source_plugins.values():
             s.close()
         # Now it needs some time to finish processing stuff that was waiting
