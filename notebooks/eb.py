@@ -14,6 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import strax
 
+
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
 parser.add_argument('--n', default=1, type=int,
@@ -25,20 +26,9 @@ parser.add_argument('--erase', action='store_true',
                          'Essential for online operation')
 args = parser.parse_args()
 
-
 run_id = '180219_2005'
-
-##
-# Setup dir
-##
-
-if args.shm:
-    in_dir = '/dev/shm/from_fake_daq'
-#    out_dir = '/dev/shm/strax_data'
-else:
-    in_dir = './from_fake_daq'
+in_dir = '/dev/shm/from_fake_daq' if args.shm else './from_fake_daq'
 out_dir = './from_eb'
-
 if os.path.exists(out_dir):
     shutil.rmtree(out_dir)
 else:
@@ -68,8 +58,8 @@ class TellS1s(strax.Plugin):
         return r
 
 
-strax.register_all(strax.xenon.plugins)
 mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
+mystrax.register_all(strax.xenon.plugins)
 mystrax.register(TellS1s)
 
 red_rec_plug = mystrax.provider('reduced_records')
@@ -90,12 +80,21 @@ def outname(data_type, i):
 
 def build(chunk_i):
     print(f"\t{chunk_i}: started job")
-    records = strax.daq_interface.load_from_readers(
-        f'{in_dir}/{chunk_i:06d}',
-        erase=args.erase)
 
+    # Concatenate data from readers
+    chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
+    records = [strax.load(fn,
+                          compressor='zstd',
+                          dtype=strax.record_dtype())
+               for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
+    records = np.concatenate(records)
+    records = strax.sort_by_time(records)
+    if args.erase:
+        shutil.rmtree(chunk_dir_path)
+
+    # Do processing
     # TODO: fix raw save calls. Should be better way to save stuff outside
-    # of strax. Also inheritance metadata has to be faked...
+    # of strax framework. Also inheritance metadata has to be faked...
     red_rec = red_rec_plug.compute(records=records)
     strax.save(outname('reduced_records', chunk_i),
                red_rec,
@@ -117,7 +116,6 @@ def finish(future, chunk_i):
     done_chunks.add(chunk_i)
 
 
-
 def du(path):
     """disk usage in human readable format (e.g. '2,1GB')"""
     try:
@@ -125,6 +123,7 @@ def du(path):
             'du','-sh', path]).split()[0].decode('utf-8')
     except subprocess.CalledProcessError:
         return float('nan')
+
 
 done = False
 pending_chunks = set()
