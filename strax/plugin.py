@@ -38,7 +38,7 @@ class Plugin:
     n_per_iter = None
     rechunk = True
 
-    save_when = SaveWhen.TARGET
+    save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
 
     def startup(self):
@@ -183,9 +183,12 @@ class LoopPlugin(Plugin):
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
-                    print(f"Last base: {base[-1]['time']}-{strax.endtime(base[-1])}")
-                    print(f"Last ting: {things[-1]['time']}-{strax.endtime(things[-1])}")
-                    raise RuntimeError(f"Split {k} into {len(r)}, should be {len(base)}!")
+                    print(f"Last base: "
+                          f"{base[-1]['time']}-{strax.endtime(base[-1])}")
+                    print(f"Last ting: "
+                          f"{things[-1]['time']}-{strax.endtime(things[-1])}")
+                    raise RuntimeError(f"Split {k} into {len(r)}, "
+                                       f"should be {len(base)}!")
                 things_by_kind[k] = r
 
         results = np.zeros(len(base), dtype=self.dtype)
@@ -238,3 +241,29 @@ class PlaceholderPlugin(Plugin):
     def compute(self):
         raise NotImplementedError("No plugin registered that "
                                   f"provides {self.provides}")
+
+
+@export
+class ReceiverPlugin(Plugin):
+    """Plugin whose data is sent in manually via send_chunk.
+
+    These plugins are only created internally, and are handled specially in
+    the core.
+    """
+    depends_on = tuple()
+    mailbox = None
+
+    def send(self, chunk_i: int, data):
+        if self.mailbox is None:
+            raise RuntimeError("Attempt to send chunk to online source "
+                               "before mailbox was set.")
+        self.mailbox.send(data, msg_number=chunk_i)
+
+    def iter(self, *args, **kwargs):
+        raise RuntimeError("OnlineSources can't be iterated.")
+
+    def close(self):
+        self.mailbox.close()
+
+    def kill(self, reason):
+        self.mailbox.kill(reason=reason)

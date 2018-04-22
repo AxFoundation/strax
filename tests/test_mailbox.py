@@ -45,10 +45,10 @@ def mailbox_tester(messages,
                    for _ in range(n_readers)]
 
         for i in range(len(messages)):
-            mb._send(messages[i], msg_number=numbers[i])
+            mb.send(messages[i], msg_number=numbers[i])
             print(f"Sent message {i}. Now {len(mb._mailbox)} ms in mailbox.")
 
-        mb._close()
+        mb.close()
 
         # Results must be equal
         for f in futures:
@@ -107,7 +107,7 @@ def test_reversed():
 def test_deadlock_regression():
     """A reader thread may start after the first message is processed"""
     mb = strax.Mailbox(timeout=SHORT_TIMEOUT)
-    mb._send(0)
+    mb.send(0)
 
     readers = [
         threading.Thread(target=reader,
@@ -120,8 +120,8 @@ def test_deadlock_regression():
     time.sleep(SHORT_TIMEOUT)
 
     readers[1].start()
-    mb._send(1)
-    mb._close()
+    mb.send(1)
+    mb.close()
 
     for t in readers:
         t.join(SHORT_TIMEOUT)
@@ -131,18 +131,18 @@ def test_deadlock_regression():
 def test_close_protection():
     """Cannot send messages to a closed mailbox"""
     mb = strax.Mailbox()
-    mb._close()
+    mb.close()
     with pytest.raises(strax.MailBoxAlreadyClosed):
-        mb._send(0)
+        mb.send(0)
 
 
 def test_valid_msg_number():
     """Message numbers are non-negative integers"""
     mb = strax.Mailbox()
     with pytest.raises(strax.InvalidMessageNumber):
-        mb._send(0, msg_number=-1)
+        mb.send(0, msg_number=-1)
     with pytest.raises(strax.InvalidMessageNumber):
-        mb._send(0, msg_number='???')
+        mb.send(0, msg_number='???')
 
 
 # Task for in the next test, must be global since we're using ProcessPool
