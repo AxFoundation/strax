@@ -4,6 +4,7 @@ Currently only filesystem-based storage; later probably also
 database backed storage.
 """
 from ast import literal_eval
+import concurrent.futures
 from collections import namedtuple
 import json
 import logging
@@ -32,7 +33,7 @@ class FileStorage:
                  executor=None):
         """File-based storage backend for strax.
 
-        :param wants: List of data types this backend stores.
+        :param provides: List of data types this backend stores.
         Defaults to 'all', accepting any data types.
         Attempting to save unwanted data types throws FileNotFoundError.
         Attempting to read unwanted data types throws NotCachedException.
@@ -69,10 +70,20 @@ class FileStorage:
             return False
         return data_type in self._provides
 
+    def has(self, key: CacheKey):
+        try:
+            self._find(key)
+        except NotCachedException:
+            return False
+        return False
+
     def get(self, key: CacheKey):
         """Return generator over cached results,
         or raise NotCachedException if we have not cached the results yet
         """
+        return self.read(self._find(key))
+
+    def _find(self, key):
         if not self.provides(key.data_type):
             self.log.debug(f"{key.data_type} not wanted by storage backend.")
             raise NotCachedException
@@ -83,9 +94,9 @@ class FileStorage:
         else:
             self.log.debug(f"{key} is NOT in cache.")
             raise NotCachedException
-
         self.log.debug(f"{key} is in cache.")
-        return self.read(dirname)
+
+        return dirname
 
     def _candidate_dirs(self, key):
         """Iterate over directories in which key might be found"""
@@ -106,11 +117,13 @@ class FileStorage:
 
     def read(self, dirname: str):
         """Iterates over strax results from directory dirname"""
-        metadata = JSONFileMetadata(dirname).read()
+        with open(dirname + '/metadata.json', mode='r') as f:
+            metadata = json.loads(f.read())
         if not len(metadata['chunks']):
             self.log.warning(f"No data files in {dirname}?")
         dtype = literal_eval(metadata['dtype'])
         compressor = metadata['compressor']
+
         kwargs = dict(dtype=dtype, compressor=compressor)
         for chunk_info in metadata['chunks']:
             fn = os.path.join(dirname, chunk_info['filename'])
@@ -125,7 +138,22 @@ class FileStorage:
              metadata: dict,
              rechunk=True):
         """Iterate over source and save the results under key
-        along with metadata"""
+        along with metadata
+        """
+        if rechunk:
+            source = strax.fixed_size_chunks(source)
+
+        saver = self.saver(key, metadata)
+        try:
+            for chunk_i, s in enumerate(source):
+                saver.send(chunk_i=chunk_i, data=s)
+        except Exception:
+            saver.crash_close()
+            raise
+        # TODO: should we catch MailboxKilled?
+        saver.close()
+
+    def saver(self, key, metadata):
         metadata.setdefault('compressor', 'blosc')
         metadata['strax_version'] = strax.__version__
         if 'dtype' in metadata:
@@ -145,75 +173,72 @@ class FileStorage:
         else:
             raise FileNotFoundError(f"No writeable directory found for {key}")
 
-        if os.path.exists(dirname):
-            shutil.rmtree(dirname)
-        os.makedirs(dirname)
-
-        if rechunk:
-            source = strax.fixed_size_chunks(source)
-
-        try:
-            with JSONFileMetadata(dirname, metadata) as md:
-                for chunk_i, x in enumerate(source):
-                    fn = '%06d' % chunk_i
-
-                    chunk_info = dict(chunk_i=chunk_i,
-                                      filename=fn,
-                                      n=len(x),
-                                      nbytes=x.nbytes)
-                    if 'time' in x[0].dtype.names:
-                        for desc, i in (('first', 0), ('last', -1)):
-                            chunk_info[f'{desc}_time'] = int(x[i]['time'])
-                            chunk_info[f'{desc}_endtime'] = int(strax.endtime(x[i]))    # noqa
-
-                    fn = os.path.join(dirname, fn)
-
-                    kwargs = dict(filename=fn,
-                                  data=x,
-                                  compressor=metadata['compressor'],
-                                  save_meta=False)
-                    if self.executor is None:
-                        chunk_info['filesize'] = strax.save(**kwargs)
-                    else:
-                        # TODO: add callback or something to get
-                        # filesizes?
-                        self.executor.submit(strax.save, **kwargs)
-                        md.add_chunk_info(chunk_info)
-
-        except strax.MailboxKilled:
-            pass
+        return FileSaver(key, metadata, dirname, executor=self.executor)
 
 
-class JSONFileMetadata:
+class FileSaver:
 
-    def __init__(self, dirname, metadata=None):
-        self.filename = os.path.join(dirname, 'metadata.json')
+    def __init__(self, key, metadata, dirname, executor):
+        self.key = key
         self.md = metadata
+        self.dirname = dirname
+        self.executor = executor
+        self.futures = []
 
-    def read(self):
-        with open(self.filename, mode='r') as f:
-            return json.loads(f.read())
+        self.tempdirname = dirname + '_temp'
+        if os.path.exists(dirname):
+            # TODO: Hmm.... shouldn't it already exist? No, simple_chain...
+            shutil.rmtree(dirname)
+        if os.path.exists(self.tempdirname):
+            shutil.rmtree(self.tempdirname)
+        os.makedirs(self.tempdirname)
 
-    def add_chunk_info(self, chunk_md):
-        self.md['chunks'].append(chunk_md)
-        # TODO: perhaps update? Meh, that's for a database backend
-
-    def __enter__(self):
-        self.f = open(self.filename, mode='w')
-        if self.md is None:
-            self.md = dict()
         self.md['chunks'] = []
         self.md['writing_started'] = time.time()
-        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def send(self, chunk_i, data):
+        import numpy as np
+        assert isinstance(data, np.ndarray)
+        fn = '%06d' % chunk_i
+
+        n_missing = (chunk_i - len(self.md['chunks']) + 1)
+        if n_missing > 0:
+            self.md['chunks'] += [None] * n_missing
+        assert len(self.md['chunks']) >= chunk_i + 1
+
+        chunk_info = dict(chunk_i=chunk_i,
+                          filename=fn,
+                          n=len(data),
+                          nbytes=data.nbytes)
+        if 'time' in data[0].dtype.names:
+            for desc, i in (('first', 0), ('last', -1)):
+                chunk_info[f'{desc}_time'] = int(data[i]['time'])
+                chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
+
+        fn = os.path.join(self.tempdirname, fn)
+
+        kwargs = dict(filename=fn,
+                      data=data,
+                      compressor=self.md['compressor'],
+                      save_meta=False)
+        if self.executor is None:
+            chunk_info['filesize'] = strax.save(**kwargs)
+            self.md['chunks'][chunk_i] = chunk_info
+        else:
+            self.md['chunks'][chunk_i] = chunk_info
+            f = self.executor.submit(strax.save, **kwargs)
+            self.futures.append(f)
+            def set_filesize(f):
+                self.md['chunks'][chunk_i]['filesize'] = f.result()
+            f.add_done_callback(set_filesize)
+
+    def close(self):
+        concurrent.futures.wait(self.futures)
         self.md['writing_ended'] = time.time()
-        if exc_type is not None:
-            self.md['exception'] = dict(
-                type=str(exc_type),
-                value=str(exc_val),
-                traceback=traceback.format_exception(
-                    exc_type, exc_val, exc_tb))
+        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+            f.write(json.dumps(self.md, sort_keys=True, indent=4))
+        os.rename(self.tempdirname, self.dirname)
 
-        self.f.write(json.dumps(self.md, sort_keys=True, indent=4))
-        self.f.close()
+    def crash_close(self):
+        self.md['exception'] = traceback.format_exc()
+        self.close()
