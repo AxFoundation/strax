@@ -122,6 +122,34 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
+    ##
+    # Processor creation
+    ##
+
+    def simple_chain(self, run_id, source, target):
+        chain = [target]
+        plugins = dict()
+        savers = dict()
+
+        while chain[-1] != source:
+            d = chain[-1]
+            plugins[d] = p = self.provider(d)
+            if len(p.depends_on) != 1:
+                raise NotImplementedError("simple_chain does not support "
+                                          "dependency branching")
+
+            key = strax.CacheKey(run_id, d, p.lineage(run_id))
+            for sb_i, sb in enumerate(self.storage):
+                if not sb.provides(d):
+                    continue
+                savers.setdefault(d, [])
+                savers[d].append(sb.saver(key,
+                                          metadata=p.metadata(run_id)))
+
+            chain.append(p.depends_on[0])
+        chain = list(reversed(chain[:-1]))
+        return SimpleChain(chain, plugins, savers)
+
     def get(self, run_id: str, target: str, save=None, profile_to=None):
         """Compute target for run_id and iterate over results
         :param run_id: run id to get
@@ -264,7 +292,6 @@ class Strax:
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
 
-@export
 class OnlineProcessor:
     """Interface for online processor running in a background thread.
     Use send to submit in new values for inputs, close to terminate.
@@ -285,3 +312,32 @@ class OnlineProcessor:
         self.t.join(timeout=timeout)
         if self.t.is_alive():
             raise RuntimeError("Online processing did not terminate on time!")
+
+
+class SimpleChain:
+    """A very basic processor that processes things on-demand
+    without any background threading or rechunking.
+
+    Suitable for high-performance multiprocessing.
+    """
+    def __init__(self, chain, plugins, savers):
+        self.chain = chain
+        self.plugins = plugins
+        self.savers = savers
+
+    def send(self, chunk_i, data):
+        for d in self.chain:
+            data = self.plugins[d].compute(data)
+            for s in self.savers[d]:
+                s.send(chunk_i=chunk_i, data=data)
+        return data
+
+    def close(self):
+        for d in self.chain:
+            for s in self.savers[d]:
+                s.close()
+
+    def crash_close(self):
+        for d in self.chain:
+            for s in self.savers[d]:
+                s.crash_close()
