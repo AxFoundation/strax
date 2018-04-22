@@ -1,11 +1,13 @@
 import argparse
-from copy import copy
 import os
+from copy import copy
 import shutil
 import time
 
+import numpy as np
 from tqdm import tqdm
 import strax
+
 mystrax = strax.Strax()
 
 parser = argparse.ArgumentParser(
@@ -20,6 +22,10 @@ parser.add_argument('--chunk_size', default=100, type=int,
                     help='Chunk size in MB')
 args = parser.parse_args()
 
+n_readers = 8
+n_channels = len(strax.xenon.common.to_pe)
+channels_per_reader = np.ceil(n_channels / n_readers)
+
 output_dir = './from_fake_daq'
 if args.shm:
     output_dir = '/dev/shm/from_fake_daq'
@@ -30,14 +36,20 @@ os.makedirs(output_dir)
 print("Preparing payload data")
 chunk_sizes = []
 chunk_data_compressed = []
-for c in tqdm(strax.chunk_arrays.fixed_size_chunks(
+for records in tqdm(strax.chunk_arrays.fixed_size_chunks(
         mystrax.get('180219_2005', 'records'),
         args.chunk_size * 1e6)):
-    chunk_sizes.append(c.nbytes)
-    chunk_data_compressed.append([
-        strax.io.COMPRESSORS['zstd']['compress'](x)
-        for x in strax.daq_interface.reader_split(c)
-    ])
+    chunk_sizes.append(records.nbytes)
+    result = []
+    for reader_i in range(n_readers):
+        first_channel = reader_i * channels_per_reader
+        r = records[
+                (records['channel'] >= first_channel)
+                & (records['channel'] < first_channel + channels_per_reader)]
+        r = strax.io.COMPRESSORS['zstd']['compress'](r)
+        result.append(r)
+    chunk_data_compressed.append(result)
+
 print(f"Prepared {len(chunk_sizes)} chunks of "
       f"total size {sum(chunk_sizes)/1e6:.4} MB")
 

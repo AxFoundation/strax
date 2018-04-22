@@ -264,7 +264,6 @@ class Strax:
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
 
-
 @export
 class OnlineProcessor:
     """Interface for online processor running in a background thread.
