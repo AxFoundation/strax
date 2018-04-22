@@ -197,8 +197,6 @@ class FileSaver:
         self.md['writing_started'] = time.time()
 
     def send(self, chunk_i, data):
-        import numpy as np
-        assert isinstance(data, np.ndarray)
         fn = '%06d' % chunk_i
 
         n_missing = (chunk_i - len(self.md['chunks']) + 1)
@@ -228,12 +226,14 @@ class FileSaver:
             self.md['chunks'][chunk_i] = chunk_info
             f = self.executor.submit(strax.save, **kwargs)
             self.futures.append(f)
+
             def set_filesize(f):
                 self.md['chunks'][chunk_i]['filesize'] = f.result()
             f.add_done_callback(set_filesize)
 
-    def close(self):
-        concurrent.futures.wait(self.futures)
+    def close(self, wait=True):
+        if wait:
+            concurrent.futures.wait(self.futures)
         self.md['writing_ended'] = time.time()
         with open(self.tempdirname + '/metadata.json', mode='w') as f:
             f.write(json.dumps(self.md, sort_keys=True, indent=4))
@@ -241,4 +241,4 @@ class FileSaver:
 
     def crash_close(self):
         self.md['exception'] = traceback.format_exc()
-        self.close()
+        self.close(wait=False)

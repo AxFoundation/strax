@@ -14,7 +14,6 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import strax
 
-
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
 parser.add_argument('--n', default=1, type=int,
@@ -35,47 +34,14 @@ else:
     os.makedirs(out_dir)
 
 
-class Peaks(strax.ReceiverPlugin):
-    provides = 'peaks'
-    dtype = strax.peak_dtype(n_channels=len(strax.xenon.common.to_pe))
-
-
-class TellS1s(strax.Plugin):
-    # TODO: maybe make empty dtype possible?
-    dtype = [('n_s1s', np.int16)]
-    counter = 0
-    parallel = False
-    save_when = strax.SaveWhen.NEVER
-
-    def compute(self, peaks, peak_classification):
-        p = peak_classification
-        r = np.zeros(1, dtype=self.dtype)
-        n_s1s = (p['type'] == 1).sum()
-        self.counter += 1
-        print(f"\t{self.counter}: High-level processing done, "
-              f"found {n_s1s} S1s")
-        r[0]['n_s1s'] = n_s1s
-        return r
-
-
+##
+# Low-level processing: process records from readers
+# to reduced records and peaks,
+# without the overhead of strax's threading system.
+##
 mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
 mystrax.register_all(strax.xenon.plugins)
-mystrax.register(TellS1s)
-
-red_rec_plug = mystrax.provider('reduced_records')
-peaks_plug = mystrax.provider('peaks')
-
-mystrax.register(Peaks)
-op = mystrax.online(run_id, 'tell_s1s')
-
-
-def outname(data_type, i):
-    dn = f'{out_dir}/{run_id}_{data_type}'
-    try:
-        os.makedirs(dn)
-    except FileExistsError:
-        pass
-    return dn + ('/%06d' % i)
+low_proc = mystrax.simple_chain(run_id, source='records', target='peaks')
 
 
 def build(chunk_i):
@@ -92,28 +58,51 @@ def build(chunk_i):
     if args.erase:
         shutil.rmtree(chunk_dir_path)
 
-    # Do processing
-    # TODO: fix raw save calls. Should be better way to save stuff outside
-    # of strax framework. Also inheritance metadata has to be faked...
-    red_rec = red_rec_plug.compute(records=records)
-    strax.save(outname('reduced_records', chunk_i),
-               red_rec,
-               save_meta=False,
-               compressor=red_rec_plug.compressor)
-
-    peaks = peaks_plug.compute(reduced_records=red_rec)
-    strax.save(outname('peaks', chunk_i),
-               peaks,
-               save_meta=False,
-               compressor=peaks_plug.compressor)
+    peaks = low_proc.send(chunk_i=chunk_i, data=records)
     print(f"\t{chunk_i}: low-level processing done")
     return peaks
 
 
+##
+# High-level processing: build everything from peaks
+##
+class PeakFeeder(strax.ReceiverPlugin):
+    provides = 'peaks'
+    dtype = strax.peak_dtype(n_channels=len(strax.xenon.common.to_pe))
+    save_when = strax.SaveWhen.NEVER
+
+
+class TellS1s(strax.Plugin):
+    """Stupid plugin to report number of S1s found"""
+    dtype = [('n_s1s', np.int16)]
+    counter = 0
+    parallel = False
+    save_when = strax.SaveWhen.NEVER
+
+    def compute(self, peaks, peak_classification):
+        p = peak_classification
+        r = np.zeros(1, dtype=self.dtype)
+        n_s1s = (p['type'] == 1).sum()
+        self.counter += 1
+        print(f"\t{self.counter}: High-level processing done, "
+              f"found {n_s1s} S1s")
+        r[0]['n_s1s'] = n_s1s
+        return r
+
+mystrax.register(PeakFeeder)
+mystrax.register(TellS1s)
+high_proc = mystrax.online(run_id, 'tell_s1s')
+
+
 def finish(future, chunk_i):
-    op.send('peaks', chunk_i, future.result())
+    high_proc.send('peaks', chunk_i, future.result())
     pending_chunks.remove(chunk_i)
     done_chunks.add(chunk_i)
+
+
+##
+# Main loop
+##
 
 
 def du(path):
@@ -155,4 +144,6 @@ with ProcessPoolExecutor(max_workers=args.n) as pool:
             f.add_done_callback(partial(finish, chunk_i=int(chunk_i)))
             pending_chunks.add(chunk_i)
 
-op.close()
+print("Run done and all jobs submitted. Waiting for final results.")
+high_proc.close()
+low_proc.close()
