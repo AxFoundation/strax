@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
 from . import helpers   # Mocks numba    # noqa
-from strax.chunk_arrays import ChunkPacer, fixed_size_chunks, same_length
-from strax.chunk_arrays import fixed_length_chunks
-from strax.chunk_arrays import same_stop, sync_iters
+import strax
 
 
 @pytest.fixture
@@ -23,7 +21,7 @@ def source_2():
 
 
 def test_get_next(source):
-    p = ChunkPacer(source)
+    p = strax.ChunkPacer(source)
     result = []
     while True:
         try:
@@ -44,7 +42,7 @@ def _check_mangling(result, total_length=1000, diff=1):
 
 
 def test_get_until(source):
-    p = ChunkPacer(source)
+    p = strax.ChunkPacer(source)
     result = []
     thresholds = [123.5, 321.5, 456.5]
     for t in thresholds:
@@ -63,13 +61,13 @@ def test_get_until(source):
 def test_fixed_length_chunks(source):
     # TODO: test chunk size < array
     # test chunk size > array
-    result = list(fixed_length_chunks(source, int(1e9)))
+    result = list(strax.fixed_length_chunks(source, int(1e9)))
     _check_mangling(result)
 
 
 def test_fixed_size_chunks(source):
     # test chunk size < array
-    result = list(fixed_size_chunks(source, 42 * 8))
+    result = list(strax.fixed_size_chunks(source, 42 * 8))
     assert np.all(np.array([len(x) for x in result[:-1]])
                   == 42)
     assert len(result[-1]) == 1000 % 42
@@ -78,12 +76,12 @@ def test_fixed_size_chunks(source):
 
 def test_fixed_size_chunks_oversized(source):
     # test chunk size > array
-    result = list(fixed_size_chunks(source, int(1e9)))
+    result = list(strax.fixed_size_chunks(source, int(1e9)))
     _check_mangling(result)
 
 
 def test_same_length(source, source_2):
-    result = list(same_length(source, source_2))
+    result = list(strax.same_length(source, source_2))
     assert all(len(x[0]) == len(x[1]) for x in result)
     _check_mangling([x[0] for x in result])
     _check_mangling([x[1] for x in result])
@@ -98,7 +96,7 @@ def source_skipper():
 
 
 def test_same_stop(source, source_skipper):
-    result = list(same_stop(source, source_skipper))
+    result = list(strax.same_stop(source, source_skipper))
 
     _do_sync_check([x[0] for x in result],
                    [x[1] for x in result])
@@ -114,7 +112,8 @@ def _do_sync_check(r1, r2):
 
 
 def test_sync_iters(source, source_skipper):
-    synced = sync_iters(same_stop, dict(s1=source, s2=source_skipper))
+    synced = strax.sync_iters(strax.same_stop,
+                              dict(s1=source, s2=source_skipper))
     assert len(synced) == 2
     assert 's1' in synced and 's2' in synced
 

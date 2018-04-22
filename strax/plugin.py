@@ -9,7 +9,6 @@ from functools import partial
 import numpy as np
 
 import strax
-import strax.chunk_arrays as ca
 export, __all__ = strax.exporter()
 
 
@@ -113,22 +112,23 @@ class Plugin:
             # Apply additional flow control
             for kind, deps in deps_by_kind.items():
                 d = deps[0]
-                iters[d] = ca.fixed_length_chunks(iters[d], n=self.n_per_iter)
+                iters[d] = strax.fixed_length_chunks(iters[d],
+                                                     n=self.n_per_iter)
                 break
 
         if len(deps_by_kind) > 1:
             # Sync the iterators that provide time info for each data kind
             # (first in deps_by_kind lists) by endtime
-            iters.update(ca.sync_iters(
-                partial(ca.same_stop, func=strax.endtime),
+            iters.update(strax.sync_iters(
+                partial(strax.same_stop, func=strax.endtime),
                 {d[0]: iters[d[0]]
                  for d in deps_by_kind.values()}))
 
         # Sync the iterators of each data_kind to provide same-length chunks
         for deps in deps_by_kind.values():
             if len(deps) > 1:
-                iters.update(ca.sync_iters(
-                    ca.same_length,
+                iters.update(strax.sync_iters(
+                    strax.same_length,
                     {d: iters[d] for d in deps}))
 
         while True:
