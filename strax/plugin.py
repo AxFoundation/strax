@@ -152,6 +152,29 @@ class Plugin:
 ##
 
 @export
+class ReceiverPlugin(Plugin):
+    """Plugin whose data is sent in manually via send_chunk.
+    """
+    depends_on = tuple()
+    mailbox = None
+
+    def send(self, chunk_i: int, data):
+        if self.mailbox is None:
+            raise RuntimeError("Attempt to send chunk to online source "
+                               "before mailbox was set.")
+        self.mailbox.send(data, msg_number=chunk_i)
+
+    def iter(self, *args, **kwargs):
+        raise RuntimeError("OnlineSources can't be iterated.")
+
+    def close(self):
+        self.mailbox.close()
+
+    def kill(self, reason):
+        self.mailbox.kill(reason=reason)
+
+
+@export
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
@@ -244,26 +267,10 @@ class PlaceholderPlugin(Plugin):
 
 
 @export
-class ReceiverPlugin(Plugin):
-    """Plugin whose data is sent in manually via send_chunk.
-
-    These plugins are only created internally, and are handled specially in
-    the core.
+class RecordsPlaceholder(PlaceholderPlugin):
+    """Placeholder plugin for something (e.g. a DAQ or simulator) that
+    provides strax records.
     """
-    depends_on = tuple()
-    mailbox = None
-
-    def send(self, chunk_i: int, data):
-        if self.mailbox is None:
-            raise RuntimeError("Attempt to send chunk to online source "
-                               "before mailbox was set.")
-        self.mailbox.send(data, msg_number=chunk_i)
-
-    def iter(self, *args, **kwargs):
-        raise RuntimeError("OnlineSources can't be iterated.")
-
-    def close(self):
-        self.mailbox.close()
-
-    def kill(self, reason):
-        self.mailbox.kill(reason=reason)
+    provides = 'records'
+    data_kind = 'records'
+    dtype = strax.record_dtype()
