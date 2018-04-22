@@ -1,4 +1,3 @@
-from copy import copy
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import threading
@@ -7,12 +6,6 @@ import inspect
 import numpy as np
 import pandas as pd
 
-# Yappi for threaded profiling
-# Do not make this a dependency - it doesn't officially support py3.6...
-try:
-    import yappi
-except ImportError:
-    yappi = None
 
 import strax
 export, __all__ = strax.exporter()
@@ -38,7 +31,7 @@ class Strax:
         # Register placeholder for records
         # TODO: Hm, why exactly? And do I have to do this for all source
         # plugins?
-        self.register(Records)
+        self.register(strax.RecordsPlaceholder)
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -238,7 +231,7 @@ class Strax:
         return final_generator, mailboxes, plugins_to_run
 
     def _run(self, final_generator, mailboxes, profile_to):
-        with ThreadedProfiler(profile_to):
+        with strax.profile_threaded(profile_to):
             # NB: do this AFTER we've put in all subscriptions!
             self.log.debug("Starting threads")
             for m in mailboxes.values():
@@ -270,40 +263,6 @@ class Strax:
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
-
-
-class Records(strax.PlaceholderPlugin):
-    """Placeholder plugin for something (e.g. a DAQ or simulator) that
-    provides strax records.
-    """
-    data_kind = 'records'
-    dtype = strax.record_dtype()
-
-
-@export
-class ThreadedProfiler:
-
-    def __init__(self, filename):
-        self.filename = filename
-        if filename is not None and yappi is None:
-            raise ValueError("Yappi did not import -- cannot profile")
-
-    @property
-    def enabled(self):
-        return not (self.filename is None or yappi is None)
-
-    def __enter__(self):
-        if self.enabled:
-            yappi.start()
-
-    def __exit__(self, *args):
-        if not self.enabled:
-            return
-        yappi.stop()
-        p = yappi.get_func_stats()
-        p = yappi.convert2pstats(p)
-        p.dump_stats(self.filename)
-        yappi.clear_stats()
 
 
 @export

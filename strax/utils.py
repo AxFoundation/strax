@@ -1,9 +1,17 @@
+import contextlib
 from functools import wraps
 import re
 
 import numpy as np
 import numba
 import dill
+
+try:
+    import yappi
+except ImportError:
+    # No threaded profiling for you
+    yappi = None
+
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -220,3 +228,21 @@ def camel_to_snake(x):
     # From https://stackoverflow.com/questions/1175208
     x = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', x).lower()
+
+
+@export
+@contextlib.contextmanager
+def profile_threaded(filename):
+    if filename is None:
+        yield
+        return
+
+    if yappi is None:
+        raise ImportError("Yappi did not import -- cannot profile")
+    yappi.start()
+    yield
+    yappi.stop()
+    p = yappi.get_func_stats()
+    p = yappi.convert2pstats(p)
+    p.dump_stats(filename)
+    yappi.clear_stats()
