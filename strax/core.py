@@ -214,6 +214,8 @@ class Strax:
         for d, p in plugins_to_run.items():
             if isinstance(p, strax.ReceiverPlugin):
                 p.mailbox = mailboxes[d]
+                # Unbounded mailbox? Hm...
+                p.mailbox.max_messages = float('inf')
             else:
                 mailboxes[d].add_sender(
                     p.iter(iters={d: mailboxes[d].subscribe()
