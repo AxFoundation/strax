@@ -153,7 +153,7 @@ class Mailbox:
         """
         try:
             for x in iterable:
-                self._send(x)
+                self.send(x)
         except MailboxKilled as e:
             # The iterable was reading from a mailbox, which has been killed.
             # Kill this mailbox too.
@@ -164,9 +164,9 @@ class Mailbox:
                              f'in {threading.current_thread().name}')
             raise
         else:
-            self._close()
+            self.close()
 
-    def _send(self, msg, msg_number=None):
+    def send(self, msg, msg_number=None):
         """Send a message.
 
         If the message is a future, receivers will be passed its result.
@@ -214,9 +214,9 @@ class Mailbox:
             self._n_sent += 1
             self._read_condition.notify_all()
 
-    def _close(self):
+    def close(self):
         with self._lock:
-            self._send(StopIteration)
+            self.send(StopIteration)
             self.closed = True
         self.log.debug(f"Closed to incoming messages")
 
@@ -280,7 +280,8 @@ class Mailbox:
                         try:
                             res = msg.result(timeout=self.timeout)
                         except TimeoutError:
-                            raise TimeoutError(f"Future {msg_number} timed out!")
+                            raise TimeoutError(
+                                f"Future {msg_number} timed out!")
                         self.log.debug(f"Future {msg_number} completed")
                     else:
                         res = msg.result()

@@ -8,6 +8,8 @@
 *.npy
 *.blosc
 strax_data
+from_fake_daq
+from_eb
 
 # cProfile output
 *.prof
@@ -40,3 +42,6 @@ docs/_build
 
 # Pycharm
 .idea
+
+# coverage
+.coverage
