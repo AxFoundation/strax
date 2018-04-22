@@ -34,10 +34,10 @@ run_id = '180219_2005'
 
 if args.shm:
     in_dir = '/dev/shm/from_fake_daq'
-    out_dir = '/dev/shm/strax_data'
+#    out_dir = '/dev/shm/strax_data'
 else:
     in_dir = './from_fake_daq'
-    out_dir = './from_eb'
+out_dir = './from_eb'
 
 if os.path.exists(out_dir):
     shutil.rmtree(out_dir)

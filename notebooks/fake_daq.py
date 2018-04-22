@@ -1,4 +1,5 @@
 import argparse
+from copy import copy
 import os
 import shutil
 import time
@@ -58,14 +59,15 @@ while not done:
         os.makedirs(tempdir)
         for reader_i, x in enumerate(c):
             with open(f'{tempdir}/reader_{reader_i}', 'wb') as f:
-                f.write(x)
+                f.write(copy(x))
         os.rename(tempdir, outdir)
         wrote_mb = chunk_sizes[chunk_i] / 1e6
 
         t_sleep = wrote_mb / args.rate - (time.time() - t_0)
         if t_sleep < 0:
-            raise ValueError("Fake DAQ too slow :-(")
-        print(f"Wrote {wrote_mb:.1f} MB_raw, sleep for {t_sleep:.2f} s")
-        time.sleep(t_sleep)
+            print("Fake DAQ too slow :-(")
+        else:
+            print(f"Wrote {wrote_mb:.1f} MB_raw, sleep for {t_sleep:.2f} s")
+            time.sleep(t_sleep)
 
         n_chunks_written += 1
