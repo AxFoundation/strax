@@ -49,9 +49,9 @@ def build(chunk_i):
 
     # Concatenate data from readers
     chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
-    records = [strax.load(fn,
-                          compressor='zstd',
-                          dtype=strax.record_dtype())
+    records = [strax.load_file(fn,
+                               compressor='zstd',
+                               dtype=strax.record_dtype())
                for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
     records = np.concatenate(records)
     records = strax.sort_by_time(records)
@@ -145,5 +145,5 @@ with ProcessPoolExecutor(max_workers=args.n) as pool:
             pending_chunks.add(chunk_i)
 
 print("Run done and all jobs submitted. Waiting for final results.")
-high_proc.close()
 low_proc.close()
+high_proc.close()

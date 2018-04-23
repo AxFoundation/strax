@@ -128,9 +128,9 @@ class FileStorage:
         for chunk_info in metadata['chunks']:
             fn = os.path.join(dirname, chunk_info['filename'])
             if self.executor is None:
-                yield strax.load(fn, **kwargs)
+                yield strax.load_file(fn, **kwargs)
             else:
-                yield self.executor.submit(strax.load, fn, **kwargs)
+                yield self.executor.submit(strax.load_file, fn, **kwargs)
 
     def save(self,
              source: typing.Generator,
@@ -220,11 +220,11 @@ class FileSaver:
                       compressor=self.md['compressor'],
                       save_meta=False)
         if self.executor is None:
-            chunk_info['filesize'] = strax.save(**kwargs)
+            chunk_info['filesize'] = strax.save_file(**kwargs)
             self.md['chunks'][chunk_i] = chunk_info
         else:
             self.md['chunks'][chunk_i] = chunk_info
-            f = self.executor.submit(strax.save, **kwargs)
+            f = self.executor.submit(strax.save_file, **kwargs)
             self.futures.append(f)
 
             def set_filesize(f):
