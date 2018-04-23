@@ -77,7 +77,7 @@ class FileStorage:
             return False
         return False
 
-    def get(self, key: CacheKey):
+    def loader(self, key: CacheKey):
         """Return generator over cached results,
         or raise NotCachedException if we have not cached the results yet
         """
@@ -132,27 +132,6 @@ class FileStorage:
             else:
                 yield self.executor.submit(strax.load_file, fn, **kwargs)
 
-    def save(self,
-             source: typing.Generator,
-             key: CacheKey,
-             metadata: dict,
-             rechunk=True):
-        """Iterate over source and save the results under key
-        along with metadata
-        """
-        if rechunk:
-            source = strax.fixed_size_chunks(source)
-
-        saver = self.saver(key, metadata)
-        try:
-            for chunk_i, s in enumerate(source):
-                saver.send(chunk_i=chunk_i, data=s)
-        except Exception:
-            saver.crash_close()
-            raise
-        # TODO: should we catch MailboxKilled?
-        saver.close()
-
     def saver(self, key, metadata):
         metadata.setdefault('compressor', 'blosc')
         metadata['strax_version'] = strax.__version__
@@ -195,6 +174,22 @@ class FileSaver:
 
         self.md['chunks'] = []
         self.md['writing_started'] = time.time()
+
+    def save_from(self, source: typing.Iterable, rechunk=True):
+        """Iterate over source and save the results under key
+        along with metadata
+        """
+        if rechunk:
+            source = strax.fixed_size_chunks(source)
+
+        try:
+            for chunk_i, s in enumerate(source):
+                self.send(chunk_i=chunk_i, data=s)
+        except Exception:
+            self.crash_close()
+            raise
+        # TODO: should we catch MailboxKilled?
+        self.close()
 
     def send(self, chunk_i, data):
         fn = '%06d' % chunk_i
