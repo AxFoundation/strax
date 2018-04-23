@@ -293,8 +293,9 @@ class Strax:
 
 
 class OnlineProcessor:
-    """Interface for online processor running in a background thread.
+    """Online processor running in a background thread.
     Use send to submit in new values for inputs, close to terminate.
+    TODO: how to crash-close? Do I need to?
     """
     def __init__(self, t, source_plugins):
         self.t = t
