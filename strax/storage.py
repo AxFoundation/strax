@@ -157,6 +157,7 @@ class FileStorage:
         return FileSaver(key, metadata, dirname, executor=self.executor)
 
 
+@export
 class FileSaver:
     closed = False
 
