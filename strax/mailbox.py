@@ -1,6 +1,7 @@
 from concurrent.futures import Future, TimeoutError
 import heapq
 import threading
+import typing
 import logging
 
 from strax.utils import exporter
@@ -166,7 +167,7 @@ class Mailbox:
         else:
             self.close()
 
-    def send(self, msg, msg_number=None):
+    def send(self, msg, msg_number: typing.Union[int, None] = None):
         """Send a message.
 
         If the message is a future, receivers will be passed its result.

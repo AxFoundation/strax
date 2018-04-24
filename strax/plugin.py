@@ -5,6 +5,7 @@ from one or more other plugins.
 """
 from enum import IntEnum
 from functools import partial
+import typing
 
 import numpy as np
 
@@ -31,11 +32,10 @@ class Plugin:
     data_kind: str
     depends_on: tuple
     provides: str
-    dependency_kinds: dict
-    dependency_dtypes: dict
     compressor = 'blosc'
     n_per_iter = None
     rechunk = True
+    deps: typing.List   # Dictionary of dependency plugin instances
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
@@ -57,10 +57,6 @@ class Plugin:
         """
         return self.__version__
 
-    def lineage(self, run_id):
-        # TODO: Implement this
-        return None
-
     def metadata(self, run_id):
         """Metadata to save along with produced data"""
         return dict(
@@ -69,7 +65,7 @@ class Plugin:
             compressor=self.compressor,
             dtype=self.dtype,
             version=self.version(run_id),
-            lineage=self.lineage(run_id)
+            lineage=self.lineage
         )
 
     def dependencies_by_kind(self, require_time=True):
@@ -81,12 +77,12 @@ class Plugin:
         deps_by_kind = dict()
         key_deps = []
         for d in self.depends_on:
-            k = self.dependency_kinds[d]
+            k = self.deps[d].data_kind
             deps_by_kind.setdefault(k, [])
 
             # If this has time information, put it first in the list
             if (require_time
-                    and 'time' in self.dependency_dtypes[d].names):
+                    and 'time' in self.deps[d].dtype.names):
                 key_deps.append(d)
                 deps_by_kind[k].insert(0, d)
             else:
@@ -152,29 +148,6 @@ class Plugin:
 ##
 
 @export
-class ReceiverPlugin(Plugin):
-    """Plugin whose data is sent in manually via send_chunk.
-    """
-    depends_on = tuple()
-    mailbox = None
-
-    def send(self, chunk_i: int, data):
-        if self.mailbox is None:
-            raise RuntimeError("Attempt to send chunk to online source "
-                               "before mailbox was set.")
-        self.mailbox.send(data, msg_number=chunk_i)
-
-    def iter(self, *args, **kwargs):
-        raise RuntimeError("OnlineSources can't be iterated.")
-
-    def close(self):
-        self.mailbox.close()
-
-    def kill(self, reason):
-        self.mailbox.kill(reason=reason)
-
-
-@export
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
@@ -190,7 +163,7 @@ class LoopPlugin(Plugin):
         if hasattr(self, 'loop_over'):
             loop_over = self.loop_over
         else:
-            loop_over = self.dependency_kinds[self.depends_on[0]]
+            loop_over = self.deps[self.depends_on[0]].data_kind
 
         # Merge data of each data kind
         deps_by_kind = self.dependencies_by_kind()
@@ -248,7 +221,7 @@ class MergePlugin(Plugin):
                              "kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return sum([strax.unpack_dtype(self.dependency_dtypes[d])
+        return sum([strax.unpack_dtype(self.deps[d])
                     for d in self.depends_on], [])
 
     def compute(self, **kwargs):
