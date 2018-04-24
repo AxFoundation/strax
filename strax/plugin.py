@@ -5,6 +5,7 @@ from one or more other plugins.
 """
 from enum import IntEnum
 from functools import partial
+import typing
 
 import numpy as np
 
@@ -20,8 +21,6 @@ class SaveWhen(IntEnum):
     TARGET = 2        # Save if the user asks for it as a final target
     ALWAYS = 3        # Save even if the user does not list it
 
-
-import typing
 
 @export
 class Plugin:
@@ -147,29 +146,6 @@ class Plugin:
 ##
 # Special plugins
 ##
-
-@export
-class ReceiverPlugin(Plugin):
-    """Plugin whose data is sent in manually via send_chunk.
-    """
-    depends_on = tuple()
-    mailbox = None
-
-    def send(self, chunk_i: int, data):
-        if self.mailbox is None:
-            raise RuntimeError("Attempt to send chunk to online source "
-                               "before mailbox was set.")
-        self.mailbox.send(data, msg_number=chunk_i)
-
-    def iter(self, *args, **kwargs):
-        raise RuntimeError("OnlineSources can't be iterated.")
-
-    def close(self):
-        self.mailbox.close()
-
-    def kill(self, reason):
-        self.mailbox.kill(reason=reason)
-
 
 @export
 class LoopPlugin(Plugin):

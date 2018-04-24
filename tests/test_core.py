@@ -36,7 +36,7 @@ def test_core():
     mystrax.register(Records)
     mystrax.register(Peaks)
 
-    bla = mystrax.get_array(run_id='some_run', target='peaks')
+    bla = mystrax.get_array(run_id='some_run', targets='peaks')
     assert len(bla) == recs_per_chunk * n_chunks
     assert bla.dtype == strax.peak_dtype()
 
