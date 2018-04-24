@@ -5,7 +5,6 @@ database backed storage.
 """
 from ast import literal_eval
 import concurrent.futures
-from collections import namedtuple
 import json
 import logging
 import os
@@ -17,9 +16,12 @@ import typing
 import strax
 export, __all__ = strax.exporter()
 
-CacheKey = namedtuple('CacheKey',
-                      ('run_id', 'data_type', 'lineage'))
-export(CacheKey)
+
+@export
+class CacheKey(typing.NamedTuple):
+    run_id: str
+    data_type: str
+    lineage: dict
 
 
 @export
@@ -77,7 +79,7 @@ class FileStorage:
             return False
         return False
 
-    def get(self, key: CacheKey):
+    def loader(self, key: CacheKey):
         """Return generator over cached results,
         or raise NotCachedException if we have not cached the results yet
         """
@@ -132,27 +134,6 @@ class FileStorage:
             else:
                 yield self.executor.submit(strax.load_file, fn, **kwargs)
 
-    def save(self,
-             source: typing.Generator,
-             key: CacheKey,
-             metadata: dict,
-             rechunk=True):
-        """Iterate over source and save the results under key
-        along with metadata
-        """
-        if rechunk:
-            source = strax.fixed_size_chunks(source)
-
-        saver = self.saver(key, metadata)
-        try:
-            for chunk_i, s in enumerate(source):
-                saver.send(chunk_i=chunk_i, data=s)
-        except Exception:
-            saver.crash_close()
-            raise
-        # TODO: should we catch MailboxKilled?
-        saver.close()
-
     def saver(self, key, metadata):
         metadata.setdefault('compressor', 'blosc')
         metadata['strax_version'] = strax.__version__
@@ -177,6 +158,7 @@ class FileStorage:
 
 
 class FileSaver:
+    closed = False
 
     def __init__(self, key, metadata, dirname, executor):
         self.key = key
@@ -196,7 +178,25 @@ class FileSaver:
         self.md['chunks'] = []
         self.md['writing_started'] = time.time()
 
+    def save_from(self, source: typing.Iterable, rechunk=True):
+        """Iterate over source and save the results under key
+        along with metadata
+        """
+        if rechunk:
+            source = strax.fixed_size_chunks(source)
+
+        try:
+            for chunk_i, s in enumerate(source):
+                self.send(chunk_i=chunk_i, data=s)
+        except Exception:
+            self.crash_close()
+            raise
+        # TODO: should we catch MailboxKilled?
+        self.close()
+
     def send(self, chunk_i, data):
+        if self.closed:
+            raise RuntimeError("Already closed!")
         fn = '%06d' % chunk_i
 
         n_missing = (chunk_i - len(self.md['chunks']) + 1)
@@ -217,8 +217,7 @@ class FileSaver:
 
         kwargs = dict(filename=fn,
                       data=data,
-                      compressor=self.md['compressor'],
-                      save_meta=False)
+                      compressor=self.md['compressor'])
         if self.executor is None:
             chunk_info['filesize'] = strax.save_file(**kwargs)
             self.md['chunks'][chunk_i] = chunk_info
@@ -227,11 +226,14 @@ class FileSaver:
             f = self.executor.submit(strax.save_file, **kwargs)
             self.futures.append(f)
 
-            def set_filesize(f):
-                self.md['chunks'][chunk_i]['filesize'] = f.result()
+            def set_filesize(_f):
+                self.md['chunks'][chunk_i]['filesize'] = _f.result()
             f.add_done_callback(set_filesize)
 
     def close(self, wait=True):
+        if self.closed:
+            raise RuntimeError("Already closed!")
+        self.closed = True
         if wait:
             concurrent.futures.wait(self.futures)
         self.md['writing_ended'] = time.time()

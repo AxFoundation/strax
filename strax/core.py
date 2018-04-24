@@ -1,14 +1,20 @@
+import collections
 from concurrent.futures import ThreadPoolExecutor
 import logging
-import threading
 import inspect
+import itertools
 
 import numpy as np
 import pandas as pd
 
-
 import strax
 export, __all__ = strax.exporter()
+
+
+ProcessorComponents = collections.namedtuple(
+    'ProcessorComponents',
+    ['plugins', 'loaders', 'savers', 'sources', 'targets'])
+export(ProcessorComponents)
 
 
 @export
@@ -68,50 +74,9 @@ class Strax:
             if issubclass(x, strax.Plugin):
                 self.register(x)
 
-    def provider(self, data_name: str) -> strax.Plugin:
-        """Return instance of plugin that provides data_name
-
-        This is the only way plugins should be instantiated.
-        """
-        if data_name not in self._plugin_class_registry:
-            raise KeyError(f"No plugin registered that provides {data_name}")
-        if data_name in self._plugin_instance_cache:
-            return self._plugin_instance_cache[data_name]
-
-        p = self._plugin_class_registry[data_name]()
-
-        p.log = logging.getLogger(p.__class__.__name__)
-
-        if not hasattr(p, 'depends_on'):
-            # Infer dependencies from self.compute's argument names
-            process_params = inspect.signature(p.compute).parameters.keys()
-            process_params = [p for p in process_params if p != 'kwargs']
-            p.depends_on = tuple(process_params)
-
-        if not hasattr(p, 'data_kind'):
-            if len(p.depends_on):
-                # Assume data kind is the same as the first dependency
-                p.data_kind = self.provider(p.depends_on[0]).data_kind
-            else:
-                # No dependencies: assume provided data kind and
-                # data type are synonymous
-                p.data_kind = p.provides
-
-        p.dependency_kinds = {d: self.provider(d).data_kind
-                              for d in p.depends_on}
-        p.dependency_dtypes = {d: self.provider(d).dtype
-                               for d in p.depends_on}
-
-        if not hasattr(p, 'dtype'):
-            p.dtype = p.infer_dtype()
-        p.dtype = np.dtype(p.dtype)
-
-        p.startup()
-        return p
-
     def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name"""
-        p = self.provider(data_name)
+        p = self.get_components('SOME_RUN???', (data_name,)).plugins[data_name]
         display_headers = ['Field name', 'Data type', 'Comment']
         result = []
         for name, dtype in strax.utils.unpack_dtype(p.dtype):
@@ -122,166 +87,158 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    ##
-    # Processor creation
-    ##
+    def get_components(self,
+                       run_id,
+                       targets=tuple(),
+                       save=tuple(),
+                       sources=tuple()):
+        """Return components for setting up a processor
 
-    def simple_chain(self, run_id, source, target):
-        chain = [target]
-        plugins = dict()
-        savers = dict()
+        :param run_id: run id to get
+        :param targets: data type to yield results for
+        :param save: str or list of str of data types you would like to save
+        to cache, if they occur in intermediate computations
+        :param sources: str of list of str of data types you will feed the
+        processor via .send.
+        """
+        if isinstance(save, str):
+            save = (save,)
+        if isinstance(sources, str):
+            sources = (sources,)
+        if isinstance(targets, str):
+            targets = (targets,)
 
-        while chain[-1] != source:
-            d = chain[-1]
-            plugins[d] = p = self.provider(d)
-            if len(p.depends_on) != 1:
-                raise NotImplementedError("simple_chain does not support "
-                                          "dependency branching")
+        # Initialize plugins for the entire computation graph
+        # (most likely far further down than we need)
+        # to get lineages and dependency info.
+        def get_plugin(d):
+            nonlocal plugins
 
-            key = strax.CacheKey(run_id, d, p.lineage(run_id))
+            if d not in self._plugin_class_registry:
+                raise KeyError(f"No plugin class registered that provides {d}")
+            p = self._plugin_class_registry[d]()
+
+            p.log = logging.getLogger(p.__class__.__name__)
+            if not hasattr(p, 'depends_on'):
+                # Infer dependencies from self.compute's argument names
+                process_params = inspect.signature(p.compute).parameters.keys()
+                process_params = [p for p in process_params if p != 'kwargs']
+                p.depends_on = tuple(process_params)
+
+            plugins[d] = p
+
+            p.deps = {d: get_plugin(d) for d in p.depends_on}
+
+            p.lineage = {d: p.version(run_id)}
+            for d in p.depends_on:
+                p.lineage.update(p.deps[d].lineage)
+
+            if not hasattr(p, 'data_kind'):
+                if len(p.depends_on):
+                    # Assume data kind is the same as the first dependency
+                    p.data_kind = p.deps[p.depends_on[0]].data_kind
+                else:
+                    # No dependencies: assume provided data kind and
+                    # data type are synonymous
+                    p.data_kind = p.provides
+
+            if not hasattr(p, 'dtype'):
+                p.dtype = p.infer_dtype()
+            p.dtype = np.dtype(p.dtype)
+            return p
+
+        plugins = collections.defaultdict(get_plugin)
+        for t in targets:
+            # This works without the RHS too, but your IDE might not get it :-)
+            plugins[t] = get_plugin(t)
+
+        # Get savers/loaders, and meanwhile filter out plugins that do not
+        # have to do computation.(their instances will stick around
+        # though the .deps attribute of plugins that do)
+        loaders = dict()
+        savers = collections.defaultdict(list)
+        seen = set()
+        to_compute = dict()
+
+        def check_cache(d):
+            nonlocal plugins, loaders, savers, seen
+            if d in seen:
+                return
+            seen.add(d)
+            p = plugins[d]
+            key = strax.CacheKey(run_id, d, p.lineage)
+
+            if d not in sources:
+                for sb_i, sb in enumerate(self.storage):
+                    try:
+                        loaders[d] = sb.loader(key)
+                        # Found it! No need to make it or save it
+                        del plugins[d]
+                        return
+                    except strax.NotCachedException:
+                        continue
+
+                # Not in any cache. We will be computing it.
+                to_compute[d] = p
+                for d in p.depends_on:
+                    check_cache(d)
+
+            # We're making this OR it gets fed in. Should we save it?
+            if p.save_when == strax.SaveWhen.NEVER:
+                if d in save:
+                    raise ValueError("Plugin forbids saving of {d}")
+                return
+            elif p.save_when == strax.SaveWhen.TARGET:
+                if d != targets:
+                    return
+            elif p.save_when == strax.SaveWhen.EXPLICIT:
+                if d not in save:
+                    return
+            else:
+                assert p.save_when == strax.SaveWhen.ALWAYS
+
             for sb_i, sb in enumerate(self.storage):
                 if not sb.provides(d):
                     continue
-                savers.setdefault(d, [])
-                savers[d].append(sb.saver(key,
-                                          metadata=p.metadata(run_id)))
+                s = sb.saver(key, p.metadata(run_id))
+                savers[d].append(s)
 
-            chain.append(p.depends_on[0])
-        chain = list(reversed(chain[:-1]))
-        return SimpleChain(chain, plugins, savers)
+        for d in targets:
+            check_cache(d)
+        plugins = to_compute
 
-    def get(self, run_id: str, target: str, save=None, profile_to=None):
+        # Validate result
+        # A data type is either computed, loaded, or fed in
+        for a, b in itertools.combinations(
+                [plugins.keys(), loaders.keys(), sources], 2):
+            if len(a & b):
+                raise RuntimeError("Multiple ways of getting "
+                                   f"{list(a & b)} specified")
+
+        return ProcessorComponents(plugins=plugins,
+                                   loaders=loaders,
+                                   savers=dict(savers),
+                                   sources=sources,
+                                   targets=targets)
+
+    ##
+    # Creation of different processors
+    ##
+
+    def simple_chain(self, run_id, target, source, save=tuple()):
+        components = self.get_components(
+            run_id, targets=(target,), save=save, sources=(source,))
+        return strax.SimpleChain(components)
+
+    def get(self, run_id, targets, save=tuple()):
         """Compute target for run_id and iterate over results
-        :param run_id: run id to get
-        :param target: data type to yield results for
-        :param save: str or list of str of data types you would like to save
-        to cache, if they occur in intermediate computations
-        :param profile_to: filename to save profiling results to. If not
-        specified, will not profile.
         """
-        final_generator, mailboxes, plugins_to_run = self._prepare(
-            run_id, target, save)
-        yield from self._run(final_generator, mailboxes, profile_to)
+        components = self.get_components(run_id, targets=targets, save=save)
+        yield from strax.ThreadedMailboxProcessor(
+            components, self.executor).iter()
 
-    def online(self, run_id: str, target: str,
-               save=None, profile_to=None):
-        """Return OnlineProcessor for computing target for run_id
-        See .get for argument documentation. # TODO: fix
-        """
-        final_generator, mailboxes, plugins_to_run = self._prepare(
-            run_id, target, save)
-
-        source_plugins = {d: p for d, p in plugins_to_run.items()
-                          if isinstance(p, strax.ReceiverPlugin)}
-        if not len(source_plugins):
-            raise ValueError("get_online is only needed if you have "
-                             "online input sources.")
-
-        def _spin():
-            for _ in self._run(final_generator, mailboxes, profile_to):
-                pass
-        t = threading.Thread(target=_spin)
-        t.start()
-        return OnlineProcessor(t, source_plugins)
-
-    def _prepare(self, run_id, target, save):
-        if isinstance(save, str):
-            save = [save]
-        elif isinstance(save, tuple):
-            save = list(save)
-        elif save is None:
-            save = []
-
-        mailboxes = dict()
-        plugins_to_run = dict()
-        keys = dict()    # Cache keys of the things we're building
-
-        self.log.debug("Creating saver/loader threads and mailboxes")
-        to_check = [target]
-        while len(to_check):
-            d = to_check.pop()
-            if d in mailboxes:
-                continue
-            p = self.provider(d)
-
-            if d in save:
-                if p.save_when == strax.SaveWhen.NEVER:
-                    raise ValueError("Plugin forbids saving of {d}")
-            else:
-                if (d == target and p.save_when == strax.SaveWhen.TARGET
-                        or p.save_when == strax.SaveWhen.ALWAYS):
-                    save.append(d)
-
-            mailboxes[d] = strax.Mailbox(name=d + '_mailbox')
-            keys[d] = strax.CacheKey(run_id, d, p.lineage(run_id))
-
-            for sb in self.storage:
-                try:
-                    cache_iterator = sb.get(keys[d])
-                except strax.NotCachedException:
-                    continue
-                else:
-                    mailboxes[d].add_sender(cache_iterator,
-                                            name=f'get_from_cache:{d}')
-                    break
-
-            else:
-                # We have to make this data, and possibly its dependencies
-                plugins_to_run[d] = p
-                to_check.extend(p.depends_on)
-
-                if d in save:
-                    for sb_i, sb in enumerate(self.storage):
-                        if not sb.provides(d):
-                            continue
-                        mailboxes[d].add_reader(
-                            sb.save,
-                            name=f'save_{sb_i}:{d}',
-                            key=keys[d],
-                            metadata=p.metadata(run_id),
-                            rechunk=p.rechunk)
-
-        # Must do this AFTER creating mailboxes for dependencies
-        self.log.debug("Creating builder threads")
-        for d, p in plugins_to_run.items():
-            if isinstance(p, strax.ReceiverPlugin):
-                p.mailbox = mailboxes[d]
-                # Unbounded mailbox? Hm...
-                p.mailbox.max_messages = float('inf')
-            else:
-                mailboxes[d].add_sender(
-                    p.iter(iters={d: mailboxes[d].subscribe()
-                                  for d in p.depends_on},
-                           executor=self.executor),
-                    name=f'build:{d}')
-
-        final_generator = mailboxes[target].subscribe()
-        return final_generator, mailboxes, plugins_to_run
-
-    def _run(self, final_generator, mailboxes, profile_to):
-        with strax.profile_threaded(profile_to):
-            # NB: do this AFTER we've put in all subscriptions!
-            self.log.debug("Starting threads")
-            for m in mailboxes.values():
-                m.start()
-
-            self.log.debug("Yielding results")
-            try:
-                yield from final_generator
-            except strax.MailboxKilled:
-                self.log.debug(f"Main thread received MailboxKilled")
-                for m in mailboxes.values():
-                    self.log.debug(f"Killing {m}")
-                    m.kill(upstream=True,
-                           reason="Strax terminating due to "
-                                  "downstream exception")
-
-            self.log.debug("Closing threads")
-            for m in mailboxes.values():
-                m.cleanup()
-
-    # TODO: fix signatures
     def make(self, *args, **kwargs):
+        # TODO: fix signatures
         for _ in self.get(*args, **kwargs):
             pass
 
@@ -291,54 +248,15 @@ class Strax:
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
+    def in_background(self, run_id, targets, sources=tuple(), save=tuple()):
+        """Return a processor that makes targets in a background thread.
 
-class OnlineProcessor:
-    """Online processor running in a background thread.
-    Use send to submit in new values for inputs, close to terminate.
-    TODO: how to crash-close? Do I need to?
-    """
-    def __init__(self, t, source_plugins):
-        self.t = t
-        self.source_plugins = source_plugins
+        Useful for sending in inputs asynchronously.
 
-    def send(self, data_type: str, chunk_i: int, data):
-        """Send a new chunk (numbered chunk_i) of data_type"""
-        self.source_plugins[data_type].send(chunk_i, data)
-
-    def close(self, timeout=None):
-        for s in self.source_plugins.values():
-            s.close()
-        # Now it needs some time to finish processing stuff that was waiting
-        # in buffers
-        self.t.join(timeout=timeout)
-        if self.t.is_alive():
-            raise RuntimeError("Online processing did not terminate on time!")
-
-
-class SimpleChain:
-    """A very basic processor that processes things on-demand
-    without any background threading or rechunking.
-
-    Suitable for high-performance multiprocessing.
-    """
-    def __init__(self, chain, plugins, savers):
-        self.chain = chain
-        self.plugins = plugins
-        self.savers = savers
-
-    def send(self, chunk_i, data):
-        for d in self.chain:
-            data = self.plugins[d].compute(data)
-            for s in self.savers[d]:
-                s.send(chunk_i=chunk_i, data=data)
-        return data
-
-    def close(self):
-        for d in self.chain:
-            for s in self.savers[d]:
-                s.close()
-
-    def crash_close(self):
-        for d in self.chain:
-            for s in self.savers[d]:
-                s.crash_close()
+        Use as a context manager:
+            with strax.in_background(...) as proc:
+                proc.send(...)
+        """
+        components = self.get_components(run_id, targets=targets,
+                                         save=save, sources=sources)
+        return strax.BackgroundThreadProcessor(components, self.executor)
