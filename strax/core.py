@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 import itertools
+import typing as ty
 
 import numpy as np
 import pandas as pd
@@ -11,15 +12,22 @@ import strax
 export, __all__ = strax.exporter()
 
 
-ProcessorComponents = collections.namedtuple(
-    'ProcessorComponents',
-    ['plugins', 'loaders', 'savers', 'sources', 'targets'])
-export(ProcessorComponents)
+@export
+class ProcessorComponents(ty.NamedTuple):
+    """Specification to assemble a processor"""
+    plugins: ty.Dict[str, strax.Plugin]
+    loaders: ty.Dict[str, ty.Iterator]
+    savers:  ty.Dict[str, ty.List[strax.FileSaver]]
+    sources: ty.Tuple[str]
+    targets: ty.Tuple[str]
 
 
 @export
 class Strax:
-    """Streaming data processor"""
+    """Streaming analysis for XENON (or eXperiments?)
+
+    Specify how data should be processed, then start processing.
+    """
 
     def __init__(self, max_workers=None, storage=None):
         self.log = logging.getLogger('strax')
@@ -76,7 +84,7 @@ class Strax:
 
     def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name"""
-        p = self.get_components('SOME_RUN???', (data_name,)).plugins[data_name]
+        p = self._get_plugins((data_name,))[data_name]
         display_headers = ['Field name', 'Data type', 'Comment']
         result = []
         for name, dtype in strax.utils.unpack_dtype(p.dtype):
@@ -87,27 +95,13 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get_components(self,
-                       run_id,
-                       targets=tuple(),
-                       save=tuple(),
-                       sources=tuple()):
-        """Return components for setting up a processor
-
-        :param run_id: run id to get
-        :param targets: data type to yield results for
-        :param save: str or list of str of data types you would like to save
-        to cache, if they occur in intermediate computations
-        :param sources: str of list of str of data types you will feed the
-        processor via .send.
+    def _get_plugins(self,
+                     targets: ty.Tuple[str] = tuple(),
+                     run_id: str = 'UNKNOWN'
+                     ) -> ty.Dict[str, strax.Plugin]:
+        """Return dictionary of plugins necessary to compute targets
+        from scratch.
         """
-        if isinstance(save, str):
-            save = (save,)
-        if isinstance(sources, str):
-            sources = (sources,)
-        if isinstance(targets, str):
-            targets = (targets,)
-
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
@@ -151,6 +145,32 @@ class Strax:
         for t in targets:
             # This works without the RHS too, but your IDE might not get it :-)
             plugins[t] = get_plugin(t)
+
+        return plugins
+
+    def get_components(self, run_id: str,
+                       targets=tuple(), save=tuple(), sources=tuple()
+                       ) -> ProcessorComponents:
+        """Return components for setting up a processor
+
+        :param run_id: run id to get
+        :param targets: data type to yield results for
+        :param save: str or list of str of data types you would like to save
+        to cache, if they occur in intermediate computations
+        :param sources: str of list of str of data types you will feed the
+        processor via .send.
+        """
+        def to_str_tuple(x) -> ty.Tuple[str]:
+            if isinstance(x, str):
+                return x,
+            elif isinstance(x, list):
+                return tuple(x)
+            return x
+        save = to_str_tuple(save)
+        sources = to_str_tuple(sources)
+        targets = to_str_tuple(targets)
+
+        plugins = self._get_plugins(targets, run_id)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation.(their instances will stick around
@@ -225,12 +245,16 @@ class Strax:
     # Creation of different processors
     ##
 
-    def simple_chain(self, run_id, target, source, save=tuple()):
+    def simple_chain(self, run_id: str, target: str, source: str,
+                     save=tuple()):
         components = self.get_components(
             run_id, targets=(target,), save=save, sources=(source,))
         return strax.SimpleChain(components)
 
-    def get(self, run_id, targets, save=tuple()):
+    # TODO: fix signatures and docstrings
+
+    def get(self, run_id: str, targets, save=tuple()
+            ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         """
         components = self.get_components(run_id, targets=targets, save=save)
@@ -238,7 +262,6 @@ class Strax:
             components, self.executor).iter()
 
     def make(self, *args, **kwargs):
-        # TODO: fix signatures
         for _ in self.get(*args, **kwargs):
             pass
 

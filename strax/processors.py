@@ -13,10 +13,9 @@ export, __all__ = strax.exporter()
 class ThreadedMailboxProcessor:
     mailboxes: typing.Dict[str, strax.Mailbox]
 
-    def __init__(self, components, executor):
+    def __init__(self, components: strax.ProcessorComponents, executor):
         self.log = logging.getLogger(self.__class__.__name__)
         self.c = c = components
-        print("Processor components: ", c)
 
         self.mailboxes = {
             d: strax.Mailbox(name=d + '_mailbox')
@@ -69,7 +68,7 @@ class BackgroundThreadProcessor:
 
     Use as a context manager.
     """
-    def __init__(self, components, executor):
+    def __init__(self, components: strax.ProcessorComponents, executor):
         self.log = logging.getLogger(self.__class__.__name__)
         self.c = components
         self.p = ThreadedMailboxProcessor(components, executor)
@@ -129,7 +128,8 @@ class SimpleChain:
 
     def send(self, chunk_i: int, data: np.ndarray):
         for d in self.chain:
-            data = self.c.plugins[d].compute(data)
+            p = self.c.plugins[d]
+            data = p.compute(data)   # Pycharm does not get this
             for s in self.c.savers.get(d, []):
                 s.send(chunk_i=chunk_i, data=data)
         return data
