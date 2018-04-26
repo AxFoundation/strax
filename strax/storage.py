@@ -164,7 +164,6 @@ class FileStorage:
 
 @export
 class FileSaver:
-    close_called = False
     closed = False
 
     def __init__(self, key, metadata, dirname, executor):
@@ -172,10 +171,10 @@ class FileSaver:
         self.md = metadata
         self.dirname = dirname
         self.executor = executor
-        self.chunks_received = 0
+        self.log = logging.getLogger('saver_' + self.key.data_type)
 
         self.lock = threading.RLock()
-        self.futures = []
+        self.futures = dict()
         self.md['chunks'] = []
         self.md['writing_started'] = time.time()
 
@@ -196,20 +195,21 @@ class FileSaver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.send(data=s, chunk_i=chunk_i)
+                self.send(data=s, chunk_i=chunk_i, _from_iterable=True)
         except Exception:
             self.crash_close()
             raise
         # TODO: should we catch MailboxKilled?
         self.close()
 
-    def send(self, data: np.ndarray, chunk_i=None):
-        with self.lock:
-            if self.closed:
-                raise RuntimeError("Already closed!")
-            if chunk_i is None:
-                chunk_i = self.chunks_received
-            self.chunks_received += 1
+    def send(self, data: np.ndarray, chunk_i=None, _from_iterable=False):
+        if self.closed:
+            raise RuntimeError(f"{self.key.data_type} saver already closed!")
+
+        if not _from_iterable and self.executor is not None:
+            raise RuntimeError("Asynchronous send cannot be combined with "
+                               "future-based saving")
+            # Otherwise close is hell!
 
         fn = '%06d' % chunk_i
         chunk_info = dict(chunk_i=chunk_i,
@@ -221,27 +221,26 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        kwargs = dict(filename=os.path.join(self.tempdirname, fn),
-                      data=data,
-                      compressor=self.md['compressor'])
-        if self.executor is None:
-            chunk_info['filesize'] = strax.save_file(**kwargs)
+        def do_save():
+            chunk_info['filesize'] = strax.save_file(
+                filename=os.path.join(self.tempdirname, fn),
+                data=data,
+                compressor=self.md['compressor'])
             self.send_meta(chunk_info)
-        else:
-            f = self.executor.submit(strax.save_file, **kwargs)
-            with self.lock:
-                self.futures.append(f)
 
-            def _finish(_f, chunk_info):
-                chunk_info['fileize'] = _f.result()
-                self.send_meta(chunk_info)
-            f.add_done_callback(partial(_finish, chunk_info=chunk_info))
+        if self.executor is None:
+            do_save()
+        else:
+            with self.lock:
+                # TODO: Small memory leak, cleanup & track highest for close
+                f = self.executor.submit(do_save)
+                self.futures[chunk_i] = f
 
     def send_meta(self, chunk_info):
-        if self.closed:
-            raise RuntimeError("Already closed!")
-        chunk_i = chunk_info['chunk_i']
         with self.lock:
+            if self.closed:
+                raise RuntimeError("Already closed!")
+            chunk_i = chunk_info['chunk_i']
             n_missing = (chunk_i - len(self.md['chunks']) + 1)
             if n_missing > 0:
                 self.md['chunks'] += [None] * n_missing
@@ -249,13 +248,9 @@ class FileSaver:
             self.md['chunks'][chunk_i] = chunk_info
 
     def close(self, wait=True):
-        with self.lock:
-            if self.close_called:
-                self.log.warning("close is a no-op: we're already closed/closing")
-                return
-            self.close_called = True
+        # Only call when NO send calls are executing anymore!
         if wait:
-            concurrent.futures.wait(self.futures)
+            concurrent.futures.wait(list(self.futures.values()))
         with self.lock:
             self.closed = True
             self.md['writing_ended'] = time.time()
@@ -264,6 +259,7 @@ class FileSaver:
             os.rename(self.tempdirname, self.dirname)
 
     def crash_close(self):
+        # Maybe this won't work, if other threads are sending...
         with self.lock:
             self.md['exception'] = traceback.format_exc()
         self.close(wait=False)

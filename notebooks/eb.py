@@ -1,10 +1,7 @@
 import logging
-import subprocess
 import argparse
 import os
 import shutil
-import time
-import glob
 
 import numpy as np
 import strax
@@ -13,16 +10,6 @@ logging.basicConfig(
    level=logging.INFO,
    format='{name} in {threadName} at {asctime}: {message}', style='{')
 log = logging.getLogger()
-
-
-def du(path):
-    """disk usage in human readable format (e.g. '2,1GB')"""
-    try:
-        return subprocess.check_output([
-            'du','-sh', path]).split()[0].decode('utf-8')
-    except subprocess.CalledProcessError:
-        return float('nan')
-
 
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
@@ -48,81 +35,45 @@ mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])],
                       max_workers=args.n)
 mystrax.register_all(strax.xenon.plugins)
 
+
+import glob
+import os
+import time
+import shutil
+
 @mystrax.register
-class TellS1s(strax.Plugin):
-    """Stupid plugin to report number of S1s found
-    should be removed soon
-    """
-    dtype = [('n_s1s', np.int16)]
-    counter = 0
-    parallel = False
-    save_when = strax.SaveWhen.NEVER
+class DAQReader(strax.Plugin):
+    provides = 'records'
+    dtype = strax.record_dtype()
 
-    def compute(self, peaks, peak_classification):
-        p = peak_classification
-        r = np.zeros(1, dtype=self.dtype)
-        n_s1s = (p['type'] == 1).sum()
-        self.counter += 1
-        print(f"\tChunk {self.counter}: done, found {n_s1s} S1s")
-        r[0]['n_s1s'] = n_s1s
-        return r
+    erase = args.erase
+    in_dir = in_dir
+    rechunk = False
 
+    def _path(self, chunk_i):
+        return f'{self.in_dir}/{chunk_i:06d}'
 
-processor = mystrax.in_background(run_id, 'tell_s1s', sources=['records'])
-log.debug("Created processor")
-
-
-def from_readers(chunk_i):
-    log.info(f"\t{chunk_i}: started job")
-
-    # Concatenate data from readers
-    chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
-    records = [strax.load_file(fn,
-                               compressor='zstd',
-                               dtype=strax.record_dtype())
-               for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
-    records = np.concatenate(records)
-    records = strax.sort_by_time(records)
-    if args.erase:
-        shutil.rmtree(chunk_dir_path)
-
-    pending_chunks.remove(chunk_i)
-    log.info(f"\t{chunk_i}: done with job, returning")
-    return records
-
-
-done = False
-pending_chunks = set()
-with processor:
-    while not done:
-        print(f'{du(in_dir)} compressed data in buffer.'
-              f'{len(pending_chunks)} chunks pending. ')
-        if os.path.exists(in_dir + '/THE_END'):
-            log.info("Data acquisition stopped")
-            done = True
-
-        to_submit = []
-        for x in glob.glob(in_dir + '/*/'):
-            c = int(x.split('/')[-2])
-            if c not in pending_chunks:
-                to_submit.append(c)
-
-        if not len(to_submit):
-            log.info("\t\tNothing to submit, sleeping")
+    def check_next_ready_or_done(self, chunk_i):
+        while not os.path.exists(self._path(chunk_i)):
+            if os.path.exists(f'{self.in_dir}/THE_END'):
+                return False
+            self.log.info("Nothing to submit, sleeping")
             time.sleep(2)
-            continue
+        return True
 
-        # TODO: sorted should not be necessary?
-        for chunk_i in sorted(to_submit):
-            log.info(f"\t{chunk_i}: job submitted")
-            f = processor.send(
-                'records',
-                 data=mystrax.executor.submit(from_readers, chunk_i),
-                 chunk_i=chunk_i)
-            pending_chunks.add(chunk_i)
+    def compute(self, chunk_i):
+        self.log.info(f"\t{chunk_i}: received from readers")
+        records = [strax.load_file(fn,
+                                   compressor='zstd',
+                                   dtype=strax.record_dtype())
+                   for fn in glob.glob(f'{self._path(chunk_i)}/reader_*')]
+        records = np.concatenate(records)
+        records = strax.sort_by_time(records)
+        if self.erase:
+            shutil.rmtree(self._path(chunk_i))
+        return records
 
-    while pending_chunks:
-        log.info("\t\tWaiting to read last chunks from readers")
-        time.sleep(2)
 
-    log.info("All chunks read in, waiting for final processing")
+for i, p in enumerate(mystrax.get(run_id, 'peak_classification')):
+    n_s1s = (p['type'] == 1).sum()
+    print(f"{i}: Found {n_s1s} S1s")

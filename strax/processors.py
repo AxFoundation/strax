@@ -27,11 +27,12 @@ class ThreadedMailboxProcessor:
 
     def __init__(self, components: ProcessorComponents, executor):
         self.log = logging.getLogger(self.__class__.__name__)
-        self.log.setLevel(logging.DEBUG)
+        # self.log.setLevel(logging.DEBUG)
         self.components = components
         self.log.debug("Processor components are: " + str(components))
         plugins = components.plugins
         savers = components.savers
+
 
         # If possible, combine save and compute operations
         # so they don't have to be scheduled by executor individually.
@@ -40,9 +41,11 @@ class ThreadedMailboxProcessor:
             if not p.rechunk:
                 self.log.debug(f"Putting savers for {d} in post_compute")
                 for s in savers[d]:
+                    s.executor = None   # Work in one thread
                     p.post_compute.append(s.send)
                     p.on_close.append(s.close)     # TODO: crash close
                 savers[d] = []
+
 
         # For the same reason, merge simple chains:
         # A -> B => A, with B as post_compute,
@@ -56,11 +59,15 @@ class ThreadedMailboxProcessor:
                     self.log.debug(f"Putting {b} in post_compute of {a}")
                     p_a = plugins[a]
                     p_a.post_compute.append(plugins[b].do_compute)
+                    p_a.on_close.extend(p_b.on_close)
                     plugins[b] = p_a
                     del plugins[a]
                     break       # Changed plugins while iterating over it
             else:
                 break
+
+        self.log.debug("After optimization: " + str(components))
+
 
         self.mailboxes = {
             d: strax.Mailbox(name=d + '_mailbox')
