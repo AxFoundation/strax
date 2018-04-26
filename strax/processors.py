@@ -1,5 +1,5 @@
 import logging
-import typing
+import typing as ty
 import itertools
 import threading
 
@@ -9,37 +9,81 @@ import strax
 export, __all__ = strax.exporter()
 
 
+
+@export
+class ProcessorComponents(ty.NamedTuple):
+    """Specification to assemble a processor"""
+    plugins: ty.Dict[str, strax.Plugin]
+    loaders: ty.Dict[str, ty.Iterator]
+    savers:  ty.Dict[str, ty.List[strax.FileSaver]]
+    sources: ty.Tuple[str]
+    targets: ty.Tuple[str]
+
+
+
 @export
 class ThreadedMailboxProcessor:
-    mailboxes: typing.Dict[str, strax.Mailbox]
+    mailboxes: ty.Dict[str, strax.Mailbox]
 
-    def __init__(self, components: strax.ProcessorComponents, executor):
+    def __init__(self, components: ProcessorComponents, executor):
         self.log = logging.getLogger(self.__class__.__name__)
-        self.c = c = components
+        self.log.setLevel(logging.DEBUG)
+        self.components = components
+        self.log.debug("Processor components are: " + str(components))
+        plugins = components.plugins
+        savers = components.savers
+
+        # If possible, combine save and compute operations
+        # so they don't have to be scheduled by executor individually.
+        # This saves data transfer between cores (NUMA).
+        for d, p in plugins.items():
+            if not p.rechunk:
+                self.log.debug(f"Putting savers for {d} in post_compute")
+                for s in savers[d]:
+                    p.post_compute.append(s.send)
+                    p.on_close.append(s.close)     # TODO: crash close
+                savers[d] = []
+
+        # For the same reason, merge simple chains:
+        # A -> B => A, with B as post_compute,
+        # then put in plugins as B instead of A.
+        while True:
+            for b, p_b in plugins.items():
+                if not p_b.rechunk and len(p_b.depends_on) == 1:
+                    a = p_b.depends_on[0]
+                    if a not in plugins:
+                        continue
+                    self.log.debug(f"Putting {b} in post_compute of {a}")
+                    p_a = plugins[a]
+                    p_a.post_compute.append(plugins[b].do_compute)
+                    plugins[b] = p_a
+                    del plugins[a]
+                    break       # Changed plugins while iterating over it
+            else:
+                break
 
         self.mailboxes = {
             d: strax.Mailbox(name=d + '_mailbox')
             for d in itertools.chain.from_iterable(components)}
 
-        for d in c.loaders:
-            assert d not in c.plugins
-            self.mailboxes[d].add_sender(c.loaders[d], name=f'load:{d}')
+        for d, loader in components.loaders.items():
+            assert d not in plugins
+            self.mailboxes[d].add_sender(loader, name=f'load:{d}')
 
-        for d in c.plugins:
-            p = c.plugins[d]
+        for d, p in plugins.items():
             self.mailboxes[d].add_sender(p.iter(
                     iters={d: self.mailboxes[d].subscribe()
                            for d in p.depends_on},
                     executor=executor),
                 name=f'build:{d}')
 
-        for d in c.savers:
-            for s_i, s in enumerate(c.savers[d]):
-                self.mailboxes[d].add_reader(s.save_from,
+        for d, savers in savers.items():
+            for s_i, saver in enumerate(savers):
+                self.mailboxes[d].add_reader(saver.save_from,
                                              name=f'save_{s_i}:{d}')
 
     def iter(self):
-        target = self.c.targets[0]
+        target = self.components.targets[0]
         final_generator = self.mailboxes[target].subscribe()
 
         self.log.debug("Starting threads")
@@ -68,8 +112,9 @@ class BackgroundThreadProcessor:
 
     Use as a context manager.
     """
-    def __init__(self, components: strax.ProcessorComponents, executor):
+    def __init__(self, components: ProcessorComponents, executor):
         self.log = logging.getLogger(self.__class__.__name__)
+        # self.log.setLevel(logging.DEBUG)
         self.c = components
         self.p = ThreadedMailboxProcessor(components, executor)
 
@@ -96,11 +141,13 @@ class BackgroundThreadProcessor:
         if self.t.is_alive():
             raise RuntimeError("Processing did not terminate?!")
 
-    def send(self, data_type: str, chunk_i: int, data: np.ndarray):
+    def send(self, data_type: str, data: np.ndarray, chunk_i: int):
         """Send new data numbered chunk_i of data_type"""
+        self.log.debug(f"Received {chunk_i} of data type {data_type}")
         if data_type not in self.c.sources:
             raise RuntimeError(f"Can't send {data_type}, not a source.")
-        self.p.mailboxes[data_type].send(data, msg_number=chunk_i)
+        self.p.mailboxes[data_type].send(msg=data, msg_number=chunk_i)
+        self.log.debug(f"Sent {chunk_i} to mailbox")
 
 
 @export
@@ -111,9 +158,10 @@ class SimpleChain:
     Suitable for high-performance multiprocessing.
     Use as a context manager.
     """
-    def __init__(self, components: strax.ProcessorComponents):
+    def __init__(self, components: ProcessorComponents):
         self.log = logging.getLogger(self.__class__.__name__)
         self.c = c = components
+        self.log.info(f"Simple chain components: {c}")
         if (any([len(p.depends_on) != 1 for p in c.plugins.values()])
                 or len(self.c.targets) != 1
                 or len(self.c.sources) != 1):
@@ -124,14 +172,17 @@ class SimpleChain:
             d = chain[-1]
             p = c.plugins[d]
             chain.append(p.depends_on[0])
-        self.chain = list(reversed(chain[:-1]))
+        self.chain = list(reversed(chain))
+        self.log.info(self.chain)
 
-    def send(self, chunk_i: int, data: np.ndarray):
-        for d in self.chain:
-            p = self.c.plugins[d]
-            data = p.compute(data)   # Pycharm does not get this
+    def send(self, data: np.ndarray, chunk_i: int):
+        for i, d in enumerate(self.chain):
+            if i != 0:
+                p = self.c.plugins[d]
+                data = p.compute(data)   # Pycharm does not get this
             for s in self.c.savers.get(d, []):
-                s.send(chunk_i=chunk_i, data=data)
+                self.log.debug(f"Saving {chunk_i} of {d}")
+                s.send(data=data, chunk_i=chunk_i)
         return data
 
     def __enter__(self):
@@ -140,6 +191,7 @@ class SimpleChain:
     def __exit__(self, exc_type, exc_val, exc_tb):
         for d in self.chain:
             for s in self.c.savers.get(d, []):
+                self.log.debug(f"Closing saver for {d}")
                 if exc_type is None:
                     s.close()
                 else:
