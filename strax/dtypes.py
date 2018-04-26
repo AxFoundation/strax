@@ -71,6 +71,9 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
     """
+    if n_channels == 1:
+        raise ValueError("Must have more than one channel")
+        # Otherwise array changes shape?? badness ensues
     return interval_dtype + [
         (('Integral across channels in photoelectrons',
             'area'), np.float32),
