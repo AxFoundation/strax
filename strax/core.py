@@ -103,9 +103,16 @@ class Strax:
             p = self._plugin_class_registry[d]()
 
             p.log = logging.getLogger(p.__class__.__name__)
+
+            compute_pars = list(
+                inspect.signature(p.compute).parameters.keys())
+            if 'chunk_i' in compute_pars:
+                p.compute_takes_chunk_i = True
+                del compute_pars[compute_pars.index('chunk_i')]
+
             if not hasattr(p, 'depends_on'):
                 # Infer dependencies from self.compute's argument names
-                process_params = inspect.signature(p.compute).parameters.keys()
+                process_params = compute_pars
                 process_params = [p for p in process_params if p != 'kwargs']
                 p.depends_on = tuple(process_params)
 
@@ -113,7 +120,7 @@ class Strax:
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
-            p.lineage = {d: p.version(run_id)}
+            p.lineage = {d: (p.__class__.__name__, p.version(run_id))}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
