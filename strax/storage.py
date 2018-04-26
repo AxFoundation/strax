@@ -5,13 +5,17 @@ database backed storage.
 """
 from ast import literal_eval
 import concurrent.futures
+import threading
 import json
+from functools import partial
 import logging
 import os
 import shutil
 import traceback
 import time
 import typing
+
+import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
@@ -56,6 +60,7 @@ class FileStorage:
         self.executor = executor
         self._provides = provides
         self.log = logging.getLogger(self.__class__.__name__)
+        # self.log.setLevel(logging.DEBUG)
         for d in data_dirs:
             try:
                 os.makedirs(d)
@@ -159,6 +164,7 @@ class FileStorage:
 
 @export
 class FileSaver:
+    close_called = False
     closed = False
 
     def __init__(self, key, metadata, dirname, executor):
@@ -166,7 +172,12 @@ class FileSaver:
         self.md = metadata
         self.dirname = dirname
         self.executor = executor
+        self.chunks_received = 0
+
+        self.lock = threading.RLock()
         self.futures = []
+        self.md['chunks'] = []
+        self.md['writing_started'] = time.time()
 
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
@@ -175,9 +186,6 @@ class FileSaver:
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
-
-        self.md['chunks'] = []
-        self.md['writing_started'] = time.time()
 
     def save_from(self, source: typing.Iterable, rechunk=True):
         """Iterate over source and save the results under key
@@ -188,23 +196,22 @@ class FileSaver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.send(chunk_i=chunk_i, data=s)
+                self.send(data=s, chunk_i=chunk_i)
         except Exception:
             self.crash_close()
             raise
         # TODO: should we catch MailboxKilled?
         self.close()
 
-    def send(self, chunk_i, data):
-        if self.closed:
-            raise RuntimeError("Already closed!")
+    def send(self, data: np.ndarray, chunk_i=None):
+        with self.lock:
+            if self.closed:
+                raise RuntimeError("Already closed!")
+            if chunk_i is None:
+                chunk_i = self.chunks_received
+            self.chunks_received += 1
+
         fn = '%06d' % chunk_i
-
-        n_missing = (chunk_i - len(self.md['chunks']) + 1)
-        if n_missing > 0:
-            self.md['chunks'] += [None] * n_missing
-        assert len(self.md['chunks']) >= chunk_i + 1
-
         chunk_info = dict(chunk_i=chunk_i,
                           filename=fn,
                           n=len(data),
@@ -214,34 +221,49 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        fn = os.path.join(self.tempdirname, fn)
-
-        kwargs = dict(filename=fn,
+        kwargs = dict(filename=os.path.join(self.tempdirname, fn),
                       data=data,
                       compressor=self.md['compressor'])
         if self.executor is None:
             chunk_info['filesize'] = strax.save_file(**kwargs)
-            self.md['chunks'][chunk_i] = chunk_info
+            self.send_meta(chunk_info)
         else:
-            self.md['chunks'][chunk_i] = chunk_info
             f = self.executor.submit(strax.save_file, **kwargs)
-            self.futures.append(f)
+            with self.lock:
+                self.futures.append(f)
 
-            def set_filesize(_f):
-                self.md['chunks'][chunk_i]['filesize'] = _f.result()
-            f.add_done_callback(set_filesize)
+            def _finish(_f, chunk_info):
+                chunk_info['fileize'] = _f.result()
+                self.send_meta(chunk_info)
+            f.add_done_callback(partial(_finish, chunk_info=chunk_info))
 
-    def close(self, wait=True):
+    def send_meta(self, chunk_info):
         if self.closed:
             raise RuntimeError("Already closed!")
-        self.closed = True
+        chunk_i = chunk_info['chunk_i']
+        with self.lock:
+            n_missing = (chunk_i - len(self.md['chunks']) + 1)
+            if n_missing > 0:
+                self.md['chunks'] += [None] * n_missing
+            assert len(self.md['chunks']) >= chunk_i + 1
+            self.md['chunks'][chunk_i] = chunk_info
+
+    def close(self, wait=True):
+        with self.lock:
+            if self.close_called:
+                self.log.warning("close is a no-op: we're already closed/closing")
+                return
+            self.close_called = True
         if wait:
             concurrent.futures.wait(self.futures)
-        self.md['writing_ended'] = time.time()
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
-            f.write(json.dumps(self.md, sort_keys=True, indent=4))
-        os.rename(self.tempdirname, self.dirname)
+        with self.lock:
+            self.closed = True
+            self.md['writing_ended'] = time.time()
+            with open(self.tempdirname + '/metadata.json', mode='w') as f:
+                f.write(json.dumps(self.md, sort_keys=True, indent=4))
+            os.rename(self.tempdirname, self.dirname)
 
     def crash_close(self):
-        self.md['exception'] = traceback.format_exc()
+        with self.lock:
+            self.md['exception'] = traceback.format_exc()
         self.close(wait=False)

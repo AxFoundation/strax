@@ -32,13 +32,18 @@ class Plugin:
     data_kind: str
     depends_on: tuple
     provides: str
+    deps: typing.List   # Dictionary of dependency plugin instances
+
     compressor = 'blosc'
     n_per_iter = None
     rechunk = True
-    deps: typing.List   # Dictionary of dependency plugin instances
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
+
+    def __init__(self):
+        self.post_compute = []
+        self.on_close = []
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -132,11 +137,28 @@ class Plugin:
                 compute_kwargs = {d: next(iters[d])
                                   for d in self.depends_on}
             except StopIteration:
+                self.close()
                 return
+            except Exception:
+                self.close()
+                raise
             if self.parallel and executor is not None:
-                yield executor.submit(self.compute, **compute_kwargs)
+                yield executor.submit(self.do_compute, **compute_kwargs)
             else:
-                yield self.compute(**compute_kwargs)
+                yield self.do_compute(**compute_kwargs)
+
+    def do_compute(self, **kwargs):
+        self.log.debug(str({k: v.dtype for k, v in kwargs.items()}))
+        result = self.compute(**kwargs)
+        for p in self.post_compute:
+            r = p(result)
+            if r is not None:
+                result = r
+        return result
+
+    def close(self):
+        for x in self.on_close:
+            x()
 
     @staticmethod
     def compute(**kwargs):
@@ -232,7 +254,6 @@ class MergePlugin(Plugin):
 class PlaceholderPlugin(Plugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
-    save_when = SaveWhen.NEVER
 
     def compute(self):
         raise NotImplementedError("No plugin registered that "

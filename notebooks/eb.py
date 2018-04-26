@@ -5,8 +5,6 @@ import os
 import shutil
 import time
 import glob
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import strax
@@ -46,38 +44,10 @@ else:
     os.makedirs(out_dir)
 
 
-##
-# Low-level processing: process records from readers
-# to reduced records and peaks,
-# without the overhead of strax's threading system.
-##
-mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
+mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])],
+                      max_workers=args.n)
 mystrax.register_all(strax.xenon.plugins)
-low_proc = mystrax.simple_chain(run_id, source='records', target='peaks')
 
-def build(chunk_i):
-    print(f"\t{chunk_i}: started job")
-
-    # Concatenate data from readers
-    chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
-    records = [strax.load_file(fn,
-                               compressor='zstd',
-                               dtype=strax.record_dtype())
-               for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
-    records = np.concatenate(records)
-    records = strax.sort_by_time(records)
-    if args.erase:
-        shutil.rmtree(chunk_dir_path)
-
-    peaks = low_proc.send(chunk_i=chunk_i, data=records)
-    print(f"\t{chunk_i}: low-level processing done")
-    return peaks
-
-log.debug("Created low-level processor")
-
-##
-# High-level processing: build everything from peaks
-##
 @mystrax.register
 class TellS1s(strax.Plugin):
     """Stupid plugin to report number of S1s found
@@ -93,57 +63,66 @@ class TellS1s(strax.Plugin):
         r = np.zeros(1, dtype=self.dtype)
         n_s1s = (p['type'] == 1).sum()
         self.counter += 1
-        print(f"\t{self.counter}: High-level processing done, "
-              f"found {n_s1s} S1s")
+        print(f"\tChunk {self.counter}: done, found {n_s1s} S1s")
         r[0]['n_s1s'] = n_s1s
         return r
 
-# TODO: make option to NOT save? This is too ugly:
-mystrax._plugin_class_registry['peaks'].save_when = strax.SaveWhen.NEVER
 
-high_proc = mystrax.in_background(run_id, 'tell_s1s', sources=['peaks'])
+processor = mystrax.in_background(run_id, 'tell_s1s', sources=['records'])
+log.debug("Created processor")
 
 
-def finish(future, chunk_i):
-    high_proc.send('peaks', chunk_i, future.result())
-    if not args.erase:
-        done_chunks.add(chunk_i)
+def from_readers(chunk_i):
+    log.info(f"\t{chunk_i}: started job")
+
+    # Concatenate data from readers
+    chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
+    records = [strax.load_file(fn,
+                               compressor='zstd',
+                               dtype=strax.record_dtype())
+               for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
+    records = np.concatenate(records)
+    records = strax.sort_by_time(records)
+    if args.erase:
+        shutil.rmtree(chunk_dir_path)
+
     pending_chunks.remove(chunk_i)
+    log.info(f"\t{chunk_i}: done with job, returning")
+    return records
 
-
-
-##
-# Main loop
-##
 
 done = False
 pending_chunks = set()
-done_chunks = set()         # Only used if not erasing data (unbounded memory)
-high_proc.log.setLevel(logging.DEBUG)
-with low_proc, high_proc, ProcessPoolExecutor(max_workers=args.n) as pool:
+with processor:
     while not done:
-        print(f'{du(in_dir)} compressed data in buffer, '
-              f'{len(pending_chunks)} chunks pending, '
-              f'{len(done_chunks)} done.')
+        print(f'{du(in_dir)} compressed data in buffer.'
+              f'{len(pending_chunks)} chunks pending. ')
         if os.path.exists(in_dir + '/THE_END'):
+            log.info("Data acquisition stopped")
             done = True
 
         to_submit = []
         for x in glob.glob(in_dir + '/*/'):
             c = int(x.split('/')[-2])
-            if c not in pending_chunks and c not in done_chunks:
+            if c not in pending_chunks:
                 to_submit.append(c)
 
         if not len(to_submit):
-            print("\t\tNothing to submit, sleeping")
+            log.info("\t\tNothing to submit, sleeping")
             time.sleep(2)
             continue
 
-        for chunk_i in to_submit:
-            print(f"\t{chunk_i}: job submitted")
-            f = pool.submit(build, chunk_i)
-            f.add_done_callback(partial(finish,
-                                        chunk_i=int(chunk_i)))
+        # TODO: sorted should not be necessary?
+        for chunk_i in sorted(to_submit):
+            log.info(f"\t{chunk_i}: job submitted")
+            f = processor.send(
+                'records',
+                 data=mystrax.executor.submit(from_readers, chunk_i),
+                 chunk_i=chunk_i)
             pending_chunks.add(chunk_i)
 
-    print("Run done and all jobs submitted. Waiting for final results.")
+    while pending_chunks:
+        log.info("\t\tWaiting to read last chunks from readers")
+        time.sleep(2)
+
+    log.info("All chunks read in, waiting for final processing")

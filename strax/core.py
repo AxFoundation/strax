@@ -13,16 +13,6 @@ export, __all__ = strax.exporter()
 
 
 @export
-class ProcessorComponents(ty.NamedTuple):
-    """Specification to assemble a processor"""
-    plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
-    savers:  ty.Dict[str, ty.List[strax.FileSaver]]
-    sources: ty.Tuple[str]
-    targets: ty.Tuple[str]
-
-
-@export
 class Strax:
     """Streaming analysis for XENON (or eXperiments?)
 
@@ -150,7 +140,7 @@ class Strax:
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(), sources=tuple()
-                       ) -> ProcessorComponents:
+                       ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
 
         :param run_id: run id to get
@@ -235,11 +225,12 @@ class Strax:
                 raise RuntimeError("Multiple ways of getting "
                                    f"{list(a & b)} specified")
 
-        return ProcessorComponents(plugins=plugins,
-                                   loaders=loaders,
-                                   savers=dict(savers),
-                                   sources=sources,
-                                   targets=targets)
+        return strax.ProcessorComponents(
+            plugins=plugins,
+            loaders=loaders,
+            savers=dict(savers),
+            sources=sources,
+            targets=targets)
 
     ##
     # Creation of different processors
