@@ -2,7 +2,6 @@
 Convert pax .zip files to flat records format
 
 #implement main logic as pax output plugin?
-#Hard, would have to append to mmap...
 """
 import numpy as np
 

@@ -1,13 +1,15 @@
 import logging
 import argparse
 import os
+import time
+import json
 import shutil
+
 import gil_load
+import strax
 
 gil_load.init()
 
-import numpy as np
-import strax
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,50 +35,13 @@ if os.path.exists(out_dir):
 else:
     os.makedirs(out_dir)
 
-mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
+mystrax = strax.Strax(
+    storage=[strax.FileStorage(data_dirs=[out_dir])],
+    config=dict(
+        input_dir=in_dir,
+        erase=args.erase,
+        to_pe=strax.xenon.common.to_pe))
 mystrax.register_all(strax.xenon.plugins)
-
-import glob
-import os
-import time
-import shutil
-
-
-
-@mystrax.register
-class DAQReader(strax.Plugin):
-    provides = 'records'
-    dtype = strax.record_dtype()
-
-    erase = args.erase
-    in_dir = in_dir
-
-    parallel = 'process'
-    rechunk = False
-
-    def _path(self, chunk_i):
-        return f'{self.in_dir}/{chunk_i:06d}'
-
-    def check_next_ready_or_done(self, chunk_i):
-        while not os.path.exists(self._path(chunk_i)):
-            if os.path.exists(f'{self.in_dir}/THE_END'):
-                return False
-            print("Nothing to submit, sleeping")
-            time.sleep(2)
-        return True
-
-    def compute(self, chunk_i):
-        print(f"{chunk_i}: received from readers")
-        records = [strax.load_file(fn,
-                                   compressor='zstd',
-                                   dtype=strax.record_dtype())
-                   for fn in glob.glob(f'{self._path(chunk_i)}/reader_*')]
-        records = np.concatenate(records)
-        records = strax.sort_by_time(records)
-        if self.erase:
-            shutil.rmtree(self._path(chunk_i))
-        return records
-
 
 gil_load.start(av_sample_interval=0.1)
 start = time.time()
@@ -91,7 +56,6 @@ end = time.time()
 gil_load.stop()
 
 # Get the filesize from the metadata
-import json
 with open(f'{out_dir}/{run_id}_records/metadata.json', mode='r') as f:
     metadata = json.loads(f.read())
 raw_data_size = sum(x['nbytes'] for x in metadata['chunks'])

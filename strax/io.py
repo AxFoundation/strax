@@ -11,7 +11,6 @@ import zstd
 import strax
 export, __all__ = strax.exporter()
 
-
 blosc.set_releasegil(True)
 
 
