@@ -3,7 +3,9 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
+from concurrent.futures import wait
 from enum import IntEnum
+import itertools
 from functools import partial
 import typing
 
@@ -27,18 +29,26 @@ class Plugin:
     """Plugin containing strax computation
 
     You should NOT instantiate plugins directly.
+    Do NOT add unpickleable things (e.g. loggers as attributes)
     """
     __version__ = '0.0.0'
     data_kind: str
     depends_on: tuple
     provides: str
+
     compressor = 'blosc'
     n_per_iter = None
     rechunk = True
-    deps: typing.List   # Dictionary of dependency plugin instances
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
+    compute_takes_chunk_i = False   # Autoinferred, no need to set yourself
+
+    deps: typing.List   # Dictionary of dependency plugin instances
+
+    def __init__(self):
+        self.post_compute = []
+        self.on_close = []
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -127,25 +137,57 @@ class Plugin:
                     strax.same_length,
                     {d: iters[d] for d in deps}))
 
-        while True:
+        pending = []
+        for chunk_i in itertools.count():
             try:
+                if not self.check_next_ready_or_done(chunk_i):
+                    raise StopIteration
                 compute_kwargs = {d: next(iters[d])
                                   for d in self.depends_on}
             except StopIteration:
+                self.close(wait_for=tuple(pending))
                 return
-            if self.parallel and executor is not None:
-                yield executor.submit(self.compute, **compute_kwargs)
-            else:
-                yield self.compute(**compute_kwargs)
+            except Exception:
+                self.close(wait_for=tuple(pending))
+                raise
 
-    @staticmethod
-    def compute(**kwargs):
+            if self.parallel and executor is not None:
+                new_f = executor.submit(self.do_compute,
+                                        chunk_i=chunk_i,
+                                        **compute_kwargs)
+                pending = [f for f in pending + [new_f]
+                           if not f.done()]
+                yield new_f
+            else:
+                yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
+
+    def do_compute(self, *args, chunk_i, **kwargs):
+        if self.compute_takes_chunk_i:
+            result = self.compute(*args, chunk_i=chunk_i, **kwargs)
+        else:
+            result = self.compute(*args, **kwargs)
+        for p in self.post_compute:
+            r = p(result, chunk_i=chunk_i)
+            if r is not None:
+                result = r
+        return result
+
+    def check_next_ready_or_done(self, chunk_i):
+        return True
+
+    def close(self, wait_for=tuple(), timeout=30):
+        wait(wait_for, timeout=timeout)
+        for x in self.on_close:
+            x()
+
+    def compute(self, **kwargs):
         raise NotImplementedError
 
 
 ##
 # Special plugins
 ##
+
 
 @export
 class LoopPlugin(Plugin):
@@ -232,7 +274,6 @@ class MergePlugin(Plugin):
 class PlaceholderPlugin(Plugin):
     """Plugin that throws NotImplementedError when asked to compute anything"""
     depends_on = tuple()
-    save_when = SaveWhen.NEVER
 
     def compute(self):
         raise NotImplementedError("No plugin registered that "

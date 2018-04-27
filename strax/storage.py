@@ -4,14 +4,17 @@ Currently only filesystem-based storage; later probably also
 database backed storage.
 """
 from ast import literal_eval
-import concurrent.futures
 import json
+import glob
 import logging
 import os
 import shutil
+import sys
 import traceback
 import time
 import typing
+
+import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
@@ -31,8 +34,7 @@ class NotCachedException(Exception):
 
 @export
 class FileStorage:
-    def __init__(self, provides='all', data_dirs=('./strax_data',),
-                 executor=None):
+    def __init__(self, provides='all', data_dirs=('./strax_data',)):
         """File-based storage backend for strax.
 
         :param provides: List of data types this backend stores.
@@ -48,14 +50,11 @@ class FileStorage:
 
         When writing, we save in the highest-preference directory
         in which we have write permission.
-
-        :param executor: concurrent.futures executor for parallelizing result
-        computations.
         """
         self.data_dirs = data_dirs
-        self.executor = executor
         self._provides = provides
         self.log = logging.getLogger(self.__class__.__name__)
+        # self.log.setLevel(logging.DEBUG)
         for d in data_dirs:
             try:
                 os.makedirs(d)
@@ -117,7 +116,7 @@ class FileStorage:
             yield os.path.join(dirname,
                                key.run_id + '_' + key.data_type)
 
-    def read(self, dirname: str):
+    def read(self, dirname: str, executor=None):
         """Iterates over strax results from directory dirname"""
         with open(dirname + '/metadata.json', mode='r') as f:
             metadata = json.loads(f.read())
@@ -129,10 +128,10 @@ class FileStorage:
         kwargs = dict(dtype=dtype, compressor=compressor)
         for chunk_info in metadata['chunks']:
             fn = os.path.join(dirname, chunk_info['filename'])
-            if self.executor is None:
+            if executor is None:
                 yield strax.load_file(fn, **kwargs)
             else:
-                yield self.executor.submit(strax.load_file, fn, **kwargs)
+                yield executor.submit(strax.load_file, fn, **kwargs)
 
     def saver(self, key, metadata):
         metadata.setdefault('compressor', 'blosc')
@@ -154,30 +153,33 @@ class FileStorage:
         else:
             raise FileNotFoundError(f"No writeable directory found for {key}")
 
-        return FileSaver(key, metadata, dirname, executor=self.executor)
+        return FileSaver(key, metadata, dirname)
 
 
 @export
 class FileSaver:
-    closed = False
+    """Saves data to compressed binary files
 
-    def __init__(self, key, metadata, dirname, executor):
+    Must work even if forked.
+    Do NOT add unpickleable things as attributes (such as loggers)!
+    """
+    closed = False      # Of course checking this is unreliable when forked...
+
+    def __init__(self, key, metadata, dirname):
         self.key = key
         self.md = metadata
         self.dirname = dirname
-        self.executor = executor
-        self.futures = []
+        self.json_options = dict(sort_keys=True, indent=4)
+
+        self.md['writing_started'] = time.time()
 
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
-            # TODO: Hmm.... shouldn't it already exist? No, simple_chain...
+            print("Deleting old data in {dirname}")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
-
-        self.md['chunks'] = []
-        self.md['writing_started'] = time.time()
 
     def save_from(self, source: typing.Iterable, rechunk=True):
         """Iterate over source and save the results under key
@@ -188,23 +190,16 @@ class FileSaver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.send(chunk_i=chunk_i, data=s)
-        except Exception:
-            self.crash_close()
-            raise
+                self.save(data=s, chunk_i=chunk_i)
+        finally:
+            self.close()
         # TODO: should we catch MailboxKilled?
-        self.close()
 
-    def send(self, chunk_i, data):
+    def save(self, data: np.ndarray, chunk_i: int):
         if self.closed:
-            raise RuntimeError("Already closed!")
+            raise RuntimeError(f"{self.key.data_type} saver already closed!")
+
         fn = '%06d' % chunk_i
-
-        n_missing = (chunk_i - len(self.md['chunks']) + 1)
-        if n_missing > 0:
-            self.md['chunks'] += [None] * n_missing
-        assert len(self.md['chunks']) >= chunk_i + 1
-
         chunk_info = dict(chunk_i=chunk_i,
                           filename=fn,
                           n=len(data),
@@ -214,34 +209,29 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        fn = os.path.join(self.tempdirname, fn)
+        chunk_info['filesize'] = strax.save_file(
+            filename=os.path.join(self.tempdirname, fn),
+            data=data,
+            compressor=self.md['compressor'])
+        with open(f'{self.tempdirname}/metadata_{chunk_i:06d}.json',
+                  mode='w') as f:
+            f.write(json.dumps(chunk_info, **self.json_options))
 
-        kwargs = dict(filename=fn,
-                      data=data,
-                      compressor=self.md['compressor'])
-        if self.executor is None:
-            chunk_info['filesize'] = strax.save_file(**kwargs)
-            self.md['chunks'][chunk_i] = chunk_info
-        else:
-            self.md['chunks'][chunk_i] = chunk_info
-            f = self.executor.submit(strax.save_file, **kwargs)
-            self.futures.append(f)
-
-            def set_filesize(_f):
-                self.md['chunks'][chunk_i]['filesize'] = _f.result()
-            f.add_done_callback(set_filesize)
-
-    def close(self, wait=True):
+    def close(self):
         if self.closed:
-            raise RuntimeError("Already closed!")
+            raise RuntimeError(f"{self.key.data_type} saver already closed!")
         self.closed = True
-        if wait:
-            concurrent.futures.wait(self.futures)
+        if sys.exc_info()[0] is not None:
+            self.md['exception'] = traceback.format_exc()
         self.md['writing_ended'] = time.time()
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
-            f.write(json.dumps(self.md, sort_keys=True, indent=4))
-        os.rename(self.tempdirname, self.dirname)
 
-    def crash_close(self):
-        self.md['exception'] = traceback.format_exc()
-        self.close(wait=False)
+        self.md['chunks'] = []
+        for fn in sorted(glob.glob(
+                self.tempdirname + '/metadata_*.json')):
+            with open(fn, mode='r') as f:
+                self.md['chunks'].append(json.load(f))
+            os.remove(fn)
+
+        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+            f.write(json.dumps(self.md, **self.json_options))
+        os.rename(self.tempdirname, self.dirname)

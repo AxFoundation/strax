@@ -1,30 +1,18 @@
 import logging
-import subprocess
 import argparse
 import os
 import shutil
-import time
-import glob
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
+import gil_load
+
+gil_load.init()
 
 import numpy as np
 import strax
 
 logging.basicConfig(
-   level=logging.INFO,
-   format='{name} in {threadName} at {asctime}: {message}', style='{')
+    level=logging.INFO,
+    format='{name} in {threadName} at {asctime}: {message}', style='{')
 log = logging.getLogger()
-
-
-def du(path):
-    """disk usage in human readable format (e.g. '2,1GB')"""
-    try:
-        return subprocess.check_output([
-            'du','-sh', path]).split()[0].decode('utf-8')
-    except subprocess.CalledProcessError:
-        return float('nan')
-
 
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
@@ -45,105 +33,71 @@ if os.path.exists(out_dir):
 else:
     os.makedirs(out_dir)
 
-
-##
-# Low-level processing: process records from readers
-# to reduced records and peaks,
-# without the overhead of strax's threading system.
-##
 mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
 mystrax.register_all(strax.xenon.plugins)
-low_proc = mystrax.simple_chain(run_id, source='records', target='peaks')
 
-def build(chunk_i):
-    print(f"\t{chunk_i}: started job")
+import glob
+import os
+import time
+import shutil
 
-    # Concatenate data from readers
-    chunk_dir_path = f'{in_dir}/{chunk_i:06d}'
-    records = [strax.load_file(fn,
-                               compressor='zstd',
-                               dtype=strax.record_dtype())
-               for fn in glob.glob(f'{chunk_dir_path}/reader_*')]
-    records = np.concatenate(records)
-    records = strax.sort_by_time(records)
-    if args.erase:
-        shutil.rmtree(chunk_dir_path)
 
-    peaks = low_proc.send(chunk_i=chunk_i, data=records)
-    print(f"\t{chunk_i}: low-level processing done")
-    return peaks
 
-log.debug("Created low-level processor")
-
-##
-# High-level processing: build everything from peaks
-##
 @mystrax.register
-class TellS1s(strax.Plugin):
-    """Stupid plugin to report number of S1s found
-    should be removed soon
-    """
-    dtype = [('n_s1s', np.int16)]
-    counter = 0
-    parallel = False
-    save_when = strax.SaveWhen.NEVER
+class DAQReader(strax.Plugin):
+    provides = 'records'
+    dtype = strax.record_dtype()
 
-    def compute(self, peaks, peak_classification):
-        p = peak_classification
-        r = np.zeros(1, dtype=self.dtype)
-        n_s1s = (p['type'] == 1).sum()
-        self.counter += 1
-        print(f"\t{self.counter}: High-level processing done, "
-              f"found {n_s1s} S1s")
-        r[0]['n_s1s'] = n_s1s
-        return r
+    erase = args.erase
+    in_dir = in_dir
 
-# TODO: make option to NOT save? This is too ugly:
-mystrax._plugin_class_registry['peaks'].save_when = strax.SaveWhen.NEVER
+    parallel = 'process'
+    rechunk = False
 
-high_proc = mystrax.in_background(run_id, 'tell_s1s', sources=['peaks'])
+    def _path(self, chunk_i):
+        return f'{self.in_dir}/{chunk_i:06d}'
 
-
-def finish(future, chunk_i):
-    high_proc.send('peaks', chunk_i, future.result())
-    if not args.erase:
-        done_chunks.add(chunk_i)
-    pending_chunks.remove(chunk_i)
-
-
-
-##
-# Main loop
-##
-
-done = False
-pending_chunks = set()
-done_chunks = set()         # Only used if not erasing data (unbounded memory)
-high_proc.log.setLevel(logging.DEBUG)
-with low_proc, high_proc, ProcessPoolExecutor(max_workers=args.n) as pool:
-    while not done:
-        print(f'{du(in_dir)} compressed data in buffer, '
-              f'{len(pending_chunks)} chunks pending, '
-              f'{len(done_chunks)} done.')
-        if os.path.exists(in_dir + '/THE_END'):
-            done = True
-
-        to_submit = []
-        for x in glob.glob(in_dir + '/*/'):
-            c = int(x.split('/')[-2])
-            if c not in pending_chunks and c not in done_chunks:
-                to_submit.append(c)
-
-        if not len(to_submit):
-            print("\t\tNothing to submit, sleeping")
+    def check_next_ready_or_done(self, chunk_i):
+        while not os.path.exists(self._path(chunk_i)):
+            if os.path.exists(f'{self.in_dir}/THE_END'):
+                return False
+            print("Nothing to submit, sleeping")
             time.sleep(2)
-            continue
+        return True
 
-        for chunk_i in to_submit:
-            print(f"\t{chunk_i}: job submitted")
-            f = pool.submit(build, chunk_i)
-            f.add_done_callback(partial(finish,
-                                        chunk_i=int(chunk_i)))
-            pending_chunks.add(chunk_i)
+    def compute(self, chunk_i):
+        print(f"{chunk_i}: received from readers")
+        records = [strax.load_file(fn,
+                                   compressor='zstd',
+                                   dtype=strax.record_dtype())
+                   for fn in glob.glob(f'{self._path(chunk_i)}/reader_*')]
+        records = np.concatenate(records)
+        records = strax.sort_by_time(records)
+        if self.erase:
+            shutil.rmtree(self._path(chunk_i))
+        return records
 
-    print("Run done and all jobs submitted. Waiting for final results.")
+
+gil_load.start(av_sample_interval=0.1)
+start = time.time()
+
+for i, p in enumerate(mystrax.get(run_id,
+                                  'peak_classification',
+                                  max_workers=args.n)):
+    n_s1s = (p['type'] == 1).sum()
+    print(f"\t\t{i}: Found {n_s1s} S1s")
+
+end = time.time()
+gil_load.stop()
+
+# Get the filesize from the metadata
+import json
+with open(f'{out_dir}/{run_id}_records/metadata.json', mode='r') as f:
+    metadata = json.loads(f.read())
+raw_data_size = sum(x['nbytes'] for x in metadata['chunks'])
+
+dt = end - start
+speed = raw_data_size / dt / 1e6
+print(f"Took {dt:.3} seconds, processing speed was {speed:.4} MB/s")
+gil_pct = 100 * gil_load.get(4)[0]
+print(f"GIL was held {gil_pct:.3f}% of the time")
