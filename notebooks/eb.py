@@ -78,7 +78,7 @@ class DAQReader(strax.Plugin):
         return records
 
 
-gil_load.start(av_sample_interval=0.05)
+gil_load.start(av_sample_interval=0.1)
 start = time.time()
 
 for i, p in enumerate(mystrax.get(run_id,

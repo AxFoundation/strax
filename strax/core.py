@@ -138,7 +138,7 @@ class Strax:
         return plugins
 
     def get_components(self, run_id: str,
-                       targets=tuple(), save=tuple(), sources=tuple()
+                       targets=tuple(), save=tuple()
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
 
@@ -146,8 +146,6 @@ class Strax:
         :param targets: data type to yield results for
         :param save: str or list of str of data types you would like to save
         to cache, if they occur in intermediate computations
-        :param sources: str of list of str of data types you will feed the
-        processor via .send.
         """
         def to_str_tuple(x) -> ty.Tuple[str]:
             if isinstance(x, str):
@@ -156,7 +154,6 @@ class Strax:
                 return tuple(x)
             return x
         save = to_str_tuple(save)
-        sources = to_str_tuple(sources)
         targets = to_str_tuple(targets)
 
         plugins = self._get_plugins(targets, run_id)
@@ -177,20 +174,19 @@ class Strax:
             p = plugins[d]
             key = strax.CacheKey(run_id, d, p.lineage)
 
-            if d not in sources:
-                for sb_i, sb in enumerate(self.storage):
-                    try:
-                        loaders[d] = sb.loader(key)
-                        # Found it! No need to make it or save it
-                        del plugins[d]
-                        return
-                    except strax.NotCachedException:
-                        continue
+            for sb_i, sb in enumerate(self.storage):
+                try:
+                    loaders[d] = sb.loader(key)
+                    # Found it! No need to make it or save it
+                    del plugins[d]
+                    return
+                except strax.NotCachedException:
+                    continue
 
-                # Not in any cache. We will be computing it.
-                to_compute[d] = p
-                for d in p.depends_on:
-                    check_cache(d)
+            # Not in any cache. We will be computing it.
+            to_compute[d] = p
+            for d in p.depends_on:
+                check_cache(d)
 
             # We're making this OR it gets fed in. Should we save it?
             if p.save_when == strax.SaveWhen.NEVER:
@@ -216,32 +212,17 @@ class Strax:
             check_cache(d)
         plugins = to_compute
 
-        # Validate result
-        # A data type is either computed, loaded, or fed in
-        for a, b in itertools.combinations(
-                [plugins.keys(), loaders.keys(), sources], 2):
-            if len(a & b):
-                raise RuntimeError("Multiple ways of getting "
-                                   f"{list(a & b)} specified")
+        # Validate result: data is either computed or loaded
+        intersec = list(plugins.keys() & loaders.keys())
+        if len(intersec):
+            raise RuntimeError("Multiple ways of getting "
+                               f"{intersec} specified")
 
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
-            sources=sources,
             targets=targets)
-
-    ##
-    # Creation of different processors
-    ##
-
-    def simple_chain(self, run_id: str, target: str, source: str,
-                     save=tuple()):
-        components = self.get_components(
-            run_id, targets=(target,), save=save, sources=(source,))
-        return strax.SimpleChain(components)
-
-    # TODO: fix signatures and docstrings
 
     def get(self, run_id: str, targets, save=tuple(), max_workers=None
             ) -> ty.Iterator[np.ndarray]:
@@ -260,16 +241,3 @@ class Strax:
 
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
-
-    def in_background(self, run_id, targets, sources=tuple(), save=tuple()):
-        """Return a processor that makes targets in a background thread.
-
-        Useful for sending in inputs asynchronously.
-
-        Use as a context manager:
-            with strax.in_background(...) as proc:
-                proc.send(...)
-        """
-        components = self.get_components(run_id, targets=targets,
-                                         save=save, sources=sources)
-        return strax.BackgroundThreadProcessor(components, self.executor)
