@@ -29,6 +29,7 @@ class Plugin:
     """Plugin containing strax computation
 
     You should NOT instantiate plugins directly.
+    Do NOT add unpickleable things (e.g. loggers as attributes)
     """
     __version__ = '0.0.0'
     data_kind: str
@@ -44,7 +45,6 @@ class Plugin:
     compute_takes_chunk_i = False   # Autoinferred, no need to set yourself
 
     deps: typing.List   # Dictionary of dependency plugin instances
-
 
     def __init__(self):
         self.post_compute = []
@@ -145,11 +145,10 @@ class Plugin:
                 compute_kwargs = {d: next(iters[d])
                                   for d in self.depends_on}
             except StopIteration:
-                wait(pending, timeout=30)
-                self.close()
+                self.close(wait_for=tuple(pending))
                 return
             except Exception:
-                # TODO: Crash close saver
+                self.close(wait_for=tuple(pending))
                 raise
 
             if self.parallel and executor is not None:
@@ -168,13 +167,7 @@ class Plugin:
         else:
             result = self.compute(*args, **kwargs)
         for p in self.post_compute:
-            try:
-                r = p(result, chunk_i=chunk_i)
-            except Exception:
-                print(f"Tried to call {p} with {result.dtype}")
-                import inspect
-                print(inspect.signature(p).parameters.keys())
-                raise
+            r = p(result, chunk_i=chunk_i)
             if r is not None:
                 result = r
         return result
@@ -182,7 +175,8 @@ class Plugin:
     def check_next_ready_or_done(self, chunk_i):
         return True
 
-    def close(self):
+    def close(self, wait_for=tuple(), timeout=30):
+        wait(wait_for, timeout=timeout)
         for x in self.on_close:
             x()
 

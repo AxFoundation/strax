@@ -96,8 +96,6 @@ class Strax:
                 raise KeyError(f"No plugin class registered that provides {d}")
             p = self._plugin_class_registry[d]()
 
-            #p.log = logging.getLogger(p.__class__.__name__)
-
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
             if 'chunk_i' in compute_pars:

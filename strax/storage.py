@@ -4,13 +4,12 @@ Currently only filesystem-based storage; later probably also
 database backed storage.
 """
 from ast import literal_eval
-import concurrent.futures
-import threading
 import json
-from functools import partial
+import glob
 import logging
 import os
 import shutil
+import sys
 import traceback
 import time
 import typing
@@ -159,28 +158,29 @@ class FileStorage:
 
 @export
 class FileSaver:
+    """Saves data to compressed binary files
+
+    Must work even if forked. Do NOT add unpickleable things as attributes!
+    """
     closed = False
 
     def __init__(self, key, metadata, dirname):
         self.key = key
         self.md = metadata
         self.dirname = dirname
-        #self.log = logging.getLogger('saver_' + self.key.data_type)
+        self.json_options = dict(sort_keys=True, indent=4)
 
-        #self.lock = threading.RLock()
-        self.futures = dict()
-        self.md['chunks'] = []
         self.md['writing_started'] = time.time()
 
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
-            # TODO: Hmm.... shouldn't it already exist? No, simple_chain...
+            print("Deleting old data in {dirname}")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
 
-    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
+    def save_from(self, source: typing.Iterable, rechunk=True):
         """Iterate over source and save the results under key
         along with metadata
         """
@@ -189,23 +189,15 @@ class FileSaver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.send(data=s, chunk_i=chunk_i, _from_iterable=True,
-                          executor=executor)
-        except Exception:
-            self.crash_close()
-            raise
+                self.save(data=s, chunk_i=chunk_i)
+        finally:
+            print(f"Getting out of {self.key.data_type} save loop")
+            self.close()
         # TODO: should we catch MailboxKilled?
-        self.close()
 
-    def send(self, data: np.ndarray, chunk_i=None, _from_iterable=False,
-             executor=None):
+    def save(self, data: np.ndarray, chunk_i: int):
         if self.closed:
             raise RuntimeError(f"{self.key.data_type} saver already closed!")
-
-        if not _from_iterable and executor is not None:
-            raise RuntimeError("Asynchronous send cannot be combined with "
-                               "future-based saving")
-            # Otherwise close is hell!
 
         fn = '%06d' % chunk_i
         chunk_info = dict(chunk_i=chunk_i,
@@ -217,45 +209,29 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        if executor is None:
-            self._do_save(chunk_info, fn, data)
-        else:
-            #with self.lock:
-            f = executor.submit(self._do_save, chunk_info, fn, data)
-            # TODO: Small memory leak, cleanup & track highest for close
-            self.futures[chunk_i] = f
-
-    def _do_save(self, chunk_info, fn, data):
         chunk_info['filesize'] = strax.save_file(
             filename=os.path.join(self.tempdirname, fn),
             data=data,
             compressor=self.md['compressor'])
-        self.send_meta(chunk_info)
+        with open(f'{self.tempdirname}/metadata_{chunk_i:06d}.json',
+                  mode='w') as f:
+            f.write(json.dumps(chunk_info, **self.json_options))
 
-    def send_meta(self, chunk_info):
-        #with self.lock:
+    def close(self):
         if self.closed:
-            raise RuntimeError("Already closed!")
-        chunk_i = chunk_info['chunk_i']
-        n_missing = (chunk_i - len(self.md['chunks']) + 1)
-        if n_missing > 0:
-            self.md['chunks'] += [None] * n_missing
-        assert len(self.md['chunks']) >= chunk_i + 1
-        self.md['chunks'][chunk_i] = chunk_info
-
-    def close(self, wait=True):
-        # Only call when NO send calls are executing anymore!
-        if wait:
-            concurrent.futures.wait(list(self.futures.values()))
-        #with self.lock:
+            raise RuntimeError(f"{self.key.data_type} saver already closed!")
         self.closed = True
+        if sys.exc_info()[0] is not None:
+            self.md['exception'] = traceback.format_exc()
         self.md['writing_ended'] = time.time()
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
-            f.write(json.dumps(self.md, sort_keys=True, indent=4))
-        os.rename(self.tempdirname, self.dirname)
 
-    def crash_close(self):
-        # Maybe this won't work, if other threads are sending...
-        #with self.lock:
-        self.md['exception'] = traceback.format_exc()
-        self.close(wait=False)
+        self.md['chunks'] = []
+        for fn in sorted(glob.glob(
+                self.tempdirname + '/metadata_*.json')):
+            with open(fn, mode='r') as f:
+                self.md['chunks'].append(json.load(f))
+            os.remove(fn)
+
+        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+            f.write(json.dumps(self.md, **self.json_options))
+        os.rename(self.tempdirname, self.dirname)
