@@ -128,10 +128,10 @@ class FileStorage:
         kwargs = dict(dtype=dtype, compressor=compressor)
         for chunk_info in metadata['chunks']:
             fn = os.path.join(dirname, chunk_info['filename'])
-            if self.executor is None:
+            if executor is None:
                 yield strax.load_file(fn, **kwargs)
             else:
-                yield self.executor.submit(strax.load_file, fn, **kwargs)
+                yield executor.submit(strax.load_file, fn, **kwargs)
 
     def saver(self, key, metadata):
         metadata.setdefault('compressor', 'blosc')
