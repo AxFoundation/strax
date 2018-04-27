@@ -2,13 +2,16 @@ import logging
 import argparse
 import os
 import shutil
+import gil_load
+
+gil_load.init()
 
 import numpy as np
 import strax
 
 logging.basicConfig(
-   level=logging.INFO,
-   format='{name} in {threadName} at {asctime}: {message}', style='{')
+    level=logging.INFO,
+    format='{name} in {threadName} at {asctime}: {message}', style='{')
 log = logging.getLogger()
 
 parser = argparse.ArgumentParser(
@@ -30,16 +33,15 @@ if os.path.exists(out_dir):
 else:
     os.makedirs(out_dir)
 
-
-mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])],
-                      max_workers=args.n)
+mystrax = strax.Strax(storage=[strax.FileStorage(data_dirs=[out_dir])])
 mystrax.register_all(strax.xenon.plugins)
-
 
 import glob
 import os
 import time
 import shutil
+
+
 
 @mystrax.register
 class DAQReader(strax.Plugin):
@@ -48,6 +50,8 @@ class DAQReader(strax.Plugin):
 
     erase = args.erase
     in_dir = in_dir
+
+    parallel = 'process'
     rechunk = False
 
     def _path(self, chunk_i):
@@ -57,12 +61,12 @@ class DAQReader(strax.Plugin):
         while not os.path.exists(self._path(chunk_i)):
             if os.path.exists(f'{self.in_dir}/THE_END'):
                 return False
-            self.log.info("Nothing to submit, sleeping")
+            print("Nothing to submit, sleeping")
             time.sleep(2)
         return True
 
     def compute(self, chunk_i):
-        self.log.info(f"\t{chunk_i}: received from readers")
+        print(f"\t{chunk_i}: received from readers")
         records = [strax.load_file(fn,
                                    compressor='zstd',
                                    dtype=strax.record_dtype())
@@ -74,6 +78,26 @@ class DAQReader(strax.Plugin):
         return records
 
 
-for i, p in enumerate(mystrax.get(run_id, 'peak_classification')):
+gil_load.start(av_sample_interval=0.05)
+start = time.time()
+
+for i, p in enumerate(mystrax.get(run_id,
+                                  'peak_classification',
+                                  max_workers=args.n)):
     n_s1s = (p['type'] == 1).sum()
     print(f"{i}: Found {n_s1s} S1s")
+
+end = time.time()
+gil_load.stop()
+
+import json
+with open(f'{out_dir}/{run_id}_records/metadata.json', mode='r') as f:
+    metadata = json.loads(f.read())
+print(metadata)
+raw_data_size = sum(x['nbytes'] for x in metadata['chunks'])
+
+dt = end - start
+speed = raw_data_size / dt / 1e6
+print(f"Took {dt:.3} seconds, processing speed was {speed:.4} MB/s")
+gil_pct = 100 * gil_load.get(4)[0]
+print(f"GIL was held {gil_pct:.3f}% of the time")

@@ -186,8 +186,7 @@ class Plugin:
         for x in self.on_close:
             x()
 
-    @staticmethod
-    def compute(**kwargs):
+    def compute(self, **kwargs):
         raise NotImplementedError
 
 

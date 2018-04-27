@@ -35,8 +35,7 @@ class NotCachedException(Exception):
 
 @export
 class FileStorage:
-    def __init__(self, provides='all', data_dirs=('./strax_data',),
-                 executor=None):
+    def __init__(self, provides='all', data_dirs=('./strax_data',)):
         """File-based storage backend for strax.
 
         :param provides: List of data types this backend stores.
@@ -52,12 +51,8 @@ class FileStorage:
 
         When writing, we save in the highest-preference directory
         in which we have write permission.
-
-        :param executor: concurrent.futures executor for parallelizing result
-        computations.
         """
         self.data_dirs = data_dirs
-        self.executor = executor
         self._provides = provides
         self.log = logging.getLogger(self.__class__.__name__)
         # self.log.setLevel(logging.DEBUG)
@@ -122,7 +117,7 @@ class FileStorage:
             yield os.path.join(dirname,
                                key.run_id + '_' + key.data_type)
 
-    def read(self, dirname: str):
+    def read(self, dirname: str, executor=None):
         """Iterates over strax results from directory dirname"""
         with open(dirname + '/metadata.json', mode='r') as f:
             metadata = json.loads(f.read())
@@ -159,21 +154,20 @@ class FileStorage:
         else:
             raise FileNotFoundError(f"No writeable directory found for {key}")
 
-        return FileSaver(key, metadata, dirname, executor=self.executor)
+        return FileSaver(key, metadata, dirname)
 
 
 @export
 class FileSaver:
     closed = False
 
-    def __init__(self, key, metadata, dirname, executor):
+    def __init__(self, key, metadata, dirname):
         self.key = key
         self.md = metadata
         self.dirname = dirname
-        self.executor = executor
-        self.log = logging.getLogger('saver_' + self.key.data_type)
+        #self.log = logging.getLogger('saver_' + self.key.data_type)
 
-        self.lock = threading.RLock()
+        #self.lock = threading.RLock()
         self.futures = dict()
         self.md['chunks'] = []
         self.md['writing_started'] = time.time()
@@ -186,7 +180,7 @@ class FileSaver:
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
 
-    def save_from(self, source: typing.Iterable, rechunk=True):
+    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
         """Iterate over source and save the results under key
         along with metadata
         """
@@ -195,18 +189,20 @@ class FileSaver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.send(data=s, chunk_i=chunk_i, _from_iterable=True)
+                self.send(data=s, chunk_i=chunk_i, _from_iterable=True,
+                          executor=executor)
         except Exception:
             self.crash_close()
             raise
         # TODO: should we catch MailboxKilled?
         self.close()
 
-    def send(self, data: np.ndarray, chunk_i=None, _from_iterable=False):
+    def send(self, data: np.ndarray, chunk_i=None, _from_iterable=False,
+             executor=None):
         if self.closed:
             raise RuntimeError(f"{self.key.data_type} saver already closed!")
 
-        if not _from_iterable and self.executor is not None:
+        if not _from_iterable and executor is not None:
             raise RuntimeError("Asynchronous send cannot be combined with "
                                "future-based saving")
             # Otherwise close is hell!
@@ -221,45 +217,45 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        def do_save():
-            chunk_info['filesize'] = strax.save_file(
-                filename=os.path.join(self.tempdirname, fn),
-                data=data,
-                compressor=self.md['compressor'])
-            self.send_meta(chunk_info)
-
-        if self.executor is None:
-            do_save()
+        if executor is None:
+            self._do_save(chunk_info, fn, data)
         else:
-            with self.lock:
-                # TODO: Small memory leak, cleanup & track highest for close
-                f = self.executor.submit(do_save)
-                self.futures[chunk_i] = f
+            #with self.lock:
+            f = executor.submit(self._do_save, chunk_info, fn, data)
+            # TODO: Small memory leak, cleanup & track highest for close
+            self.futures[chunk_i] = f
+
+    def _do_save(self, chunk_info, fn, data):
+        chunk_info['filesize'] = strax.save_file(
+            filename=os.path.join(self.tempdirname, fn),
+            data=data,
+            compressor=self.md['compressor'])
+        self.send_meta(chunk_info)
 
     def send_meta(self, chunk_info):
-        with self.lock:
-            if self.closed:
-                raise RuntimeError("Already closed!")
-            chunk_i = chunk_info['chunk_i']
-            n_missing = (chunk_i - len(self.md['chunks']) + 1)
-            if n_missing > 0:
-                self.md['chunks'] += [None] * n_missing
-            assert len(self.md['chunks']) >= chunk_i + 1
-            self.md['chunks'][chunk_i] = chunk_info
+        #with self.lock:
+        if self.closed:
+            raise RuntimeError("Already closed!")
+        chunk_i = chunk_info['chunk_i']
+        n_missing = (chunk_i - len(self.md['chunks']) + 1)
+        if n_missing > 0:
+            self.md['chunks'] += [None] * n_missing
+        assert len(self.md['chunks']) >= chunk_i + 1
+        self.md['chunks'][chunk_i] = chunk_info
 
     def close(self, wait=True):
         # Only call when NO send calls are executing anymore!
         if wait:
             concurrent.futures.wait(list(self.futures.values()))
-        with self.lock:
-            self.closed = True
-            self.md['writing_ended'] = time.time()
-            with open(self.tempdirname + '/metadata.json', mode='w') as f:
-                f.write(json.dumps(self.md, sort_keys=True, indent=4))
-            os.rename(self.tempdirname, self.dirname)
+        #with self.lock:
+        self.closed = True
+        self.md['writing_ended'] = time.time()
+        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+            f.write(json.dumps(self.md, sort_keys=True, indent=4))
+        os.rename(self.tempdirname, self.dirname)
 
     def crash_close(self):
         # Maybe this won't work, if other threads are sending...
-        with self.lock:
-            self.md['exception'] = traceback.format_exc()
+        #with self.lock:
+        self.md['exception'] = traceback.format_exc()
         self.close(wait=False)

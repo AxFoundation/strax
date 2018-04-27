@@ -1,3 +1,4 @@
+from concurrent import futures
 import logging
 import typing as ty
 import itertools
@@ -25,7 +26,7 @@ class ProcessorComponents(ty.NamedTuple):
 class ThreadedMailboxProcessor:
     mailboxes: ty.Dict[str, strax.Mailbox]
 
-    def __init__(self, components: ProcessorComponents, executor):
+    def __init__(self, components: ProcessorComponents, max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         # self.log.setLevel(logging.DEBUG)
         self.components = components
@@ -33,6 +34,9 @@ class ThreadedMailboxProcessor:
         plugins = components.plugins
         savers = components.savers
 
+        # Executors for parallelization
+        process_executor = futures.ProcessPoolExecutor(max_workers=max_workers)
+        thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
         # If possible, combine save and compute operations
         # so they don't have to be scheduled by executor individually.
@@ -40,19 +44,19 @@ class ThreadedMailboxProcessor:
         for d, p in plugins.items():
             if not p.rechunk:
                 self.log.debug(f"Putting savers for {d} in post_compute")
-                for s in savers[d]:
-                    s.executor = None   # Work in one thread
+                for s in savers.get(d, []):
                     p.post_compute.append(s.send)
                     p.on_close.append(s.close)     # TODO: crash close
                 savers[d] = []
-
 
         # For the same reason, merge simple chains:
         # A -> B => A, with B as post_compute,
         # then put in plugins as B instead of A.
         while True:
             for b, p_b in plugins.items():
-                if not p_b.rechunk and len(p_b.depends_on) == 1:
+                if (not p_b.rechunk
+                        and len(p_b.depends_on) == 1
+                        and b not in components.targets):
                     a = p_b.depends_on[0]
                     if a not in plugins:
                         continue
@@ -68,7 +72,6 @@ class ThreadedMailboxProcessor:
 
         self.log.debug("After optimization: " + str(components))
 
-
         self.mailboxes = {
             d: strax.Mailbox(name=d + '_mailbox')
             for d in itertools.chain.from_iterable(components)}
@@ -78,6 +81,13 @@ class ThreadedMailboxProcessor:
             self.mailboxes[d].add_sender(loader, name=f'load:{d}')
 
         for d, p in plugins.items():
+
+            executor = None
+            if p.parallel == 'process':
+                executor = process_executor
+            elif p.parallel:
+                executor = thread_executor
+
             self.mailboxes[d].add_sender(p.iter(
                     iters={d: self.mailboxes[d].subscribe()
                            for d in p.depends_on},
@@ -87,7 +97,8 @@ class ThreadedMailboxProcessor:
         for d, savers in savers.items():
             for s_i, saver in enumerate(savers):
                 self.mailboxes[d].add_reader(saver.save_from,
-                                             name=f'save_{s_i}:{d}')
+                                             name=f'save_{s_i}:{d}',
+                                             executor=thread_executor)
 
     def iter(self):
         target = self.components.targets[0]
