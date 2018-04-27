@@ -160,9 +160,10 @@ class FileStorage:
 class FileSaver:
     """Saves data to compressed binary files
 
-    Must work even if forked. Do NOT add unpickleable things as attributes!
+    Must work even if forked.
+    Do NOT add unpickleable things as attributes (such as loggers)!
     """
-    closed = False
+    closed = False      # Of course checking this is unreliable when forked...
 
     def __init__(self, key, metadata, dirname):
         self.key = key
@@ -191,7 +192,6 @@ class FileSaver:
             for chunk_i, s in enumerate(source):
                 self.save(data=s, chunk_i=chunk_i)
         finally:
-            print(f"Getting out of {self.key.data_type} save loop")
             self.close()
         # TODO: should we catch MailboxKilled?
 
