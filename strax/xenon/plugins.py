@@ -25,6 +25,7 @@ class ReducedRecords(strax.Plugin):
 class Peaks(strax.Plugin):
     data_kind = 'peaks'
     parallel = True
+    rechunk = False
     dtype = strax.peak_dtype(n_channels=len(to_pe))
 
     def compute(self, reduced_records):

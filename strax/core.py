@@ -1,5 +1,4 @@
 import collections
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 import itertools
@@ -13,34 +12,19 @@ export, __all__ = strax.exporter()
 
 
 @export
-class ProcessorComponents(ty.NamedTuple):
-    """Specification to assemble a processor"""
-    plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
-    savers:  ty.Dict[str, ty.List[strax.FileSaver]]
-    sources: ty.Tuple[str]
-    targets: ty.Tuple[str]
-
-
-@export
 class Strax:
     """Streaming analysis for XENON (or eXperiments?)
 
     Specify how data should be processed, then start processing.
     """
 
-    def __init__(self, max_workers=None, storage=None):
+    def __init__(self, storage=None):
         self.log = logging.getLogger('strax')
         if storage is None:
             storage = [strax.FileStorage()]
         self.storage = storage
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
-        self.executor = ThreadPoolExecutor(max_workers=max_workers,
-                                           thread_name_prefix='pool_')
-        # Hmm...
-        for s in storage:
-            s.executor = self.executor
 
         # Register placeholder for records
         # TODO: Hm, why exactly? And do I have to do this for all source
@@ -112,10 +96,15 @@ class Strax:
                 raise KeyError(f"No plugin class registered that provides {d}")
             p = self._plugin_class_registry[d]()
 
-            p.log = logging.getLogger(p.__class__.__name__)
+            compute_pars = list(
+                inspect.signature(p.compute).parameters.keys())
+            if 'chunk_i' in compute_pars:
+                p.compute_takes_chunk_i = True
+                del compute_pars[compute_pars.index('chunk_i')]
+
             if not hasattr(p, 'depends_on'):
                 # Infer dependencies from self.compute's argument names
-                process_params = inspect.signature(p.compute).parameters.keys()
+                process_params = compute_pars
                 process_params = [p for p in process_params if p != 'kwargs']
                 p.depends_on = tuple(process_params)
 
@@ -123,7 +112,7 @@ class Strax:
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
-            p.lineage = {d: p.version(run_id)}
+            p.lineage = {d: (p.__class__.__name__, p.version(run_id))}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -149,16 +138,14 @@ class Strax:
         return plugins
 
     def get_components(self, run_id: str,
-                       targets=tuple(), save=tuple(), sources=tuple()
-                       ) -> ProcessorComponents:
+                       targets=tuple(), save=tuple()
+                       ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
 
         :param run_id: run id to get
         :param targets: data type to yield results for
         :param save: str or list of str of data types you would like to save
         to cache, if they occur in intermediate computations
-        :param sources: str of list of str of data types you will feed the
-        processor via .send.
         """
         def to_str_tuple(x) -> ty.Tuple[str]:
             if isinstance(x, str):
@@ -167,7 +154,6 @@ class Strax:
                 return tuple(x)
             return x
         save = to_str_tuple(save)
-        sources = to_str_tuple(sources)
         targets = to_str_tuple(targets)
 
         plugins = self._get_plugins(targets, run_id)
@@ -188,20 +174,19 @@ class Strax:
             p = plugins[d]
             key = strax.CacheKey(run_id, d, p.lineage)
 
-            if d not in sources:
-                for sb_i, sb in enumerate(self.storage):
-                    try:
-                        loaders[d] = sb.loader(key)
-                        # Found it! No need to make it or save it
-                        del plugins[d]
-                        return
-                    except strax.NotCachedException:
-                        continue
+            for sb_i, sb in enumerate(self.storage):
+                try:
+                    loaders[d] = sb.loader(key)
+                    # Found it! No need to make it or save it
+                    del plugins[d]
+                    return
+                except strax.NotCachedException:
+                    continue
 
-                # Not in any cache. We will be computing it.
-                to_compute[d] = p
-                for d in p.depends_on:
-                    check_cache(d)
+            # Not in any cache. We will be computing it.
+            to_compute[d] = p
+            for d in p.depends_on:
+                check_cache(d)
 
             # We're making this OR it gets fed in. Should we save it?
             if p.save_when == strax.SaveWhen.NEVER:
@@ -227,39 +212,25 @@ class Strax:
             check_cache(d)
         plugins = to_compute
 
-        # Validate result
-        # A data type is either computed, loaded, or fed in
-        for a, b in itertools.combinations(
-                [plugins.keys(), loaders.keys(), sources], 2):
-            if len(a & b):
-                raise RuntimeError("Multiple ways of getting "
-                                   f"{list(a & b)} specified")
+        # Validate result: data is either computed or loaded
+        intersec = list(plugins.keys() & loaders.keys())
+        if len(intersec):
+            raise RuntimeError("Multiple ways of getting "
+                               f"{intersec} specified")
 
-        return ProcessorComponents(plugins=plugins,
-                                   loaders=loaders,
-                                   savers=dict(savers),
-                                   sources=sources,
-                                   targets=targets)
+        return strax.ProcessorComponents(
+            plugins=plugins,
+            loaders=loaders,
+            savers=dict(savers),
+            targets=targets)
 
-    ##
-    # Creation of different processors
-    ##
-
-    def simple_chain(self, run_id: str, target: str, source: str,
-                     save=tuple()):
-        components = self.get_components(
-            run_id, targets=(target,), save=save, sources=(source,))
-        return strax.SimpleChain(components)
-
-    # TODO: fix signatures and docstrings
-
-    def get(self, run_id: str, targets, save=tuple()
+    def get(self, run_id: str, targets, save=tuple(), max_workers=None
             ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         """
         components = self.get_components(run_id, targets=targets, save=save)
         yield from strax.ThreadedMailboxProcessor(
-            components, self.executor).iter()
+            components, max_workers=max_workers).iter()
 
     def make(self, *args, **kwargs):
         for _ in self.get(*args, **kwargs):
@@ -270,16 +241,3 @@ class Strax:
 
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
-
-    def in_background(self, run_id, targets, sources=tuple(), save=tuple()):
-        """Return a processor that makes targets in a background thread.
-
-        Useful for sending in inputs asynchronously.
-
-        Use as a context manager:
-            with strax.in_background(...) as proc:
-                proc.send(...)
-        """
-        components = self.get_components(run_id, targets=targets,
-                                         save=save, sources=sources)
-        return strax.BackgroundThreadProcessor(components, self.executor)
