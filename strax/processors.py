@@ -10,7 +10,6 @@ import strax
 export, __all__ = strax.exporter()
 
 
-
 @export
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
@@ -19,7 +18,6 @@ class ProcessorComponents(ty.NamedTuple):
     savers:  ty.Dict[str, ty.List[strax.FileSaver]]
     sources: ty.Tuple[str]
     targets: ty.Tuple[str]
-
 
 
 @export
@@ -45,13 +43,14 @@ class ThreadedMailboxProcessor:
             if not p.rechunk:
                 self.log.debug(f"Putting savers for {d} in post_compute")
                 for s in savers.get(d, []):
-                    p.post_compute.append(s.send)
+                    p.post_compute.append(s.save)
                     p.on_close.append(s.close)     # TODO: crash close
                 savers[d] = []
 
         # For the same reason, merge simple chains:
         # A -> B => A, with B as post_compute,
         # then put in plugins as B instead of A.
+        # TODO: check they agree on paralellization?
         while True:
             for b, p_b in plugins.items():
                 if (not p_b.rechunk
@@ -97,8 +96,7 @@ class ThreadedMailboxProcessor:
         for d, savers in savers.items():
             for s_i, saver in enumerate(savers):
                 self.mailboxes[d].add_reader(saver.save_from,
-                                             name=f'save_{s_i}:{d}',
-                                             executor=thread_executor)
+                                             name=f'save_{s_i}:{d}')
 
     def iter(self):
         target = self.components.targets[0]
@@ -200,7 +198,7 @@ class SimpleChain:
                 data = p.compute(data)   # Pycharm does not get this
             for s in self.c.savers.get(d, []):
                 self.log.debug(f"Saving {chunk_i} of {d}")
-                s.send(data=data, chunk_i=chunk_i)
+                s.save(data=data, chunk_i=chunk_i)
         return data
 
     def __enter__(self):

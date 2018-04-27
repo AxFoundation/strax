@@ -66,7 +66,7 @@ class DAQReader(strax.Plugin):
         return True
 
     def compute(self, chunk_i):
-        print(f"\t{chunk_i}: received from readers")
+        print(f"{chunk_i}: received from readers")
         records = [strax.load_file(fn,
                                    compressor='zstd',
                                    dtype=strax.record_dtype())
@@ -85,15 +85,15 @@ for i, p in enumerate(mystrax.get(run_id,
                                   'peak_classification',
                                   max_workers=args.n)):
     n_s1s = (p['type'] == 1).sum()
-    print(f"{i}: Found {n_s1s} S1s")
+    print(f"\t\t{i}: Found {n_s1s} S1s")
 
 end = time.time()
 gil_load.stop()
 
+# Get the filesize from the metadata
 import json
 with open(f'{out_dir}/{run_id}_records/metadata.json', mode='r') as f:
     metadata = json.loads(f.read())
-print(metadata)
 raw_data_size = sum(x['nbytes'] for x in metadata['chunks'])
 
 dt = end - start
