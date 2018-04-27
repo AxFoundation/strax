@@ -1,9 +1,52 @@
+import glob
+import os
+import time
+import shutil
+
 from .common import to_pe
 
 import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
+
+
+@export
+@strax.takes_config(
+    strax.Option('input_dir', type=str,
+                 help="Directory where readers put data"),
+    strax.Option('erase', default=False,
+                 help="Delete reader data after processing"))
+class DAQReader(strax.Plugin):
+    provides = 'records'
+    dtype = strax.record_dtype()
+
+    parallel = 'process'
+    rechunk = False
+
+    def _path(self, chunk_i):
+        return self.config["input_dir"] + f'/{chunk_i:06d}'
+
+    def check_next_ready_or_done(self, chunk_i):
+        while not os.path.exists(self._path(chunk_i)):
+            if os.path.exists(self.config["input_dir"] + f'/THE_END'):
+                return False
+            print("Nothing to submit, sleeping")
+            time.sleep(2)
+        return True
+
+    def compute(self, chunk_i):
+        print(f"{chunk_i}: received from readers")
+        records = [strax.load_file(fn,
+                                   compressor='zstd',
+                                   dtype=strax.record_dtype())
+                   for fn in glob.glob(f'{self._path(chunk_i)}/reader_*')]
+        records = np.concatenate(records)
+        records = strax.sort_by_time(records)
+        if self.config['erase']:
+            shutil.rmtree(self._path(chunk_i))
+        return records
+
 
 
 @export

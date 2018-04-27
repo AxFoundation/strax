@@ -29,7 +29,7 @@ class Plugin:
     """Plugin containing strax computation
 
     You should NOT instantiate plugins directly.
-    Do NOT add unpickleable things (e.g. loggers as attributes)
+    Do NOT add unpickleable things (e.g. loggers) as attributes.
     """
     __version__ = '0.0.0'
     data_kind: str
@@ -39,12 +39,14 @@ class Plugin:
     compressor = 'blosc'
     n_per_iter = None
     rechunk = True
-
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
     compute_takes_chunk_i = False   # Autoinferred, no need to set yourself
 
-    deps: typing.List   # Dictionary of dependency plugin instances
+    # Things you should never set directly in plugin overrides:
+    config: typing.Dict
+    deps: typing.List       # Dictionary of dependency plugin instances
+    takes_config = dict()       # Config options
 
     def __init__(self):
         self.post_compute = []
@@ -71,12 +73,11 @@ class Plugin:
         """Metadata to save along with produced data"""
         return dict(
             run_id=run_id,
+            data_type=self.provides,
             data_kind=self.data_kind,
-            compressor=self.compressor,
             dtype=self.dtype,
-            version=self.version(run_id),
-            lineage=self.lineage
-        )
+            compressor=self.compressor,
+            lineage=self.lineage)
 
     def dependencies_by_kind(self, require_time=True):
         """Return dependencies grouped by data kind
@@ -255,6 +256,7 @@ class MergePlugin(Plugin):
     def __init__(self):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for MergePlugin')
+        super().__init__()
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()

@@ -18,10 +18,11 @@ class Strax:
     Specify how data should be processed, then start processing.
     """
 
-    def __init__(self, storage=None):
+    def __init__(self, storage=None, config=None):
         self.log = logging.getLogger('strax')
         if storage is None:
             storage = [strax.FileStorage()]
+        self.set_config(config, mode='new')
         self.storage = storage
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
@@ -30,6 +31,20 @@ class Strax:
         # TODO: Hm, why exactly? And do I have to do this for all source
         # plugins?
         self.register(strax.RecordsPlaceholder)
+
+    def set_config(self, config=None, mode='update'):
+        if config is None:
+            config = dict()
+        if mode == 'update':
+            self.config.update(config)
+        elif mode == 'setdefault':
+            for k in config:
+                self.config.setdefault(k, config[k])
+        elif mode == 'new':
+            self.config = config
+        else:
+            raise RuntimeError("Expected update, setdefault or new as config"
+                               " setting mode")
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -89,12 +104,17 @@ class Strax:
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
+
+        strax.validate_config(self.config,
+                              self._plugin_class_registry.values())
+
         def get_plugin(d):
             nonlocal plugins
 
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
             p = self._plugin_class_registry[d]()
+            strax.set_plugin_config(self.config, p)
 
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
@@ -111,6 +131,7 @@ class Strax:
             plugins[d] = p
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
+            p.config = self.config
 
             p.lineage = {d: (p.__class__.__name__, p.version(run_id))}
             for d in p.depends_on:

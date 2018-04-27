@@ -22,7 +22,6 @@ class ThreadedMailboxProcessor:
 
     def __init__(self, components: ProcessorComponents, max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
-        # self.log.setLevel(logging.DEBUG)
         self.components = components
         self.log.debug("Processor components are: " + str(components))
         plugins = components.plugins
@@ -40,7 +39,7 @@ class ThreadedMailboxProcessor:
                 self.log.debug(f"Putting savers for {d} in post_compute")
                 for s in savers.get(d, []):
                     p.post_compute.append(s.save)
-                    p.on_close.append(s.close)     # TODO: crash close
+                    p.on_close.append(s.close)
                 savers[d] = []
 
         # For the same reason, merge simple chains:

@@ -7,6 +7,7 @@ __version__ = '0.0.1'
 from .utils import *
 from .dtypes import *
 from .chunk_arrays import *
+from .config import *
 
 from .storage import *
 from .plugin import *
