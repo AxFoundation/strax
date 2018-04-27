@@ -1,5 +1,4 @@
 import collections
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 import itertools
@@ -19,18 +18,13 @@ class Strax:
     Specify how data should be processed, then start processing.
     """
 
-    def __init__(self, max_workers=None, storage=None):
+    def __init__(self, storage=None):
         self.log = logging.getLogger('strax')
         if storage is None:
             storage = [strax.FileStorage()]
         self.storage = storage
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
-        self.executor = ThreadPoolExecutor(max_workers=max_workers,
-                                           thread_name_prefix='pool_')
-        # Hmm...
-        for s in storage:
-            s.executor = self.executor
 
         # Register placeholder for records
         # TODO: Hm, why exactly? And do I have to do this for all source
@@ -102,7 +96,7 @@ class Strax:
                 raise KeyError(f"No plugin class registered that provides {d}")
             p = self._plugin_class_registry[d]()
 
-            p.log = logging.getLogger(p.__class__.__name__)
+            #p.log = logging.getLogger(p.__class__.__name__)
 
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
@@ -251,13 +245,13 @@ class Strax:
 
     # TODO: fix signatures and docstrings
 
-    def get(self, run_id: str, targets, save=tuple()
+    def get(self, run_id: str, targets, save=tuple(), max_workers=None
             ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         """
         components = self.get_components(run_id, targets=targets, save=save)
         yield from strax.ThreadedMailboxProcessor(
-            components, self.executor).iter()
+            components, max_workers=max_workers).iter()
 
     def make(self, *args, **kwargs):
         for _ in self.get(*args, **kwargs):
