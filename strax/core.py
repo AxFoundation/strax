@@ -1,7 +1,6 @@
 import collections
 import logging
 import inspect
-import itertools
 import typing as ty
 
 import numpy as np
@@ -131,9 +130,10 @@ class Strax:
             plugins[d] = p
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
-            p.config = self.config
 
-            p.lineage = {d: (p.__class__.__name__, p.version(run_id))}
+            p.lineage = {d: (p.__class__.__name__,
+                             p.version(run_id),
+                             p.config)}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -206,8 +206,8 @@ class Strax:
 
             # Not in any cache. We will be computing it.
             to_compute[d] = p
-            for d in p.depends_on:
-                check_cache(d)
+            for dep_d in p.depends_on:
+                check_cache(dep_d)
 
             # We're making this OR it gets fed in. Should we save it?
             if p.save_when == strax.SaveWhen.NEVER:
@@ -227,6 +227,7 @@ class Strax:
                 if not sb.provides(d):
                     continue
                 s = sb.saver(key, p.metadata(run_id))
+                s.meta_only = p.save_meta_only
                 savers[d].append(s)
 
         for d in targets:

@@ -42,6 +42,7 @@ class Plugin:
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
     compute_takes_chunk_i = False   # Autoinferred, no need to set yourself
+    save_meta_only = False
 
     # Things you should never set directly in plugin overrides:
     config: typing.Dict
@@ -180,9 +181,6 @@ class Plugin:
         wait(wait_for, timeout=timeout)
         for x in self.on_close:
             x()
-
-    def compute(self, **kwargs):
-        raise NotImplementedError
 
 
 ##

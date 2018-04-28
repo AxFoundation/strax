@@ -46,6 +46,7 @@ class ThreadedMailboxProcessor:
         # A -> B => A, with B as post_compute,
         # then put in plugins as B instead of A.
         # TODO: check they agree on paralellization?
+        # TODO: allow compute grouping while saver does rechunk
         while True:
             for b, p_b in plugins.items():
                 if (not p_b.rechunk
