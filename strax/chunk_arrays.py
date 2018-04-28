@@ -12,7 +12,8 @@ export, __all__ = exporter()
 @export
 class ChunkPacer:
 
-    def __init__(self, source):
+    def __init__(self, source, dtype=None):
+        self.dtype = dtype
         self.source = source
         self.buffer = []
         self.buffer_items = 0
@@ -81,10 +82,19 @@ class ChunkPacer:
         n += sum(len(x) for x in self.buffer[:-1])
         return self._take_from_buffer(n)
 
-    def put_back_at_start(self, x):
+    def _put_back_at_start(self, x):
         self.buffer = [x] + self.buffer
         self.buffer_items += 1
         self._squash_buffer()
+
+    @property
+    def itemsize(self):
+        if self.dtype is None:
+            # Peek at one item to figure out the dtype and size
+            x = self.get_n(1)
+            self.dtype = x.dtype
+            self._put_back_at_start(x)
+        return np.zeros(1, dtype=self.dtype).nbytes
 
 
 @export
@@ -99,21 +109,30 @@ def fixed_length_chunks(source, n=10):
 
 
 @export
-def fixed_size_chunks(source, n_bytes=int(1e8)):
+def fixed_size_chunks(source, n_bytes=int(1e8), dtype=None):
     """Yield arrays of maximum size n_bytes"""
     p = ChunkPacer(source)
-
-    # Peek at one item to figure out the size
-    x = p.get_n(1)
-    bytes_per_item = x.nbytes
-    p.put_back_at_start(x)
-
-    n = int(n_bytes / bytes_per_item)
+    n = int(n_bytes / p.itemsize)
     try:
         while True:
             yield p.get_n(n)
     except StopIteration:
         return
+
+
+@export
+def alternating_size_chunks(source, *sizes):
+    """Yield arrays of sizes[0], then sizes[1], ... sizes[n],
+    then sizes[0], etc."""
+    p = ChunkPacer(source)
+    ns = np.floor(np.array(sizes) / p.itemsize).astype(np.int)
+    i = 0
+    while True:
+        try:
+            yield p.get_n(ns[i])
+        except StopIteration:
+            return
+        i = (i + 1) % len(sizes)
 
 
 @export

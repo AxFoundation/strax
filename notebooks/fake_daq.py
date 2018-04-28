@@ -18,6 +18,8 @@ parser.add_argument('--t', default=10, type=int,
                     help='How long to run the fake DAQ')
 parser.add_argument('--chunk_size', default=100, type=int,
                     help='Chunk size in MB')
+parser.add_argument('--sync_chunk_size', default=5, type=int,
+                    help='Synchronization chunk size in MB')
 args = parser.parse_args()
 
 n_readers = 8
@@ -35,10 +37,10 @@ print("Preparing payload data")
 mystrax = strax.Strax()
 chunk_sizes = []
 chunk_data_compressed = []
-for records in tqdm(strax.fixed_size_chunks(
+for records in tqdm(strax.alternating_size_chunks(
         mystrax.get('180423_1021', 'records'),
-        args.chunk_size * 1e6)):
-
+        args.chunk_size * 1e6,
+        args.sync_chunk_size * 1e6)):
     # Restore baseline, clear metadata
     records['data'] = 16000 - records['data']
     records['baseline'] = 0
@@ -58,33 +60,43 @@ for records in tqdm(strax.fixed_size_chunks(
 print(f"Prepared {len(chunk_sizes)} chunks of "
       f"total size {sum(chunk_sizes)/1e6:.4} MB")
 
+def write_to_dir(c, outdir):
+    tempdir = outdir + '_temp'
+    os.makedirs(tempdir)
+    for reader_i, x in enumerate(c):
+        with open(f'{tempdir}/reader_{reader_i}', 'wb') as f:
+            f.write(copy(x))        # Copy needed for honest shm writing?
+    os.rename(tempdir, outdir)
+
+
 program_start = time.time()
 n_chunks_written = 0
+t_offset = 0
 done = False
-while not done:
-    for chunk_i, c in enumerate(chunk_data_compressed):
-        t_0 = time.time()
+for chunk_i, c in enumerate(chunk_data_compressed):
+    t_0 = time.time()
 
-        if t_0 > program_start + args.t:
-            with open(output_dir + '/THE_END', mode='w') as f:
-                f.write("That's all folks!")
-            done = True
-            break
+    if t_0 > program_start + args.t:
+        with open(output_dir + '/THE_END', mode='w') as f:
+            f.write("That's all folks!")
+        done = True
+        break
 
-        outdir = output_dir + '/%06d' % n_chunks_written
-        tempdir = outdir + '_temp'
-        os.makedirs(tempdir)
-        for reader_i, x in enumerate(c):
-            with open(f'{tempdir}/reader_{reader_i}', 'wb') as f:
-                f.write(copy(x))
-        os.rename(tempdir, outdir)
-        wrote_mb = chunk_sizes[chunk_i] / 1e6
+    big_chunk_i = chunk_i // 2
 
-        t_sleep = wrote_mb / args.rate - (time.time() - t_0)
-        if t_sleep < 0:
-            print("Fake DAQ too slow :-(")
-        else:
-            print(f"Wrote {wrote_mb:.1f} MB_raw, sleep for {t_sleep:.2f} s")
-            time.sleep(t_sleep)
+    if chunk_i % 2 != 0:
+        write_to_dir(c, output_dir + '/%06d_post' % big_chunk_i)
+        write_to_dir(c, output_dir + '/%06d_pre' % (big_chunk_i + 1))
+    else:
+        write_to_dir(c, output_dir + '/%06d' % big_chunk_i)
 
-        n_chunks_written += 1
+    wrote_mb = chunk_sizes[chunk_i] / 1e6
+
+    t_sleep = wrote_mb / args.rate - (time.time() - t_0)
+    if t_sleep < 0:
+        print("Fake DAQ too slow :-(")
+    else:
+        print(f"Wrote {wrote_mb:.1f} MB_raw, sleep for {t_sleep:.2f} s")
+        time.sleep(t_sleep)
+
+    n_chunks_written += 1

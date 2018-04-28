@@ -3,11 +3,10 @@ import os
 import time
 import shutil
 
-from .common import to_pe
-
 import numpy as np
 
 import strax
+from .common import to_pe
 export, __all__ = strax.exporter()
 
 
@@ -28,26 +27,58 @@ class DAQReader(strax.Plugin):
     def _path(self, chunk_i):
         return self.config["input_dir"] + f'/{chunk_i:06d}'
 
-    def check_next_ready_or_done(self, chunk_i):
-        while not os.path.exists(self._path(chunk_i)):
-            if os.path.exists(self.config["input_dir"] + f'/THE_END'):
-                return False
-            print("Nothing to submit, sleeping")
-            time.sleep(2)
-        return True
+    def _chunk_paths(self, chunk_i):
+        """Return paths to previous, current and next chunk
+        If any of them does not exist, their path is replaced by False.
+        """
+        p = self._path(chunk_i)
+        return tuple([
+            q if os.path.exists(q) else False
+            for q in [p + '_pre', p, p + '_post']])
 
-    def compute(self, chunk_i):
-        print(f"{chunk_i}: received from readers")
+    def check_next_ready_or_done(self, chunk_i):
+        while True:
+            ended = os.path.exists(self.config["input_dir"] + f'/THE_END')
+            pre, current, post = self._chunk_paths(chunk_i)
+            next_ahead = os.path.exists(self._path(chunk_i + 1))
+            if (current and (
+                    (pre and post
+                     or chunk_i == 0 and post
+                     or ended and (pre and not next_ahead)))):
+                return True
+            if ended and not current:
+                return False
+            print(f"Waiting for chunk {chunk_i}, sleeping")
+            time.sleep(2)
+
+    @staticmethod
+    def _load_chunk(path, side='central'):
         records = [strax.load_file(fn,
                                    compressor='zstd',
                                    dtype=strax.record_dtype())
-                   for fn in glob.glob(f'{self._path(chunk_i)}/reader_*')]
+                   for fn in glob.glob(f'{path}/reader_*')]
         records = np.concatenate(records)
         records = strax.sort_by_time(records)
+        if side == 'central':
+            return records
+        return strax.from_break(records, left=side == 'pre')
+
+
+    def compute(self, chunk_i):
+        pre, current, post = self._chunk_paths(chunk_i)
+        records = np.concatenate(
+            ([self._load_chunk(pre, side='pre')] if pre else [])
+            + [self._load_chunk(current)]
+            + ([self._load_chunk(post, side='post')] if post else [])
+        )
+
         if self.config['erase']:
-            shutil.rmtree(self._path(chunk_i))
+            for x in pre, current, post:
+                shutil.rmtree(x)
+
         strax.baseline(records)
         strax.integrate(records)
+
         return records
 
 
