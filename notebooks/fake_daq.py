@@ -36,8 +36,14 @@ mystrax = strax.Strax()
 chunk_sizes = []
 chunk_data_compressed = []
 for records in tqdm(strax.fixed_size_chunks(
-        mystrax.get('180219_2005', 'records'),
+        mystrax.get('180423_1021', 'records'),
         args.chunk_size * 1e6)):
+
+    # Restore baseline, clear metadata
+    records['data'] = 16000 - records['data']
+    records['baseline'] = 0
+    records['area'] = 0
+
     chunk_sizes.append(records.nbytes)
     result = []
     for reader_i in range(n_readers):
