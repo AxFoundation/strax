@@ -1,7 +1,9 @@
+import builtins
 import collections
 import logging
 import inspect
 import typing as ty
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -93,6 +95,13 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
+    def _set_plugin_config(self, p: strax.Plugin):
+        # Explicit type check, since if someone calls this with a plugin CLASS
+        # funny business might ensue
+        assert isinstance(p, strax.Plugin)
+        p.config = {k: v for k, v in self.config.items()
+                    if k in p.takes_config}
+
     def _get_plugins(self,
                      targets: ty.Tuple[str] = tuple(),
                      run_id: str = 'UNKNOWN'
@@ -100,20 +109,29 @@ class Strax:
         """Return dictionary of plugins necessary to compute targets
         from scratch.
         """
+        # Check all config options are taken by some registered plugin class
+        # (helps spot typos)
+        all_opts = set().union(*[
+            pc.takes_config.keys()
+            for pc in self._plugin_class_registry.values()])
+        for k in self.config:
+            if k not in all_opts:
+                warnings.warn(f"Option {k} not taken by any registered plugin")
+
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
-
-        strax.validate_config(self.config,
-                              self._plugin_class_registry.values())
-
         def get_plugin(d):
             nonlocal plugins
 
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
+
             p = self._plugin_class_registry[d]()
-            strax.set_plugin_config(self.config, p)
+
+            # The plugin may not get all the required options here
+            # but we don't know if we need the plugin yet
+            self._set_plugin_config(p)
 
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
@@ -133,7 +151,8 @@ class Strax:
 
             p.lineage = {d: (p.__class__.__name__,
                              p.version(run_id),
-                             p.config)}
+                             [k for k in p.config
+                              if p.takes_config[k].track])}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -234,11 +253,15 @@ class Strax:
             check_cache(d)
         plugins = to_compute
 
-        # Validate result: data is either computed or loaded
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
-            raise RuntimeError("Multiple ways of getting "
-                               f"{intersec} specified")
+            raise RuntimeError("{intersec} both computed and loaded?!")
+
+        # Check all required options are available / set defaults
+        for p in plugins.values():
+            for opt in p.takes_config.values():
+                opt.validate(self.config)
+            self._set_plugin_config(p)
 
         return strax.ProcessorComponents(
             plugins=plugins,
@@ -263,3 +286,82 @@ class Strax:
 
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
+
+
+##
+# Config specification. Maybe should be its own file?
+##
+
+@export
+class InvalidConfiguration(Exception):
+    pass
+
+
+# Todo:  Does it really have to be a decorator just for nice error message?
+@export
+def takes_config(*options):
+    def wrapped(plugin_class):
+        result = []
+        for opt in options:
+            if isinstance(opt, str):
+                opt = Option(opt)
+            elif not isinstance(opt, Option):
+                raise RuntimeError("Specify config options by str or Option")
+            opt.taken_by = plugin_class.__name__
+            result.append(opt)
+
+        plugin_class.takes_config = {opt.name: opt for opt in result}
+        return plugin_class
+
+    return wrapped
+
+
+# Use instead of None since None might be a proper value/default
+OMITTED = 'Argument was not given'
+
+
+@export
+class Option:
+    taken_by = "UNKNOWN???"
+
+    def __init__(self,
+                 name: str,
+                 type: type = OMITTED,
+                 default: ty.Any = OMITTED,
+                 default_factory: ty.Callable = OMITTED,
+                 track=True,
+                 help: str = ''):
+        self.name = name
+        self.type = type
+        type = builtins.type
+        self.default = default
+        self.track = track
+        self.default_factory = default_factory
+        self.help = help
+
+        if (self.default is not OMITTED
+                and self.default_factory is not OMITTED):
+            raise RuntimeError(f"Tried to specify both default and "
+                               f"default_factory for option {self.name}")
+
+        if type is OMITTED and default is not OMITTED:
+            self.type = type(default)
+
+    def validate(self, config):
+        """Checks if the option is in config and sets defaults if needed.
+        """
+        if self.name in config:
+            value = config[self.name]
+            if (self.type is not OMITTED
+                    and not isinstance(value, self.type)):
+                raise InvalidConfiguration(
+                    f"Invalid type for option {self.name}. "
+                    f"Excepted a {self.type}, got a {type(value)}")
+        else:
+            if self.default is OMITTED:
+                if self.default_factory is OMITTED:
+                    raise InvalidConfiguration(f"Missing option {self.name} "
+                                               f"required by {self.taken_by}")
+                config[self.name] = self.default_factory()
+            else:
+                config[self.name] = self.default

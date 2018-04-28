@@ -163,6 +163,7 @@ class Plugin:
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
 
+    # *args used in optimized per-process running
     def do_compute(self, *args, chunk_i, **kwargs):
         if self.compute_takes_chunk_i:
             result = self.compute(*args, chunk_i=chunk_i, **kwargs)
@@ -181,6 +182,9 @@ class Plugin:
         wait(wait_for, timeout=timeout)
         for x in self.on_close:
             x()
+
+    def compute(self, **kwargs):
+        raise NotImplementedError
 
 
 ##

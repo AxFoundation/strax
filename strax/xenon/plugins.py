@@ -13,9 +13,9 @@ export, __all__ = strax.exporter()
 
 @export
 @strax.takes_config(
-    strax.Option('input_dir', type=str,
+    strax.Option('input_dir', type=str, track=False,
                  help="Directory where readers put data"),
-    strax.Option('erase', default=False,
+    strax.Option('erase', default=False, track=False,
                  help="Delete reader data after processing"))
 class DAQReader(strax.Plugin):
     provides = 'records'
@@ -23,6 +23,7 @@ class DAQReader(strax.Plugin):
 
     parallel = 'process'
     rechunk = False
+    can_remake = False
 
     def _path(self, chunk_i):
         return self.config["input_dir"] + f'/{chunk_i:06d}'
@@ -45,22 +46,23 @@ class DAQReader(strax.Plugin):
         records = strax.sort_by_time(records)
         if self.config['erase']:
             shutil.rmtree(self._path(chunk_i))
+        strax.baseline(records)
+        strax.integrate(records)
         return records
-
 
 
 @export
 class ReducedRecords(strax.Plugin):
-    data_kind = 'records'
+    data_kind = 'records'   # TODO: indicate cuts have been done?
     compressor = 'zstd'
     parallel = True
     rechunk = False
     dtype = strax.record_dtype()
 
     def compute(self, records):
-        r = records
-        strax.integrate(r)
-        r = strax.exclude_tails(r, to_pe)
+        r = strax.exclude_tails(records, to_pe)
+        hits = strax.find_hits(r)
+        strax.cut_outside_hits(r, hits)
         return r
 
 
@@ -73,10 +75,7 @@ class Peaks(strax.Plugin):
 
     def compute(self, reduced_records):
         r = reduced_records
-
-        hits = strax.find_hits(r)
-        strax.cut_outside_hits(r, hits)
-
+        hits = strax.find_hits(r)       # TODO: Duplicate work
         peaks = strax.find_peaks(hits, to_pe,
                                  result_dtype=self.dtype)
         strax.sum_waveform(peaks, r, to_pe)
