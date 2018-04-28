@@ -164,6 +164,7 @@ class FileSaver:
     Do NOT add unpickleable things as attributes (such as loggers)!
     """
     closed = False      # Of course checking this is unreliable when forked...
+    meta_only = False
 
     def __init__(self, key, metadata, dirname):
         self.key = key
@@ -209,10 +210,11 @@ class FileSaver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        chunk_info['filesize'] = strax.save_file(
-            filename=os.path.join(self.tempdirname, fn),
-            data=data,
-            compressor=self.md['compressor'])
+        if not self.meta_only:
+            chunk_info['filesize'] = strax.save_file(
+                filename=os.path.join(self.tempdirname, fn),
+                data=data,
+                compressor=self.md['compressor'])
         with open(f'{self.tempdirname}/metadata_{chunk_i:06d}.json',
                   mode='w') as f:
             f.write(json.dumps(chunk_info, **self.json_options))

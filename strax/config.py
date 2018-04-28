@@ -15,11 +15,10 @@ class InvalidConfiguration(Exception):
     pass
 
 
-#Todo:  Does it really have to be a decorator just for nice error message?
+# Todo:  Does it really have to be a decorator just for nice error message?
 @export
 def takes_config(*options):
     def wrapped(plugin_class):
-        print(plugin_class, options)
         result = []
         for opt in options:
             if isinstance(opt, str):
@@ -101,4 +100,3 @@ def validate_config(config, plugins):
 def set_plugin_config(config, plugin):
     plugin.config = {k: v for k, v in config.items()
                      if k in plugin.takes_config}
-
