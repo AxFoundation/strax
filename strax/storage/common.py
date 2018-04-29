@@ -134,10 +134,13 @@ class Saver:
             for chunk_i, s in enumerate(source):
                 self.save(data=s, chunk_i=chunk_i)
         except strax.MailboxKilled:
-            # Exit gracefully, one exception on the screen is enough
+            # Write exception (with close), but exit gracefully.
+            # One traceback on screen is enough
+            self.close()
             pass
         finally:
-            self.close()
+            if not self.closed:
+                self.close()
 
     def save(self, data: np.ndarray, chunk_i: int):
         if self.closed:

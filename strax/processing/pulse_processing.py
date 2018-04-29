@@ -102,6 +102,8 @@ def record_links(records):
 def find_hits(records, threshold=15, _result_buffer=None):
     """Return hits (intervals above threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
+
+    NB: returned hits are NOT sorted yet!
     """
     buffer = _result_buffer
     if not len(records):
