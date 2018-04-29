@@ -12,7 +12,7 @@ class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
     loaders: ty.Dict[str, ty.Iterator]
-    savers:  ty.Dict[str, ty.List[strax.FileSaver]]
+    savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
 

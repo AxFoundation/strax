@@ -107,6 +107,7 @@ class Store:
         raise NotImplementedError
 
 
+@export             # Needed for type hints elsewhere
 class Saver:
     """Interface for saving a data type
 

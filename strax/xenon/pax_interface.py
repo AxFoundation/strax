@@ -1,16 +1,16 @@
-"""
-Convert pax .zip files to flat records format
-
-#implement main logic as pax output plugin?
+"""Convert pax .zip files to flat records format
 """
 import numpy as np
+import os
+import glob
 
 import strax
-from strax.dtypes import record_dtype
-from strax.utils import records_needed
+export, __all__ = strax.exporter()
 
 
-def pax_to_records(input_filename, samples_per_record=110):
+@export
+def pax_to_records(input_filename,
+                   samples_per_record=strax.DEFAULT_RECORD_LENGTH):
     """Return pulse records array from pax zip input_filename"""
     from pax import core   # Pax is not a dependency
     mypax = core.Processor('XENON1T', config_dict=dict(
@@ -36,14 +36,15 @@ def pax_to_records(input_filename, samples_per_record=110):
                               for e in get_events()
                               for p in e.pulses])
 
-    n_records = records_needed(pulse_lengths, samples_per_record).sum()
-    records = np.zeros(n_records, dtype=record_dtype(samples_per_record))
+    n_records = strax.records_needed(pulse_lengths, samples_per_record).sum()
+    records = np.zeros(n_records,
+                       dtype=strax.record_dtype(samples_per_record))
 
     output_record_index = 0  # Record offset in data
     for event in get_events():
         for p in event.pulses:
 
-            n_records = records_needed(p.length, samples_per_record)
+            n_records = strax.records_needed(p.length, samples_per_record)
             for rec_i in range(n_records):
                 r = records[output_record_index]
                 r['time'] = (event.start_time
@@ -73,4 +74,36 @@ def pax_to_records(input_filename, samples_per_record=110):
                 output_record_index += 1
 
     mypax.shutdown()
-    return strax.sort_by_time(records)
+
+    # In strax data, records are always stored
+    # sorted, baselined and integrated
+    records = strax.sort_by_time(records)
+    strax.baseline(records)
+    strax.integrate(records)
+    return records
+
+
+@export
+@strax.takes_config(
+    strax.Option('pax_raw_dir', default='/data/xenon/raw', track=False,
+                 help="Directory with raw pax datasets"),
+    strax.Option('stop_after_zips', default=10,
+                 help="Convert only this many zip files")
+)
+class RecordsFromPax(strax.Plugin):
+    provides = 'records'
+    data_kind = 'records'
+    depends_on = tuple()
+    dtype = strax.record_dtype()
+    parallel = False
+
+    def iter(self, *args, **kwargs):
+        input_dir = os.path.join(self.config['pax_raw_dir'], self.run_id)
+        pax_files = sorted(glob.glob(input_dir + '/*.zip'))
+        pax_sizes = np.array([os.path.getsize(x)
+                              for x in pax_files])
+        print(f"Found {len(pax_files)} files, {pax_sizes.sum() / 1e9:.2f} GB")
+        for file_i, in_fn in enumerate(pax_files):
+            if file_i >= self.config['stop_after_zips']:
+                break
+            yield strax.xenon.pax_interface.pax_to_records(in_fn)

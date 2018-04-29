@@ -7,9 +7,10 @@ TODO: file numba issue.
 import numpy as np
 
 __all__ = ('interval_dtype record_dtype hit_dtype peak_dtype '
-           'DIGITAL_SUM_WAVEFORM_CHANNEL').split()
+           'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
+DEFAULT_RECORD_LENGTH = 110
 
 
 # Base dtype for interval-like objects (pulse, peak, hit)
@@ -29,7 +30,7 @@ interval_dtype = [
 ]
 
 
-def record_dtype(samples_per_record=110):
+def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform record.
 
     Length can be shorter than the number of samples in data,

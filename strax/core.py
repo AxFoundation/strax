@@ -134,6 +134,7 @@ class Strax:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
             p = self._plugin_class_registry[d]()
+            p.run_id = run_id
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
