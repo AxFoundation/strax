@@ -4,7 +4,7 @@ import shutil
 import glob
 
 import strax
-from .common import Store, Saver, NotCached
+from .common import Store, Saver, NotCached, CacheKey
 
 export, __all__ = strax.exporter()
 
@@ -47,10 +47,16 @@ class FileStore(Store):
 
         return dirname
 
-    def _candidate_dirs(self, key):
-        """Return directories at which data meant by key might be found"""
-        return [os.path.join(d, key.run_id + '_' + key.data_type)
-                for d in self.data_dirs]
+    def _candidate_dirs(self, key: CacheKey):
+        """Return directories at which data meant by key
+        could be found or saved"""
+        hash = strax.deterministic_hash(key.lineage)
+        return [
+            os.path.join(d,
+                         '_'.join([key.run_id,
+                                   key.data_type,
+                                   hash]))
+            for d in self.data_dirs]
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = os.path.join(dirname, chunk_info['filename'])
