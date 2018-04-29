@@ -220,10 +220,12 @@ class LoopPlugin(Plugin):
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
         base = things_by_kind[loop_over]
-        for k, things in things_by_kind.items():
-            if k != loop_over:
-                assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+        assert (np.all(base[1:]['time'] >= strax.endtime(base[:-1])),
+                f'{base} not disjoint')
 
+        for k, things in things_by_kind.items():
+            assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+            if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
                     raise RuntimeError(f"Split {k} into {len(r)}, "
@@ -265,7 +267,7 @@ class MergePlugin(Plugin):
                              "kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return sum([strax.unpack_dtype(self.deps[d])
+        return sum([strax.unpack_dtype(self.deps[d].dtype)
                     for d in self.depends_on], [])
 
     def compute(self, **kwargs):

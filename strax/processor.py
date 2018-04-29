@@ -105,12 +105,13 @@ class ThreadedMailboxProcessor:
         self.log.debug(f"Yielding {target}")
         try:
             yield from final_generator
-        except strax.MailboxKilled:
+        except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():
-                self.log.debug(f"Killing {m}")
-                m.kill(upstream=True,
-                       reason="Strax terminating due to downstream exception")
+                if m != target:
+                    self.log.debug(f"Killing {m}")
+                    m.kill(upstream=True,
+                           reason=e.args[0])
 
         self.log.debug("Closing threads")
         for m in self.mailboxes.values():

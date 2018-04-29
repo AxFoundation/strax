@@ -97,6 +97,9 @@ class ReducedRecords(strax.Plugin):
 
 
 @export
+@strax.takes_config(
+    strax.Option('diagnose_sorting', track=False, default=False,
+                 help="Enable runtime checks for sorting and disjointness"))
 class Peaks(strax.Plugin):
     data_kind = 'peaks'
     parallel = True
@@ -106,6 +109,8 @@ class Peaks(strax.Plugin):
     def compute(self, reduced_records):
         r = reduced_records
         hits = strax.find_hits(r)       # TODO: Duplicate work
+        hits = strax.sort_by_time(hits)
+
         peaks = strax.find_peaks(hits, to_pe,
                                  result_dtype=self.dtype)
         strax.sum_waveform(peaks, r, to_pe)
@@ -113,6 +118,13 @@ class Peaks(strax.Plugin):
         peaks = strax.split_peaks(peaks, r, to_pe)
 
         strax.compute_widths(peaks)
+
+        if self.config['diagnose_sorting']:
+            assert np.diff(r['time']).min() >= 0, "Records not sorted"
+            assert np.diff(hits['time']).min() >= 0, "Hits not sorted"
+            assert np.all(peaks['time'][1:]
+                          >= strax.endtime(peaks)[:-1]), "Peaks not disjoint"
+
         return peaks
 
 
