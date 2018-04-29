@@ -52,25 +52,27 @@ class DAQReader(strax.Plugin):
             time.sleep(2)
 
     @staticmethod
-    def _load_chunk(path, side='central'):
+    def _load_chunk(path, kind='central'):
         records = [strax.load_file(fn,
                                    compressor='zstd',
                                    dtype=strax.record_dtype())
                    for fn in glob.glob(f'{path}/reader_*')]
         records = np.concatenate(records)
         records = strax.sort_by_time(records)
-        if side == 'central':
+        if kind == 'central':
+            recs = records
             return records
-        return strax.from_break(records, left=side == 'pre')
-
+        recs = strax.from_break(records, left=kind == 'post')
+        return recs
 
     def compute(self, chunk_i):
         pre, current, post = self._chunk_paths(chunk_i)
         records = np.concatenate(
-            ([self._load_chunk(pre, side='pre')] if pre else [])
+            ([self._load_chunk(pre, kind='pre')] if pre else [])
             + [self._load_chunk(current)]
-            + ([self._load_chunk(post, side='post')] if post else [])
+            + ([self._load_chunk(post, kind='post')] if post else [])
         )
+        # print(np.diff(records['time']).min(), "in recs")
 
         if self.config['erase']:
             for x in pre, current, post:
@@ -198,9 +200,10 @@ class Events(strax.Plugin):
     def compute(self, peak_basics):
         left_ext = int(1e6)
         right_ext = int(1e6)
+
+        # TODO: this can be done much faster and better
         large_peaks = peak_basics[peak_basics['area'] > 1e5]
 
-        # TODO: this can be done much faster
         event_ranges = []
         split_indices = np.where(np.diff(large_peaks['time'])
                                  > left_ext + right_ext)[0] + 1
@@ -220,7 +223,8 @@ class Events(strax.Plugin):
 
 @export
 class EventBasics(strax.LoopPlugin):
-    depends_on = ('events', 'peak_basics', 'peak_classification')
+    depends_on = ('events',
+                  'peak_basics', 'peak_classification')
     dtype = [(('Number of peaks in the event',
                'n_peaks'), np.int32),
 

@@ -45,11 +45,9 @@ mystrax.register_all(strax.xenon.plugins)
 gil_load.start(av_sample_interval=0.05)
 start = time.time()
 
-for i, p in enumerate(mystrax.get(run_id,
-                                  'peak_classification',
-                                  max_workers=args.n)):
-    n_s1s = (p['type'] == 1).sum()
-    print(f"\t\t{i}: Found {n_s1s} S1s")
+for i, events in enumerate(
+        mystrax.get(run_id, 'event_basics', max_workers=args.n)):
+    print(f"\t{i}: Found {len(events)} events")
 
 end = time.time()
 gil_load.stop()
