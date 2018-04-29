@@ -37,17 +37,18 @@ class Plugin:
     provides: str
 
     compressor = 'blosc'
-    n_per_iter = None
+    n_per_iter = None       # TODO: think about this
     rechunk = True
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
-    compute_takes_chunk_i = False   # Autoinferred, no need to set yourself
     save_meta_only = False
 
-    # Things you should never set directly in plugin overrides:
+    # These are set on plugin initialization, which is done in the core
+    run_id: str
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     takes_config = dict()       # Config options
+    compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
 
     def __init__(self):
         self.post_compute = []
