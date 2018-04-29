@@ -29,7 +29,6 @@ def test_find_peaks(hits, min_hits, min_area):
 
     # Without requirements, all hits must occur in a peak
     if min_area == 0 and min_hits == 1:
-
         assert np.sum(peaks['n_hits']) == len(hits)
         assert np.all(strax.fully_contained_in(hits, peaks) > -1)
 
@@ -38,7 +37,7 @@ def test_find_peaks(hits, min_hits, min_area):
     ends = peaks['time'] + peaks['length'] * peaks['dt']
     assert np.all(ends[:-1] + gap_threshold <= starts[1:])
 
-    assert np.all(starts == np.sort(starts))
+    assert np.all(starts == np.sort(starts)), "Not sorted"
 
     # TODO: add more tests, preferably test against a second algorithm
 

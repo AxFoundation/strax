@@ -196,7 +196,6 @@ class Plugin:
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
-
     def __init__(self):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for LoopPlugin')
@@ -222,12 +221,10 @@ class LoopPlugin(Plugin):
         base = things_by_kind[loop_over]
         for k, things in things_by_kind.items():
             if k != loop_over:
+                assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
-                    print(f"Last base: "
-                          f"{base[-1]['time']}-{strax.endtime(base[-1])}")
-                    print(f"Last ting: "
-                          f"{things[-1]['time']}-{strax.endtime(things[-1])}")
                     raise RuntimeError(f"Split {k} into {len(r)}, "
                                        f"should be {len(base)}!")
                 things_by_kind[k] = r

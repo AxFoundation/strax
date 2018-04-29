@@ -6,12 +6,6 @@ import numpy as np
 import numba
 import dill
 
-try:
-    import yappi
-except ImportError:
-    # No threaded profiling for you
-    yappi = None
-
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -161,7 +155,6 @@ def split_by_containment(things, containers):
     """Return list of thing-arrays contained in each container
 
     Assumes everything is sorted, and containers are nonoverlapping
-    TODO: needs tests!
     """
     if not len(containers):
         return []
@@ -212,7 +205,7 @@ def merge_arrs(arrs):
     """Merge structured arrays of equal length. Assumes no field collisions.
     """
     n = len(arrs[0])
-    if not all(np.array([len(x) for x in arrs]) == n):
+    if not all([len(x) == n for x in arrs]):
         raise ValueError("Arrays must all have the same length")
     result_dtype = sum([unpack_dtype(x.dtype) for x in arrs], [])
     result = np.zeros(n, dtype=result_dtype)
@@ -233,12 +226,11 @@ def camel_to_snake(x):
 @export
 @contextlib.contextmanager
 def profile_threaded(filename):
+    import yappi            # noqa   # yappi is not a dependency
     if filename is None:
         yield
         return
 
-    if yappi is None:
-        raise ImportError("Yappi did not import -- cannot profile")
     yappi.start()
     yield
     yappi.stop()

@@ -163,7 +163,7 @@ def find_hits(records, threshold=15, _result_buffer=None):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def from_break(records, safe_break=int(5e6), left=True):
+def from_break(records, safe_break=int(5e5), left=True):
     """Return records on side of a break at least safe_break long
     If there is no such break, return the best break found.
     """
@@ -176,7 +176,7 @@ def from_break(records, safe_break=int(5e6), left=True):
             return np.zeros(0, dtype=records.dtype)
 
     max_gap = 0
-    prev_t = 0
+    prev_t = records[0]['time']
     max_gap_i = -1
     for i, r in enumerate(records):
         gap = r['time'] - prev_t

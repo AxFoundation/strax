@@ -70,16 +70,10 @@ def write_to_dir(c, outdir):
 
 
 program_start = time.time()
-n_chunks_written = 0
-t_offset = 0
-done = False
 for chunk_i, c in enumerate(chunk_data_compressed):
     t_0 = time.time()
 
     if t_0 > program_start + args.t:
-        with open(output_dir + '/THE_END', mode='w') as f:
-            f.write("That's all folks!")
-        done = True
         break
 
     big_chunk_i = chunk_i // 2
@@ -96,7 +90,10 @@ for chunk_i, c in enumerate(chunk_data_compressed):
     if t_sleep < 0:
         print("Fake DAQ too slow :-(")
     else:
-        print(f"Wrote {wrote_mb:.1f} MB_raw, sleep for {t_sleep:.2f} s")
+        print(f"{chunk_i}: wrote {wrote_mb:.1f} MB_raw, "
+              f"sleep for {t_sleep:.2f} s")
         time.sleep(t_sleep)
 
-    n_chunks_written += 1
+
+with open(output_dir + '/THE_END', mode='w') as f:
+    f.write("That's all folks!")

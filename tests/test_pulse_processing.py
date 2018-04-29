@@ -62,8 +62,8 @@ def test_find_hits_randomize(records):
 
 @given(several_fake_records)
 def test_from_break(records):
-    left = strax.from_break(records, side='left')
-    right = strax.from_break(records, side='right')
+    left = strax.from_break(records, left=True)
+    right = strax.from_break(records, left=False)
 
     assert len(left) + len(right) == len(records)
     if len(records) > 0:
