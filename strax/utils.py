@@ -1,6 +1,7 @@
 import contextlib
 from functools import wraps
 import re
+import typing
 
 import numpy as np
 import numba
@@ -238,3 +239,12 @@ def profile_threaded(filename):
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)
     yappi.clear_stats()
+
+
+@export
+def to_str_tuple(x) -> typing.Tuple[str]:
+    if isinstance(x, str):
+        return x,
+    elif isinstance(x, list):
+        return tuple(x)
+    return x

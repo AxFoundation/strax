@@ -21,10 +21,16 @@ class Strax:
 
     def __init__(self, storage=None, config=None):
         self.log = logging.getLogger('strax')
+
         if storage is None:
-            storage = [strax.FileStorage()]
+            storage = ['./strax_data']
+        if not isinstance(storage, (list, tuple)):
+            storage = [storage]
+        self.storage = [strax.FileStore(s) if isinstance(s, str) else s
+                        for s in storage]
+
         self.set_config(config, mode='new')
-        self.storage = storage
+
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
 
@@ -187,14 +193,8 @@ class Strax:
         :param save: str or list of str of data types you would like to save
         to cache, if they occur in intermediate computations
         """
-        def to_str_tuple(x) -> ty.Tuple[str]:
-            if isinstance(x, str):
-                return x,
-            elif isinstance(x, list):
-                return tuple(x)
-            return x
-        save = to_str_tuple(save)
-        targets = to_str_tuple(targets)
+        save = strax.to_str_tuple(save)
+        targets = strax.to_str_tuple(targets)
 
         plugins = self._get_plugins(targets, run_id)
 
@@ -220,7 +220,7 @@ class Strax:
                     # Found it! No need to make it or save it
                     del plugins[d]
                     return
-                except strax.NotCachedException:
+                except strax.NotCached:
                     continue
 
             # Not in any cache. We will be computing it.

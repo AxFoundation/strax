@@ -161,7 +161,11 @@ class Mailbox:
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         except Exception as e:
-            self.kill(reason=f"{e.__class__.__name__}('{e.args[0]}') "
+            try:
+                e_args = e.args[0]
+            except IndexError:
+                e_args = ''
+            self.kill(reason=f"{e.__class__.__name__}('{e_args}') "
                              f'in {threading.current_thread().name}')
             raise
         else:
