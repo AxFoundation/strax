@@ -5,16 +5,8 @@ import time
 import json
 import shutil
 
-import gil_load
 import strax
 
-gil_load.init()
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='{name} in {threadName} at {asctime}: {message}', style='{')
-log = logging.getLogger()
 
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
@@ -25,7 +17,23 @@ parser.add_argument('--shm', action='store_true',
 parser.add_argument('--erase', action='store_true',
                     help='Erase data after reading it. '
                          'Essential for online operation')
+parser.add_argument('--debug', action='store_true',
+                    help='Activate debug logging')
+
 args = parser.parse_args()
+
+try:
+    import gil_load     # noqa
+    gil_load.init()
+except ImportError:
+    from unittest.mock import Mock
+    gil_load = Mock()
+    gil_load.get = Mock(return_value=[float('nan')])
+
+logging.basicConfig(
+    level=logging.DEBUG if args.debug else logging.INFO,
+    format='{name} in {threadName} at {asctime}: {message}', style='{')
+log = logging.getLogger()
 
 run_id = '180423_1021'
 in_dir = '/dev/shm/from_fake_daq' if args.shm else './from_fake_daq'
@@ -44,7 +52,7 @@ gil_load.start(av_sample_interval=0.05)
 start = time.time()
 
 for i, events in enumerate(
-        mystrax.get(run_id, 'event_basics', max_workers=args.n)):
+        mystrax.get_iter(run_id, 'event_basics', max_workers=args.n)):
     print(f"\t{i}: Found {len(events)} events")
 
 end = time.time()

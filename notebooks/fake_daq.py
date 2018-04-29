@@ -38,7 +38,7 @@ mystrax = strax.Strax()
 chunk_sizes = []
 chunk_data_compressed = []
 for records in tqdm(strax.alternating_size_chunks(
-        mystrax.get('180423_1021', 'records'),
+        mystrax.get_iter('180423_1021', 'records'),
         args.chunk_size * 1e6,
         args.sync_chunk_size * 1e6)):
     # Restore baseline, clear metadata
