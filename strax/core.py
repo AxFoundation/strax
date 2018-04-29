@@ -4,6 +4,8 @@ import logging
 import inspect
 import typing as ty
 import warnings
+import random
+import string
 
 import numpy as np
 import pandas as pd
@@ -270,20 +272,37 @@ class Strax:
             savers=dict(savers),
             targets=targets)
 
-    def get(self, run_id: str, targets, save=tuple(), max_workers=None
-            ) -> ty.Iterator[np.ndarray]:
+    def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None
+                 ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         """
+        # If multiple targets of the same kind, create a MergePlugin
+        # automatically
+        if isinstance(targets, (list, tuple)) and len(targets) > 1:
+            plugins = self._get_plugins(targets=targets)
+            if len(set(plugins[d].data_kind for d in targets)) == 1:
+                temp_name = ''.join(random.choices(
+                    string.ascii_lowercase, k=10))
+                temp_merge = type(temp_name,
+                                  (strax.MergePlugin,),
+                                  dict(depends_on=tuple(targets)))
+                self.register(temp_merge)
+                targets = temp_name
+                # TODO: auto-unregister? Better to have a temp register
+                # override option in get_components
+            else:
+                raise RuntimeError("Cannot automerge different data kinds!")
+
         components = self.get_components(run_id, targets=targets, save=save)
         yield from strax.ThreadedMailboxProcessor(
             components, max_workers=max_workers).iter()
 
     def make(self, *args, **kwargs):
-        for _ in self.get(*args, **kwargs):
+        for _ in self.get_iter(*args, **kwargs):
             pass
 
     def get_array(self, *args, **kwargs):
-        return np.concatenate(list(self.get(*args, **kwargs)))
+        return np.concatenate(list(self.get_iter(*args, **kwargs)))
 
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
