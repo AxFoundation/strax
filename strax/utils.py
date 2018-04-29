@@ -2,6 +2,8 @@ import contextlib
 from functools import wraps
 import re
 import typing
+from hashlib import sha1
+import pickle
 
 import numpy as np
 import numba
@@ -248,3 +250,30 @@ def to_str_tuple(x) -> typing.Tuple[str]:
     elif isinstance(x, list):
         return tuple(x)
     return x
+
+
+@export
+def hashablize(obj):
+    """Convert a container hierarchy into one that can be hashed.
+    See http://stackoverflow.com/questions/985294
+    """
+    try:
+        hash(obj)
+    except TypeError:
+        if isinstance(obj, dict):
+            return tuple((k, hashablize(v)) for (k, v) in sorted(obj.items()))
+        elif isinstance(obj, np.ndarray):
+            return tuple(obj.tolist())
+        elif hasattr(obj, '__iter__'):
+            return tuple(hashablize(o) for o in obj)
+        else:
+            raise TypeError("Can't hashablize object of type %r" % type(obj))
+    else:
+        return obj
+
+
+@export
+def deterministic_hash(thing):
+    """Return a deterministic hash of a container hierarchy using hashablize,
+    pickle and sha1"""
+    return sha1(pickle.dumps(hashablize(thing))).hexdigest()

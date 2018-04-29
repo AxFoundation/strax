@@ -57,13 +57,16 @@ class Store:
             self._find(key)
         except NotCached:
             return False
-        return False
+        return True
 
     def loader(self, key: CacheKey, executor=None):
         """Return generator over cached results,
         or raise NotCached if the data is unavailable.
         """
         return self._read(self._find(key), executor)
+
+    def load_meta(self, key: CacheKey):
+        return self._read_meta(self._find(key))
 
     def saver(self, key, metadata):
         if not self.provides(key.data_type):

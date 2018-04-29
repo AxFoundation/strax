@@ -59,8 +59,7 @@ end = time.time()
 gil_load.stop()
 
 def total_size(data_type, raw=False):
-    with open(f'{out_dir}/{run_id}_{data_type}/metadata.json', mode='r') as f:
-        metadata = json.loads(f.read())
+    metadata = mystrax.get_meta(run_id, data_type)
     return sum(x['nbytes' if raw else 'filesize']
                for x in metadata['chunks']) / 1e6
 

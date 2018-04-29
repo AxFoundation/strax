@@ -103,10 +103,18 @@ class Strax:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def _set_plugin_config(self, p: strax.Plugin):
-        # Explicit type check, since if someone calls this with a plugin CLASS
-        # funny business might ensue
+    def _set_plugin_config(self, p, tolerant=True):
+        # Explicit type check, since if someone calls this with
+        # plugin CLASSES, funny business might ensue
+        # TODO: modifies self.config -> bad?
         assert isinstance(p, strax.Plugin)
+
+        for opt in p.takes_config.values():
+            try:
+                opt.validate(self.config)
+            except strax.InvalidConfiguration:
+                if not tolerant:
+                    raise
         p.config = {k: v for k, v in self.config.items()
                     if k in p.takes_config}
 
@@ -140,7 +148,7 @@ class Strax:
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
-            self._set_plugin_config(p)
+            self._set_plugin_config(p, tolerant=True)
 
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
@@ -160,8 +168,8 @@ class Strax:
 
             p.lineage = {d: (p.__class__.__name__,
                              p.version(run_id),
-                             [k for k in p.config
-                              if p.takes_config[k].track])}
+                             {k: v for k, v in p.config.items()
+                              if p.takes_config[k].track})}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -262,10 +270,7 @@ class Strax:
 
         # Check all required options are available / set defaults
         for p in plugins.values():
-            for opt in p.takes_config.values():
-                opt.validate(self.config)
             self._set_plugin_config(p)
-
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
@@ -307,10 +312,20 @@ class Strax:
     def get_df(self, *args, **kwargs):
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
+    def get_meta(self, run_id, target):
+        p = self._get_plugins((target,))[target]
+        key = strax.CacheKey(run_id, target, p.lineage)
+        for sb in self.storage:
+            if sb.has(key):
+                return sb.load_meta(key)
+        raise strax.NotCached(f"Can't load metadata, "
+                              f"data for {key} not available")
+
 
 ##
 # Config specification. Maybe should be its own file?
 ##
+
 
 @export
 class InvalidConfiguration(Exception):
