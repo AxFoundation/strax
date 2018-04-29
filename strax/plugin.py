@@ -214,14 +214,13 @@ class LoopPlugin(Plugin):
         deps_by_kind = self.dependencies_by_kind()
         things_by_kind = {
             k: strax.merge_arrs([kwargs[d] for d in deps])
-            for k, deps in deps_by_kind.items()
-        }
+            for k, deps in deps_by_kind.items()}
 
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
         base = things_by_kind[loop_over]
-        assert (np.all(base[1:]['time'] >= strax.endtime(base[:-1])),
-                f'{base} not disjoint')
+        assert np.all(base[1:]['time'] >= strax.endtime(base[:-1])), \
+            f'{base}s overlap'
 
         for k, things in things_by_kind.items():
             assert np.diff(things['time']).min() > 0, f'{k} not sorted'
