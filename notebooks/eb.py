@@ -35,11 +35,9 @@ if os.path.exists(out_dir):
 else:
     os.makedirs(out_dir)
 
-mystrax = strax.Strax(
-    storage=[strax.FileStorage(data_dirs=[out_dir])],
-    config=dict(
-        input_dir=in_dir,
-        erase=args.erase))
+mystrax = strax.Strax(storage=out_dir,
+                      config=dict(input_dir=in_dir,
+                                  erase=args.erase))
 mystrax.register_all(strax.xenon.plugins)
 
 gil_load.start(av_sample_interval=0.05)

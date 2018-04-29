@@ -60,10 +60,8 @@ class DAQReader(strax.Plugin):
         records = np.concatenate(records)
         records = strax.sort_by_time(records)
         if kind == 'central':
-            recs = records
             return records
-        recs = strax.from_break(records, left=kind == 'post')
-        return recs
+        return strax.from_break(records, left=kind == 'post')
 
     def compute(self, chunk_i):
         pre, current, post = self._chunk_paths(chunk_i)
@@ -72,7 +70,6 @@ class DAQReader(strax.Plugin):
             + [self._load_chunk(current)]
             + ([self._load_chunk(post, kind='post')] if post else [])
         )
-        # print(np.diff(records['time']).min(), "in recs")
 
         if self.config['erase']:
             for x in pre, current, post:
