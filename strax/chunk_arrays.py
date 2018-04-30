@@ -3,10 +3,8 @@
 import itertools
 
 import numpy as np
-from strax.utils import first_index_not_below
-
-from strax.utils import exporter
-export, __all__ = exporter()
+import strax
+export, __all__ = strax.exporter()
 
 
 @export
@@ -78,7 +76,7 @@ class ChunkPacer:
         except StopIteration:
             pass
 
-        n = first_index_not_below(func(self.buffer[-1]), threshold)
+        n = strax.first_index_not_below(func(self.buffer[-1]), threshold)
         n += sum(len(x) for x in self.buffer[:-1])
         return self._take_from_buffer(n)
 
@@ -111,7 +109,7 @@ def fixed_length_chunks(source, n=10):
 @export
 def fixed_size_chunks(source, n_bytes=int(1e8), dtype=None):
     """Yield arrays of maximum size n_bytes"""
-    p = ChunkPacer(source)
+    p = ChunkPacer(source, dtype=dtype)
     n = int(n_bytes / p.itemsize)
     try:
         while True:
@@ -136,6 +134,54 @@ def alternating_size_chunks(source, *sizes):
 
 
 @export
+def chunk_by_break(source,
+                   safe_break,
+                   ignore_below=10,
+                   max_t_buffer=int(1e10)):
+    """Yield arrays whose final elements are separated by at least
+    safe_break from the first elements of the next array.
+    :param source: Iterator producing interval-like arrays
+    :param safe_break: break the LAST time a gap this large occurs in a chunk.
+    If no such gap occurs, saves a chunk in the buffer.
+    :param ignore_below: Exclude intervals with area lower than this from the
+    break calculation
+    :param max_buffer: Maximum duration of time in the buffer.
+    If a larger buffer would result, break the buffer at the largest gap
+    even if it is smaller than safe_break.
+    """
+    # TODO: needs tests!
+    # TODO: add functionality to ChunkPacer instead?
+    buffer = None
+    for chunk_i, x in enumerate(source):
+        if chunk_i == 0:
+            buffer = x.copy()
+        else:
+            buffer = np.concatenate([buffer, x])
+
+        while True:
+            large_peaks = buffer[buffer['area'] > ignore_below]
+            time_in_buffer = buffer['time'][-1] - buffer['time'][0]
+            try:
+                break_i = strax.find_break_i(
+                    large_peaks,
+                    safe_break=safe_break,
+                    tolerant=time_in_buffer > max_t_buffer)
+
+                # TODO: can be faster...
+                mask = buffer['time'] < large_peaks[break_i]['time']
+                yield buffer[mask]
+                buffer = buffer[~mask]
+            except strax.NoBreakFound:
+                break
+
+    if buffer is None:
+        print("No data????")
+
+    if buffer is not None and len(buffer):
+        yield buffer
+
+
+@export
 def same_length(*sources):
     """Yield tuples of arrays of the same number of items
     """
@@ -156,6 +202,8 @@ def same_stop(*sources, field=None, func=None):
     others = [ChunkPacer(s) for s in sources[1:]]
 
     for x in pacemaker:
+        if not len(x):
+            continue
         threshold = x[-1]
         if field is not None:
             threshold = threshold[field]
@@ -182,3 +230,13 @@ def sync_iters(chunker, sources):
 
     return {names[i]: get_item(teed[i], i)
             for i in range(len(names))}
+
+
+@export
+def merge_iters(iters):
+    try:
+        while True:
+            yield strax.merge_arrs([next(it)
+                                    for it in iters])
+    except StopIteration:
+        return

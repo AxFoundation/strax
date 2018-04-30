@@ -2,7 +2,7 @@ import numpy as np
 from hypothesis import given
 
 import strax
-from .helpers import single_fake_pulse, several_fake_records
+from .helpers import single_fake_pulse
 
 
 def _find_hits(r):
@@ -58,16 +58,3 @@ def test_find_hits_randomize(records):
         l_ = results[i][1]
         r_ = results[i + 1][0]
         assert not np.any(w[l_:r_] == 1)
-
-
-@given(several_fake_records)
-def test_from_break(records):
-    left = strax.from_break(records, left=True)
-    right = strax.from_break(records, left=False)
-
-    assert len(left) + len(right) == len(records)
-    if len(records) > 0:
-        np.testing.assert_equal(np.concatenate([left, right]),
-                                records)
-    # TODO: I'm not actually testing the break seeker because it will almost
-    # certainly change

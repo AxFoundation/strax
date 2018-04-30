@@ -6,6 +6,7 @@ __version__ = '0.0.1'
 # The order of subpackes is not invariant, since we use strax.xxx inside strax
 from .utils import *
 from .dtypes import *
+from strax.processing.general import *
 from .chunk_arrays import *
 
 from .storage import *

@@ -4,6 +4,7 @@ from copy import copy
 import shutil
 import time
 
+import numba
 import numpy as np
 from tqdm import tqdm
 import strax
@@ -33,16 +34,23 @@ if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
 os.makedirs(output_dir)
 
+st = strax.Strax(config=dict(stop_after_zips=5))   # Maybe not track for now...
+st.register(strax.xenon.pax_interface.RecordsFromPax)
+
+def restore_baseline(records):
+    for r in records:
+        r['data'][:r['length']] = 16000 - r['data'][:r['length']]
+
 print("Preparing payload data")
-mystrax = strax.Strax()
 chunk_sizes = []
 chunk_data_compressed = []
 for records in tqdm(strax.alternating_size_chunks(
-        mystrax.get_iter('180423_1021', 'records'),
+        st.get_iter('180423_1021', 'raw_records'),
         args.chunk_size * 1e6,
         args.sync_chunk_size * 1e6)):
+
     # Restore baseline, clear metadata
-    records['data'] = 16000 - records['data']
+    restore_baseline(records)
     records['baseline'] = 0
     records['area'] = 0
 
