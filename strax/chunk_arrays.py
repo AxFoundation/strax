@@ -151,6 +151,7 @@ def chunk_by_break(source,
     """
     # TODO: needs tests!
     # TODO: add functionality to ChunkPacer instead?
+    buffer = None
     for chunk_i, x in enumerate(source):
         if chunk_i == 0:
             buffer = x.copy()
@@ -173,7 +174,10 @@ def chunk_by_break(source,
             except strax.NoBreakFound:
                 break
 
-    if len(buffer):
+    if buffer is None:
+        print("No data????")
+
+    if buffer is not None and len(buffer):
         yield buffer
 
 
@@ -198,6 +202,8 @@ def same_stop(*sources, field=None, func=None):
     others = [ChunkPacer(s) for s in sources[1:]]
 
     for x in pacemaker:
+        if not len(x):
+            continue
         threshold = x[-1]
         if field is not None:
             threshold = threshold[field]

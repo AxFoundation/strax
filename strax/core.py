@@ -36,11 +36,6 @@ class Strax:
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
 
-        # Register placeholder for records
-        # TODO: Hm, why exactly? And do I have to do this for all source
-        # plugins?
-        self.register(strax.RecordsPlaceholder)
-
     def set_config(self, config=None, mode='update'):
         if config is None:
             config = dict()

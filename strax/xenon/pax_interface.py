@@ -91,13 +91,15 @@ def pax_to_records(input_filename,
                  help="Convert only this many zip files")
 )
 class RecordsFromPax(strax.Plugin):
-    provides = 'records'
-    data_kind = 'records'
+    provides = 'raw_records'
+    data_kind = 'raw_records'
     depends_on = tuple()
     dtype = strax.record_dtype()
     parallel = False
 
     def iter(self, *args, **kwargs):
+        if not os.path.exists(self.config['pax_raw_dir']):
+            raise FileNotFoundError(self.config['pax_raw_dir'])
         input_dir = os.path.join(self.config['pax_raw_dir'], self.run_id)
         pax_files = sorted(glob.glob(input_dir + '/*.zip'))
         pax_sizes = np.array([os.path.getsize(x)
