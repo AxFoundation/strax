@@ -63,9 +63,12 @@ class DAQReader(strax.Plugin):
         records = strax.sort_by_time(records)
         if kind == 'central':
             return records
-        return strax.from_break(records, left=kind == 'post')
+        return strax.from_break(records,
+                                left=kind == 'post',
+                                tolerant=True)
 
     def compute(self, chunk_i):
+        print(f'{chunk_i}: computing')
         pre, current, post = self._chunk_paths(chunk_i)
         records = np.concatenate(
             ([self._load_chunk(pre, kind='pre')] if pre else [])
@@ -79,6 +82,7 @@ class DAQReader(strax.Plugin):
 
         strax.baseline(records)
         strax.integrate(records)
+        print(f'{chunk_i}: got {len(records)} records from readers')
 
         return records
 
@@ -219,6 +223,13 @@ class NCompeting(strax.Plugin):
           'n_competing'), np.int32),
     ]
 
+    def rechunk_input(self, iters):
+        return dict(peaks=strax.chunk_by_break(
+            iters['peaks'],
+            safe_break=self.config['nearby_window'],
+            ignore_below=self.config['ignore_below']
+        ))
+
     def compute(self, peaks):
         # TODO: allow dict of arrays output
         result = np.zeros(len(peaks), dtype=self.dtype)
@@ -244,7 +255,7 @@ def find_n_competing(peaks, window, fraction, ignore_below):
             left_i += 1
         while t[right_i] - window < t[i] and right_i < n - 1:
             right_i += 1
-        results[i] = np.sum(a[left_i:right_i + 1] > min(ignore_below,
+        results[i] = np.sum(a[left_i:right_i + 1] > max(ignore_below,
                                                         a[i] * fraction))
 
     return results - 1
@@ -301,6 +312,14 @@ class Events(strax.Plugin):
     ]
     parallel = False  # Since keeping state (events_seen)
     events_seen = 0
+
+    def rechunk_input(self, iters):
+        return dict(peaks=strax.chunk_by_break(
+            iters['peaks'],
+            safe_break=(self.config['left_extension']
+                        + self.config['right_extension'] + 1),
+            ignore_below=self.config['trigger_threshold']
+        ))
 
     def compute(self, peaks):
         le = self.config['left_extension']

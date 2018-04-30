@@ -39,7 +39,7 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    rechunk_input = False     # Input is rechunked before compute
+    rechunk_input = False
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
@@ -145,8 +145,8 @@ class Plugin:
                 new_iters[kind] = iters[deps[0]]
         iters = new_iters
 
-        # Any additional rechunking, if needed
-        iters = self.sync_input_iters(iters)
+        if self.rechunk_input:
+            iters = self.rechunk_input(iters)
 
         pending = []
         for chunk_i in itertools.count():
@@ -199,9 +199,6 @@ class Plugin:
     def compute(self, **kwargs):
         raise NotImplementedError
 
-    def sync_input_iters(self, iters):
-        return iters
-
 ##
 # Special plugins
 ##
@@ -224,11 +221,13 @@ class LoopPlugin(Plugin):
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
         base = kwargs[loop_over]
-        assert np.all(base[1:]['time'] >= strax.endtime(base[:-1])), \
-            f'{base}s overlap'
+        if len(base) > 1:
+            assert np.all(base[1:]['time'] >= strax.endtime(base[:-1])), \
+                f'{base}s overlap'
 
         for k, things in kwargs.items():
-            assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+            if len(things) > 1:
+                assert np.diff(things['time']).min() > 0, f'{k} not sorted'
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
