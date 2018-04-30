@@ -35,7 +35,7 @@ class ThreadedMailboxProcessor:
         # so they don't have to be scheduled by executor individually.
         # This saves data transfer between cores (NUMA).
         for d, p in plugins.items():
-            if not p.rechunk:
+            if not p.rechunk_on_save:
                 self.log.debug(f"Putting savers for {d} in post_compute")
                 for s in savers.get(d, []):
                     p.post_compute.append(s.save)
@@ -49,7 +49,7 @@ class ThreadedMailboxProcessor:
         # TODO: allow compute grouping while saver does rechunk
         while True:
             for b, p_b in plugins.items():
-                if (not p_b.rechunk
+                if (p_b.parallel and not p_b.rechunk_on_save
                         and len(p_b.depends_on) == 1
                         and b not in components.targets):
                     a = p_b.depends_on[0]
