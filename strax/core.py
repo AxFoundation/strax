@@ -265,7 +265,7 @@ class Strax:
 
         # Check all required options are available / set defaults
         for p in plugins.values():
-            self._set_plugin_config(p)
+            self._set_plugin_config(p, tolerant=False)
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,

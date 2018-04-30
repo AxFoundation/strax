@@ -23,7 +23,7 @@ class FileStore(Store):
 
         When writing, we save (only) in the highest-preference directory
         in which we have write permission.
-        """.format(provides_doc=Store.provides_doc)
+        """.format(provides_doc=Store.saver_init_doc)
         super().__init__(provides)
 
         self.data_dirs = strax.to_str_tuple(data_dirs)
@@ -44,7 +44,6 @@ class FileStore(Store):
             self.log.debug(f"{key} is NOT in cache.")
             raise NotCached
         self.log.debug(f"{key} is in cache.")
-
         return dirname
 
     def _candidate_dirs(self, key: CacheKey):
