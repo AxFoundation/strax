@@ -150,17 +150,12 @@ class Strax:
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, tolerant=True)
 
+            # TODO: check can now be moved inside plugin
             compute_pars = list(
                 inspect.signature(p.compute).parameters.keys())
             if 'chunk_i' in compute_pars:
                 p.compute_takes_chunk_i = True
                 del compute_pars[compute_pars.index('chunk_i')]
-
-            if not hasattr(p, 'depends_on'):
-                # Infer dependencies from self.compute's argument names
-                process_params = compute_pars
-                process_params = [p for p in process_params if p != 'kwargs']
-                p.depends_on = tuple(process_params)
 
             plugins[d] = p
 

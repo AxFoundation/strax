@@ -4,15 +4,14 @@
 import numpy as np
 import numba
 
-from strax import utils
-from strax.dtypes import hit_dtype
-
-__all__ = 'baseline integrate find_hits from_break'.split()
+import strax
+export, __all__ = strax.exporter()
 
 # Constant for use in record_links, to indicate there is no prev/next record
 NOT_APPLICABLE = -1
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def baseline(records, baseline_samples=40):
     """Subtract pulses from int(baseline), store baseline in baseline field
@@ -48,12 +47,14 @@ def baseline(records, baseline_samples=40):
         d.baseline = bl
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
     for i, r in enumerate(records):
         records[i]['area'] = r['data'].sum()
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
@@ -97,7 +98,8 @@ def record_links(records):
 # else copying buffers / switching context dominates over actual computation
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
-@utils.growing_result(hit_dtype, chunk_size=int(1e4))
+@export
+@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_hits(records, threshold=15, _result_buffer=None):
     """Return hits (intervals above threshold) found in records.
@@ -162,39 +164,3 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def from_break(records, safe_break=10000, left=True):
-    """Return records on side of a break at least safe_break long
-    If there is no such break, return the best break found.
-    """
-    # TODO: This is extremely rough. Better to find proper gaps, and if we
-    # know the timing of the readers, consider breaks at end and start too.
-    if len(records) < 2:
-        if left:
-            return records
-        else:
-            return np.zeros(0, dtype=records.dtype)
-
-    max_gap = 0
-    prev_t = records[0]['time']
-    max_gap_i = -1
-    for i, r in enumerate(records):
-        gap = r['time'] - prev_t
-        if gap >= safe_break:
-            break_i = i
-            break
-        if gap > max_gap:
-            max_gap_i = i
-            max_gap = gap
-    else:
-        print("Did not find safe break, using largest available break: ",
-              max_gap,
-              " ns")
-        break_i = max_gap_i
-
-    if left:
-        return records[:break_i]
-    else:
-        return records[break_i:]

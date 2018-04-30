@@ -12,6 +12,7 @@ def test_core():
 
     class Records(strax.Plugin):
         provides = 'records'
+        depends_on = tuple()
         dtype = strax.record_dtype()
 
         def iter(self, *args, **kwargs):
@@ -25,6 +26,7 @@ def test_core():
 
     class Peaks(strax.Plugin):
         provides = 'peaks'
+        depends_on = ('records',)
         dtype = strax.peak_dtype()
 
         def compute(self, records):

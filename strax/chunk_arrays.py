@@ -3,10 +3,8 @@
 import itertools
 
 import numpy as np
-from strax.utils import first_index_not_below
-
-from strax.utils import exporter
-export, __all__ = exporter()
+import strax
+export, __all__ = strax.exporter()
 
 
 @export
@@ -78,7 +76,7 @@ class ChunkPacer:
         except StopIteration:
             pass
 
-        n = first_index_not_below(func(self.buffer[-1]), threshold)
+        n = strax.first_index_not_below(func(self.buffer[-1]), threshold)
         n += sum(len(x) for x in self.buffer[:-1])
         return self._take_from_buffer(n)
 
@@ -182,3 +180,13 @@ def sync_iters(chunker, sources):
 
     return {names[i]: get_item(teed[i], i)
             for i in range(len(names))}
+
+
+@export
+def merge_iters(iters):
+    try:
+        while True:
+            yield strax.merge_arrs([next(it)
+                                    for it in iters])
+    except StopIteration:
+        return

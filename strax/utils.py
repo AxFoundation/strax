@@ -85,101 +85,6 @@ def growing_result(dtype=np.int, chunk_size=10000):
     return _growing_result
 
 
-# (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
-# TODO: maybe this should be a factory?
-@export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def sort_by_time(x):
-    """Sort pulses by time, then channel.
-
-    Assumes you have no more than 10k channels, and records don't span
-    more than 100 days. TODO: FIX this
-    """
-    # I couldn't get fast argsort on multiple keys to work in numba
-    # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min()) * 10000 + x['channel']
-    sort_i = np.argsort(sort_key)
-    return x[sort_i]
-
-
-@export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def first_index_not_below(arr, t):
-    """Return first index of array >= t, or len(arr) if no such found"""
-    for i, x in enumerate(arr):
-        if x >= t:
-            return i
-    return len(arr)
-
-
-@export
-def endtime(x):
-    """Return endtime of intervals x"""
-    if 'endtime' in x.dtype.names:
-        return x['endtime']
-    return x['time'] + x['length'] * x['dt']
-
-
-@export
-def fully_contained_in(things, containers):
-    """Return array of len(things) with index of interval in containers
-    for which things are fully contained in a container, or -1 if no such
-    exists. We assume all intervals are sorted by time, and b_intervals
-    nonoverlapping.
-    """
-    result = np.ones(len(things), dtype=np.int32) * -1
-    a_starts = things['time']
-    b_starts = containers['time']
-    a_ends = endtime(things)
-    b_ends = endtime(containers)
-    _fc_in(a_starts, b_starts, a_ends, b_ends, result)
-    return result
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
-    b_i = 0
-    for a_i in range(len(a_starts)):
-        # Skip ahead one or more b's if we're beyond them
-        # Note <= in second condition: end is an exclusive bound
-        while b_i < len(b_starts) and b_ends[b_i] <= a_starts[a_i]:
-            b_i += 1
-        if b_i == len(b_starts):
-            break
-
-        # Check for containment. We only need to check one b, since bs
-        # are nonoverlapping
-        if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
-            result[a_i] = b_i
-
-
-@export
-def split_by_containment(things, containers):
-    """Return list of thing-arrays contained in each container
-
-    Assumes everything is sorted, and containers are nonoverlapping
-    """
-    if not len(containers):
-        return []
-
-    which_container = fully_contained_in(things, containers)
-
-    mask = which_container != -1
-    things = things[mask]
-    which_container = which_container[mask]
-    things_split = np.split(
-        things,
-        np.where(np.diff(which_container))[0] + 1)
-
-    # Insert empties for containers with nothing
-    for c in np.setdiff1d(np.arange(len(containers)),
-                          np.unique(which_container)):
-        if c == 0:
-            continue   # np.split already produces an empty in this case?
-        things_split.insert(c, things[:0])
-
-    return things_split
-
 
 @export
 def unpack_dtype(dtype):
@@ -203,15 +108,38 @@ def unpack_dtype(dtype):
     return result
 
 
+
+@export
+def merged_dtype(dtypes):
+    result = {}
+    for x in dtypes:
+        for unpacked_dtype in unpack_dtype(x):
+            field_name = unpacked_dtype[0]
+            if isinstance(field_name, tuple):
+                field_name = field_name[0]
+
+            if field_name in result:
+                # Name collision
+                continue
+
+            result[field_name] = unpacked_dtype
+
+    return list(result.values())
+
+
 @export
 def merge_arrs(arrs):
-    """Merge structured arrays of equal length. Assumes no field collisions.
+    """Merge structured arrays of equal length.
+
+    On field name collisions, data from later arrays is kept.
     """
+    # Much faster than the similar function in numpy.lib.recfunctions
+
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):
         raise ValueError("Arrays must all have the same length")
-    result_dtype = sum([unpack_dtype(x.dtype) for x in arrs], [])
-    result = np.zeros(n, dtype=result_dtype)
+
+    result = np.zeros(n, dtype=merged_dtype([x.dtype for x in arrs]))
     for arr in arrs:
         for fn in arr.dtype.names:
             result[fn] = arr[fn]

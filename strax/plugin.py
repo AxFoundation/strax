@@ -37,8 +37,10 @@ class Plugin:
     provides: str
 
     compressor = 'blosc'
-    n_per_iter = None       # TODO: think about this
-    rechunk = True
+
+    rechunk_on_save = True    # Saver is allowed to rechunk
+    rechunk_input = False     # Input is rechunked before compute
+
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
     save_meta_only = False
@@ -48,12 +50,17 @@ class Plugin:
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     takes_config = dict()       # Config options
-    compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
+    compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
 
     def __init__(self):
-        self.pre_compute = []
+        if not hasattr(self, 'depends_on'):
+            raise ValueError('depends_on not provided for '
+                             f'{self.__class__.__name__}')
         self.post_compute = []
         self.on_close = []
+        if self.rechunk_input and self.parallel:
+            raise RuntimeError("Plugins that rechunk their input "
+                               "cannot be parallelized")
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -118,14 +125,6 @@ class Plugin:
         """
         deps_by_kind = self.dependencies_by_kind()
 
-        if self.n_per_iter is not None:
-            # Apply additional flow control
-            for kind, deps in deps_by_kind.items():
-                d = deps[0]
-                iters[d] = strax.fixed_length_chunks(iters[d],
-                                                     n=self.n_per_iter)
-                break
-
         if len(deps_by_kind) > 1:
             # Sync the iterators that provide time info for each data kind
             # (first in deps_by_kind lists) by endtime
@@ -134,20 +133,28 @@ class Plugin:
                 {d[0]: iters[d[0]]
                  for d in deps_by_kind.values()}))
 
-        # Sync the iterators of each data_kind to provide same-length chunks
-        for deps in deps_by_kind.values():
+        # Convert to iterators over merged data for each kind
+        new_iters = dict()
+        for kind, deps in deps_by_kind.items():
             if len(deps) > 1:
-                iters.update(strax.sync_iters(
+                synced_iters = strax.sync_iters(
                     strax.same_length,
-                    {d: iters[d] for d in deps}))
+                    {d: iters[d] for d in deps})
+                new_iters[kind] = strax.merge_iters(synced_iters.values())
+            else:
+                new_iters[kind] = iters[deps[0]]
+        iters = new_iters
+
+        # Any additional rechunking, if needed
+        iters = self.sync_input_iters(iters)
 
         pending = []
         for chunk_i in itertools.count():
             try:
                 if not self.check_next_ready_or_done(chunk_i):
                     raise StopIteration
-                compute_kwargs = {d: next(iters[d])
-                                  for d in self.depends_on}
+                compute_kwargs = {k: next(iters[k])
+                                  for k in deps_by_kind}
             except StopIteration:
                 self.close(wait_for=tuple(pending))
                 return
@@ -168,11 +175,6 @@ class Plugin:
     def do_compute(self, *args, chunk_i=None, **kwargs):
         for i, x in enumerate(args):
             kwargs[self.depends_on[i]] = x
-
-        for p in self.pre_compute:
-            r = p(**kwargs, chunk_i=chunk_i)
-            if r is not None:
-                kwargs = r
 
         if self.compute_takes_chunk_i:
             result = self.compute(**kwargs, chunk_i=chunk_i)
@@ -197,29 +199,17 @@ class Plugin:
     def compute(self, **kwargs):
         raise NotImplementedError
 
+    def sync_input_iters(self, iters):
+        return iters
 
 ##
 # Special plugins
 ##
 
 
-@export
-class MergePlugin(Plugin):
-
-    def __init__(self):
-        super().__init__()
-        if not hasattr(self, 'depends_on'):
-            raise ValueError('depends_on is mandatory for LoopPlugin')
-
-        self.pre_compute.append(self.merge_deps)
-
-    def merge_deps(self, chunk_i, **kwargs):
-        return {k: strax.merge_arrs([kwargs[d] for d in deps])
-                for k, deps in self.dependencies_by_kind().items()}
-
 
 @export
-class LoopPlugin(MergePlugin):
+class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
     def compute(self, **kwargs):
@@ -264,7 +254,7 @@ class LoopPlugin(MergePlugin):
 
 
 @export
-class MergeOnlyPlugin(MergePlugin):
+class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
     save_when = SaveWhen.EXPLICIT
@@ -272,15 +262,15 @@ class MergeOnlyPlugin(MergePlugin):
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
         if len(deps_by_kind) != 1:
-            raise ValueError("MergePlugins can only merge data of the same "
-                             "kind, but got multiple kinds: "
+            raise ValueError("MergeOnlyPlugins can only merge data "
+                             "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return sum([strax.unpack_dtype(self.deps[d].dtype)
-                    for d in self.depends_on], [])
+        return strax.merged_dtype([self.deps[d].dtype
+                                   for d in self.depends_on])
 
     def compute(self, **kwargs):
-        return strax.merge_arrs(list(kwargs.values()))
+        return kwargs[list(kwargs.keys())[0]]
 
 
 @export
