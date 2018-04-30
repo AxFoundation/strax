@@ -13,6 +13,16 @@ import pandas as pd
 import strax
 export, __all__ = strax.exporter()
 
+get_docs = """
+    :param run_id: run id to get
+    :param target: data type to get
+    :param save: data types you would like to save
+    to cache, if they occur in intermediate computations.
+    Some plugins save automatically.
+    :param max_workers: Number of worker threads/processes to spawn.
+    In practice more CPUs may be used due to strax's multithreading.
+"""
+
 
 @export
 class Strax:
@@ -188,11 +198,7 @@ class Strax:
                        targets=tuple(), save=tuple()
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
-
-        :param run_id: run id to get
-        :param targets: data type to yield results for
-        :param save: str or list of str of data types you would like to save
-        to cache, if they occur in intermediate computations
+        {get_docs}
         """
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
@@ -270,6 +276,9 @@ class Strax:
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None
                  ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
+        {get_docs}
+        TODO: This is not quite a normal iterator: if you break
+        results will still accumulate in a background thread!
         """
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
@@ -292,17 +301,30 @@ class Strax:
         yield from strax.ThreadedMailboxProcessor(
             components, max_workers=max_workers).iter()
 
-    def make(self, *args, **kwargs):
+    def make(self, *args, **kwargs) -> None:
+        """Compute target for run_id (return nothing)
+        {get_docs}
+        """
         for _ in self.get_iter(*args, **kwargs):
             pass
 
-    def get_array(self, *args, **kwargs):
+    def get_array(self, *args, **kwargs) -> np.ndarray:
+        """Compute target for run_id and return as numpy array
+        {get_docs}
+        """
         return np.concatenate(list(self.get_iter(*args, **kwargs)))
 
-    def get_df(self, *args, **kwargs):
+    def get_df(self, *args, **kwargs) -> pd.DataFrame:
+        """Compute target for run_id and return as pandas DataFrame
+        {get_docs}
+        """
         return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
 
-    def get_meta(self, run_id, target):
+    def get_meta(self, run_id, target) -> dict:
+        """Return metadata for target for run_id, or raise NotCached
+        if data is not yet available.
+        {get_docs}
+        """
         p = self._get_plugins((target,))[target]
         key = strax.CacheKey(run_id, target, p.lineage)
         for sb in self.storage:
@@ -311,6 +333,11 @@ class Strax:
         raise strax.NotCached(f"Can't load metadata, "
                               f"data for {key} not available")
 
+
+for x in dir(Strax):
+    if x.startswith('get_') or x == 'make':
+        f = getattr(Strax, x)
+        f.__doc__ = f.__doc__.format(get_docs=get_docs)
 
 ##
 # Config specification. Maybe should be its own file?
