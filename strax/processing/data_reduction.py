@@ -5,7 +5,7 @@ from enum import IntEnum
 
 from strax.processing.pulse_processing import NOT_APPLICABLE, record_links
 from strax.processing.peak_building import find_peaks
-from strax.utils import fully_contained_in
+from .general import fully_contained_in
 from strax.dtypes import peak_dtype
 
 __all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \

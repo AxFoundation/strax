@@ -63,12 +63,12 @@ def total_size(data_type, raw=False):
                for x in metadata['chunks']) / 1e6
 
 
-raw_data_size = round(total_size('records', raw=True))
+raw_data_size = round(total_size('raw_records', raw=True))
 dt = end - start
 speed = raw_data_size / dt
 gil_pct = 100 * gil_load.get(4)[0]
 sizes = {d: '%0.2f MB' % total_size(d)
-         for d in ['records', 'reduced_records',
+         for d in ['raw_records', 'records',
                    'peaks', 'peak_classification']}
 print(f"""
 Took {dt:.3f} seconds, processed {raw_data_size} MB at {speed:.2f} MB/s

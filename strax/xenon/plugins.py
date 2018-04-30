@@ -18,11 +18,12 @@ export, __all__ = strax.exporter()
     strax.Option('erase', default=False, track=False,
                  help="Delete reader data after processing"))
 class DAQReader(strax.Plugin):
-    provides = 'records'
+    provides = 'raw_records'
+    depends_on = tuple()
     dtype = strax.record_dtype()
 
     parallel = 'process'
-    rechunk = False
+    rechunk_on_save = False
     can_remake = False
 
     def _path(self, chunk_i):
@@ -62,7 +63,10 @@ class DAQReader(strax.Plugin):
         records = strax.sort_by_time(records)
         if kind == 'central':
             return records
-        return strax.from_break(records, left=kind == 'post')
+        return strax.from_break(records,
+                                safe_break=int(1e3),  # TODO config?
+                                left=kind == 'post',
+                                tolerant=True)
 
     def compute(self, chunk_i):
         pre, current, post = self._chunk_paths(chunk_i)
@@ -79,19 +83,25 @@ class DAQReader(strax.Plugin):
         strax.baseline(records)
         strax.integrate(records)
 
+        timespan_sec = (records[-1]['time'] - records[0]['time']) / 1e9
+        print(f'{chunk_i}: read {records.nbytes/1e6:.2f} MB '
+              f'({len(records)} records, '
+              f'{timespan_sec:.2f} sec) from readers')
+
         return records
 
 
 @export
-class ReducedRecords(strax.Plugin):
+class Records(strax.Plugin):
+    depends_on = ('raw_records',)
     data_kind = 'records'   # TODO: indicate cuts have been done?
     compressor = 'zstd'
     parallel = True
-    rechunk = False
+    rechunk_on_save = False
     dtype = strax.record_dtype()
 
-    def compute(self, records):
-        r = strax.exclude_tails(records, to_pe)
+    def compute(self, raw_records):
+        r = strax.exclude_tails(raw_records, to_pe)
         hits = strax.find_hits(r)
         strax.cut_outside_hits(r, hits)
         return r
@@ -102,13 +112,14 @@ class ReducedRecords(strax.Plugin):
     strax.Option('diagnose_sorting', track=False, default=False,
                  help="Enable runtime checks for sorting and disjointness"))
 class Peaks(strax.Plugin):
+    depends_on = ('records',)
     data_kind = 'peaks'
     parallel = True
-    rechunk = False
+    rechunk_on_save = False
     dtype = strax.peak_dtype(n_channels=len(to_pe))
 
-    def compute(self, reduced_records):
-        r = reduced_records
+    def compute(self, records):
+        r = records
         hits = strax.find_hits(r)       # TODO: Duplicate work
         hits = strax.sort_by_time(hits)
 
@@ -132,6 +143,7 @@ class Peaks(strax.Plugin):
 @export
 class PeakBasics(strax.Plugin):
     parallel = True
+    depends_on = ('peaks',)
     dtype = [
         (('Start time of the peak (ns since unix epoch)',
           'time'), np.int64),
@@ -176,13 +188,14 @@ class PeakBasics(strax.Plugin):
 @export
 class PeakClassification(strax.Plugin):
     parallel = True
+    depends_on = ('peak_basics',)
     dtype = [
         (('Classification of the peak.',
           'type'), np.int8)
     ]
 
-    def compute(self, peak_basics):
-        p = peak_basics
+    def compute(self, peaks):
+        p = peaks
         r = np.zeros(len(p), dtype=self.dtype)
 
         is_s1 = p['area'] > 2
@@ -197,35 +210,43 @@ class PeakClassification(strax.Plugin):
 
 
 @strax.takes_config(
-    strax.Option('max_competitive', default=7,
-                 help='Peaks with >= this number of similarly-sized or higher '
-                      'peaks do not trigger events'),
     strax.Option('min_area_fraction', default=0.5,
                  help='The area of competing peaks must be at least '
                       'this fraction of that of the considered peak'),
-    strax.Option('max_time_diff', default=int(1e7),
+    strax.Option('nearby_window', default=int(1e7),
                  help='Peaks starting within this time window (on either side)'
-                      'in ns count as nearby.'))
+                      'in ns count as nearby.'),
+    strax.Option('ignore_below', default=10,
+                 help='Peaks smaller than this are ignored completely. '
+                      'This is necessary to have "safe breaks" in the data.')
+)
 class NCompeting(strax.Plugin):
-    # TODO: Need overlap handling!
-    parallel = True
+    depends_on = ('peak_basics',)
     dtype = [
         (('Number of nearby similarly-sized (or larger) peaks',
           'n_competing'), np.int32),
     ]
 
-    def compute(self, peak_basics):
+    def rechunk_input(self, iters):
+        return dict(peaks=strax.chunk_by_break(
+            iters['peaks'],
+            safe_break=self.config['nearby_window'],
+            ignore_below=self.config['ignore_below']
+        ))
+
+    def compute(self, peaks):
         # TODO: allow dict of arrays output
-        result = np.zeros(len(peak_basics), dtype=self.dtype)
+        result = np.zeros(len(peaks), dtype=self.dtype)
         result['n_competing'] = find_n_competing(
-            peak_basics,
-            window=self.config['max_time_diff'],
-            fraction=self.config['min_area_fraction'])
+            peaks,
+            window=self.config['nearby_window'],
+            fraction=self.config['min_area_fraction'],
+            ignore_below=self.config['ignore_below'])
         return result
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_n_competing(peaks, window, fraction):
+def find_n_competing(peaks, window, fraction, ignore_below):
     n = len(peaks)
     t = peaks['time']
     a = peaks['area']
@@ -238,9 +259,32 @@ def find_n_competing(peaks, window, fraction):
             left_i += 1
         while t[right_i] - window < t[i] and right_i < n - 1:
             right_i += 1
-        results[i] = np.sum(a[left_i:right_i + 1] > a[i] * fraction) - 1
+        results[i] = np.sum(a[left_i:right_i + 1] > max(ignore_below,
+                                                        a[i] * fraction))
 
-    return results
+    return results - 1
+
+
+def find_peak_groups(peaks, gap_threshold,
+                     left_extension=0, right_extension=0,
+                     max_duration=int(1e9)):
+    # Mock up a "hits" array so we can just use the existing peakfinder
+    # It doesn't work on raw peaks, since they might have different dts
+    # TODO: is there no cleaner way?
+    fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
+    fake_hits['dt'] = 1
+    fake_hits['time'] = peaks['time']
+    # TODO: could this cause int nonsense?
+    fake_hits['length'] = peaks['endtime'] - peaks['time']
+    fake_peaks = strax.find_peaks(
+        fake_hits, to_pe=np.zeros(1),
+        gap_threshold=gap_threshold,
+        left_extension=left_extension, right_extension=right_extension,
+        min_hits=1, min_area=0,
+        max_duration=max_duration)
+    # TODO: cleanup input of meaningless fields?
+    # (e.g. sum waveform)
+    return fake_peaks
 
 
 @strax.takes_config(
@@ -255,11 +299,11 @@ def find_n_competing(peaks, window, fraction):
     strax.Option('right_extension', default=int(1e6),
                  help='Extend events this many ns to the right from each '
                       'triggering peak'),
-    strax.Option('max_event_length', default=int(1e7),
+    strax.Option('max_event_duration', default=int(1e7),
                  help='Events longer than this are forcefully ended, '
-                      'triggers in the truncated part are lost!')
+                      'triggers in the truncated part are lost!'),
 )
-class Events(strax.MergePlugin):
+class Events(strax.Plugin):
     depends_on = ['peak_basics', 'n_competing']
     data_kind = 'events'
     dtype = [
@@ -270,10 +314,17 @@ class Events(strax.MergePlugin):
         (('Event end time in ns since the unix epoch',
           'endtime'), np.int64),
     ]
-    parallel = False  # Since keeping state (events_seen)
+    parallel = False    # Since keeping state (events_seen)
     events_seen = 0
 
-    # TODO: automerge deps
+    def rechunk_input(self, iters):
+        return dict(peaks=strax.chunk_by_break(
+            iters['peaks'],
+            safe_break=(self.config['left_extension']
+                        + self.config['right_extension'] + 1),
+            ignore_below=self.config['trigger_threshold']
+        ))
+
     def compute(self, peaks):
         le = self.config['left_extension']
         re = self.config['right_extension']
@@ -283,39 +334,24 @@ class Events(strax.MergePlugin):
             & (peaks['n_competing'] <= self.config['max_competing'])
             ]
 
-        # Join nearby triggers - yet another max-gap clustering
-        # Mock up a "hits" array so we can just use the existing peakfinder
-        # TODO: is there no cleaner way?
-        fake_hits = np.zeros(len(triggers), dtype=strax.hit_dtype)
-        fake_hits['dt'] = 1
-        fake_hits['time'] = triggers['time']
-        # TODO: could this cause int nonsense?
-        fake_hits['length'] = triggers['endtime'] - triggers['time']
-        fake_peaks = strax.find_peaks(
-            fake_hits, to_pe=np.zeros(1),
+        # Join nearby triggers
+        peak_groups = find_peak_groups(
+            triggers,
             gap_threshold=le + re + 1,
-            left_extension=le, right_extension=re,
-            min_hits=1, min_area=0,
-            max_duration=self.config['max_event_length'])
+            left_extension=le,
+            right_extension=re,
+            max_duration=self.config['max_event_duration'])
 
-        result = np.zeros(len(fake_peaks), self.dtype)
-        result['time'] = fake_peaks['time']
-        result['endtime'] = (fake_peaks['time']
-                             + fake_peaks['length'] * fake_peaks['dt'])
+        result = np.zeros(len(peak_groups), self.dtype)
+        result['time'] = peak_groups['time']
+        result['endtime'] = (peak_groups['time']
+                             + peak_groups['length'] * peak_groups['dt'])
         result['event_number'] = (np.arange(len(result))
                                   + self.events_seen)
 
         # Filter out events without S1 + S2
         self.events_seen += len(result)
 
-        # TODO dirty hack!!
-        # This will mangle events to ensure they are nonoverlapping
-        # Needed for online processing until we have overlap handling...
-        # Alternative is to put n_per_iter = float('inf')
-        result['time'] = np.clip(result['time'],
-                                 peaks[0]['time'], None)
-        result['endtime'] = np.clip(result['endtime'],
-                                    None, peaks[-1]['endtime'])
         return result
         # TODO: someday investigate why loopplugin doesn't give
         # anything if events do not contain peaks..

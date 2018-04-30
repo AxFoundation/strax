@@ -1,9 +1,6 @@
-from .helpers import sorted_intervals, disjoint_sorted_intervals
-
+from . import helpers   # noqa
 import numpy as np
 import strax
-
-from hypothesis import given
 
 
 def test_growing_result():
@@ -30,44 +27,3 @@ def test_growing_result():
     got = bla(result_dtype=np.float)
     np.testing.assert_equal(got, should_get)
     assert got.dtype == should_get.dtype
-
-
-@given(sorted_intervals, disjoint_sorted_intervals)
-def test_fully_contained_in(things, containers):
-    result = strax.fully_contained_in(things, containers)
-
-    assert len(result) == len(things)
-    if len(result):
-        assert result.max() < len(containers)
-
-    for i, thing in enumerate(things):
-        if result[i] == -1:
-            # Check for false negative
-            for c in containers:
-                assert not _is_contained(thing, c)
-        else:
-            # Check for false positives
-            assert _is_contained(thing, containers[result[i]])
-
-
-@given(sorted_intervals, disjoint_sorted_intervals)
-def test_split_by_containment(things, containers):
-    result = strax.split_by_containment(things, containers)
-
-    assert len(result) == len(containers)
-
-    for container_i, things_in in enumerate(result):
-        for t in things:
-            assert ((t in things_in)
-                    == _is_contained(t, containers[container_i]))
-
-    if len(result) and len(np.concatenate(result)):
-        assert np.diff(np.concatenate(result)['time']) >= 0, "Sorting broken"
-
-
-def _is_contained(_thing, _container):
-    # Assumes dt = 1
-    return _container['time'] \
-           <= _thing['time'] \
-           <= _thing['time'] + _thing['length'] \
-           <= _container['time'] + _container['length']
