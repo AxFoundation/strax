@@ -37,9 +37,12 @@ os.makedirs(output_dir)
 st = strax.Strax(config=dict(stop_after_zips=5))   # Maybe not track for now...
 st.register(strax.xenon.pax_interface.RecordsFromPax)
 
+
+@numba.njit
 def restore_baseline(records):
     for r in records:
         r['data'][:r['length']] = 16000 - r['data'][:r['length']]
+
 
 print("Preparing payload data")
 chunk_sizes = []
