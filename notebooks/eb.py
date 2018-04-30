@@ -2,7 +2,6 @@ import logging
 import argparse
 import os
 import time
-import json
 import shutil
 
 import strax
@@ -33,7 +32,6 @@ except ImportError:
 logging.basicConfig(
     level=logging.DEBUG if args.debug else logging.INFO,
     format='{name} in {threadName} at {asctime}: {message}', style='{')
-log = logging.getLogger()
 
 run_id = '180423_1021'
 in_dir = '/dev/shm/from_fake_daq' if args.shm else './from_fake_daq'
@@ -43,34 +41,37 @@ if os.path.exists(out_dir):
 else:
     os.makedirs(out_dir)
 
-mystrax = strax.Strax(storage=out_dir,
-                      config=dict(input_dir=in_dir,
-                                  erase=args.erase))
-mystrax.register_all(strax.xenon.plugins)
+st = strax.Strax(storage=out_dir,
+                 config=dict(input_dir=in_dir,
+                             erase=args.erase))
+st.register_all(strax.xenon.plugins)
 
 gil_load.start(av_sample_interval=0.05)
 start = time.time()
 
 for i, events in enumerate(
-        mystrax.get_iter(run_id, 'event_basics', max_workers=args.n)):
+        st.get_iter(run_id, 'event_basics', max_workers=args.n)):
     print(f"\t{i}: Found {len(events)} events")
 
 end = time.time()
 gil_load.stop()
 
+
 def total_size(data_type, raw=False):
-    metadata = mystrax.get_meta(run_id, data_type)
+    metadata = st.get_meta(run_id, data_type)
     return sum(x['nbytes' if raw else 'filesize']
                for x in metadata['chunks']) / 1e6
 
-raw_data_size = total_size('records', raw=True)
+
+raw_data_size = round(total_size('records', raw=True))
 dt = end - start
 speed = raw_data_size / dt
-print(f"Took {dt:.3f} seconds, "
-      f"processed {round(raw_data_size)} MB at {speed:.2f} MB/s")
 gil_pct = 100 * gil_load.get(4)[0]
-print(f"GIL was held {gil_pct:.3f}% of the time")
-print(f"Data size on disk: ",
-      {d: '%0.2f MB' % total_size(d)
-       for d in ['records', 'reduced_records',
-                 'peaks', 'peak_classification']})
+sizes = {d: '%0.2f MB' % total_size(d)
+         for d in ['records', 'reduced_records',
+                   'peaks', 'peak_classification']}
+print(f"""
+Took {dt:.3f} seconds, processed {raw_data_size} MB at {speed:.2f} MB/s
+GIL was held {gil_pct:.3f}% of the time
+Data sizes on disk: {sizes}
+""")
