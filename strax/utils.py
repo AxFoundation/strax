@@ -85,7 +85,6 @@ def growing_result(dtype=np.int, chunk_size=10000):
     return _growing_result
 
 
-
 @export
 def unpack_dtype(dtype):
     """Return list of tuples needed to construct the dtype
@@ -106,7 +105,6 @@ def unpack_dtype(dtype):
             field_dtype, some_number = fieldinfo
             result.append((field_name, field_dtype))
     return result
-
 
 
 @export

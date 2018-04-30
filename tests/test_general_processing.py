@@ -1,5 +1,4 @@
 from hypothesis import given
-from hypothesis.strategies import booleans
 from .helpers import sorted_intervals, disjoint_sorted_intervals
 from .helpers import several_fake_records
 
@@ -72,4 +71,4 @@ def test_from_break(records):
                                     records)
         if len(left) and len(right):
             assert left[-1]['time'] <= right[0]['time'] - window
-        assert not has_break(left)
+        assert not has_break(right)

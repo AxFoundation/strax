@@ -42,7 +42,7 @@ def endtime(x):
 
 @export
 # TODO: somehow numba compilation hangs on this one? reproduce / file issue?
-#numba.jit(nopython=True, nogil=True, cache=True)
+# numba.jit(nopython=True, nogil=True, cache=True)
 def from_break(x, safe_break=10000, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long
     If there is no such break, return the best break found.
@@ -84,7 +84,7 @@ def find_break_i(x, safe_break, tolerant=True):
     if not tolerant:
         raise NoBreakFound
 
-    print("Did not find safe break, using largest available break: ",
+    print("\t\tDid not find safe break, using largest available break: ",
           max_gap,
           " ns")
     return max_gap_i

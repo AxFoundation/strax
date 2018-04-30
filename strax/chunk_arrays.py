@@ -177,7 +177,6 @@ def chunk_by_break(source,
         yield buffer
 
 
-
 @export
 def same_length(*sources):
     """Yield tuples of arrays of the same number of items
