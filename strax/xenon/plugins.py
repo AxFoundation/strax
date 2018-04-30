@@ -64,11 +64,11 @@ class DAQReader(strax.Plugin):
         if kind == 'central':
             return records
         return strax.from_break(records,
+                                safe_break=int(1e3),  # TODO config?
                                 left=kind == 'post',
                                 tolerant=True)
 
     def compute(self, chunk_i):
-        print(f'{chunk_i}: computing')
         pre, current, post = self._chunk_paths(chunk_i)
         records = np.concatenate(
             ([self._load_chunk(pre, kind='pre')] if pre else [])
@@ -82,7 +82,11 @@ class DAQReader(strax.Plugin):
 
         strax.baseline(records)
         strax.integrate(records)
-        print(f'{chunk_i}: got {len(records)} records from readers')
+
+        timespan_sec = (records[-1]['time'] - records[0]['time']) / 1e9
+        print(f'{chunk_i}: read {records.nbytes/1e6:.2f} MB '
+              f'({len(records)} records, '
+              f'{timespan_sec:.2f} sec) from readers')
 
         return records
 
@@ -310,7 +314,7 @@ class Events(strax.Plugin):
         (('Event end time in ns since the unix epoch',
           'endtime'), np.int64),
     ]
-    parallel = False  # Since keeping state (events_seen)
+    parallel = False    # Since keeping state (events_seen)
     events_seen = 0
 
     def rechunk_input(self, iters):
@@ -348,14 +352,6 @@ class Events(strax.Plugin):
         # Filter out events without S1 + S2
         self.events_seen += len(result)
 
-        # TODO dirty hack!!
-        # This will mangle events to ensure they are nonoverlapping
-        # Needed for online processing until we have overlap handling...
-        # Alternative is to put n_per_iter = float('inf')
-        result['time'] = np.clip(result['time'],
-                                 peaks[0]['time'], None)
-        result['endtime'] = np.clip(result['endtime'],
-                                    None, peaks[-1]['endtime'])
         return result
         # TODO: someday investigate why loopplugin doesn't give
         # anything if events do not contain peaks..

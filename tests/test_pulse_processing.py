@@ -2,7 +2,7 @@ import numpy as np
 from hypothesis import given
 
 import strax
-from .helpers import single_fake_pulse, several_fake_records
+from .helpers import single_fake_pulse
 
 
 def _find_hits(r):
