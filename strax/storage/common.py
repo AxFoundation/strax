@@ -32,16 +32,19 @@ class Store:
     """Storage backend for strax data
     """
 
-    provides_doc = """
+    saver_init_doc = """
         :param provides: List of data types this store accepts/provides.
             Defaults to 'all', accepting any data types.
             Attempting to read unwanted data types throws NotCached.
             Attempting to save unwanted data types throws RuntimeError
             (you're supposed to check this with the .provides method).
+        :param recover: Load data even if an exception occurred
+            during computation (and the data is thus likely incomplete)
     """
 
-    def __init__(self, provides='all'):
+    def __init__(self, provides='all', recover=False):
         self._provides = provides
+        self.recover = recover
         self.log = logging.getLogger(self.__class__.__name__)
 
     def provides(self, data_type):
@@ -54,19 +57,33 @@ class Store:
 
     def has(self, key: CacheKey):
         try:
-            self._find(key)
+            self.find(key)
         except NotCached:
             return False
         return True
+
+    def find(self, key: CacheKey):
+        """Return something to load key from (e.g. a directory name)
+        or raise NotCached
+        """
+        something = self._find(key)
+        if 'exception' in self._read_meta(something):
+            self.log.info(f"Found incomplete data for {key}")
+            if self.recover:
+                self.log.info("Recovering")
+                return something
+            self.log.info("Not recovering")
+            raise NotCached
+        return something
 
     def loader(self, key: CacheKey, executor=None):
         """Return generator over cached results,
         or raise NotCached if the data is unavailable.
         """
-        return self._read(self._find(key), executor)
+        return self._read(self.find(key), executor)
 
     def load_meta(self, key: CacheKey):
-        return self._read_meta(self._find(key))
+        return self._read_meta(self.find(key))
 
     def saver(self, key, metadata):
         if not self.provides(key.data_type):
@@ -167,11 +184,12 @@ class Saver:
     def _save_chunk_metadata(self, chunk_info):
         raise NotImplementedError
 
-    def close(self, record_exception=True):
+    def close(self):
         if self.closed:
             raise RuntimeError(f"{self.key.data_type} saver already closed!")
         self.closed = True
-        if record_exception and sys.exc_info()[0] is not None:
+        exc_info = sys.exc_info()
+        if exc_info[0] not in [None, StopIteration]:
             self.md['exception'] = traceback.format_exc()
         self.md['writing_ended'] = time.time()
 
