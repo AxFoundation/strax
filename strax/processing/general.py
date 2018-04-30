@@ -41,15 +41,15 @@ def endtime(x):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def from_break(x, safe_break=10000, left=True):
+# TODO: somehow numba compilation hangs on this one? reproduce / file issue?
+#numba.jit(nopython=True, nogil=True, cache=True)
+def from_break(x, safe_break=10000, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long
     If there is no such break, return the best break found.
     """
     # TODO: This is extremely rough. Better to find proper gaps, and if we
     # know the timing of the readers, consider breaks at end and start too.
-
-    break_i = find_break_i(x, safe_break=safe_break)
+    break_i = find_break_i(x, safe_break=safe_break, tolerant=tolerant)
 
     if left:
         return x[:break_i]
@@ -58,35 +58,36 @@ def from_break(x, safe_break=10000, left=True):
 
 
 @export
-class NoGapFound(Exception):
+class NoBreakFound(Exception):
     pass
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
 @export
-def find_break_i(x, safe_break, tolerant=True, warn=True):
-    if len(x) < 2:
-        return 0
-
+@numba.jit(nopython=True, nogil=True, cache=True)
+def find_break_i(x, safe_break, tolerant=True):
+    """Returns LAST index of x whose time is more than safe_break away
+    from the x before
+    :param tolerant: if no break found, yield an as good as possible break
+    anyway.
+    """
     max_gap = 0
-    prev_t = x[0]['time']
     max_gap_i = -1
-    for i, r in enumerate(x):
-        gap = r['time'] - prev_t
+    for _i in range(len(x) - 1):
+        i = len(x) - 1 - _i
+        gap = x[i]['time'] - x[i - 1]['time']
         if gap >= safe_break:
             return i
         if gap > max_gap:
             max_gap_i = i
             max_gap = gap
 
-    if tolerant:
-        if warn:
-            print("Did not find safe break, using largest available break: ",
-                  max_gap,
-                  " ns")
-        return max_gap_i
-    raise NoGapFound
+    if not tolerant:
+        raise NoBreakFound
 
+    print("Did not find safe break, using largest available break: ",
+          max_gap,
+          " ns")
+    return max_gap_i
 
 
 @export

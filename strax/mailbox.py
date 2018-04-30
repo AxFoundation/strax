@@ -127,7 +127,7 @@ class Mailbox:
         with self._lock:
             subscriber_i = self._n_subscribers
             self._subscribers_have_read.append(-1)
-            self.log.debug("Subscribed")
+            self.log.debug(f"Added subscriber {subscriber_i}")
             return self._read(subscriber_i=subscriber_i)
 
     def start(self):
@@ -209,6 +209,7 @@ class Mailbox:
             def can_write():
                 return len(self._mailbox) < self.max_messages
             if not can_write():
+                self.log.debug(self._subscribers_have_read)
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
             if not self._write_condition.wait_for(can_write,
                                                   timeout=self.timeout):
