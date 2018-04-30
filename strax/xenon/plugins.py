@@ -259,7 +259,8 @@ def find_n_competing(peaks, window, fraction):
                  help='Events longer than this are forcefully ended, '
                       'triggers in the truncated part are lost!')
 )
-class Events(strax.Plugin):
+class Events(strax.MergePlugin):
+    depends_on = ['peak_basics', 'n_competing']
     data_kind = 'events'
     dtype = [
         (('Event number in this dataset',
@@ -273,13 +274,13 @@ class Events(strax.Plugin):
     events_seen = 0
 
     # TODO: automerge deps
-    def compute(self, peak_basics, n_competing):
+    def compute(self, peaks):
         le = self.config['left_extension']
         re = self.config['right_extension']
 
-        triggers = peak_basics[
-            (peak_basics['area'] > self.config['trigger_threshold'])
-            & (n_competing['n_competing'] <= self.config['max_competing'])
+        triggers = peaks[
+            (peaks['area'] > self.config['trigger_threshold'])
+            & (peaks['n_competing'] <= self.config['max_competing'])
             ]
 
         # Join nearby triggers - yet another max-gap clustering
@@ -312,9 +313,9 @@ class Events(strax.Plugin):
         # Needed for online processing until we have overlap handling...
         # Alternative is to put n_per_iter = float('inf')
         result['time'] = np.clip(result['time'],
-                                 peak_basics[0]['time'], None)
+                                 peaks[0]['time'], None)
         result['endtime'] = np.clip(result['endtime'],
-                                    None, peak_basics[-1]['endtime'])
+                                    None, peaks[-1]['endtime'])
         return result
         # TODO: someday investigate why loopplugin doesn't give
         # anything if events do not contain peaks..

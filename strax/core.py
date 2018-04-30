@@ -281,7 +281,7 @@ class Strax:
                  ) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         """
-        # If multiple targets of the same kind, create a MergePlugin
+        # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets)
@@ -289,7 +289,7 @@ class Strax:
                 temp_name = ''.join(random.choices(
                     string.ascii_lowercase, k=10))
                 temp_merge = type(temp_name,
-                                  (strax.MergePlugin,),
+                                  (strax.MergeOnlyPlugin,),
                                   dict(depends_on=tuple(targets)))
                 self.register(temp_merge)
                 targets = temp_name

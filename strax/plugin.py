@@ -51,6 +51,7 @@ class Plugin:
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
 
     def __init__(self):
+        self.pre_compute = []
         self.post_compute = []
         self.on_close = []
 
@@ -164,16 +165,25 @@ class Plugin:
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
 
-    # *args used in optimized per-process running
-    def do_compute(self, *args, chunk_i, **kwargs):
+    def do_compute(self, *args, chunk_i=None, **kwargs):
+        for i, x in enumerate(args):
+            kwargs[self.depends_on[i]] = x
+
+        for p in self.pre_compute:
+            r = p(**kwargs, chunk_i=chunk_i)
+            if r is not None:
+                kwargs = r
+
         if self.compute_takes_chunk_i:
-            result = self.compute(*args, chunk_i=chunk_i, **kwargs)
+            result = self.compute(**kwargs, chunk_i=chunk_i)
         else:
-            result = self.compute(*args, **kwargs)
+            result = self.compute(**kwargs)
+
         for p in self.post_compute:
             r = p(result, chunk_i=chunk_i)
             if r is not None:
                 result = r
+
         return result
 
     def check_next_ready_or_done(self, chunk_i):
@@ -194,48 +204,53 @@ class Plugin:
 
 
 @export
-class LoopPlugin(Plugin):
-    """Plugin that disguises multi-kind data-iteration by an event loop
-    """
+class MergePlugin(Plugin):
+
     def __init__(self):
+        super().__init__()
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on is mandatory for LoopPlugin')
-        super().__init__()
 
+        self.pre_compute.append(self.merge_deps)
+
+    def merge_deps(self, chunk_i, **kwargs):
+        return {k: strax.merge_arrs([kwargs[d] for d in deps])
+                for k, deps in self.dependencies_by_kind().items()}
+
+
+@export
+class LoopPlugin(MergePlugin):
+    """Plugin that disguises multi-kind data-iteration by an event loop
+    """
     def compute(self, **kwargs):
         # If not otherwise specified, data kind to loop over
         # is that of the first dependency (e.g. events)
+        # Can't be in __init__: deps not initialized then
         if hasattr(self, 'loop_over'):
             loop_over = self.loop_over
         else:
             loop_over = self.deps[self.depends_on[0]].data_kind
 
-        # Merge data of each data kind
-        deps_by_kind = self.dependencies_by_kind()
-        things_by_kind = {
-            k: strax.merge_arrs([kwargs[d] for d in deps])
-            for k, deps in deps_by_kind.items()}
-
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
-        base = things_by_kind[loop_over]
+        base = kwargs[loop_over]
         assert np.all(base[1:]['time'] >= strax.endtime(base[:-1])), \
             f'{base}s overlap'
 
-        for k, things in things_by_kind.items():
+        for k, things in kwargs.items():
             assert np.diff(things['time']).min() > 0, f'{k} not sorted'
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
                     raise RuntimeError(f"Split {k} into {len(r)}, "
                                        f"should be {len(base)}!")
-                things_by_kind[k] = r
+                kwargs[k] = r
 
         results = np.zeros(len(base), dtype=self.dtype)
         for i in range(len(base)):
             r = self.compute_loop(base[i],
-                                  **{k: things_by_kind[k][i]
-                                     for k in deps_by_kind
+                                  **{k: kwargs[k][i]
+                                     for k in self.dependencies_by_kind()
                                      if k != loop_over})
 
             # Convert from dict to array row:
@@ -249,15 +264,10 @@ class LoopPlugin(Plugin):
 
 
 @export
-class MergePlugin(Plugin):
+class MergeOnlyPlugin(MergePlugin):
     """Plugin that merges data from its dependencies
     """
     save_when = SaveWhen.EXPLICIT
-
-    def __init__(self):
-        if not hasattr(self, 'depends_on'):
-            raise ValueError('depends_on is mandatory for MergePlugin')
-        super().__init__()
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
