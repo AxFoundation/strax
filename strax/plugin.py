@@ -269,23 +269,3 @@ class MergeOnlyPlugin(Plugin):
 
     def compute(self, **kwargs):
         return kwargs[list(kwargs.keys())[0]]
-
-
-@export
-class PlaceholderPlugin(Plugin):
-    """Plugin that throws NotImplementedError when asked to compute anything"""
-    depends_on = tuple()
-
-    def compute(self):
-        raise NotImplementedError("No plugin registered that "
-                                  f"provides {self.provides}")
-
-
-@export
-class RecordsPlaceholder(PlaceholderPlugin):
-    """Placeholder plugin for something (e.g. a DAQ or simulator) that
-    provides strax records.
-    """
-    provides = 'records'
-    data_kind = 'records'
-    dtype = strax.record_dtype()
