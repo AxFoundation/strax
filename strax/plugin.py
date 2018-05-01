@@ -181,6 +181,17 @@ class Plugin:
         else:
             result = self.compute(**kwargs)
 
+        if isinstance(result, dict):
+            if not len(result):
+                # TODO: alt way of getting length?
+                raise RuntimeError("if returning dict, must have a key")
+            some_key = list(result.keys())[0]
+            n = len(result[some_key])
+            r = np.zeros(n, dtype=self.dtype)
+            for k, v in result.items():
+                r[k] = v
+            result = r
+
         for p in self.post_compute:
             r = p(result, chunk_i=chunk_i)
             if r is not None:
