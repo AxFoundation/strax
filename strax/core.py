@@ -2,6 +2,7 @@ import builtins
 import collections
 import logging
 import inspect
+import fnmatch
 import typing as ty
 import warnings
 import random
@@ -31,7 +32,11 @@ class Strax:
     Specify how data should be processed, then start processing.
     """
 
-    def __init__(self, storage=None, config=None):
+    def __init__(self,
+                 storage=None,
+                 config=None,
+                 register=None,
+                 register_all=None):
         self.log = logging.getLogger('strax')
 
         if storage is None:
@@ -41,10 +46,31 @@ class Strax:
         self.storage = [strax.FileStore(s) if isinstance(s, str) else s
                         for s in storage]
 
-        self.set_config(config, mode='new')
-
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
+
+        self.set_config(config, mode='new')
+
+        if register is not None:
+            self.register(register)
+        if register_all is not None:
+            self.register_all(register_all)
+
+    def new_context(self, storage=tuple(), config=None,
+                    register=None, register_all=None):
+        if not isinstance(storage, (list, tuple)):
+            storage = [storage]
+        if config is None:
+            config = dict()
+        if register is None:
+            register = []
+        if not isinstance(register, (tuple, list)):
+            register = [register]
+        register = list(self._plugin_class_registry.values()) + register
+        return Strax(storage=self.storage + list(storage),
+                     config={**self.config, **config},
+                     register=register,
+                     register_all=register_all)
 
     def set_config(self, config=None, mode='update'):
         if config is None:
@@ -71,6 +97,12 @@ class Strax:
 
         Returns plugin_class (so this can be used as a decorator)
         """
+        if isinstance(plugin_class, (tuple, list)) and provides is None:
+            # Secret shortcut for multiple registration
+            for x in plugin_class:
+                self.register(x)
+            return
+
         if not hasattr(plugin_class, 'provides'):
             # No output name specified: construct one from the class name
             snake_name = strax.camel_to_snake(plugin_class.__name__)
@@ -86,8 +118,48 @@ class Strax:
 
         return plugin_class
 
+    def search_field(self, pattern):
+        cache = dict()
+        for d in self._plugin_class_registry:
+            if d not in cache:
+                cache.update(self._get_plugins((d,)))
+            p = cache[d]
+
+            for field_name in p.dtype.names:
+                if fnmatch.fnmatch(field_name, pattern):
+                    print(f"{field_name} is part of {d} "
+                          f"(provided by {p.__class__.__name__})")
+
+    def search_config(self, data_type, pattern='*'):
+        r = []
+        for d, p in self._get_plugins((data_type,)).items():
+            for opt in p.takes_config.values():
+                if not fnmatch.fnmatch(opt.name, pattern):
+                    continue
+                try:
+                    default = opt.get_default()
+                except strax.InvalidConfiguration:
+                    default = '<OMITTED>'
+                r.append(dict(
+                    option=opt.name,
+                    default=default,
+                    current=self.config.get(opt.name, '<OMITTED>'),
+                    data_type=d))
+        if len(r):
+            return pd.DataFrame(r, columns=r[0].keys())
+        return pd.DataFrame([])
+
+    def lineage(self, data_type):
+        return self._get_plugins((data_type,))[data_type].lineage
+
     def register_all(self, module):
         """Register all plugins defined in module"""
+        if isinstance(module, (tuple, list)):
+            # Secret shortcut for multiple registration
+            for x in module:
+                self.register_all(x)
+            return
+
         for x in dir(module):
             x = getattr(module, x)
             if type(x) != type(type):
@@ -113,14 +185,14 @@ class Strax:
         # plugin CLASSES, funny business might ensue
         # TODO: modifies self.config -> bad?
         assert isinstance(p, strax.Plugin)
-
+        config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(self.config)
+                opt.validate(config)
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
-        p.config = {k: v for k, v in self.config.items()
+        p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
 
     def _get_plugins(self,
@@ -273,13 +345,15 @@ class Strax:
             savers=dict(savers),
             targets=targets)
 
-    def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None
-                 ) -> ty.Iterator[np.ndarray]:
+    def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
+                 **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         {get_docs}
         TODO: This is not quite a normal iterator: if you break
         results will still accumulate in a background thread!
         """
+        if len(kwargs):
+            self = self.new_context(**kwargs)
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -333,11 +407,6 @@ class Strax:
         raise strax.NotCached(f"Can't load metadata, "
                               f"data for {key} not available")
 
-
-for x in dir(Strax):
-    if x.startswith('get_') or x == 'make':
-        f = getattr(Strax, x)
-        f.__doc__ = f.__doc__.format(get_docs=get_docs)
 
 ##
 # Config specification. Maybe should be its own file?
@@ -399,7 +468,15 @@ class Option:
         if type is OMITTED and default is not OMITTED:
             self.type = type(default)
 
-    def validate(self, config):
+    def get_default(self):
+        if self.default is OMITTED:
+            if self.default_factory is OMITTED:
+                raise InvalidConfiguration(f"Missing option {self.name} "
+                                           f"required by {self.taken_by}")
+            return self.default_factory()
+        return self.default
+
+    def validate(self, config, set_defaults=True):
         """Checks if the option is in config and sets defaults if needed.
         """
         if self.name in config:
@@ -409,11 +486,5 @@ class Option:
                 raise InvalidConfiguration(
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
-        else:
-            if self.default is OMITTED:
-                if self.default_factory is OMITTED:
-                    raise InvalidConfiguration(f"Missing option {self.name} "
-                                               f"required by {self.taken_by}")
-                config[self.name] = self.default_factory()
-            else:
-                config[self.name] = self.default
+        elif set_defaults:
+            config[self.name] = self.get_default()

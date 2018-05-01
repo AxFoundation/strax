@@ -186,6 +186,15 @@ class PeakBasics(strax.Plugin):
 
 
 @export
+@strax.takes_config(
+    strax.Option('s1_max_width', default=150,
+                 help="Maximum (IQR) width of S1s"),
+    strax.Option('s1_min_n_channels', default=3,
+                 help="Minimum number of PMTs that must contribute to a S1"),
+    strax.Option('s2_min_area', default=100,
+                 help="Minimum area (PE) for S2s"),
+    strax.Option('s2_min_width', default=200,
+                 help="Minimum width for S2s"))
 class PeakClassification(strax.Plugin):
     parallel = True
     depends_on = ('peak_basics',)
@@ -198,12 +207,12 @@ class PeakClassification(strax.Plugin):
         p = peaks
         r = np.zeros(len(p), dtype=self.dtype)
 
-        is_s1 = p['area'] > 2
-        is_s1 &= p['range_50p_area'] < 150
+        is_s1 = p['n_channels'] > self.config['s1_min_n_channels']
+        is_s1 &= p['range_50p_area'] < self.config['s1_max_width']
         r['type'][is_s1] = 1
 
-        is_s2 = p['area'] > 100
-        is_s2 &= p['range_50p_area'] > 200
+        is_s2 = p['area'] > self.config['s2_min_area']
+        is_s2 &= p['range_50p_area'] > self.config['s2_min_width']
         r['type'][is_s2] = 2
 
         return r
