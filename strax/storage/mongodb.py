@@ -68,6 +68,7 @@ class MongoStore(Store):
 
 @export
 class MongoSaver(Saver):
+    prefer_rechunk = False
 
     def __init__(self, key, metadata, col):
         super().__init__(key, metadata)

@@ -160,6 +160,7 @@ class Saver:
     """
     closed = False
     meta_only = False
+    prefer_rechunk = True
 
     def __init__(self, key, metadata):
         self.key = key
@@ -171,7 +172,7 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
-        if rechunk:
+        if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
         try:
