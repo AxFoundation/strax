@@ -68,10 +68,11 @@ class ChunkPacer:
 
         if not len(self.buffer):
             self._fetch_another()
-        assert len(self.buffer) == 1
+            assert len(self.buffer) == 1
 
         try:
-            while not func(self.buffer[-1][-1]) > threshold:
+            while (not len(self.buffer[-1])
+                    or not func(self.buffer[-1][-1]) > threshold):
                 self._fetch_another()
         except StopIteration:
             pass
@@ -85,13 +86,16 @@ class ChunkPacer:
         self.buffer_items += 1
         self._squash_buffer()
 
+    def peek(self, n=1):
+        x = self.get_n(n)
+        self._put_back_at_start(x)
+        return x
+
     @property
     def itemsize(self):
         if self.dtype is None:
             # Peek at one item to figure out the dtype and size
-            x = self.get_n(1)
-            self.dtype = x.dtype
-            self._put_back_at_start(x)
+            self.dtype = self.peek().dtype
         return np.zeros(1, dtype=self.dtype).nbytes
 
 
@@ -131,6 +135,22 @@ def alternating_size_chunks(source, *sizes):
         except StopIteration:
             return
         i = (i + 1) % len(sizes)
+
+
+@export
+def alternating_duration_chunks(source, *durations):
+    """Yield arrays of sizes[0], then sizes[1], ... sizes[n],
+    then sizes[0], etc."""
+    p = ChunkPacer(source)
+    t = p.peek()[0]['time']
+    i = 0
+    while True:
+        try:
+            t += durations[i]
+            yield p.get_until(t, func=strax.endtime)
+        except StopIteration:
+            return
+        i = (i + 1) % len(durations)
 
 
 @export
