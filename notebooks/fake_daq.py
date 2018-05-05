@@ -34,7 +34,7 @@ if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
 os.makedirs(output_dir)
 
-st = strax.Strax(config=dict(stop_after_zips=5))   # Maybe not track for now...
+st = strax.Context(config=dict(stop_after_zips=5))   # Maybe not track for now...
 st.register(strax.xenon.pax_interface.RecordsFromPax)
 
 
