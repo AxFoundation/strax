@@ -53,7 +53,7 @@ class FileStore(Store):
     def _candidate_dirs(self, key: CacheKey):
         """Return directories at which data meant by key
         could be found or saved"""
-        return [os.path.join(d, self._key_dirname(key))
+        return [os.path.join(d, str(key))
                 for d in self.data_dirs]
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
@@ -92,8 +92,6 @@ class FileSaver(Saver):
     Do NOT add unpickleable things as attributes (such as loggers)!
     """
     json_options = dict(sort_keys=True, indent=4)
-    closed = False      # Of course checking this is unreliable when forked...
-    meta_only = False
 
     def __init__(self, key, metadata, dirname):
         super().__init__(key, metadata)

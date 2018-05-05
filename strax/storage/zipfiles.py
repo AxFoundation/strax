@@ -32,7 +32,7 @@ class ZipFileStore(FileStore):
         return key.data_type + '_' + strax.deterministic_hash(key.lineage)
 
     def _find(self, key):
-        dirn = self._key_dirname(key)
+        dirn = str(key)
 
         for zipn in self._candidate_zips(key):
             with zipfile.ZipFile(zipn) as zp:

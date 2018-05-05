@@ -17,6 +17,11 @@ class CacheKey(typing.NamedTuple):
     data_type: str
     lineage: dict
 
+    def __repr__(self):
+        return '_'.join([self.run_id,
+                         self.data_type,
+                         strax.deterministic_hash(self.lineage)])
+
 
 @export
 class NotCached(Exception):
@@ -62,10 +67,13 @@ class Store:
         we do not have it yet)
         """
         if write and self.readonly:
+            self.log.debug(f"Can't save {data_type}, we're readonly")
             return False
         if len(self._exclude) and data_type in self._exclude:
+            self.log.debug(f"Not saving {data_type}, excluded")
             return False
         if len(self._take_only) and data_type not in self._take_only:
+            self.log.debug(f"Not saving {data_type}, not taken")
             return False
         return True
 
@@ -103,6 +111,8 @@ class Store:
         if not self.provides(key.data_type):
             raise RuntimeError(f"{key.data_type} not provided by "
                                f"storage backend.")
+
+        self.log.debug(f"Saving {key}")
 
         metadata.setdefault('compressor', 'blosc')
         metadata['strax_version'] = strax.__version__
@@ -208,3 +218,5 @@ class Saver:
         self.md['writing_ended'] = time.time()
 
         # >>> child class may want to finish writing metadata <<<
+
+
