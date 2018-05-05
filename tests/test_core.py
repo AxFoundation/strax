@@ -34,7 +34,7 @@ def test_core():
             p['time'] = records['time']
             return p
 
-    mystrax = strax.Strax(storage=[])
+    mystrax = strax.Context(storage=[])
     mystrax.register(Records)
     mystrax.register(Peaks)
 

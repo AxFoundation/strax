@@ -12,7 +12,7 @@ export, __all__ = strax.exporter()
 @export
 class FileStore(Store):
 
-    def __init__(self, data_dirs, provides='all'):
+    def __init__(self, data_dirs, *args, **kwargs):
         """File-based storage backend for strax.
         Data is stored in (compressed) binary dumps, metadata in json.
 
@@ -23,8 +23,8 @@ class FileStore(Store):
 
         When writing, we save (only) in the highest-preference directory
         in which we have write permission.
-        """.format(provides_doc=Store.saver_init_doc)
-        super().__init__(provides)
+        """
+        super().__init__(*args, **kwargs)
 
         self.data_dirs = strax.to_str_tuple(data_dirs)
 
@@ -39,23 +39,22 @@ class FileStore(Store):
     def _find(self, key):
         for dirname in self._candidate_dirs(key):
             if os.path.exists(dirname):
-                break
-        else:
-            self.log.debug(f"{key} is NOT in cache.")
-            raise NotCached
-        self.log.debug(f"{key} is in cache.")
-        return dirname
+                self.log.debug(f"{key} is in cache.")
+                return dirname
+        self.log.debug(f"{key} is NOT in cache.")
+        raise NotCached
+
+    @staticmethod
+    def _key_dirname(key):
+        return '_'.join([key.run_id,
+                         key.data_type,
+                         strax.deterministic_hash(key.lineage)])
 
     def _candidate_dirs(self, key: CacheKey):
         """Return directories at which data meant by key
         could be found or saved"""
-        hash = strax.deterministic_hash(key.lineage)
-        return [
-            os.path.join(d,
-                         '_'.join([key.run_id,
-                                   key.data_type,
-                                   hash]))
-            for d in self.data_dirs]
+        return [os.path.join(d, self._key_dirname(key))
+                for d in self.data_dirs]
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = os.path.join(dirname, chunk_info['filename'])
@@ -111,7 +110,7 @@ class FileSaver(Saver):
     def _save_chunk(self, data, chunk_info):
         filename = '%06d' % chunk_info['chunk_i']
         filesize = strax.save_file(
-                filename=os.path.join(self.tempdirname, filename),
+                os.path.join(self.tempdirname, filename),
                 data=data,
                 compressor=self.md['compressor'])
         return dict(filename=filename, filesize=filesize)

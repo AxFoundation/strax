@@ -32,28 +32,42 @@ class Store:
     """Storage backend for strax data
     """
 
-    saver_init_doc = """
-        :param provides: List of data types this store accepts/provides.
-            Defaults to 'all', accepting any data types.
-            Attempting to read unwanted data types throws NotCached.
-            Attempting to save unwanted data types throws RuntimeError
-            (you're supposed to check this with the .provides method).
+    saver_init_doc = """\
         :param recover: Load data even if an exception occurred
             during computation (and the data is thus likely incomplete)
+        :param take_only: Provide only these data types.
+        :param exclude: Do NOT provide these data types.
+
+        If take_only and exclude are both omitted, provide all data types.
+        If a data type is listed in both, it will not be provided.
+
+        Attempting to read unwanted data types throws NotCached.
+        Attempting to save unwanted data types throws RuntimeError
+            (you're supposed to check this with the .provides method).
     """
 
-    def __init__(self, provides='all', recover=False):
-        self._provides = provides
+    def __init__(self,
+                 take_only=tuple(), exclude=tuple(),
+                 recover=False,
+                 readonly=False):
+        self._take_only = strax.to_str_tuple(take_only)
+        self._exclude = strax.to_str_tuple(exclude)
         self.recover = recover
+        self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def provides(self, data_type):
-        """Return whether this store will store this datatype"""
-        if self._provides == 'all':
-            return True
-        if self._provides == 'none':
+    def provides(self, data_type, write=False):
+        """Return whether this store can provides this datatype
+        :param write: if True, return if we can also store the data (in case
+        we do not have it yet)
+        """
+        if write and self.readonly:
             return False
-        return data_type in self._provides
+        if len(self._exclude) and data_type in self._exclude:
+            return False
+        if len(self._take_only) and data_type not in self._take_only:
+            return False
+        return True
 
     def has(self, key: CacheKey):
         try:
