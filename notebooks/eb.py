@@ -5,6 +5,8 @@ import time
 import shutil
 import zipfile
 
+import pymongo
+
 import strax
 
 
@@ -19,6 +21,8 @@ parser.add_argument('--erase', action='store_true',
                          'Essential for online operation')
 parser.add_argument('--debug', action='store_true',
                     help='Activate debug logging')
+parser.add_argument('--mongo', action='store_true',
+                    help='Activate mongo saving')
 
 args = parser.parse_args()
 
@@ -44,6 +48,9 @@ for x in 'raw reduced_raw temp_processed processed'.split():
     if os.path.exists(fn):
         shutil.rmtree(fn)
     os.makedirs(fn)
+mongo_uri = 'mongodb://localhost'
+if args.mongo:
+    pymongo.MongoClient(mongo_uri).drop_database('strax_data')
 
 st = strax.Context(
     storage=[strax.FileStore(out_dir + '/raw',
@@ -51,10 +58,14 @@ st = strax.Context(
              strax.FileStore(out_dir + '/reduced_raw',
                              take_only='records'),
              strax.FileStore(out_dir + '/temp_processed',
-                             exclude=['records', 'raw_records']),
-    ],
+                             exclude=['records', 'raw_records'])],
     config=dict(input_dir=in_dir,
                 erase=args.erase))
+if args.mongo:
+    st.storage.append(
+        strax.MongoStore(mongo_uri,
+                         take_only=['events', 'event_basics']))
+
 st.register_all(strax.xenon.plugins)
 
 gil_load.start(av_sample_interval=0.05)
