@@ -281,7 +281,27 @@ class Context:
 
             if not hasattr(p, 'dtype'):
                 p.dtype = p.infer_dtype()
-            p.dtype = np.dtype(p.dtype)
+
+            if not isinstance(p, np.dtype):
+                dtype = []
+                for x in p.dtype:
+                    if len(x) == 3:
+                        if isinstance(x[0], tuple):
+                            # Numpy syntax for array field
+                            dtype.append(x)
+                        else:
+                            # Lazy syntax for normal field
+                            field_name, field_type, comment = x
+                            dtype.append(((comment, field_name), field_type))
+                    elif len(x) == 2:
+                        # (field_name, type)
+                        dtype.append(x)
+                    elif len(x) == 1:
+                        # Omitted type: assume float
+                        dtype.append((x, np.float))
+                    else:
+                        raise ValueError(f"Invalid field specification {x}")
+                p.dtype = np.dtype(dtype)
             return p
 
         plugins = collections.defaultdict(get_plugin)
