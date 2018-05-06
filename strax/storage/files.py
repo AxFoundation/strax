@@ -114,6 +114,9 @@ class FileSaver(Saver):
         return dict(filename=filename, filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):
+        if self.meta_only:
+            # TODO HACK!
+            chunk_info["filename"] = '%06d' % chunk_info['chunk_i']
         fn = f'{self.tempdirname}/metadata_{chunk_info["filename"]}.json'
         with open(fn, mode='w') as f:
             f.write(json.dumps(chunk_info, **self.json_options))
