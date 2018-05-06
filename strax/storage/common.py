@@ -219,5 +219,3 @@ class Saver:
         self.md['writing_ended'] = time.time()
 
         # >>> child class may want to finish writing metadata <<<
-
-

@@ -196,12 +196,11 @@ class PeakBasics(strax.Plugin):
     strax.Option('s2_min_width', default=200,
                  help="Minimum width for S2s"))
 class PeakClassification(strax.Plugin):
-    parallel = True
+    __version__ = '0.0.1'
     depends_on = ('peak_basics',)
     dtype = [
-        (('Classification of the peak.',
-          'type'), np.int8)
-    ]
+        ('type', np.int8, 'Classification of the peak.')]
+    parallel = True
 
     def compute(self, peaks):
         p = peaks
@@ -232,9 +231,8 @@ class PeakClassification(strax.Plugin):
 class NCompeting(strax.Plugin):
     depends_on = ('peak_basics',)
     dtype = [
-        (('Number of nearby similarly-sized (or larger) peaks',
-          'n_competing'), np.int32),
-    ]
+        ('n_competing', np.int32,
+            'Number of nearby similarly-sized (or larger) peaks')]
 
     def rechunk_input(self, iters):
         return dict(peaks=strax.chunk_by_break(
@@ -316,13 +314,9 @@ class Events(strax.Plugin):
     depends_on = ['peak_basics', 'n_competing']
     data_kind = 'events'
     dtype = [
-        (('Event number in this dataset',
-          'event_number'), np.int64),
-        (('Event start time in ns since the unix epoch',
-          'time'), np.int64),
-        (('Event end time in ns since the unix epoch',
-          'endtime'), np.int64),
-    ]
+        ('event_number', np.int64, 'Event number in this dataset'),
+        ('time', np.int64, 'Event start time in ns since the unix epoch'),
+        ('endtime', np.int64, 'Event end time in ns since the unix epoch')]
     parallel = False    # Since keeping state (events_seen)
     events_seen = 0
 
@@ -415,15 +409,25 @@ class EventBasics(strax.LoopPlugin):
         return result
 
 
-@export
-class LargestPeakArea(strax.LoopPlugin):
-    depends_on = ('events', 'peak_basics')
-    dtype = [(('Area of largest peak in event (PE)',
-               'largest_area'), np.float32)]
+# LargestS2Area is just an example plugin
+# The same info is provided in event_basics
+
+class LargestS2Area(strax.LoopPlugin):
+    """Find the largest S2 area in the event.
+    """
+    __version__ = '0.1'
+    depends_on = ('events', 'peak_basics', 'peak_classification')
+
+    dtype = [
+        ('largest_s2_area', np.float32,
+            'Area (PE) of largest S2 in event')]
 
     def compute_loop(self, event, peaks):
-        x = 0
-        if len(peaks):
-            x = peaks['area'].max()
 
-        return dict(largest_area=x)
+        s2s = peaks[peaks['type'] == 2]
+
+        result = 0
+        if len(s2s):
+            result = s2s['area'].max()
+
+        return dict(largest_s2_area=result)
