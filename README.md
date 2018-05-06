@@ -4,6 +4,7 @@ Stream analysis for XENON (experimental)
 [![Build Status](https://travis-ci.org/JelleAalbers/strax.svg?branch=master)](https://travis-ci.org/JelleAalbers/strax)
 [![Coverage Status](https://coveralls.io/repos/github/JelleAalbers/strax/badge.svg?branch=master)](https://coveralls.io/github/JelleAalbers/strax?branch=master)
 [![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
+[![Join the chat at https://gitter.im/AxFoundation/strax](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/AxFoundation/strax?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 To install, run `pip install strax`.
 
