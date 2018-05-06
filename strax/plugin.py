@@ -89,12 +89,19 @@ class Plugin:
             compressor=self.compressor,
             lineage=self.lineage)
 
-    def dependencies_by_kind(self, require_time=True):
+    def dependencies_by_kind(self, require_time=None):
         """Return dependencies grouped by data kind
         i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
-        :param require_time: If True (default), one dependency of each kind
+        :param require_time: If True, one dependency of each kind
         must provide time information. It will be put first in the list.
+
+        If require_time is omitted, we will require time only if there is
+        more than one data kind in the dependencies.
         """
+        if require_time is None:
+            require_time = \
+                len(self.dependencies_by_kind(require_time=False)) > 1
+
         deps_by_kind = dict()
         key_deps = []
         for d in self.depends_on:
@@ -112,7 +119,8 @@ class Plugin:
         if require_time:
             for k, d in deps_by_kind.items():
                 if not d[0] in key_deps:
-                    raise ValueError(f"No dependency of data kind {k} "
+                    raise ValueError(f"For {self.__class__.__name__}, no "
+                                     f"dependency of data kind {k} "
                                      "has time information!")
 
         return deps_by_kind
@@ -152,7 +160,10 @@ class Plugin:
         for chunk_i in itertools.count():
             try:
                 if not self.check_next_ready_or_done(chunk_i):
-                    raise StopIteration
+                    # TODO: avoid duplication
+                    # but also remain picklable...
+                    self.close(wait_for=tuple(pending))
+                    return
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
@@ -202,8 +213,12 @@ class Plugin:
     def check_next_ready_or_done(self, chunk_i):
         return True
 
-    def close(self, wait_for=tuple(), timeout=30):
-        wait(wait_for, timeout=timeout)
+    def close(self, wait_for=tuple(), timeout=120):
+        done, not_done = wait(wait_for, timeout=timeout)
+        if len(not_done):
+            raise RuntimeError(
+                f"{len(not_done)} futures of {self.__class__.__name__}"
+                "did not complete in time!")
         for x in self.on_close:
             x()
 
