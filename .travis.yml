@@ -20,8 +20,8 @@ sudo: false
 deploy:
   provider: pypi
   user: "AxFoundation"
-  password:
-    secure: "Your encrypted password"  # Need's repo owner to run
+  password:  # The following is encrypted FYI
+    secure: "m0xZzEAbrDaYCiCp11Bfo9jamfXrJPTUFOr7OLJy1ScaiqCqaJB/1J0ZOeitPNXIfJZ4UNkP6JqQHETg6bqSHi41qJS+0iBIGB3UWNvUDI6o+zKHHrLQ1md2aOuuY+7+KrGytwUbiXg3BsK4dk62mq9k1Ziv7SD0bB1tYYF4wLDaAwccNwM0tgJEUxgr3fsxCXMsFMtSmKjGxRwi2/Qb3m9hpphdOO5WHbDB4G28gBAgA3io8vL+V6z2UTCeaoWxuDqmVmeoRdUpNkljwazyx7CyucsYxtJ/Bt9iRVY/LGkF/HyyiMKd33dVlMKK8pgDHJ17HJNsulbCxdG8wyL7CW8WJyG4LfZrbtLY6y7sWb7I8cN5+AbO8e2O43PdkiUXr+1yBGinikRB7rzeV+0uBqIaMszTVeC/jSacRoT+5eXa7TY9aMrZb09rIdwLcqpSAB0lUS5uCCQfB4QQ6kgic0FQ0DC/nCech+xhTSSBuWd6hVdnEL/+GnvZQLZJTW5wEW+INKScg9yS9YKiI88BiSrWtemEP/39P69CHFu3A3wrw1UbBGxk9GFpmMkadYvH1CSp9Tq9r8V60WcVoRKyhGxxbcOOV3J2CCyIeRnw9oUJWyrJYe1e8OMJdFC1LRW2rGXTO2phJ1JYrVajgM+cUlj/o/rrhk8uRBNIM3M3ipQ="
   on:
     tags: true  # Only upload tags from bumpversion
     
