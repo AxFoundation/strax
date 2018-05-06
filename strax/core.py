@@ -170,7 +170,8 @@ class Context:
                     option=opt.name,
                     default=default,
                     current=self.config.get(opt.name, '<OMITTED>'),
-                    data_type=d))
+                    data_type=d,
+                    help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
