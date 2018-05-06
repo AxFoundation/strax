@@ -26,10 +26,14 @@ get_docs = """
 
 
 @export
-class Strax:
-    """Streaming analysis for XENON (or eXperiments?)
+class Context:
+    """Context for strax analysis.
 
-    Specify how data should be processed, then start processing.
+    A context holds info on HOW to process data, such as which plugins provide
+    what data types, where to store which results, and configuration options
+    for the plugins.
+
+    You start all strax processing through a context.
     """
 
     def __init__(self,
@@ -56,8 +60,16 @@ class Strax:
         if register_all is not None:
             self.register_all(register_all)
 
-    def new_context(self, storage=tuple(), config=None,
-                    register=None, register_all=None):
+    def new_context(self,
+                    storage=tuple(),
+                    config=None,
+                    register=None,
+                    register_all=None,
+                    replace=False):
+        """Return a new context with new setting adding to those in
+        this context.
+        :param replace: If True, replaces settings rather than adding them.
+        """
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -66,13 +78,26 @@ class Strax:
             register = []
         if not isinstance(register, (tuple, list)):
             register = [register]
-        register = list(self._plugin_class_registry.values()) + register
-        return Strax(storage=self.storage + list(storage),
-                     config={**self.config, **config},
-                     register=register,
-                     register_all=register_all)
+
+        if not replace:
+            storage = self.storage + list(storage)
+            config = {**self.config, **config}
+            register = list(self._plugin_class_registry.values()) + register
+
+        return Context(storage=storage,
+                       config=config,
+                       register=register,
+                       register_all=register_all)
 
     def set_config(self, config=None, mode='update'):
+        """Set new configuration options
+
+        :param config: dict of new options
+        :param mode: can be either
+         - update: Add to or override current options in context
+         - setdefault: Add to current options, but do not override
+         - replace: Erase config form this context, then set only these options
+        """
         if config is None:
             config = dict()
         if mode == 'update':
@@ -98,7 +123,8 @@ class Strax:
         Returns plugin_class (so this can be used as a decorator)
         """
         if isinstance(plugin_class, (tuple, list)) and provides is None:
-            # Secret shortcut for multiple registration
+            # shortcut for multiple registration
+            # TODO: document
             for x in plugin_class:
                 self.register(x)
             return
@@ -144,7 +170,8 @@ class Strax:
                     option=opt.name,
                     default=default,
                     current=self.config.get(opt.name, '<OMITTED>'),
-                    data_type=d))
+                    data_type=d,
+                    help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
@@ -183,7 +210,6 @@ class Strax:
     def _set_plugin_config(self, p, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
-        # TODO: modifies self.config -> bad?
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
@@ -256,7 +282,27 @@ class Strax:
 
             if not hasattr(p, 'dtype'):
                 p.dtype = p.infer_dtype()
-            p.dtype = np.dtype(p.dtype)
+
+            if not isinstance(p, np.dtype):
+                dtype = []
+                for x in p.dtype:
+                    if len(x) == 3:
+                        if isinstance(x[0], tuple):
+                            # Numpy syntax for array field
+                            dtype.append(x)
+                        else:
+                            # Lazy syntax for normal field
+                            field_name, field_type, comment = x
+                            dtype.append(((comment, field_name), field_type))
+                    elif len(x) == 2:
+                        # (field_name, type)
+                        dtype.append(x)
+                    elif len(x) == 1:
+                        # Omitted type: assume float
+                        dtype.append((x, np.float))
+                    else:
+                        raise ValueError(f"Invalid field specification {x}")
+                p.dtype = np.dtype(dtype)
             return p
 
         plugins = collections.defaultdict(get_plugin)
@@ -322,7 +368,7 @@ class Strax:
                 assert p.save_when == strax.SaveWhen.ALWAYS
 
             for sb_i, sb in enumerate(self.storage):
-                if not sb.provides(d):
+                if not sb.provides(d, write=True):
                     continue
                 s = sb.saver(key, p.metadata(run_id))
                 s.meta_only = p.save_meta_only
