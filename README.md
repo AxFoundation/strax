@@ -1,9 +1,10 @@
 # strax
 Streaming analysis for Xenon experiments
 
-[![Build Status](https://travis-ci.org/AxFoundation/strax.svg?branch=master)](https://travis-ci.org/JelleAalbers/strax)
-[![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/JelleAalbers/strax?branch=master)
+[![Build Status](https://travis-ci.org/AxFoundation/strax.svg?branch=master)](https://travis-ci.org/AxFoundation/strax)
+[![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/AxFoundation/strax?branch=master)
 [![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
+[![Join the chat at https://gitter.im/AxFoundation/strax](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/AxFoundation/strax?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Strax is an analysis framework for pulse-only digitization data, 
 specialized for live data reduction at speeds of 50-100 MB(raw) / core / sec. 
@@ -28,7 +29,7 @@ and specific algorithms for XENONnT will ultimately be hosted into a separate re
 ### Documentation
 
 Documentation is under construction. For the moment, you might find these useful:
-  * [Tutorial notebook](https://www.github.com/JelleAalbers/strax/blob/master/notebooks/Strax%20demo.ipynb)
+  * [Tutorial notebook](https://www.github.com/AxFoundation/strax/blob/master/notebooks/Strax%20demo.ipynb)
   * [Introductory talk](https://docs.google.com/presentation/d/1qZmbAKJmzn7iTbBbkzhTvHmiBqdbYyxhgheRRrDhTeY) (aimed at XENON1T analysis/DAQ experts)
   * Function reference (TODO readthedocs)
 
