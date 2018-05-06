@@ -160,7 +160,10 @@ class Plugin:
         for chunk_i in itertools.count():
             try:
                 if not self.check_next_ready_or_done(chunk_i):
-                    raise StopIteration
+                    # TODO: avoid duplication 
+                    # but also remain picklable...
+                    self.close(wait_for=tuple(pending))
+                    return
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
@@ -210,8 +213,12 @@ class Plugin:
     def check_next_ready_or_done(self, chunk_i):
         return True
 
-    def close(self, wait_for=tuple(), timeout=30):
-        wait(wait_for, timeout=timeout)
+    def close(self, wait_for=tuple(), timeout=120):
+        done, not_done = wait(wait_for, timeout=timeout)
+        if len(not_done):
+              raise RuntimeError(
+                  f"{len(not_done)} futures of {self.__class__.__name__}"
+                  "did not complete in time!")
         for x in self.on_close:
             x()
 

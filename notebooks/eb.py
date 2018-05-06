@@ -23,6 +23,8 @@ parser.add_argument('--debug', action='store_true',
                     help='Activate debug logging')
 parser.add_argument('--mongo', action='store_true',
                     help='Activate mongo saving')
+parser.add_argument('--no_super_raw', action='store_true',
+                    help='Do not save unreduced raw data')
 
 args = parser.parse_args()
 
@@ -51,6 +53,9 @@ for x in 'raw reduced_raw temp_processed processed'.split():
 mongo_uri = 'mongodb://localhost'
 if args.mongo:
     pymongo.MongoClient(mongo_uri).drop_database('strax_data')
+    
+if args.no_super_raw:
+    strax.xenon.plugins.DAQReader.save_meta_only = True
 
 st = strax.Context(
     storage=[strax.FileStore(out_dir + '/raw',
@@ -78,24 +83,27 @@ for i, events in enumerate(
 end = time.time()
 gil_load.stop()
 
+dt = end - start
+gil_pct = 100 * gil_load.get(4)[0]
+print(f"Took {dt:.3f} seconds, GIL was held {gil_pct:.3f}% of the time")
 
 def total_size(data_type, raw=False):
     metadata = st.get_meta(run_id, data_type)
-    return sum(x['nbytes' if raw else 'filesize']
-               for x in metadata['chunks']) / 1e6
-
+    try:
+        return sum(x['nbytes' if raw else 'filesize']
+                  for x in metadata['chunks']) / 1e6
+    except Exception:
+        return float('nan')
 
 raw_data_size = round(total_size('raw_records', raw=True))
-dt = end - start
 speed = raw_data_size / dt
-gil_pct = 100 * gil_load.get(4)[0]
 sizes = {d: '%0.2f MB' % total_size(d)
          for d in ['raw_records', 'records',
                    'peaks', 'peak_classification',
-                   'event_basics']}
+                   'event_basics'
+                  ]}
 print(f"""
-Took {dt:.3f} seconds, processed {raw_data_size} MB at {speed:.2f} MB/s
-GIL was held {gil_pct:.3f}% of the time
+Processed {raw_data_size} MB at {speed:.2f} MB/s
 Data sizes on disk: {sizes}
 """)
 
