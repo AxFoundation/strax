@@ -11,16 +11,17 @@ import strax
 
 parser = argparse.ArgumentParser(
     description='Fake DAQ to test XENONnT eventbuilder prototype')
-parser.add_argument('--rate', default=100, type=int,
-                    help='Output rate in MBraw/sec')
+parser.add_argument('--rate', default=0, type=int,
+                    help='Output rate in MBraw/sec. '
+                         'If omitted, emit data as if in realtime.')
 parser.add_argument('--shm', action='store_true',
                     help='Operate in /dev/shm')
-parser.add_argument('--t', default=10, type=int,
-                    help='How long to run the fake DAQ')
-parser.add_argument('--chunk_size', default=100, type=int,
-                    help='Chunk size in MB')
-parser.add_argument('--sync_chunk_size', default=5, type=int,
-                    help='Synchronization chunk size in MB')
+parser.add_argument('--chunk_duration', default=2., type=float,
+                    help='Chunk size in sec')
+parser.add_argument('--stop_after', default=float('inf'), type=float,
+                    help='Stop after this much MB written/loaded in')
+parser.add_argument('--sync_chunk_duration', default=0.2, type=float,
+                    help='Synchronization chunk size in sec')
 args = parser.parse_args()
 
 n_readers = 8
@@ -34,7 +35,7 @@ if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
 os.makedirs(output_dir)
 
-st = strax.Strax(config=dict(stop_after_zips=5))   # Maybe not track for now...
+st = strax.Context(storage='./test_input_data')
 st.register(strax.xenon.pax_interface.RecordsFromPax)
 
 
@@ -44,18 +45,49 @@ def restore_baseline(records):
         r['data'][:r['length']] = 16000 - r['data'][:r['length']]
 
 
-print("Preparing payload data")
+def write_to_dir(c, outdir):
+    tempdir = outdir + '_temp'
+    os.makedirs(tempdir)
+    for reader_i, x in enumerate(c):
+        with open(f'{tempdir}/reader_{reader_i}', 'wb') as f:
+            f.write(copy(x))        # Copy needed for honest shm writing?
+    os.rename(tempdir, outdir)
+    
+
+def write_chunk(chunk_i, reader_data):
+    big_chunk_i = chunk_i // 2
+
+    if chunk_i % 2 != 0:
+        write_to_dir(reader_data, output_dir + '/%06d_post' % big_chunk_i)
+        write_to_dir(reader_data, output_dir + '/%06d_pre' % (big_chunk_i + 1))
+    else:
+        write_to_dir(reader_data, output_dir + '/%06d' % big_chunk_i)
+
+        
+if args.rate:
+    print("Preparing payload data: slurping into memory")
+
 chunk_sizes = []
 chunk_data_compressed = []
-for records in tqdm(strax.alternating_size_chunks(
-        st.get_iter('180423_1021', 'raw_records'),
-        args.chunk_size * 1e6,
-        args.sync_chunk_size * 1e6)):
+time_offset = int(time.time()) * int(1e9)
+for chunk_i, records in enumerate(
+        strax.alternating_duration_chunks(
+            st.get_iter('180423_1021', 'raw_records'),
+            args.chunk_duration * 1e9,
+            args.sync_chunk_duration * 1e9)):
+    t_0 = time.time()
 
-    # Restore baseline, clear metadata
+    if chunk_i == 0:
+        payload_t_start = records[0]['time']
+    payload_t_end = records[-1]['time']
+
+    # Restore baseline, clear metadata, fix time
     restore_baseline(records)
     records['baseline'] = 0
     records['area'] = 0
+    if not args.rate:
+        # Simulate live DAQ
+        records['time'] += time_offset - payload_t_start
 
     chunk_sizes.append(records.nbytes)
     result = []
@@ -64,47 +96,69 @@ for records in tqdm(strax.alternating_size_chunks(
         r = records[
                 (records['channel'] >= first_channel)
                 & (records['channel'] < first_channel + channels_per_reader)]
-        r = strax.io.COMPRESSORS['zstd']['compress'](r)
+        r = strax.io.COMPRESSORS['blosc']['compress'](r)
         result.append(r)
-    chunk_data_compressed.append(result)
-
-print(f"Prepared {len(chunk_sizes)} chunks of "
-      f"total size {sum(chunk_sizes)/1e6:.4} MB")
-
-def write_to_dir(c, outdir):
-    tempdir = outdir + '_temp'
-    os.makedirs(tempdir)
-    for reader_i, x in enumerate(c):
-        with open(f'{tempdir}/reader_{reader_i}', 'wb') as f:
-            f.write(copy(x))        # Copy needed for honest shm writing?
-    os.rename(tempdir, outdir)
-
-
-program_start = time.time()
-for chunk_i, c in enumerate(chunk_data_compressed):
-    t_0 = time.time()
-
-    if t_0 > program_start + args.t:
-        break
-
-    big_chunk_i = chunk_i // 2
-
-    if chunk_i % 2 != 0:
-        write_to_dir(c, output_dir + '/%06d_post' % big_chunk_i)
-        write_to_dir(c, output_dir + '/%06d_pre' % (big_chunk_i + 1))
+        
+    if args.rate:
+        # Slurp into memory
+        chunk_data_compressed.append(result)
     else:
-        write_to_dir(c, output_dir + '/%06d' % big_chunk_i)
+        # Simulate realtime DAQ
+        # Cannot slurp in advance, else time would be offset.
+        write_chunk(chunk_i, result)
+        if chunk_i % 2 == 0:
+            dt = args.chunk_duration
+        else:
+            dt = args.sync_chunk_duration 
 
-    wrote_mb = chunk_sizes[chunk_i] / 1e6
-
-    t_sleep = wrote_mb / args.rate - (time.time() - t_0)
-    if t_sleep < 0:
-        print("Fake DAQ too slow :-(")
-    else:
+        t_sleep = dt - (time.time() - t_0)
+        wrote_mb = chunk_sizes[chunk_i] / 1e6
+        
         print(f"{chunk_i}: wrote {wrote_mb:.1f} MB_raw, "
               f"sleep for {t_sleep:.2f} s")
-        time.sleep(t_sleep)
+        if t_sleep < 0:
+            if chunk_i % 2 == 0:
+                print("Fake DAQ too slow :-(")
+        else:
+            time.sleep(t_sleep)
+            
+    if sum(chunk_sizes)/1e6 > args.stop_after:
+        # TODO: background thread does not terminate!
+        break
 
+if args.rate:
+    total_raw = sum(chunk_sizes)/1e6
+    total_comp = sum([len(y) for x in chunk_data_compressed for y in x])/1e6
+    total_dt = (payload_t_end - payload_t_start) / int(1e9)
+    print(f"Prepared {len(chunk_sizes)} chunks "
+          f"spanning {total_dt:.1f} sec, "
+          f"{total_raw:.2f} MB raw "
+          f"({total_comp:.2f} MB compressed)")
+    if args.rate:
+        takes = total_raw / args.rate
+    else:
+        takes = total_dt
+    input(f"Press enter to start DAQ for {takes:.1f} sec")
+    
+    # Emit at fixed rate
+    for chunk_i, reader_data in enumerate(chunk_data_compressed):
+        t_0 = time.time()
+        
+        write_chunk(chunk_i, reader_data)
+        
+        wrote_mb = chunk_sizes[chunk_i] / 1e6
+        t_sleep = wrote_mb / args.rate - (time.time() - t_0)
+                
+        print(f"{chunk_i}: wrote {wrote_mb:.1f} MB_raw, "
+              f"sleep for {t_sleep:.2f} s")
+        if t_sleep < 0:
+            if chunk_i % 2 == 0:
+                print("Fake DAQ too slow :-(")
+        else:
+            time.sleep(t_sleep)
 
+            
 with open(output_dir + '/THE_END', mode='w') as f:
     f.write("That's all folks!")
+    
+print("Fake DAQ done")
