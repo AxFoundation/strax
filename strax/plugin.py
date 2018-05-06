@@ -160,7 +160,7 @@ class Plugin:
         for chunk_i in itertools.count():
             try:
                 if not self.check_next_ready_or_done(chunk_i):
-                    # TODO: avoid duplication 
+                    # TODO: avoid duplication
                     # but also remain picklable...
                     self.close(wait_for=tuple(pending))
                     return
@@ -216,9 +216,9 @@ class Plugin:
     def close(self, wait_for=tuple(), timeout=120):
         done, not_done = wait(wait_for, timeout=timeout)
         if len(not_done):
-              raise RuntimeError(
-                  f"{len(not_done)} futures of {self.__class__.__name__}"
-                  "did not complete in time!")
+            raise RuntimeError(
+                f"{len(not_done)} futures of {self.__class__.__name__}"
+                "did not complete in time!")
         for x in self.on_close:
             x()
 

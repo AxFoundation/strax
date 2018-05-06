@@ -44,8 +44,10 @@ You can also clone the repository, then setup a developer installation with `pyt
 The provided demonstration notebooks require test data that is not included in the repository.
 Eventually we will provide simulated data for this purpose.
 For now, XENON collaboration members can find test data at:
-   * Processed only (for strax demo notebook): ... 
-   * Raw (for fake_daq.py and eb.py): ...
+   * [Processed only](https://xe1t-wiki.lngs.infn.it/lib/exe/fetch.php?media=xenon:xenon1t:aalbers:processed.zip) (for strax demo notebook) 
+   * Raw (for fake_daq.py and eb.py) at midway: `/scratch/midway2/aalbers/test_input_data.zip`
+
+To use these, unzip them in the notebooks directory. The 'processed' zipfile will just make a directory with one zipfile inside.
 
 If you experience problems during installation, try installing 
 exactly the same version of the dependencies as used on he Travis build test server. 
