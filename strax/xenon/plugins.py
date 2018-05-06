@@ -24,7 +24,6 @@ class DAQReader(strax.Plugin):
 
     parallel = 'process'
     rechunk_on_save = False
-    can_remake = False
 
     def _path(self, chunk_i):
         return self.config["input_dir"] + f'/{chunk_i:06d}'
@@ -53,20 +52,22 @@ class DAQReader(strax.Plugin):
             print(f"Waiting for chunk {chunk_i}, sleeping")
             time.sleep(2)
 
-    @staticmethod
-    def _load_chunk(path, kind='central'):
+    def _load_chunk(self, path, kind='central'):
         records = [strax.load_file(fn,
-                                   compressor='zstd',
+                                   compressor='blosc',
                                    dtype=strax.record_dtype())
                    for fn in glob.glob(f'{path}/reader_*')]
         records = np.concatenate(records)
         records = strax.sort_by_time(records)
         if kind == 'central':
             return records
-        return strax.from_break(records,
-                                safe_break=int(1e3),  # TODO config?
-                                left=kind == 'post',
-                                tolerant=True)
+        result = strax.from_break(records,
+                                  safe_break=int(1e3),  # TODO config?
+                                  left=kind == 'post',
+                                  tolerant=True)
+        if self.config['erase']:
+            shutil.rmtree(path)
+        return result
 
     def compute(self, chunk_i):
         pre, current, post = self._chunk_paths(chunk_i)
@@ -75,10 +76,6 @@ class DAQReader(strax.Plugin):
             + [self._load_chunk(current)]
             + ([self._load_chunk(post, kind='post')] if post else [])
         )
-
-        if self.config['erase']:
-            for x in pre, current, post:
-                shutil.rmtree(x)
 
         strax.baseline(records)
         strax.integrate(records)
