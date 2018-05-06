@@ -87,8 +87,8 @@ def pax_to_records(input_filename,
 @strax.takes_config(
     strax.Option('pax_raw_dir', default='/data/xenon/raw', track=False,
                  help="Directory with raw pax datasets"),
-    strax.Option('stop_after_zips', default=10,
-                 help="Convert only this many zip files")
+    strax.Option('stop_after_zips', default=0, track=False,
+                 help="Convert only this many zip files. 0 = all.")
 )
 class RecordsFromPax(strax.Plugin):
     provides = 'raw_records'
@@ -106,6 +106,7 @@ class RecordsFromPax(strax.Plugin):
                               for x in pax_files])
         print(f"Found {len(pax_files)} files, {pax_sizes.sum() / 1e9:.2f} GB")
         for file_i, in_fn in enumerate(pax_files):
-            if file_i >= self.config['stop_after_zips']:
+            if (self.config['stop_after_zips']
+                    and file_i >= self.config['stop_after_zips']):
                 break
             yield strax.xenon.pax_interface.pax_to_records(in_fn)
