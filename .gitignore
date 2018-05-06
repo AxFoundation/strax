@@ -10,6 +10,13 @@
 strax_data
 from_fake_daq
 from_eb
+raw
+reduced_raw
+processed
+temp_processed
+custom_data
+test_input_data
+*.zip
 
 # cProfile output
 *.prof

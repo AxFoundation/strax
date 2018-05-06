@@ -17,6 +17,11 @@ class CacheKey(typing.NamedTuple):
     data_type: str
     lineage: dict
 
+    def __repr__(self):
+        return '_'.join([self.run_id,
+                         self.data_type,
+                         strax.deterministic_hash(self.lineage)])
+
 
 @export
 class NotCached(Exception):
@@ -32,28 +37,45 @@ class Store:
     """Storage backend for strax data
     """
 
-    saver_init_doc = """
-        :param provides: List of data types this store accepts/provides.
-            Defaults to 'all', accepting any data types.
-            Attempting to read unwanted data types throws NotCached.
-            Attempting to save unwanted data types throws RuntimeError
-            (you're supposed to check this with the .provides method).
+    saver_init_doc = """\
         :param recover: Load data even if an exception occurred
             during computation (and the data is thus likely incomplete)
+        :param take_only: Provide only these data types.
+        :param exclude: Do NOT provide these data types.
+
+        If take_only and exclude are both omitted, provide all data types.
+        If a data type is listed in both, it will not be provided.
+
+        Attempting to read unwanted data types throws NotCached.
+        Attempting to save unwanted data types throws RuntimeError
+            (you're supposed to check this with the .provides method).
     """
 
-    def __init__(self, provides='all', recover=False):
-        self._provides = provides
+    def __init__(self,
+                 take_only=tuple(), exclude=tuple(),
+                 recover=False,
+                 readonly=False):
+        self._take_only = strax.to_str_tuple(take_only)
+        self._exclude = strax.to_str_tuple(exclude)
         self.recover = recover
+        self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def provides(self, data_type):
-        """Return whether this store will store this datatype"""
-        if self._provides == 'all':
-            return True
-        if self._provides == 'none':
+    def provides(self, data_type, write=False):
+        """Return whether this store can provides this datatype
+        :param write: if True, return if we can also store the data (in case
+        we do not have it yet)
+        """
+        if write and self.readonly:
+            self.log.debug(f"Can't save {data_type}, we're readonly")
             return False
-        return data_type in self._provides
+        if len(self._exclude) and data_type in self._exclude:
+            self.log.debug(f"Not saving {data_type}, excluded")
+            return False
+        if len(self._take_only) and data_type not in self._take_only:
+            self.log.debug(f"Not saving {data_type}, not taken")
+            return False
+        return True
 
     def has(self, key: CacheKey):
         try:
@@ -89,6 +111,8 @@ class Store:
         if not self.provides(key.data_type):
             raise RuntimeError(f"{key.data_type} not provided by "
                                f"storage backend.")
+
+        self.log.debug(f"Saving {key}")
 
         metadata.setdefault('compressor', 'blosc')
         metadata['strax_version'] = strax.__version__
@@ -136,6 +160,7 @@ class Saver:
     """
     closed = False
     meta_only = False
+    prefer_rechunk = True
 
     def __init__(self, key, metadata):
         self.key = key
@@ -147,7 +172,7 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
-        if rechunk:
+        if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
         try:

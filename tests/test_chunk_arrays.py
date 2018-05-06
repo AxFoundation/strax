@@ -57,6 +57,13 @@ def test_get_until(source):
     assert all([result[i + 1][0] >= thresholds[i]
                 for i in range(len(thresholds) - 1)])
 
+    result.append(p.get_until(5000))
+    _check_mangling(result)
+
+    # Regression test
+    with pytest.raises(StopIteration):
+        p.get_until(5000)
+
 
 def test_fixed_length_chunks(source):
     # TODO: test chunk size < array

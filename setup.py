@@ -9,7 +9,7 @@ with open('requirements.txt') as f:
                 for x in f.readlines()]
 
 setup(name='strax',
-      version='0.0.1',
+      version='0.1.0',
       description='Streaming analysis for XENON',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
