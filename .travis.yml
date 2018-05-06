@@ -23,7 +23,7 @@ deploy:
   password:  # The following is encrypted FYI
     secure: kFyJJEetLpOghneLaykUEvjwN9JYE6icAgUn9cwl7uC5zXvtCQNhWDCP1fDbY70kEOkrJ9E6o/dEe8WWwSJyv/7gkzvqmBt/3BOpbDugT+VcZaCqIFd7jcDHyfpd3KOCLCmfpLNt4fI48y3eij+pNf91LKlHJzCC5Qzv5v5XuJXZBx0L19/7viuLGP2WTxkEInKzPaAZrgZh/+yYD0qb1m0a0y9ewUcXv5gEILUUyIREU66JAqd1/3ZRb2rhBgXBLmBfq0FwvfCGLYE2QMel31EOxxUU0oFdLH2DZVpDZzM9OwX8h482Z5m2z5bjVkRldGA09mo7RpDePttjIx1PPncBgLizmY7xTnY8QfKwd0mIcSLimgJffv8S7AbHxMFtcExpLsZrMiOThK3suSTvsrwlGXJ4mR8FD6OATrGYRt9z6CF8f/8zMM3VBb3LbJFlFh7ybG4VLyB88vjZ/e/VZXAWZbZyvNcQUH6SU7fTRsUAI3We5b3D0rjZsH77zaObP4uEq0Aip+j+RulMrHHFvijqb3UP2niBsW8h4iUqYfQWSfLWxbE1WHqjdTAuxHgpEX5ESxHCFUjq71eq5pGp/mJTHD6Lj5e4TgtPuAMDFApB7VHrOksHhqZSgXAe+6pftyRRQQRqX8r838pYRgWGxLuV1vUKMP+CjCIjZlKk/qU=
   on:
-    tags: false  # Only upload tags from bumpversion
+    tags: true  # Only upload tags from bumpversion
     
 # The build matrix over all possible setups
 matrix:
