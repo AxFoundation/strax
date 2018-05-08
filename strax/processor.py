@@ -1,3 +1,4 @@
+from collections import defaultdict
 from concurrent import futures
 import logging
 import typing as ty
@@ -16,6 +17,24 @@ class ProcessorComponents(ty.NamedTuple):
     targets: ty.Tuple[str]
 
 
+def savers_to_post_compute(c, log=None, force=False):
+    """Put savers in post_compute of their associated plugins
+    :param log: logger
+    :param force: do it even if it means disabling rechunking
+    """
+    # If possible, combine save and compute operations
+    # so they don't have to be scheduled by executor individually.
+    # This saves data transfer between cores (NUMA).
+    for d, p in c.plugins.items():
+        if force or not p.rechunk_on_save:
+            if log:
+                log.debug(f"Putting savers for {d} in post_compute")
+            for s in c.savers.get(d, []):
+                p.post_compute.append(s.save)
+                p.on_close.append(s.close)
+            del c.savers[d]
+
+
 @export
 class ThreadedMailboxProcessor:
     mailboxes: ty.Dict[str, strax.Mailbox]
@@ -31,16 +50,7 @@ class ThreadedMailboxProcessor:
         process_executor = futures.ProcessPoolExecutor(max_workers=max_workers)
         thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
-        # If possible, combine save and compute operations
-        # so they don't have to be scheduled by executor individually.
-        # This saves data transfer between cores (NUMA).
-        for d, p in plugins.items():
-            if not p.rechunk_on_save:
-                self.log.debug(f"Putting savers for {d} in post_compute")
-                for s in savers.get(d, []):
-                    p.post_compute.append(s.save)
-                    p.on_close.append(s.close)
-                savers[d] = []
+        savers_to_post_compute(components, log=self.log)
 
         # For the same reason, merge simple chains:
         # A -> B => A, with B as post_compute,
@@ -116,3 +126,65 @@ class ThreadedMailboxProcessor:
         self.log.debug("Closing threads")
         for m in self.mailboxes.values():
             m.cleanup()
+
+
+@export
+class IteratorProcessor:
+    """Simple processor that does not use mailboxes or threading, but
+    cannot do multiprocessing"""
+
+    def __init__(self, components: ProcessorComponents, max_workers=1):
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.components = components
+        self.log.debug("Processor components are: " + str(components))
+        plugins = components.plugins.copy()
+
+        assert len(components.targets) == 1, "Only single target supported"
+        target = components.targets[0]
+        assert max_workers in [1, None], "Multiprocessing not implemented"
+
+        savers_to_post_compute(components, log=self.log, force=True)
+        assert len(components.savers) == 0
+
+        # Find out how many iterators we need for each data type
+        n_iters = defaultdict(int)
+        n_iters[target] += 1
+        for p in plugins.values():
+            for d in p.depends_on:
+                n_iters[d] += 1
+
+        def make_iters(d, it):
+            nonlocal iters
+            iters[d] = list(itertools.tee(it, n_iters[d]))
+
+        iters = dict()
+        for d, l in components.loaders.items():
+            make_iters(d, l)
+
+        while len(plugins):
+            for d, p in plugins.items():
+                # Check we have iters for this plugin already
+                try:
+                    for dep in p.depends_on:
+                        if dep not in iters:
+                            raise KeyError
+                except KeyError:
+                    continue
+
+                it = p.iter({dep: iters[dep].pop()
+                             for dep in p.depends_on})
+                make_iters(d, it)
+                del plugins[d]
+                break    # Can't modify while iterating
+
+        self.final_iterator = iters[target].pop()
+        for d, its in iters.items():
+            assert len(its) == 0, f"{len(its)} unusused iterators for {d}!"
+
+    def iter(self):
+        yield from self.final_iterator
+
+        # Close remaining savers; does not happen automatically
+        # due to branching
+        for p in self.components.plugins.values():
+            p.close()
