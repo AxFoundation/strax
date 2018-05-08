@@ -34,6 +34,33 @@ def savers_to_post_compute(c, log=None, force=False):
                 p.on_close.append(s.close)
             del c.savers[d]
 
+def merge_chains(c, log=None):
+    # Merge simple chains:
+    # A -> B => A, with B as post_compute,
+    # then put in plugins as B instead of A.
+    # TODO: check they agree on paralellization?
+    # TODO: allow compute grouping while saver does rechunk
+    while True:
+        for b, p_b in c.plugins.items():
+            if (p_b.parallel and not p_b.rechunk_on_save
+                    and len(p_b.depends_on) == 1
+                    and b not in c.targets):
+                a = p_b.depends_on[0]
+                if a not in c.plugins:
+                    continue
+                if log:
+                    log.debug(f"Putting {b} in post_compute of {a}")
+                p_a = c.plugins[a]
+                p_a.post_compute.append(c.plugins[b].do_compute)
+                p_a.on_close.extend(p_b.on_close)
+                c.plugins[b] = p_a
+                del c.plugins[a]
+                break       # Changed plugins while iterating over it
+        else:
+            break
+    return c
+
+
 
 @export
 class ThreadedMailboxProcessor:
@@ -51,29 +78,7 @@ class ThreadedMailboxProcessor:
         thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
         savers_to_post_compute(components, log=self.log)
-
-        # For the same reason, merge simple chains:
-        # A -> B => A, with B as post_compute,
-        # then put in plugins as B instead of A.
-        # TODO: check they agree on paralellization?
-        # TODO: allow compute grouping while saver does rechunk
-        while True:
-            for b, p_b in plugins.items():
-                if (p_b.parallel and not p_b.rechunk_on_save
-                        and len(p_b.depends_on) == 1
-                        and b not in components.targets):
-                    a = p_b.depends_on[0]
-                    if a not in plugins:
-                        continue
-                    self.log.debug(f"Putting {b} in post_compute of {a}")
-                    p_a = plugins[a]
-                    p_a.post_compute.append(plugins[b].do_compute)
-                    p_a.on_close.extend(p_b.on_close)
-                    plugins[b] = p_a
-                    del plugins[a]
-                    break       # Changed plugins while iterating over it
-            else:
-                break
+        merge_chains(components, log=self.log)
 
         self.log.debug("After optimization: " + str(components))
 
@@ -137,7 +142,6 @@ class IteratorProcessor:
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
         self.log.debug("Processor components are: " + str(components))
-        plugins = components.plugins.copy()
 
         assert len(components.targets) == 1, "Only single target supported"
         target = components.targets[0]
@@ -145,11 +149,13 @@ class IteratorProcessor:
 
         savers_to_post_compute(components, log=self.log, force=True)
         assert len(components.savers) == 0
+        merge_chains(components, log=self.log)
+
 
         # Find out how many iterators we need for each data type
         n_iters = defaultdict(int)
         n_iters[target] += 1
-        for p in plugins.values():
+        for p in components.plugins.values():
             for d in p.depends_on:
                 n_iters[d] += 1
 
@@ -161,6 +167,7 @@ class IteratorProcessor:
         for d, l in components.loaders.items():
             make_iters(d, l)
 
+        plugins = components.plugins.copy()
         while len(plugins):
             for d, p in plugins.items():
                 # Check we have iters for this plugin already
@@ -188,3 +195,25 @@ class IteratorProcessor:
         # due to branching
         for p in self.components.plugins.values():
             p.close()
+
+
+"""
+def read_ahead(plugin, executor, n=15):
+
+    next_chunk_i = 0
+    pending = dict()
+    stopped = False
+    for chunk_i in itertools.count():
+        # Submit new futures
+        while not stopped and len(pending) < n:
+            try:
+                pending[next_chunk_i] = next(source_of_futures)
+                next_chunk_i += 1
+            except StopIteration:
+                stopped = True
+
+        # Next alread pending?
+        if next_chunk_i
+
+        # Next
+"""

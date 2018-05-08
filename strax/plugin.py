@@ -8,6 +8,7 @@ from enum import IntEnum
 import itertools
 from functools import partial
 import typing
+import time
 
 import numpy as np
 
@@ -49,9 +50,9 @@ class Plugin:
     run_id: str
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
-    takes_config = dict()       # Config options
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
     closed = False
+    takes_config = dict()       # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -126,6 +127,12 @@ class Plugin:
 
         return deps_by_kind
 
+    def source_finished(self):
+        return False
+
+    def is_ready(self, chunk_i):
+        return True
+
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
         :param iters: dict with iterators over dependencies
@@ -160,11 +167,16 @@ class Plugin:
         pending = []
         for chunk_i in itertools.count():
             try:
-                if not self.check_next_ready_or_done(chunk_i):
-                    # TODO: avoid duplication
-                    # but also remain picklable...
-                    self.close(wait_for=tuple(pending))
-                    return
+                # TODO: only do this for input plugins?
+                while True:
+                    if self.is_ready(chunk_i):
+                        break
+                    elif self.source_finished():
+                        raise StopIteration
+                    print(f"{self.__class__.__name__} waiting "
+                          f"for chunk {chunk_i}")
+                    time.sleep(2)
+
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
