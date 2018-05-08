@@ -22,6 +22,8 @@ get_docs = """
     Some plugins save automatically.
     :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
+    :param backend: Backend code used for concurrency: 'mailbox' (default) or
+    'iter'.
 """
 
 
@@ -70,6 +72,7 @@ class Context:
         this context.
         :param replace: If True, replaces settings rather than adding them.
         """
+        # TODO: Clone rather than pass on storage instance
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -392,6 +395,7 @@ class Context:
             targets=targets)
 
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
+                 backend='mailbox',
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results
         {get_docs}
@@ -418,8 +422,9 @@ class Context:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id, targets=targets, save=save)
-        yield from strax.ThreadedMailboxProcessor(
-            components, max_workers=max_workers).iter()
+        proc = dict(mailbox=strax.ThreadedMailboxProcessor,
+                    iter=strax.IteratorProcessor)[backend]
+        yield from proc(components, max_workers=max_workers).iter()
 
     def make(self, *args, **kwargs) -> None:
         """Compute target for run_id (return nothing)

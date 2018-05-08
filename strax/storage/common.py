@@ -210,6 +210,7 @@ class Saver:
         raise NotImplementedError
 
     def close(self):
+        print(f"Closing {self.key.data_type}")
         if self.closed:
             raise RuntimeError(f"{self.key.data_type} saver already closed!")
         self.closed = True

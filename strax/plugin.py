@@ -51,6 +51,7 @@ class Plugin:
     deps: typing.List       # Dictionary of dependency plugin instances
     takes_config = dict()       # Config options
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
+    closed = False
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -214,6 +215,8 @@ class Plugin:
         return True
 
     def close(self, wait_for=tuple(), timeout=120):
+        if self.closed:
+            return
         done, not_done = wait(wait_for, timeout=timeout)
         if len(not_done):
             raise RuntimeError(
