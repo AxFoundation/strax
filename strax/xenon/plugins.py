@@ -37,17 +37,25 @@ class DAQReader(strax.Plugin):
             q if os.path.exists(q) else False
             for q in [p + '_pre', p, p + '_post']])
 
-    def check_next_ready_or_done(self, chunk_i):
+    def source_finished(self):
+        return os.path.exists(self.config["input_dir"] + f'/THE_END')
+
+    def is_ready(self, chunk_i):
+        ended = self.source_finished()
+        pre, current, post = self._chunk_paths(chunk_i)
+        next_ahead = os.path.exists(self._path(chunk_i + 1))
+        if (current and (
+                (pre and post
+                 or chunk_i == 0 and post
+                 or ended and (pre and not next_ahead)))):
+            return True
+        return False
+
+    def check_next_ready_or_done(self, chunk_i, wait=True):
         while True:
-            ended = os.path.exists(self.config["input_dir"] + f'/THE_END')
-            pre, current, post = self._chunk_paths(chunk_i)
-            next_ahead = os.path.exists(self._path(chunk_i + 1))
-            if (current and (
-                    (pre and post
-                     or chunk_i == 0 and post
-                     or ended and (pre and not next_ahead)))):
+            if self.is_ready(chunk_i):
                 return True
-            if ended and not current:
+            elif self.source_finished():
                 return False
             print(f"Waiting for chunk {chunk_i}, sleeping")
             time.sleep(2)

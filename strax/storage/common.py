@@ -212,7 +212,8 @@ class Saver:
     def close(self):
         print(f"Closing {self.key.data_type}")
         if self.closed:
-            raise RuntimeError(f"{self.key.data_type} saver already closed!")
+            print(f"{self.key.data_type} saver already closed")
+            return
         self.closed = True
         exc_info = sys.exc_info()
         if exc_info[0] not in [None, StopIteration]:
