@@ -12,7 +12,7 @@ with open('README.md') as file:
     long_description = file.read()
 
 setup(name='strax',
-      version='0.1.0',
+      version='0.1.1',
       description='Streaming analysis for XENON',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
