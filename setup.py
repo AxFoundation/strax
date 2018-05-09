@@ -8,6 +8,9 @@ with open('requirements.txt') as f:
     requires = [x.strip().split('=')[0]
                 for x in f.readlines()]
 
+with open('README.md') as file:
+    long_description = file.read()
+
 setup(name='strax',
       version='0.1.0',
       description='Streaming analysis for XENON',
@@ -16,11 +19,19 @@ setup(name='strax',
       url='https://github.com/jelleaalbers/strax',
       setup_requires=['pytest-runner'],
       install_requires=requires,
-      tests_require=requires + ['pytest', 'boltons', 'hypothesis'],
-      packages=['strax'],
+      tests_require=requires + ['pytest',
+                                'boltons',
+                                'hypothesis'],
+      long_description=long_description,
+      long_description_content_type="text/markdown",
+      packages=['strax',
+                'strax.processing',
+                'strax.storage',
+                'strax.xenon'],
       classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.6',
-    ],)
+        'Programming Language :: Python :: 3.6',],
+      zip_safe = False,
+    )
