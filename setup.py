@@ -11,7 +11,7 @@ with open('requirements.txt') as f:
 with open('README.md') as file:
     readme = file.read()
 
-with open('HISTORY.rst') as file:
+with open('HISTORY.md') as file:
     history = file.read()
 
 setup(name='strax',
