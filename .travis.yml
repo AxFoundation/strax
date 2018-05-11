@@ -54,8 +54,8 @@ before_install:
 
 # This is the actual install of strax
 install:
-  - pip install -r requirements.txt
-  - pip install coveralls
+  - pip install ripa
+  - ripa -r requirements.txt coveralls
   - python setup.py install
   
 # Compute the code coverage
