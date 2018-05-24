@@ -17,3 +17,4 @@ and there is no documentation to speak of. For the coming weeks we're probably n
 - When accepting pull requests, prefer merge or squash depending on how the commit history looks.
   - If it's dozens of 'oops' and 'test' commits, best to squash.
   - If it's a few commits that mostly outline discrete steps of an implementation, it's worth keeping, so best to merge.
+- Do not place experiment specific information in strax.  Strax is a core where your experiment should have a separate repository containing the relevant plugins.
