@@ -27,14 +27,11 @@ class ZipFileStore(FileStore):
         super().__init__(*args, **kwargs)
         self.readonly = True
 
-    @staticmethod
-    def _get_fn(key):
-        return key.data_type + '_' + strax.deterministic_hash(key.lineage)
-
     def _find(self, key):
         dirn = str(key)
 
-        for zipn in self._candidate_zips(key):
+        for d in self.data_dirs:
+            zipn = os.path.join(d, key.run_id + '.zip')
             with zipfile.ZipFile(zipn) as zp:
                 try:
                     zp.getinfo(dirn + '/metadata.json')
@@ -46,13 +43,6 @@ class ZipFileStore(FileStore):
 
         self.log.debug(f"{key} is NOT in cache.")
         raise NotCached
-
-    def _candidate_zips(self, key):
-        """Return zipfiles at which data meant by key
-        could be found or saved"""
-        return [
-            os.path.join(d, key.run_id + '.zip')
-            for d in self.data_dirs]
 
     def _read_chunk(self, zipn_and_dirn, chunk_info, dtype, compressor):
         zipn, dirn = zipn_and_dirn
