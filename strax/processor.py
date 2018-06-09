@@ -17,8 +17,9 @@ class ProcessorComponents(ty.NamedTuple):
     targets: ty.Tuple[str]
 
 
-def savers_to_post_compute(c, log=None, force=False):
+def savers_to_post_compute(c: ProcessorComponents, log=None, force=False):
     """Put savers in post_compute of their associated plugins
+    :param c: Processor components
     :param log: logger
     :param force: do it even if it means disabling rechunking
     """
@@ -33,13 +34,17 @@ def savers_to_post_compute(c, log=None, force=False):
                 p.post_compute.append(s.save)
                 p.on_close.append(s.close)
             del c.savers[d]
+    assert len(c.savers) == 0
 
-def merge_chains(c, log=None):
-    # Merge simple chains:
-    # A -> B => A, with B as post_compute,
-    # then put in plugins as B instead of A.
-    # TODO: check they agree on paralellization?
-    # TODO: allow compute grouping while saver does rechunk
+
+def merge_chains(c: ProcessorComponents, log=None):
+    """
+    Merge simple chains (A -> B -> C  =>  A) by putting B and C in post_compute
+    of A. The resulting plugin is then put under the key for C.
+    TODO: does this work if A is not a starting point?
+    TODO: check they agree on paralellization?
+    TODO: allow compute grouping while saver does rechunk.
+    """
     while True:
         for b, p_b in c.plugins.items():
             if (p_b.parallel and not p_b.rechunk_on_save
@@ -143,14 +148,14 @@ class IteratorProcessor:
         self.components = components
         self.log.debug("Processor components are: " + str(components))
 
-        assert len(components.targets) == 1, "Only single target supported"
+        assert max_workers in [1, None], \
+            "Iterator backend cannot multiprocess"
+        assert len(components.targets) == 1, \
+            "Iterator backend supports only one target"
         target = components.targets[0]
-        assert max_workers in [1, None], "Multiprocessing not implemented"
 
         savers_to_post_compute(components, log=self.log, force=True)
-        assert len(components.savers) == 0
         merge_chains(components, log=self.log)
-
 
         # Find out how many iterators we need for each data type
         n_iters = defaultdict(int)
@@ -160,7 +165,12 @@ class IteratorProcessor:
                 n_iters[d] += 1
 
         def make_iters(d, it):
+            """Create iters for data type d by cloning (itertools.tee)
+            the iterator it.
+            """
             nonlocal iters
+            if d in iters:
+                raise RuntimeError(f"Tried to create iters for {d} twice")
             iters[d] = list(itertools.tee(it, n_iters[d]))
 
         iters = dict()
@@ -178,6 +188,7 @@ class IteratorProcessor:
                 except KeyError:
                     continue
 
+                # Construct the iter for this plugin
                 it = p.iter({dep: iters[dep].pop()
                              for dep in p.depends_on})
                 make_iters(d, it)
