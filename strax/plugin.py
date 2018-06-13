@@ -40,7 +40,7 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    rechunk_input = None
+    rechunk_input = None      # Child class can make function that takes and returns iters
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
