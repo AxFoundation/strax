@@ -44,12 +44,15 @@ class Context:
         """Create a strax context.
 
         :param storage: Storage backends to use. Can be:
-          - a string: path to use for FileStore backend (stores data in many separate subdirectories)
+          - a string: path to use for FileStore backend (stores data in
+            many separate subdirectories)
           - omitted. Will use a FileStore backend that uses ./strax_data
           - a list/tuple of storage backends.
-        :param config: Dictionary with configuration options that will be applied to plugins
+        :param config: Dictionary with configuration options that will be
+           applied to plugins
         :param register: plugin class or list of plugin classes to register
-        :param register_all: module for which all plugin classes defined in it will be registered.
+        :param register_all: module for which all plugin classes defined in it
+           will be registered.
         """
         self.log = logging.getLogger('strax')
 
@@ -77,7 +80,7 @@ class Context:
                     register_all=None,
                     replace=False):
         """Return a new context with new setting adding to those in
-        this context. 
+        this context.
         :param replace: If True, replaces settings rather than adding them.
         See Context.__init__ for documentation on other parameters.
         """
