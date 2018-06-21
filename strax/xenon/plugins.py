@@ -17,12 +17,10 @@ export, __all__ = strax.exporter()
                  help="Directory where readers put data"),
     strax.Option('erase', default=False, track=False,
                  help="Delete reader data after processing"))
-class DAQReader(strax.Plugin):
+class DAQReader(strax.ParallelInputPlugin):
     provides = 'raw_records'
     depends_on = tuple()
     dtype = strax.record_dtype()
-
-    parallel = 'process'
     rechunk_on_save = False
 
     def _path(self, chunk_i):
@@ -50,15 +48,6 @@ class DAQReader(strax.Plugin):
                  or ended and (pre and not next_ahead)))):
             return True
         return False
-
-    def check_next_ready_or_done(self, chunk_i, wait=True):
-        while True:
-            if self.is_ready(chunk_i):
-                return True
-            elif self.source_finished():
-                return False
-            print(f"Waiting for chunk {chunk_i}, sleeping")
-            time.sleep(2)
 
     def _load_chunk(self, path, kind='central'):
         records = [strax.load_file(fn,
