@@ -1,4 +1,5 @@
 from ast import literal_eval
+from concurrent.futures import wait
 import logging
 import sys
 import time
@@ -208,16 +209,24 @@ class Saver:
 
     def _save_chunk_metadata(self, chunk_info):
         raise NotImplementedError
+        
+    def _close(self):
+        raise NotImplementedError
 
-    def close(self):
-        print(f"Closing {self.key.data_type}")
+    def close(self, wait_for=None, timeout=120):
         if self.closed:
-            print(f"{self.key.data_type} saver already closed")
-            return
-        self.closed = True
-        exc_info = sys.exc_info()
-        if exc_info[0] not in [None, StopIteration]:
-            self.md['exception'] = traceback.format_exc()
-        self.md['writing_ended'] = time.time()
+            raise RuntimeError(f"{self.key.data_type} saver already closed")
 
-        # >>> child class may want to finish writing metadata <<<
+        if wait_for:
+            print(f"Closing {self.key.data_type} saver, waiting for {len(wait_for)} futures")
+            done, not_done = wait(wait_for, timeout=timeout)
+            if len(not_done):
+                raise RuntimeError(
+                    f"{len(not_done)} futures of {self.key} did not"
+                     "complete in time!")
+        else:
+            print(f"Closing {self.key.data_type} saver, don't have to wait")
+        
+        self.closed = True
+        self._close()
+        print(f"Done closing {self.key.data_type} saver")

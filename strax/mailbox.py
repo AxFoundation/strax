@@ -69,7 +69,7 @@ class Mailbox:
     def __init__(self,
                  name='mailbox',
                  timeout=120,
-                 max_messages=30):
+                 max_messages=60):
         self.name = name
         self.timeout = timeout
         self.max_messages = max_messages
