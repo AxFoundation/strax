@@ -16,6 +16,12 @@ class ProcessorComponents(ty.NamedTuple):
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
+        
+class MailboxDict(dict):
+    def __missing__(self, key):
+        res = self[key] = strax.Mailbox(name=key + '_mailbox')
+        return res
+
 
 @export
 class ThreadedMailboxProcessor:
@@ -24,7 +30,7 @@ class ThreadedMailboxProcessor:
     def __init__(self, components: ProcessorComponents, max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
-        self.mailboxes = defaultdict(lambda: strax.Mailbox())
+        self.mailboxes = MailboxDict()
 
         self.log.debug("Processor components are: " + str(components))
         plugins = components.plugins
@@ -35,10 +41,12 @@ class ThreadedMailboxProcessor:
         thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
         # Deal with parallel input processes
-        par_inputs = {d: p for d, p in plugins.items()
-                      if isinstance(p, strax.ParallelInputPlugin)}
-        for input_d, input_p in par_inputs:
-            components = input_p.setup(components, self.mailboxes, process_executor)
+        # Setting up one of these modifies plugins, so we must gather 
+        # them all first.
+        par_inputs = [p for p in plugins.values()
+                      if issubclass(p.__class__, strax.ParallelInputPlugin)]
+        for p in par_inputs:
+            components = p.setup(components, self.mailboxes, process_executor)
 
         self.log.debug("After optimization: " + str(components))
 

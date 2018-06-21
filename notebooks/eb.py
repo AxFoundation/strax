@@ -14,8 +14,6 @@ parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
 parser.add_argument('--n', default=1, type=int,
                     help='Worker processes to start')
-parser.add_argument('--backend', default='mailbox',
-                    help='Concurrency backend: mailbox or iter')
 parser.add_argument('--shm', action='store_true',
                     help='Operate in /dev/shm')
 parser.add_argument('--erase', action='store_true',
@@ -80,8 +78,7 @@ start = time.time()
 
 for i, events in enumerate(
         st.get_iter(run_id, 'event_basics',
-                    max_workers=args.n,
-                    backend=args.backend)):
+                    max_workers=args.n)):
     print(f"\t{i}: Found {len(events)} events")
 
 end = time.time()
