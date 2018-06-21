@@ -53,7 +53,7 @@ class Context:
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
 
-        self.set_config(config, mode='new')
+        self.set_config(config, mode='replace')
 
         if register is not None:
             self.register(register)
