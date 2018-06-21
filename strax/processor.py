@@ -1,7 +1,6 @@
 from concurrent import futures
 import logging
 import typing as ty
-import itertools
 
 import strax
 export, __all__ = strax.exporter()
@@ -16,6 +15,12 @@ class ProcessorComponents(ty.NamedTuple):
     targets: ty.Tuple[str]
 
 
+class MailboxDict(dict):
+    def __missing__(self, key):
+        res = self[key] = strax.Mailbox(name=key + '_mailbox')
+        return res
+
+
 @export
 class ThreadedMailboxProcessor:
     mailboxes: ty.Dict[str, strax.Mailbox]
@@ -23,6 +28,8 @@ class ThreadedMailboxProcessor:
     def __init__(self, components: ProcessorComponents, max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
+        self.mailboxes = MailboxDict()
+
         self.log.debug("Processor components are: " + str(components))
         plugins = components.plugins
         savers = components.savers
@@ -31,52 +38,21 @@ class ThreadedMailboxProcessor:
         process_executor = futures.ProcessPoolExecutor(max_workers=max_workers)
         thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
-        # If possible, combine save and compute operations
-        # so they don't have to be scheduled by executor individually.
-        # This saves data transfer between cores (NUMA).
-        for d, p in plugins.items():
-            if not p.rechunk_on_save:
-                self.log.debug(f"Putting savers for {d} in post_compute")
-                for s in savers.get(d, []):
-                    p.post_compute.append(s.save)
-                    p.on_close.append(s.close)
-                savers[d] = []
-
-        # For the same reason, merge simple chains:
-        # A -> B => A, with B as post_compute,
-        # then put in plugins as B instead of A.
-        # TODO: check they agree on paralellization?
-        # TODO: allow compute grouping while saver does rechunk
-        while True:
-            for b, p_b in plugins.items():
-                if (p_b.parallel and not p_b.rechunk_on_save
-                        and len(p_b.depends_on) == 1
-                        and b not in components.targets):
-                    a = p_b.depends_on[0]
-                    if a not in plugins:
-                        continue
-                    self.log.debug(f"Putting {b} in post_compute of {a}")
-                    p_a = plugins[a]
-                    p_a.post_compute.append(plugins[b].do_compute)
-                    p_a.on_close.extend(p_b.on_close)
-                    plugins[b] = p_a
-                    del plugins[a]
-                    break       # Changed plugins while iterating over it
-            else:
-                break
+        # Deal with parallel input processes
+        # Setting up one of these modifies plugins, so we must gather
+        # them all first.
+        par_inputs = [p for p in plugins.values()
+                      if issubclass(p.__class__, strax.ParallelInputPlugin)]
+        for p in par_inputs:
+            components = p.setup(components, self.mailboxes, process_executor)
 
         self.log.debug("After optimization: " + str(components))
-
-        self.mailboxes = {
-            d: strax.Mailbox(name=d + '_mailbox')
-            for d in itertools.chain.from_iterable(components)}
 
         for d, loader in components.loaders.items():
             assert d not in plugins
             self.mailboxes[d].add_sender(loader, name=f'load:{d}')
 
         for d, p in plugins.items():
-
             executor = None
             if p.parallel == 'process':
                 executor = process_executor

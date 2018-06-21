@@ -1,6 +1,5 @@
 import glob
 import os
-import time
 import shutil
 
 import numpy as np
@@ -17,12 +16,10 @@ export, __all__ = strax.exporter()
                  help="Directory where readers put data"),
     strax.Option('erase', default=False, track=False,
                  help="Delete reader data after processing"))
-class DAQReader(strax.Plugin):
+class DAQReader(strax.ParallelInputPlugin):
     provides = 'raw_records'
     depends_on = tuple()
     dtype = strax.record_dtype()
-
-    parallel = 'process'
     rechunk_on_save = False
 
     def _path(self, chunk_i):
@@ -37,20 +34,19 @@ class DAQReader(strax.Plugin):
             q if os.path.exists(q) else False
             for q in [p + '_pre', p, p + '_post']])
 
-    def check_next_ready_or_done(self, chunk_i):
-        while True:
-            ended = os.path.exists(self.config["input_dir"] + f'/THE_END')
-            pre, current, post = self._chunk_paths(chunk_i)
-            next_ahead = os.path.exists(self._path(chunk_i + 1))
-            if (current and (
-                    (pre and post
-                     or chunk_i == 0 and post
-                     or ended and (pre and not next_ahead)))):
-                return True
-            if ended and not current:
-                return False
-            print(f"Waiting for chunk {chunk_i}, sleeping")
-            time.sleep(2)
+    def source_finished(self):
+        return os.path.exists(self.config["input_dir"] + f'/THE_END')
+
+    def is_ready(self, chunk_i):
+        ended = self.source_finished()
+        pre, current, post = self._chunk_paths(chunk_i)
+        next_ahead = os.path.exists(self._path(chunk_i + 1))
+        if (current and (
+                (pre and post
+                 or chunk_i == 0 and post
+                 or ended and (pre and not next_ahead)))):
+            return True
+        return False
 
     def _load_chunk(self, path, kind='central'):
         records = [strax.load_file(fn,
