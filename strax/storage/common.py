@@ -209,7 +209,7 @@ class Saver:
 
     def _save_chunk_metadata(self, chunk_info):
         raise NotImplementedError
-        
+
     def _close(self):
         raise NotImplementedError
 
@@ -218,15 +218,22 @@ class Saver:
             raise RuntimeError(f"{self.key.data_type} saver already closed")
 
         if wait_for:
-            print(f"Closing {self.key.data_type} saver, waiting for {len(wait_for)} futures")
+            print(f"Closing {self.key.data_type} saver, "
+                  f"waiting for {len(wait_for)} futures")
             done, not_done = wait(wait_for, timeout=timeout)
             if len(not_done):
                 raise RuntimeError(
                     f"{len(not_done)} futures of {self.key} did not"
-                     "complete in time!")
+                    "complete in time!")
         else:
             print(f"Closing {self.key.data_type} saver, don't have to wait")
-        
+
         self.closed = True
+
+        exc_info = sys.exc_info()
+        if exc_info[0] not in [None, StopIteration]:
+            self.md['exception'] = traceback.format_exc()
+        self.md['writing_ended'] = time.time()
+
         self._close()
         print(f"Done closing {self.key.data_type} saver")

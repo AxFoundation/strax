@@ -1,8 +1,6 @@
-from collections import defaultdict
 from concurrent import futures
 import logging
 import typing as ty
-import itertools
 
 import strax
 export, __all__ = strax.exporter()
@@ -16,7 +14,7 @@ class ProcessorComponents(ty.NamedTuple):
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
-        
+
 class MailboxDict(dict):
     def __missing__(self, key):
         res = self[key] = strax.Mailbox(name=key + '_mailbox')
@@ -41,7 +39,7 @@ class ThreadedMailboxProcessor:
         thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
         # Deal with parallel input processes
-        # Setting up one of these modifies plugins, so we must gather 
+        # Setting up one of these modifies plugins, so we must gather
         # them all first.
         par_inputs = [p for p in plugins.values()
                       if issubclass(p.__class__, strax.ParallelInputPlugin)]

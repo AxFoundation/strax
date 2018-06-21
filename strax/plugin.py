@@ -3,7 +3,6 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
-from concurrent.futures import wait
 from enum import IntEnum
 import itertools
 from functools import partial
@@ -40,8 +39,8 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    rechunk_input = None      # Child class can make this a function that takes
-                              # and returns iters
+    # Child class can make this a function that takes and returns iters:
+    rechunk_input = None
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
@@ -177,9 +176,6 @@ class Plugin:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
 
     def do_compute(self, *args, chunk_i=None, **kwargs):
-        #for i, x in enumerate(args):
-        #     kwargs[self.depends_on[i]] = x
-
         if self.compute_takes_chunk_i:
             result = self.compute(*args, chunk_i=chunk_i, **kwargs)
         else:
@@ -216,7 +212,7 @@ class ParallelInputPlugin(Plugin):
     Child must implement source_finished and is_ready.
     """
     sub_plugins: typing.Dict[str, Plugin]
-    sub_savers: typing.Dict[str, strax.Saver]
+    sub_savers: typing.Dict[str, typing.List[strax.Saver]]
     outputs_to_send: typing.Set[str]
 
     def __init__(self):
@@ -233,7 +229,6 @@ class ParallelInputPlugin(Plugin):
         savers = components.savers
 
         del plugins[self.provides]
-        #print(f"Setting up input plugin for {self.provides}")
 
         # Gather all plugins that do not rechunk and which branch out as a
         # simple tree from the input plugin.
@@ -245,7 +240,7 @@ class ParallelInputPlugin(Plugin):
                         and p.depends_on[0] in i_have
                         and p.parallel):
                     self.sub_plugins[d] = p
-                    
+
                     del plugins[d]
                     break
             else:
@@ -259,7 +254,7 @@ class ParallelInputPlugin(Plugin):
         # If the savers do not require rechunking, run them in this way also
         for d in list(self.sub_plugins.keys()) + [self.provides]:
             if d in savers:
-                
+
                 # Get the plugin... awkward...
                 if d in self.sub_plugins:
                     p = self.sub_plugins[d]
@@ -269,30 +264,23 @@ class ParallelInputPlugin(Plugin):
                     p = self
                 else:
                     raise RuntimeError
-                
+
                 if p.rechunk_on_save:
                     self.outputs_to_send.add(d)
                 else:
                     self.sub_savers[d] = savers[d]
-                    #print(f"Deleting {d} from savers")
                     del savers[d]
-        #print(savers.keys(), self.sub_plugins.keys(), list(self.sub_plugins.keys()) + [self.provides])
-        #raise ZeroDivisionError
 
         mailboxes[self.provides].add_sender(self.iter(executor))
         mailboxes[self.provides].add_reader(partial(self.send_outputs,
                                                     mailboxes=mailboxes))
-        #print("Done setting up parplugin.", self.sub_plugins, self.sub_savers, self.outputs_to_send)
         return components
 
     def send_outputs(self, source, mailboxes):
         for result in source:
-            #print(f"Got a result! Spreading the good word. Keys in result: {result.keys()}")
             for d, x in result.items():
-                #print(d)
-                #print(f"Sending {d} (length {len(x)}, dtype {x.dtype} to mailbox")
                 mailboxes[d].send(x)
-                
+
         for d in self.outputs_to_send:
             mailboxes[d].close()
 
@@ -310,24 +298,24 @@ class ParallelInputPlugin(Plugin):
                        if not f.done()]
             yield new_f
 
-        print(f"{self.__class__.__name__} exhausted. Waiting for {len(pending)} pending futures.")
+        print(f"{self.__class__.__name__} exhausted. "
+              f"Waiting for {len(pending)} pending futures.")
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=pending)
 
     def do_compute(self, chunk_i):
         result = self.compute(chunk_i=chunk_i)
-        self._output = {}   # Fortunately everybody else is in a different process..
+        # Fortunately everybody else is in a different process...
+        self._output = {}
         self._grok(self.provides, result, chunk_i)
         for d in self.outputs_to_send:
             assert d in self._output, f"Output {d} missing!"
         return self._output
 
     def _grok(self, d, x, chunk_i):
-        #print(f"{d} done, let's see")
         for other_d, p in self.sub_plugins.items():
             if p.depends_on[0] == d:
-                #print(f"Computing {other_d}")
                 self._grok(other_d, p.do_compute(x), chunk_i)
 
         if d in self.sub_savers:
@@ -342,7 +330,6 @@ class ParallelInputPlugin(Plugin):
 
     def is_ready(self, chunk_i):
         raise NotImplementedError
-
 
 
 @export
