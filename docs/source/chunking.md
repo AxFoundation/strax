@@ -8,7 +8,7 @@ Plugins receive and produce data in *chunks*. Plugins can chunk their output as 
 Savers are free to chunk their data as they like; for example, in files of convenient sizes. [TODO; exception for parallel blah...]
 
 ### Example: a plugin that must rechunk
-Imagine a plugin that computes the time between a peak and the next peak. This can't compute time for the final peak in a chunk.
+Imagine a plugin that computes the time between a peak and the next peak. This can't compute the result for the final peak in a chunk.
   * The first output chunk will thus be one item smaller. However, it will save the time of that last peak for later use.
   * Once the next input chunk arrives, it computes the time difference between the saved peak and the first peak of the new input chunk. This is the first result of the second output chunk. The second output chunk has the same size as the input chunk, but it will contain different peaks.
   * Finally, the last chunk will be one item larger.
@@ -47,7 +47,7 @@ The *mailbox* class provides the additional machinery that handles this. During 
 A data type's mailbox iterates over the results of the plugin or loader that produces it. It also provides an iterator to each plugin that needs it as an input. 
 
 The input iterators given to the plugins must be somewhat magical. If we call `next`, but the input is not yet available, we must pause (and do something else) until it is.
-To enable this suspending, strax runs each plugin in a separate thread. (We could use a framework like `asyncio` instead if we wanted to run our own scheduler, now we just use the OS' scheduler.)
+To enable this suspending, strax runs each plugin in a separate thread. (We could use a framework like `asyncio` instead if we wanted to run our own scheduler, now we just use the OS's scheduler.)
 
 The threads in strax are thus motivated by [concurrency](https://en.wikipedia.org/wiki/Concurrency_(computer_science)), not parallelism.
 As a bonus, they do allow different plugins to run simultaneously.
@@ -63,7 +63,7 @@ but this does not affect IO or computations in numpy and numba.
 
 Strax can process data at 50-100 raw-MB /sec single core, which is not enough for live online processing at high DAQ rates. We must thus parallelize at least some of the signal processing. 
 
-This might be impossible. For example, we cannot assigning event numbers  (0, 1, 2, ...) in parallel if we want unique numbers that increment without gaps. We also cannot save to a single file in parallel. 
+This might be impossible. For example, we cannot assign event numbers  (0, 1, 2, ...) in parallel if we want unique numbers that increment without gaps. We also cannot save to a single file in parallel. 
 
 
 ### Implementation
@@ -72,9 +72,9 @@ To get parallelization, plugins can defer computations to a pool of **threads** 
 
 Each plugin chooses whether it wants to use a thread- or process pool for parallelization, or cannot be parallelized at all.
   * A *thread pool* has little overhead, but the performance gain is limited by the global interpreter lock. If the computation is in pure python, there is no benefit at all. Numba code reaps benefits until the pure-python overhead around it becomes the limiting factor (at high numbers of cores).  
-  * A *process pool* incurs overhead from (1) forking the strax process and (2) pickling and unpickling the results in the child and parent processes. We hope to remove overhead (2) using a shared memory system. For example, [zeroMQ](http://zeromq.org/) allows interprocess communication without copying, and [works for numpy arrays specifically](http://pyzmq.readthedocs.io/en/latest/serialization.html). 
+  * A *process pool* incurs overhead from (1) forking the strax process and (2) pickling and unpickling the results in the child and parent processes. A shared memory system would avoid overhead (2), but make memory management a lot more difficult. (However, there are libraries like [zeroMQ](http://zeromq.org/) that allow interprocess communication without copying, and [work for numpy arrays specifically](http://pyzmq.readthedocs.io/en/latest/serialization.html). 
 
-Loaders always use a threadpool for paralellization. Savers used to do the same, but currently this is not supported, and saving is not usually parallelized. Savers that are optimized to post-compute operations (see below) are the exception.
+Loaders always use a threadpool for paralellization. Savers used to do the same, but currently this is not supported, and saving is not usually parallelized. Savers that are optimized away to post-compute operations (see below) are the exception.
 
 ### Chain optimization
 
