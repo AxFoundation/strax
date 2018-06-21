@@ -63,7 +63,7 @@ class Context:
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
 
-        self.set_config(config, mode='new')
+        self.set_config(config, mode='replace')
 
         if register is not None:
             self.register(register)
@@ -81,6 +81,7 @@ class Context:
         :param replace: If True, replaces settings rather than adding them.
         See Context.__init__ for documentation on other parameters.
         """
+        # TODO: Clone rather than pass on storage instance
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -107,7 +108,7 @@ class Context:
         :param mode: can be either
          - update: Add to or override current options in context
          - setdefault: Add to current options, but do not override
-         - replace: Erase config form this context, then set only these options
+         - replace: Erase config, then set only these options
         """
         if config is None:
             config = dict()
@@ -116,7 +117,7 @@ class Context:
         elif mode == 'setdefault':
             for k in config:
                 self.config.setdefault(k, config[k])
-        elif mode == 'new':
+        elif mode == 'replace':
             self.config = config
         else:
             raise RuntimeError("Expected update, setdefault or new as config"
@@ -475,16 +476,16 @@ class InvalidConfiguration(Exception):
     pass
 
 
-# Todo:  Does it really have to be a decorator just for nice error message?
 @export
 def takes_config(*options):
+    """Decorator for plugin classes, to specify which options it takes.
+    :param options: Option instances of options this plugin takes.
+    """
     def wrapped(plugin_class):
         result = []
         for opt in options:
-            if isinstance(opt, str):
-                opt = Option(opt)
-            elif not isinstance(opt, Option):
-                raise RuntimeError("Specify config options by str or Option")
+            if not isinstance(opt, Option):
+                raise RuntimeError("Specify config options by Option objects")
             opt.taken_by = plugin_class.__name__
             result.append(opt)
 
@@ -494,12 +495,14 @@ def takes_config(*options):
     return wrapped
 
 
+# Placeholder value for omitted values.
 # Use instead of None since None might be a proper value/default
-OMITTED = 'Argument was not given'
+OMITTED = '<OMITTED>'
 
 
 @export
 class Option:
+    """Configuration option taken by a strax plugin"""
     taken_by = "UNKNOWN???"
 
     def __init__(self,
@@ -507,16 +510,25 @@ class Option:
                  type: type = OMITTED,
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
-                 track=True,
+                 track: bool = True,
                  help: str = ''):
+        """
+        :param name: Option identifier
+        :param type: Excepted type of the option's value.
+        :param default: Default value the option takes.
+        :param default_factory: Function that produces a default value.
+        :param track: If True, option value becomes part of plugin lineage
+        (just like the plugin version).
+        :param help: Human-readable description of the option.
+        """
         self.name = name
         self.type = type
-        type = builtins.type
         self.default = default
-        self.track = track
         self.default_factory = default_factory
+        self.track = track
         self.help = help
 
+        type = builtins.type
         if (self.default is not OMITTED
                 and self.default_factory is not OMITTED):
             raise RuntimeError(f"Tried to specify both default and "
@@ -526,6 +538,7 @@ class Option:
             self.type = type(default)
 
     def get_default(self):
+        """Return default value for the option"""
         if self.default is OMITTED:
             if self.default_factory is OMITTED:
                 raise InvalidConfiguration(f"Missing option {self.name} "
