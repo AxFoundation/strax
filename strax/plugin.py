@@ -40,7 +40,8 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    rechunk_input = None      # Child class can make function that takes and returns iters
+    rechunk_input = None      # Child class can make this a function that takes
+                              # and returns iters
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
@@ -51,15 +52,12 @@ class Plugin:
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    closed = False
     takes_config = dict()       # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on not provided for '
                              f'{self.__class__.__name__}')
-        self.post_compute = []
-        self.on_close = []
         if self.rechunk_input and self.parallel:
             raise RuntimeError("Plugins that rechunk their input "
                                "cannot be parallelized")
@@ -127,12 +125,6 @@ class Plugin:
 
         return deps_by_kind
 
-    def source_finished(self):
-        return False
-
-    def is_ready(self, chunk_i):
-        return True
-
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
         :param iters: dict with iterators over dependencies
@@ -167,23 +159,11 @@ class Plugin:
         pending = []
         for chunk_i in itertools.count():
             try:
-                # TODO: only do this for input plugins?
-                while True:
-                    if self.is_ready(chunk_i):
-                        break
-                    elif self.source_finished():
-                        raise StopIteration
-                    print(f"{self.__class__.__name__} waiting "
-                          f"for chunk {chunk_i}")
-                    time.sleep(2)
-
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
-                self.close(wait_for=tuple(pending))
                 return
             except Exception:
-                self.close(wait_for=tuple(pending))
                 raise
 
             if self.parallel and executor is not None:
@@ -216,33 +196,124 @@ class Plugin:
                 r[k] = v
             result = r
 
-        for p in self.post_compute:
-            r = p(result, chunk_i=chunk_i)
-            if r is not None:
-                result = r
-
         return result
-
-    def check_next_ready_or_done(self, chunk_i):
-        return True
-
-    def close(self, wait_for=tuple(), timeout=120):
-        if self.closed:
-            return
-        done, not_done = wait(wait_for, timeout=timeout)
-        if len(not_done):
-            raise RuntimeError(
-                f"{len(not_done)} futures of {self.__class__.__name__}"
-                "did not complete in time!")
-        for x in self.on_close:
-            x()
 
     def compute(self, **kwargs):
         raise NotImplementedError
 
+
 ##
 # Special plugins
 ##
+
+@export
+class ParallelInputPlugin(Plugin):
+    """An input plugin that reads chunks in parallel in different processes.
+
+    We will try to run dependencies in the same process, to evade
+    data transfer (pickling and memory copy) penalties.
+
+    Child must implement source_finished and is_ready.
+    """
+    sub_plugins: typing.Dict[str, Plugin]
+    sub_savers: typing.Dict[str, strax.Saver]
+    outputs_to_send: typing.Set[str]
+
+    def __init__(self):
+        super().__init__()
+        # Subsidiary plugins and savers.
+        # Dictionary provides -> plugin/saver
+        self.sub_plugins = {}
+        self.sub_savers = {}
+        # List of ouputs to send
+        self.outputs_to_send = set()
+
+    def setup(self, components, mailboxes, executor):
+        plugins = components.plugins
+        savers = components.savers
+
+        del plugins[self.provides]
+
+        # Gather all plugins that do not rechunk and which branch out as a
+        # simple tree from the input plugin.
+        # We'll run these all together in one process.
+        while True:
+            for d, p in plugins.keys():
+                i_have = [self.provides] + list(self.sub_plugins.keys())
+                if (len(p.depends_on) == 0
+                        and p.depends_on[0] in i_have
+                        and p.parallel):
+                    self.sub_plugins[d] = p
+                    del plugins[d]
+                    break
+            else:
+                break
+
+        # Which data types are we outputting?
+        for d, p in plugins:
+            if np.intersect1d(p.depends_on, list(self.sub_plugins.keys())):
+                self.outputs_to_send.add(d)
+
+        # If the savers do not require rechunking, run them in this way also
+        for d, p in self.sub_plugins.items():
+            if d in savers:
+                if not p.rechunk_on_save:
+                    self.sub_savers[d] = savers[d]
+                    del savers[d]
+                else:
+                    self.outputs_to_send.add(d)
+
+        mailboxes[self.provides].add_sender(self.iter(executor))
+        mailboxes[self.provides].add_reader(partial(self.send_outputs,
+                                                    mailboxes=mailboxes))
+        return components
+
+    def send_outputs(self, source, mailboxes):
+        for result in source:
+            for d, x in result.items():
+                mailboxes[d].send(x)
+
+    def iter(self, executor):
+        pending = []
+        for chunk_i in itertools.count():
+            if not self.is_ready(chunk_i):
+                if self.source_finished():
+                    break
+                print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
+                time.sleep(2)
+
+            new_f = executor.submit(self.do_compute, chunk_i=chunk_i)
+            pending = [f for f in pending + [new_f]
+                       if not f.done()]
+            yield new_f
+
+        for s in self.sub_savers:
+            s.close(wait_for=pending)
+
+    def do_compute(self, chunk_i):
+        result = self.compute(chunk_i=chunk_i)
+        self._output = []   # Fortunately everybody else is in a different process..
+        self._grok(self.provides, result, chunk_i)
+        return self._output
+
+    def _grok(self, d, x, chunk_i):
+        for other_d, p in self.sub_plugins.items():
+            if p.depends_on[0] == d:
+                self._grok(p.provides, p.do_compute(x), chunk_i)
+
+        if d in self.sub_savers:
+            s = self.sub_savers[d]
+            s.save(data=x, chunk_i=chunk_i)
+
+        if d in self.outputs_to_send:
+            self._output[d] = x
+
+    def source_finished(self):
+        raise NotImplementedError
+
+    def is_ready(self, chunk_i):
+        raise NotImplementedError
+
 
 
 @export
