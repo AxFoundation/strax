@@ -261,21 +261,12 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            p = self._plugin_class_registry[d]()
+            plugins[d] = p = self._plugin_class_registry[d]()
             p.run_id = run_id
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, tolerant=True)
-
-            # TODO: check can now be moved inside plugin
-            compute_pars = list(
-                inspect.signature(p.compute).parameters.keys())
-            if 'chunk_i' in compute_pars:
-                p.compute_takes_chunk_i = True
-                del compute_pars[compute_pars.index('chunk_i')]
-
-            plugins[d] = p
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
