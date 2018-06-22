@@ -124,6 +124,12 @@ class Plugin:
 
         return deps_by_kind
 
+    def is_ready(self, chunk_i):
+        return True
+
+    def source_finished(self):
+        raise NotImplementedError
+
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
         :param iters: dict with iterators over dependencies
@@ -157,6 +163,12 @@ class Plugin:
 
         pending = []
         for chunk_i in itertools.count():
+            if not self.is_ready(chunk_i):
+                if self.source_finished():
+                    break
+                print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
+                time.sleep(2)
+
             try:
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
@@ -174,6 +186,11 @@ class Plugin:
                 yield new_f
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
+
+        self.cleanup(wait_for=pending)
+
+    def cleanup(self, wait_for):
+        pass
 
     def do_compute(self, *args, chunk_i=None, **kwargs):
         if self.compute_takes_chunk_i:
@@ -203,7 +220,7 @@ class Plugin:
 ##
 
 @export
-class ParallelInputPlugin(Plugin):
+class ParallelSourcePlugin(Plugin):
     """An input plugin that reads chunks in parallel in different processes.
 
     We will try to run dependencies in the same process, to evade
@@ -225,6 +242,11 @@ class ParallelInputPlugin(Plugin):
         self.outputs_to_send = set()
 
     def setup(self, components, mailboxes, executor):
+        """Setup this plugin inside a ThreadedMailboxProcessor
+        This will gather as much plugins/savers as possible as "subsidiaries"
+        which can run in the same processes as the input.
+        :return: ProcessorComponents, altered by setup process.
+        """
         plugins = components.plugins
         savers = components.savers
 
@@ -284,28 +306,18 @@ class ParallelInputPlugin(Plugin):
         for d in self.outputs_to_send:
             mailboxes[d].close()
 
-    def iter(self, executor):
-        pending = []
-        for chunk_i in itertools.count():
-            if not self.is_ready(chunk_i):
-                if self.source_finished():
-                    break
-                print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
-                time.sleep(2)
+    def is_ready(self, chunk_i):
+        return True
 
-            new_f = executor.submit(self.do_compute, chunk_i=chunk_i)
-            pending = [f for f in pending + [new_f]
-                       if not f.done()]
-            yield new_f
-
+    def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
-              f"Waiting for {len(pending)} pending futures.")
+              f"Waiting for {len(wait_for)} pending futures.")
         for savers in self.sub_savers.values():
             for s in savers:
-                s.close(wait_for=pending)
+                s.close(wait_for=wait_for)
 
-    def do_compute(self, chunk_i):
-        result = self.compute(chunk_i=chunk_i)
+    def do_compute(self, *args, chunk_i=None, **kwargs):
+        result = super().do_compute(*args, chunk_i=chunk_i, **kwargs)
         # Fortunately everybody else is in a different process...
         self._output = {}
         self._grok(self.provides, result, chunk_i)
@@ -314,6 +326,7 @@ class ParallelInputPlugin(Plugin):
         return self._output
 
     def _grok(self, d, x, chunk_i):
+        """Launch any computations depending on result d:x (data type:array)"""
         for other_d, p in self.sub_plugins.items():
             if p.depends_on[0] == d:
                 self._grok(other_d, p.do_compute(x), chunk_i)
@@ -324,12 +337,6 @@ class ParallelInputPlugin(Plugin):
 
         if d in self.outputs_to_send:
             self._output[d] = x
-
-    def source_finished(self):
-        raise NotImplementedError
-
-    def is_ready(self, chunk_i):
-        raise NotImplementedError
 
 
 @export

@@ -42,7 +42,7 @@ class ThreadedMailboxProcessor:
         # Setting up one of these modifies plugins, so we must gather
         # them all first.
         par_inputs = [p for p in plugins.values()
-                      if issubclass(p.__class__, strax.ParallelInputPlugin)]
+                      if issubclass(p.__class__, strax.ParallelSourcePlugin)]
         for p in par_inputs:
             components = p.setup(components, self.mailboxes, process_executor)
 
