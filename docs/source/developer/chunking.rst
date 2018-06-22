@@ -7,9 +7,10 @@ Savers are free to chunk their data as they like; for example, in files of conve
 Example: a plugin that must rechunk
 -------------------------------------
 Imagine a plugin that computes the time between a peak and the next peak. This can't compute the result for the final peak in a chunk.
-  * The first output chunk will thus be one item smaller. However, it will save the time of that last peak for later use.
-  * Once the next input chunk arrives, it computes the time difference between the saved peak and the first peak of the new input chunk. This is the first result of the second output chunk. The second output chunk has the same size as the input chunk, but it will contain different peaks.
-  * Finally, the last chunk will be one item larger.
+
+* The first output chunk will thus be one item smaller. However, it will save the time of that last peak for later use.
+* Once the next input chunk arrives, it computes the time difference between the saved peak and the first peak of the new input chunk. This is the first result of the second output chunk. The second output chunk has the same size as the input chunk, but it will contain different peaks.
+* Finally, the last chunk will be one item larger.
 
 Synchronization of one data kind
 --------------------------------------

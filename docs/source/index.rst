@@ -12,8 +12,18 @@ Github page: https://github.com/AxFoundation/strax
 Strax is an analysis framework for pulse-only digitization data,
 specialized for live data processing at speeds of 50-100 MB(raw) / core / sec.
 
-Strax is initially developed for the XENONnT experiment, but the configuration
+For comparison, this is more than 100x faster than the XENON1T processor `pax <http://github.com/XENON1T/pax>`_,
+and does not require a preprocessing stage ('eventbuilder').
+It achieves this due to using `numpy <https://docs.scipy.org/doc/numpy/>`_ `structured arrays <https://docs.scipy.org/doc/numpy/user/basics.rec.html>`_ internally,
+which are supported by the amazing just-in-time compiler `numba <http://numba.pydata.org/>`_.
+
+Strax is initially developed for the XENONnT experiment. However, the configuration
 and specific algorithms for XENONnT will eventually be hosted separately.
+
+Besides the documentation below, you might find these presentations useful:
+
+* `Talk on strax at the first XENONnT software telecon (June 2018) <https://docs.google.com/presentation/d/1khf-RNp6K-Q3TW1nQr5xUdrCUPGTJ8lDlDxnAh3s__U>`_
+* `Talk on strax for DAQ experts (May 2018) <https://docs.google.com/presentation/d/1qZmbAKJmzn7iTbBbkzhTvHmiBqdbYyxhgheRRrDhTeY>`_
 
 
 .. toctree::
@@ -23,13 +33,11 @@ and specific algorithms for XENONnT will eventually be hosted separately.
     basics/setup
     basics/tutorial.ipynb
 
-
 .. toctree::
     :maxdepth: 1
     :caption: Advanced usage
 
     advanced/overview
-
 
 .. toctree::
     :maxdepth: 1
@@ -38,6 +46,7 @@ and specific algorithms for XENONnT will eventually be hosted separately.
     developer/chunking
     developer/pipeline
     developer/parallel
+    developer/contributing
 
 The above pages describe how strax's processing framework works under the hood, and explains some implementation choices. It's meant for people who want to do core development on strax; users or even plugin developers should not need it.
 

@@ -132,9 +132,10 @@ class Plugin:
 
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
+
         :param iters: dict with iterators over dependencies
-        :param executor: Executor to punt computation tasks to.
-            If None, will compute inside the plugin's thread.
+        :param executor: Executor to punt computation tasks to. If None,
+            will compute inside the plugin's thread.
         """
         deps_by_kind = self.dependencies_by_kind()
 
