@@ -12,8 +12,8 @@ strax.xenon.common module
     :undoc-members:
     :show-inheritance:
 
-strax.xenon.pax_interface module
---------------------------------
+strax.xenon.pax\_interface module
+---------------------------------
 
 .. automodule:: strax.xenon.pax_interface
     :members:

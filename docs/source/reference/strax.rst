@@ -13,8 +13,8 @@ Subpackages
 Submodules
 ----------
 
-strax.chunk_arrays module
--------------------------
+strax.chunk\_arrays module
+--------------------------
 
 .. automodule:: strax.chunk_arrays
     :members:
