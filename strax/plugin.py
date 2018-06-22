@@ -228,6 +228,8 @@ class ParallelSourcePlugin(Plugin):
 
     Child must implement source_finished and is_ready.
     """
+    parallel = 'process'
+    
     sub_plugins: typing.Dict[str, Plugin]
     sub_savers: typing.Dict[str, typing.List[strax.Saver]]
     outputs_to_send: typing.Set[str]
@@ -293,7 +295,8 @@ class ParallelSourcePlugin(Plugin):
                     self.sub_savers[d] = savers[d]
                     del savers[d]
 
-        mailboxes[self.provides].add_sender(self.iter(executor))
+        mailboxes[self.provides].add_sender(self.iter(
+            iters={}, executor=executor))
         mailboxes[self.provides].add_reader(partial(self.send_outputs,
                                                     mailboxes=mailboxes))
         return components
