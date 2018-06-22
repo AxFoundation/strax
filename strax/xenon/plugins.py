@@ -16,7 +16,7 @@ export, __all__ = strax.exporter()
                  help="Directory where readers put data"),
     strax.Option('erase', default=False, track=False,
                  help="Delete reader data after processing"))
-class DAQReader(strax.ParallelInputPlugin):
+class DAQReader(strax.ParallelSourcePlugin):
     provides = 'raw_records'
     depends_on = tuple()
     dtype = strax.record_dtype()
