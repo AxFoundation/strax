@@ -46,6 +46,7 @@ Besides the documentation below, you might find these presentations useful:
     developer/chunking
     developer/pipeline
     developer/parallel
+    developer/overlaps
     developer/contributing
 
 The above pages describe how strax's processing framework works under the hood, and explains some implementation choices. It's meant for people who want to do core development on strax; users or even plugin developers should not need it.
