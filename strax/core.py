@@ -1,7 +1,6 @@
 import builtins
 import collections
 import logging
-import inspect
 import fnmatch
 import typing as ty
 import warnings
@@ -438,7 +437,10 @@ class Context:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        return np.concatenate(list(self.get_iter(*args, **kwargs)))
+        results = list(self.get_iter(*args, **kwargs))
+        if len(results):
+            return np.concatenate(results)
+        raise ValueError("Not a single chunk returned?")
 
     def get_df(self, *args, **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame

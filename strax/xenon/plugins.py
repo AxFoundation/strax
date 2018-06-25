@@ -217,82 +217,49 @@ class PeakClassification(strax.Plugin):
     strax.Option('nearby_window', default=int(1e7),
                  help='Peaks starting within this time window (on either side)'
                       'in ns count as nearby.'),
-    strax.Option('ignore_below', default=10,
-                 help='Peaks smaller than this are ignored completely. '
-                      'This is necessary to have "safe breaks" in the data.')
 )
-class NCompeting(strax.Plugin):
+class NCompeting(strax.OverlapWindowPlugin):
     depends_on = ('peak_basics',)
     dtype = [
         ('n_competing', np.int32,
-            'Number of nearby similarly-sized (or larger) peaks')]
+            'Number of nearby larger or slightly smaller peaks')]
 
-    def rechunk_input(self, iters):
-        return dict(peaks=strax.chunk_by_break(
-            iters['peaks'],
-            safe_break=self.config['nearby_window'],
-            ignore_below=self.config['ignore_below']
-        ))
+    def get_window_size(self):
+        return 2 * self.config['nearby_window']
 
     def compute(self, peaks):
-        # TODO: allow dict of arrays output
-        result = np.zeros(len(peaks), dtype=self.dtype)
-        result['n_competing'] = find_n_competing(
+        return dict(n_competing=self.find_n_competing(
             peaks,
             window=self.config['nearby_window'],
-            fraction=self.config['min_area_fraction'],
-            ignore_below=self.config['ignore_below'])
-        return result
+            fraction=self.config['min_area_fraction']))
 
+    @staticmethod
+    @numba.jit(nopython=True, nogil=True, cache=True)
+    def find_n_competing(peaks, window, fraction):
+        n = len(peaks)
+        t = peaks['time']
+        a = peaks['area']
+        results = np.zeros(n, dtype=np.int32)
 
-@numba.jit(nopython=True, nogil=True, cache=True)
-def find_n_competing(peaks, window, fraction, ignore_below):
-    n = len(peaks)
-    t = peaks['time']
-    a = peaks['area']
-    results = np.zeros(n, dtype=np.int32)
+        left_i = 0
+        right_i = 0
+        for i, peak in enumerate(peaks):
+            while t[left_i] + window < t[i] and left_i < n - 1:
+                left_i += 1
+            while t[right_i] - window < t[i] and right_i < n - 1:
+                right_i += 1
+            results[i] = np.sum(a[left_i:right_i + 1] > a[i] * fraction)
 
-    left_i = 0
-    right_i = 0
-    for i, peak in enumerate(peaks):
-        while t[left_i] + window < t[i] and left_i < n - 1:
-            left_i += 1
-        while t[right_i] - window < t[i] and right_i < n - 1:
-            right_i += 1
-        results[i] = np.sum(a[left_i:right_i + 1] > max(ignore_below,
-                                                        a[i] * fraction))
-
-    return results - 1
-
-
-def find_peak_groups(peaks, gap_threshold,
-                     left_extension=0, right_extension=0,
-                     max_duration=int(1e9)):
-    # Mock up a "hits" array so we can just use the existing peakfinder
-    # It doesn't work on raw peaks, since they might have different dts
-    # TODO: is there no cleaner way?
-    fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
-    fake_hits['dt'] = 1
-    fake_hits['time'] = peaks['time']
-    # TODO: could this cause int nonsense?
-    fake_hits['length'] = peaks['endtime'] - peaks['time']
-    fake_peaks = strax.find_peaks(
-        fake_hits, to_pe=np.zeros(1),
-        gap_threshold=gap_threshold,
-        left_extension=left_extension, right_extension=right_extension,
-        min_hits=1, min_area=0,
-        max_duration=max_duration)
-    # TODO: cleanup input of meaningless fields?
-    # (e.g. sum waveform)
-    return fake_peaks
+        return results - 1
 
 
 @strax.takes_config(
-    strax.Option('trigger_threshold', default=100,
-                 help='Peaks with area (PE) below this do NOT cause events'),
-    strax.Option('max_competing', default=7,
-                 help='Peaks with  this number of similarly-sized or higher '
-                      'peaks do NOT cause events'),
+    strax.Option('trigger_min_area', default=100,
+                 help='Peaks must have more area (PE) than this to '
+                      'cause events'),
+    strax.Option('trigger_max_competing', default=7,
+                 help='Peaks must have FEWER nearby larger or slightly smaller'
+                      ' peaks to cause events'),
     strax.Option('left_extension', default=int(1e6),
                  help='Extend events this many ns to the left from each '
                       'triggering peak'),
@@ -303,23 +270,18 @@ def find_peak_groups(peaks, gap_threshold,
                  help='Events longer than this are forcefully ended, '
                       'triggers in the truncated part are lost!'),
 )
-class Events(strax.Plugin):
+class Events(strax.OverlapWindowPlugin):
     depends_on = ['peak_basics', 'n_competing']
     data_kind = 'events'
     dtype = [
         ('event_number', np.int64, 'Event number in this dataset'),
         ('time', np.int64, 'Event start time in ns since the unix epoch'),
         ('endtime', np.int64, 'Event end time in ns since the unix epoch')]
-    parallel = False    # Since keeping state (events_seen)
     events_seen = 0
 
-    def rechunk_input(self, iters):
-        return dict(peaks=strax.chunk_by_break(
-            iters['peaks'],
-            safe_break=(self.config['left_extension']
-                        + self.config['right_extension'] + 1),
-            ignore_below=self.config['trigger_threshold']
-        ))
+    def get_window_size(self):
+        return (2 * self.config['left_extension'] +
+                self.config['right_extension'])
 
     def compute(self, peaks):
         le = self.config['left_extension']
@@ -327,30 +289,56 @@ class Events(strax.Plugin):
 
         triggers = peaks[
             (peaks['area'] > self.config['trigger_threshold'])
-            & (peaks['n_competing'] <= self.config['max_competing'])
-            ]
+            & (peaks['n_competing'] <= self.config['max_competing'])]
 
         # Join nearby triggers
-        peak_groups = find_peak_groups(
+        t0, t1 = self.find_peak_groups(
             triggers,
             gap_threshold=le + re + 1,
             left_extension=le,
             right_extension=re,
             max_duration=self.config['max_event_duration'])
 
-        result = np.zeros(len(peak_groups), self.dtype)
-        result['time'] = peak_groups['time']
-        result['endtime'] = (peak_groups['time']
-                             + peak_groups['length'] * peak_groups['dt'])
-        result['event_number'] = (np.arange(len(result))
-                                  + self.events_seen)
+        result = np.zeros(len(t0), self.dtype)
+        result['time'] = t0
+        result['endtime'] = t1
+        result['event_number'] = np.arange(len(result)) + self.events_seen
 
-        # Filter out events without S1 + S2
         self.events_seen += len(result)
 
         return result
-        # TODO: someday investigate why loopplugin doesn't give
+        # TODO: someday investigate if/why loopplugin doesn't give
         # anything if events do not contain peaks..
+
+    @staticmethod
+    def find_peak_groups(peaks, gap_threshold,
+                         left_extension=0, right_extension=0,
+                         max_duration=int(1e9)):
+        """Return boundaries of groups of peaks separated by gap_threshold,
+        extended left and right.
+        :param peaks: Peaks to group
+        :param gap_threshold: Minimum gap between peaks
+        :param left_extension: Extend groups by this many ns left
+        :param right_extension: " " right
+        :param max_duration: Maximum group duration. See strax.find_peaks for
+        what happens if this is exceeded
+        :return: time, endtime arrays of group boundaries
+        """
+        # Mock up a "hits" array so we can just use the existing peakfinder
+        # It doesn't work on raw peaks, since they might have different dts
+        # TODO: is there no cleaner way?
+        fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
+        fake_hits['dt'] = 1
+        fake_hits['time'] = peaks['time']
+        # TODO: could this cause int overrun nonsense anywhere?
+        fake_hits['length'] = peaks['endtime'] - peaks['time']
+        fake_peaks = strax.find_peaks(
+            fake_hits, to_pe=np.zeros(1),
+            gap_threshold=gap_threshold,
+            left_extension=left_extension, right_extension=right_extension,
+            min_hits=1, min_area=0,
+            max_duration=max_duration)
+        return fake_peaks['time'], strax.endtime(fake_peaks)
 
 
 @export
@@ -402,11 +390,11 @@ class EventBasics(strax.LoopPlugin):
         return result
 
 
-# LargestS2Area is just an example plugin
-# The same info is provided in event_basics
-
+#
 class LargestS2Area(strax.LoopPlugin):
     """Find the largest S2 area in the event.
+
+    This is just an example plugin, event_basics provides this too.
     """
     __version__ = '0.1'
     depends_on = ('events', 'peak_basics', 'peak_classification')

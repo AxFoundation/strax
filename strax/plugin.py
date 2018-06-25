@@ -245,7 +245,7 @@ class ParallelSourcePlugin(Plugin):
     Child must implement source_finished and is_ready.
     """
     parallel = 'process'
-    
+
     sub_plugins: typing.Dict[str, Plugin]
     sub_savers: typing.Dict[str, typing.List[strax.Saver]]
     outputs_to_send: typing.Set[str]
@@ -355,6 +355,7 @@ class ParallelSourcePlugin(Plugin):
             self._output[d] = x
 
 
+@export
 class OverlapWindowPlugin(Plugin):
     """Plugin whose computation depends on having its inputs extend
     a certain window on both sides.
@@ -363,16 +364,15 @@ class OverlapWindowPlugin(Plugin):
     - All inputs are sorted by endtime. Since everything in strax is sorted by
     time, this only works for disjoint intervals such as peaks or events,
     but NOT records!
-    - You are NOT creating a new data kind.
-    - One of your dependencies has the same data kind and provides time information
+    - You must read time info for your data kind, or create a new data kind.
     """
     parallel = False
 
     def __init__(self):
         super().__init__()
-        self.before = {}
-        self.cached_result = None
-        raise NotImplementedError
+        self.cached_input = {}
+        self.cached_results = None
+        self.last_threshold = -float('inf')
 
     def get_window_size(self):
         """Return the required window size in nanoseconds"""
@@ -382,35 +382,37 @@ class OverlapWindowPlugin(Plugin):
         yield from super().iter(iters, executor=executor)
 
         # Yield results initially suppressed in fear of a next chunk
-        if self.cached_result:
-            yield self.cached_result
+        if self.cached_results is not None and len(self.cached_results):
+            yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
-        # Find the last time in the inputs. They are already properly synced.
-        endtimes = strax.endtime(kwargs[self.data_kind])
+        if not len(kwargs):
+            raise RuntimeError("OverlapWindowPlugin must have a dependency")
+        end = max([strax.endtime(x[-1])
+                   for x in kwargs.values()])
+        invalid_beyond = end - self.get_window_size()
+        cache_inputs_beyond = end - 3 * self.get_window_size()
 
-        new_kwargs = {}
         for k, v in kwargs.items():
-            if k == self.data_kind:
-                # Magic happens here
-                pass
-        kwargs = new_kwargs
-
-        kwargs = {k: self.init_overlap(v)
-        for k, v in kwargs.items()}
+            if len(self.cached_input):
+                kwargs[k] = v = np.concatenate([self.cached_input[k], v])
+            self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
-        # Remove results already sent out last time
-        result = result[self.n_already_sent:]
+        endtimes = strax.endtime(kwargs[self.data_kind]
+                                 if self.data_kind in kwargs
+                                 else result)
+        assert len(endtimes) == len(result)
 
-        # Which results can we send?
-        is_safe = endtimes < endtimes.max() - self.get_window_size()
+        # Remove results that are invalid or already sent out last time
+        is_valid = endtimes < invalid_beyond
+        self.cached_results = result[~is_valid]
+        result = result[is_valid
+                        & (endtimes > self.last_threshold)]
 
-        # Save the suppressed result, in case this is the last chunk
-        self.cached_result = result[~is_safe]
-
-        return result[is_safe]
+        self.last_threshold = invalid_beyond
+        return result
 
 
 @export
