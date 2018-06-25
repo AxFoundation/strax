@@ -2,7 +2,7 @@ Chunking and synchronization
 ============================
 Plugins receive and produce data in *chunks*. Plugins can chunk their output as they wish, but must not assume anything about how their inputs are chunked. Two inputs, even of the same data kind, will not always arrive chunked in the same way. Plugins therefore *synchronize* their inputs -- transform to equal-size merged chunks -- before computations. This is done under the hood in the plugin base class.
 
-Savers are free to chunk their data as they like; for example, in files of convenient sizes. For very low-level plugins this is not recommended, as it has consequences for parallelization (see below).
+Savers are free to chunk their data as they like; for example, in files of convenient sizes. For very low-level plugins this is not recommended, as it has consequences for parallelization (see the parallelization docs).
 
 Example: a plugin that must rechunk
 -------------------------------------
