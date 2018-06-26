@@ -22,7 +22,7 @@ and specific algorithms for XENONnT will eventually be hosted separately.
 
 Besides the documentation below, you might find these presentations useful:
 
-* `Talk on strax at the first XENONnT software telecon (June 2018) <https://docs.google.com/presentation/d/1khf-RNp6K-Q3TW1nQr5xUdrCUPGTJ8lDlDxnAh3s__U>`_
+* `Talk on strax at the first XENONnT software telecon (May 2018) <https://docs.google.com/presentation/d/1khf-RNp6K-Q3TW1nQr5xUdrCUPGTJ8lDlDxnAh3s__U>`_
 * `Talk on strax for DAQ experts (May 2018) <https://docs.google.com/presentation/d/1qZmbAKJmzn7iTbBbkzhTvHmiBqdbYyxhgheRRrDhTeY>`_
 
 

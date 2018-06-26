@@ -70,8 +70,9 @@ class Plugin:
             del compute_pars[compute_pars.index('chunk_i')]
         self.compute_pars = compute_pars
 
-    def startup(self):
-        """Hook if plugin wants to do something after initialization."""
+    def setup(self):
+        """Hook if plugin wants to do something on initialization
+        """
         pass
 
     def infer_dtype(self):
@@ -259,7 +260,7 @@ class ParallelSourcePlugin(Plugin):
         # List of ouputs to send
         self.outputs_to_send = set()
 
-    def setup(self, components, mailboxes, executor):
+    def setup_mailboxes(self, components, mailboxes, executor):
         """Setup this plugin inside a ThreadedMailboxProcessor
         This will gather as much plugins/savers as possible as "subsidiaries"
         which can run in the same processes as the input.
