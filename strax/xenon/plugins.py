@@ -260,10 +260,10 @@ class NCompeting(strax.OverlapWindowPlugin):
     strax.Option('trigger_max_competing', default=7,
                  help='Peaks must have FEWER nearby larger or slightly smaller'
                       ' peaks to cause events'),
-    strax.Option('left_extension', default=int(1e6),
+    strax.Option('left_event_extension', default=int(1e6),
                  help='Extend events this many ns to the left from each '
                       'triggering peak'),
-    strax.Option('right_extension', default=int(1e6),
+    strax.Option('right_event_extension', default=int(1e6),
                  help='Extend events this many ns to the right from each '
                       'triggering peak'),
     strax.Option('max_event_duration', default=int(1e7),
@@ -280,16 +280,16 @@ class Events(strax.OverlapWindowPlugin):
     events_seen = 0
 
     def get_window_size(self):
-        return (2 * self.config['left_extension'] +
-                self.config['right_extension'])
+        return (2 * self.config['left_event_extension'] +
+                self.config['right_event_extension'])
 
     def compute(self, peaks):
-        le = self.config['left_extension']
-        re = self.config['right_extension']
+        le = self.config['left_event_extension']
+        re = self.config['right_event_extension']
 
         triggers = peaks[
-            (peaks['area'] > self.config['trigger_threshold'])
-            & (peaks['n_competing'] <= self.config['max_competing'])]
+            (peaks['area'] > self.config['trigger_min_area'])
+            & (peaks['n_competing'] <= self.config['trigger_max_competing'])]
 
         # Join nearby triggers
         t0, t1 = self.find_peak_groups(
