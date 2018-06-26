@@ -7,6 +7,7 @@ import numba
 
 import strax
 from .common import to_pe
+from .utils import get_resource
 export, __all__ = strax.exporter()
 
 
@@ -178,6 +179,79 @@ class PeakBasics(strax.Plugin):
         return r
 
 
+@strax.takes_config(
+    strax.Option('nn_architecture',
+                 default='https://raw.githubusercontent.com/XENON1T/pax/master/pax/data/XENON1T_tensorflow_nn_pos_20171217_sr1.json',  # noqa
+                 help='JSON filename/URL of neural net architecture'),
+    strax.Option('nn_weights',
+                 default='https://github.com/XENON1T/pax/raw/master/pax/data/XENON1T_tensorflow_nn_pos_weights_20171217_sr1.h5',   # noqa
+                 help='HDF5 filename/URL of neural net weights'),
+    strax.Option('min_reconstruction_area',
+                 help='Skip reconstruction if area (PE) is less than this',
+                 default=10))
+class PeakPositions(strax.Plugin):
+    dtype = [('x', np.float32,
+              'Reconstructed S2 X position (cm), uncorrected'),
+             ('y', np.float32,
+              'Reconstructed S2 Y position (cm), uncorrected')]
+    depends_on = ('peaks',)
+
+    # TODO
+    # Parallelization doesn't seem to make it go faster
+    # Is there much pure-python stuff in tensorflow?
+    # Process-level paralellization might work, but you'd have to do setup
+    # in each process, which probably negates the benefits,
+    # except for huge chunks
+    parallel = False
+
+    n_top_pmts = 127
+
+    def setup(self):
+        import keras
+        import tensorflow as tf
+
+        self.pmt_mask = to_pe[:self.n_top_pmts] > 0
+
+        nn = keras.models.model_from_json(
+            get_resource(self.config['nn_architecture']))
+
+        temp_f = '_temp.h5'
+        with open(temp_f, mode='wb') as f:
+            f.write(get_resource(self.config['nn_weights'],
+                                 binary=True))
+        nn.load_weights(temp_f)
+
+        self.nn = nn
+
+        # Workaround for threading? see:
+        # https://github.com/keras-team/keras/issues/5640#issuecomment-345613052
+        self.nn._make_predict_function()
+        self.graph = tf.get_default_graph()
+
+    def compute(self, peaks):
+        # Keep large peaks only
+        peak_mask = peaks['area'] > self.config['min_reconstruction_area']
+        x = peaks['area_per_channel'][peak_mask, :]
+
+        # Gain correction. This also changes int->float, so can't do *=
+        x = x * to_pe.reshape(1, -1)
+
+        # Keep good top PMTS
+        x = x[:, :self.n_top_pmts][:, self.pmt_mask]
+
+        # Normalize
+        x /= x.sum(axis=1).reshape(-1, 1)
+
+        result = np.ones((len(peaks), 2), dtype=np.float32) * float('nan')
+        with self.graph.as_default():
+            result[peak_mask, :] = self.nn.predict(x)
+
+        # Convert from mm to cm... why why why
+        result /= 10
+
+        return dict(x=result[:, 0], y=result[:, 1])
+
+
 @export
 @strax.takes_config(
     strax.Option('s1_max_width', default=150,
@@ -344,7 +418,8 @@ class Events(strax.OverlapWindowPlugin):
 @export
 class EventBasics(strax.LoopPlugin):
     depends_on = ('events',
-                  'peak_basics', 'peak_classification', 'n_competing')
+                  'peak_basics', 'peak_classification',
+                  'peak_positions', 'n_competing')
 
     def infer_dtype(self):
         dtype = [(('Number of peaks in the event',
@@ -354,7 +429,7 @@ class EventBasics(strax.LoopPlugin):
         for i in [1, 2]:
             dtype += [((f'Main S{i} peak index',
                         f's{i}_index'), np.int32),
-                      ((f'Main S{i} area (PE)',
+                      ((f'Main S{i} area (PE), uncorrected',
                         f's{i}_area'), np.float32),
                       ((f'Main S{i} area fraction top',
                         f's{i}_area_fraction_top'), np.float32),
@@ -362,6 +437,10 @@ class EventBasics(strax.LoopPlugin):
                         f's{i}_range_50p_area'), np.float32),
                       ((f'Main S{i} number of competing peaks',
                         f's{i}_n_competing'), np.int32)]
+        dtype += [(f's2_x', np.float32,
+                   f'Main S2 reconstructed X position (cm), uncorrected',),
+                  (f's2_y', np.float32,
+                   f'Main S2 reconstructed Y position (cm), uncorrected',)]
         return dtype
 
     def compute_loop(self, event, peaks):
@@ -374,15 +453,21 @@ class EventBasics(strax.LoopPlugin):
             s_mask = peaks['type'] == s_i
             ss = peaks[s_mask]
             s_indices = np.arange(len(peaks))[s_mask]
+
             if not len(ss):
                 result[f's{s_i}_index'] = -1
                 continue
+
             main_i = np.argmax(ss['area'])
             result[f's{s_i}_index'] = s_indices[main_i]
             s = main_s[s_i] = ss[main_i]
+
             for prop in ['area', 'area_fraction_top',
                          'range_50p_area', 'n_competing']:
                 result[f's{s_i}_{prop}'] = s[prop]
+            if s_i == 2:
+                for q in 'xy':
+                    result[f's2_{q}'] = s[q]
 
         if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
@@ -390,7 +475,6 @@ class EventBasics(strax.LoopPlugin):
         return result
 
 
-#
 class LargestS2Area(strax.LoopPlugin):
     """Find the largest S2 area in the event.
 

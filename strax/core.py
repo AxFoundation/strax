@@ -377,9 +377,12 @@ class Context:
         if len(intersec):
             raise RuntimeError("{intersec} both computed and loaded?!")
 
-        # Check all required options are available / set defaults
+        # For the plugins which will run computations,
+        # check all required options are available or set defaults.
+        # Also run any user-defined setup
         for p in plugins.values():
             self._set_plugin_config(p, tolerant=False)
+            p.setup()
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,

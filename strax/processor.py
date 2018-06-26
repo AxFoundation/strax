@@ -44,7 +44,9 @@ class ThreadedMailboxProcessor:
         par_inputs = [p for p in plugins.values()
                       if issubclass(p.__class__, strax.ParallelSourcePlugin)]
         for p in par_inputs:
-            components = p.setup(components, self.mailboxes, process_executor)
+            components = p.setup_mailboxes(components,
+                                           self.mailboxes,
+                                           process_executor)
 
         self.log.debug("After optimization: " + str(components))
 
