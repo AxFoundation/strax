@@ -88,7 +88,8 @@ class ThreadedMailboxProcessor:
                     self.log.debug(f"Killing {m}")
                     m.kill(upstream=True,
                            reason=e.args[0])
-
-        self.log.debug("Closing threads")
-        for m in self.mailboxes.values():
-            m.cleanup()
+            raise
+        finally:
+            self.log.debug("Closing threads")
+            for m in self.mailboxes.values():
+                m.cleanup()

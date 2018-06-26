@@ -8,6 +8,7 @@ import itertools
 from functools import partial
 import typing
 import time
+import inspect
 
 import numpy as np
 
@@ -60,6 +61,14 @@ class Plugin:
         if self.rechunk_input and self.parallel:
             raise RuntimeError("Plugins that rechunk their input "
                                "cannot be parallelized")
+
+        # Store compute parameter names, see if we take chunk_i too
+        compute_pars = list(
+            inspect.signature(self.compute).parameters.keys())
+        if 'chunk_i' in compute_pars:
+            self.compute_takes_chunk_i = True
+            del compute_pars[compute_pars.index('chunk_i')]
+        self.compute_pars = compute_pars
 
     def startup(self):
         """Hook if plugin wants to do something after initialization."""
@@ -125,9 +134,15 @@ class Plugin:
         return deps_by_kind
 
     def is_ready(self, chunk_i):
+        """Return whether the chunk chunk_i is ready for reading.
+        Returns True by default; override if you make an online input plugin.
+        """
         return True
 
     def source_finished(self):
+        """Return whether all chunks the plugin wants to read have been written.
+        Only called for online input plugins.
+        """
         raise NotImplementedError
 
     def iter(self, iters, executor=None):
@@ -193,11 +208,11 @@ class Plugin:
     def cleanup(self, wait_for):
         pass
 
-    def do_compute(self, *args, chunk_i=None, **kwargs):
+    def do_compute(self, chunk_i=None, **kwargs):
         if self.compute_takes_chunk_i:
-            result = self.compute(*args, chunk_i=chunk_i, **kwargs)
+            result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
-            result = self.compute(*args, **kwargs)
+            result = self.compute(**kwargs)
 
         if isinstance(result, dict):
             if not len(result):
@@ -230,7 +245,7 @@ class ParallelSourcePlugin(Plugin):
     Child must implement source_finished and is_ready.
     """
     parallel = 'process'
-    
+
     sub_plugins: typing.Dict[str, Plugin]
     sub_savers: typing.Dict[str, typing.List[strax.Saver]]
     outputs_to_send: typing.Set[str]
@@ -310,9 +325,6 @@ class ParallelSourcePlugin(Plugin):
         for d in self.outputs_to_send:
             mailboxes[d].close()
 
-    def is_ready(self, chunk_i):
-        return True
-
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
               f"Waiting for {len(wait_for)} pending futures.")
@@ -341,6 +353,66 @@ class ParallelSourcePlugin(Plugin):
 
         if d in self.outputs_to_send:
             self._output[d] = x
+
+
+@export
+class OverlapWindowPlugin(Plugin):
+    """Plugin whose computation depends on having its inputs extend
+    a certain window on both sides.
+
+    Current implementation assumes:
+    - All inputs are sorted by endtime. Since everything in strax is sorted by
+    time, this only works for disjoint intervals such as peaks or events,
+    but NOT records!
+    - You must read time info for your data kind, or create a new data kind.
+    """
+    parallel = False
+
+    def __init__(self):
+        super().__init__()
+        self.cached_input = {}
+        self.cached_results = None
+        self.last_threshold = -float('inf')
+
+    def get_window_size(self):
+        """Return the required window size in nanoseconds"""
+        raise NotImplementedError
+
+    def iter(self, iters, executor=None):
+        yield from super().iter(iters, executor=executor)
+
+        # Yield results initially suppressed in fear of a next chunk
+        if self.cached_results is not None and len(self.cached_results):
+            yield self.cached_results
+
+    def do_compute(self, chunk_i=None, **kwargs):
+        if not len(kwargs):
+            raise RuntimeError("OverlapWindowPlugin must have a dependency")
+        end = max([strax.endtime(x[-1])
+                   for x in kwargs.values()])
+        invalid_beyond = end - self.get_window_size()
+        cache_inputs_beyond = end - 3 * self.get_window_size()
+
+        for k, v in kwargs.items():
+            if len(self.cached_input):
+                kwargs[k] = v = np.concatenate([self.cached_input[k], v])
+            self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
+
+        result = super().do_compute(chunk_i=chunk_i, **kwargs)
+
+        endtimes = strax.endtime(kwargs[self.data_kind]
+                                 if self.data_kind in kwargs
+                                 else result)
+        assert len(endtimes) == len(result)
+
+        # Remove results that are invalid or already sent out last time
+        is_valid = endtimes < invalid_beyond
+        self.cached_results = result[~is_valid]
+        result = result[is_valid
+                        & (endtimes > self.last_threshold)]
+
+        self.last_threshold = invalid_beyond
+        return result
 
 
 @export

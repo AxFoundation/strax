@@ -1,7 +1,6 @@
 import builtins
 import collections
 import logging
-import inspect
 import fnmatch
 import typing as ty
 import warnings
@@ -13,16 +12,6 @@ import pandas as pd
 
 import strax
 export, __all__ = strax.exporter()
-
-get_docs = """
-    :param run_id: run id to get
-    :param target: data type to get
-    :param save: data types you would like to save
-    to cache, if they occur in intermediate computations.
-    Some plugins save automatically.
-    :param max_workers: Number of worker threads/processes to spawn.
-    In practice more CPUs may be used due to strax's multithreading.
-"""
 
 
 @export
@@ -68,10 +57,10 @@ class Context:
 
         self.set_config(config, mode='replace')
 
-        if register is not None:
-            self.register(register)
         if register_all is not None:
             self.register_all(register_all)
+        if register is not None:
+            self.register(register)
 
     def new_context(self,
                     storage=tuple(),
@@ -261,21 +250,12 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            p = self._plugin_class_registry[d]()
+            plugins[d] = p = self._plugin_class_registry[d]()
             p.run_id = run_id
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, tolerant=True)
-
-            # TODO: check can now be moved inside plugin
-            compute_pars = list(
-                inspect.signature(p.compute).parameters.keys())
-            if 'chunk_i' in compute_pars:
-                p.compute_takes_chunk_i = True
-                del compute_pars[compute_pars.index('chunk_i')]
-
-            plugins[d] = p
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
@@ -408,10 +388,11 @@ class Context:
 
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
-        """Compute target for run_id and iterate over results
+        """Compute target for run_id and iterate over results.
+
+        Do NOT interrupt the iterator (i.e. break): it will keep running stuff
+        in background threads...
         {get_docs}
-        TODO: This is not quite a normal iterator: if you break
-        results will still accumulate in a background thread!
         """
         if len(kwargs):
             self = self.new_context(**kwargs)
@@ -436,29 +417,39 @@ class Context:
         yield from strax.ThreadedMailboxProcessor(
             components, max_workers=max_workers).iter()
 
-    def make(self, *args, **kwargs) -> None:
-        """Compute target for run_id (return nothing)
+    def make(self, run_id: str, targets, save=tuple(), max_workers=None,
+             **kwargs) -> None:
+        """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
-        for _ in self.get_iter(*args, **kwargs):
+        for _ in self.get_iter(run_id, targets, save, max_workers, **kwargs):
             pass
 
-    def get_array(self, *args, **kwargs) -> np.ndarray:
+    def get_array(self, run_id: str, targets, save=tuple(), max_workers=None,
+                  **kwargs) -> np.ndarray:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        return np.concatenate(list(self.get_iter(*args, **kwargs)))
+        results = list(self.get_iter(run_id, targets, save, max_workers,
+                                     **kwargs))
+        if len(results):
+            return np.concatenate(results)
+        raise ValueError("Not a single chunk returned?")
 
-    def get_df(self, *args, **kwargs) -> pd.DataFrame:
+    def get_df(self, run_id: str, targets, save=tuple(), max_workers=None,
+               **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
         """
-        return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
+        return pd.DataFrame.from_records(self.get_array(
+            run_id, targets, save, max_workers, **kwargs))
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise NotCached
         if data is not yet available.
-        {get_docs}
+
+        :param run_id: run id to get
+        :param targets: data type to get
         """
         p = self._get_plugins((target,))[target]
         key = strax.CacheKey(run_id, target, p.lineage)
@@ -467,6 +458,26 @@ class Context:
                 return sb.load_meta(key)
         raise strax.NotCached(f"Can't load metadata, "
                               f"data for {key} not available")
+
+
+# Fix the get_xxx docstrings
+get_docs = """
+:param run_id: run id to get
+:param targets: list/tuple of strings of data type names to get
+:param save: extra data types you would like to save
+    to cache, if they occur in intermediate computations.
+    Many plugins save automatically anyway.
+:param max_workers: Number of worker threads/processes to spawn.
+    In practice more CPUs may be used due to strax's multithreading.
+
+"""
+
+for x in dir(Context):
+    y = getattr(Context, x)
+    if hasattr(x, '__doc__'):
+        doc = y.__doc__
+        if doc is not None and '{get_docs}' in doc:
+            y.__doc__ = doc.format(get_docs=get_docs)
 
 
 ##
