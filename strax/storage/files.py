@@ -99,7 +99,7 @@ class FileSaver(Saver):
 
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
-            print("Deleting old incomplete data in {dirname}")
+            print(f"Deleting old incomplete data in {dirname}")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
