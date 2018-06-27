@@ -14,8 +14,8 @@ def test_overlap_plugin(input_peaks, split_i):
     chunks = np.split(input_peaks, [split_i])
     chunks = [c for c in chunks if len(c)]
     print("\n\nNew run")
-    print(input_peaks['time'],
-          [c['time'] for c in chunks],
+    print(strax.endtime(input_peaks),
+          [strax.endtime(c) for c in chunks],
           [len(c) for c in chunks])
 
     class Peaks(strax.Plugin):
@@ -35,6 +35,11 @@ def test_overlap_plugin(input_peaks, split_i):
 
     window = 10
 
+    # Note we must apply this to endtime, not time, since
+    # peaks straddling the overlap threshold are assigned to the NEXT window.
+    # If we used time it would fail on examples with peaks larger than window.
+    # In real life, the window should simply be chosen large enough that this
+    # is not an issue.
     def count_in_window(ts, w=window):
         # Terribly inefficient algorithm...
         result = np.zeros(len(ts), dtype=np.int16)
@@ -50,8 +55,9 @@ def test_overlap_plugin(input_peaks, split_i):
             return window
 
         def compute(self, peaks):
-            print(f"Compute got {peaks['time']}")
-            result = dict(n_within_window=count_in_window(peaks['time']))
+            print(f"Compute got {strax.endtime(peaks)}")
+            result = dict(
+                n_within_window=count_in_window(strax.endtime(peaks)))
             print(f"Result is %s" % result)
             return result
 
@@ -63,7 +69,7 @@ def test_overlap_plugin(input_peaks, split_i):
     st.register(WithinWindow)
 
     result = st.get_array(run_id='some_run', targets='within_window')
-    expected = count_in_window(input_peaks['time'])
+    expected = count_in_window(strax.endtime(input_peaks))
 
     assert len(expected) == len(input_peaks), "WTF??"
     assert isinstance(result, np.ndarray), "Did not get an array"
