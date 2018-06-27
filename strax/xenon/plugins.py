@@ -6,8 +6,7 @@ import numpy as np
 import numba
 
 import strax
-from .common import to_pe
-from .utils import get_resource
+from .common import to_pe, pax_file, get_resource
 export, __all__ = strax.exporter()
 
 
@@ -180,15 +179,24 @@ class PeakBasics(strax.Plugin):
 
 
 @strax.takes_config(
-    strax.Option('nn_architecture',
-                 default='https://raw.githubusercontent.com/XENON1T/pax/master/pax/data/XENON1T_tensorflow_nn_pos_20171217_sr1.json',  # noqa
-                 help='JSON filename/URL of neural net architecture'),
-    strax.Option('nn_weights',
-                 default='https://github.com/XENON1T/pax/raw/master/pax/data/XENON1T_tensorflow_nn_pos_weights_20171217_sr1.h5',   # noqa
-                 help='HDF5 filename/URL of neural net weights'),
+    strax.Option(
+        'nn_architecture',
+        help='Path to JSON of neural net architecture',
+        default_by_run=[
+            (0, pax_file('XENON1T_tensorflow_nn_pos_20171217_sr0.json')),
+            (170118_1327, pax_file('XENON1T_tensorflow_nn_pos_20171217_sr1.json'))]),   # noqa
+
+    strax.Option(
+        'nn_weights',
+        help='Path to HDF5 of neural net weights',
+        default_by_run=[
+            (0, pax_file('XENON1T_tensorflow_nn_pos_weights_20171217_sr0.h5')),
+            (170118_1327, pax_file('XENON1T_tensorflow_nn_pos_weights_20171217_sr1.h5'))]),   # noqa
+
     strax.Option('min_reconstruction_area',
                  help='Skip reconstruction if area (PE) is less than this',
-                 default=10))
+                 default=10)
+)
 class PeakPositions(strax.Plugin):
     dtype = [('x', np.float32,
               'Reconstructed S2 X position (cm), uncorrected'),
@@ -214,16 +222,14 @@ class PeakPositions(strax.Plugin):
 
         nn = keras.models.model_from_json(
             get_resource(self.config['nn_architecture']))
-
         temp_f = '_temp.h5'
         with open(temp_f, mode='wb') as f:
             f.write(get_resource(self.config['nn_weights'],
                                  binary=True))
         nn.load_weights(temp_f)
-
         self.nn = nn
 
-        # Workaround for threading? see:
+        # Workaround for using keras/tensorflow in a threaded environment. See:
         # https://github.com/keras-team/keras/issues/5640#issuecomment-345613052
         self.nn._make_predict_function()
         self.graph = tf.get_default_graph()

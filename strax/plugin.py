@@ -49,6 +49,7 @@ class Plugin:
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
+    run_i: int
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself

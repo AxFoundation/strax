@@ -9,9 +9,15 @@ import string
 
 import numpy as np
 import pandas as pd
+import numexpr
 
 import strax
 export, __all__ = strax.exporter()
+
+
+# Placeholder value for omitted values.
+# Use instead of None since None might be a proper value/default
+OMITTED = '<OMITTED>'
 
 
 @export
@@ -24,6 +30,7 @@ class Context:
 
     You start all strax processing through a context.
     """
+    config: dict
 
     def __init__(self,
                  storage=None,
@@ -149,10 +156,12 @@ class Context:
         return plugin_class
 
     def search_field(self, pattern):
+        """Find and print which plugin(s) provides a field that matches
+        pattern (fnmatch)."""
         cache = dict()
         for d in self._plugin_class_registry:
             if d not in cache:
-                cache.update(self._get_plugins((d,)))
+                cache.update(self._get_plugins((d,), run_id='0'))
             p = cache[d]
 
             for field_name in p.dtype.names:
@@ -160,28 +169,37 @@ class Context:
                     print(f"{field_name} is part of {d} "
                           f"(provided by {p.__class__.__name__})")
 
-    def search_config(self, data_type, pattern='*'):
+    def search_config(self, data_type, pattern='*', run_id='9' * 20):
+        """Return configuration options that affect data_type.
+        :param data_type: Data type name
+        :param pattern: Show only options that match (fnmatch) pattern
+        :param run_id: Run id to use for run-dependent config options.
+        If omitted, will show defaults active for new runs.
+        """
         r = []
-        for d, p in self._get_plugins((data_type,)).items():
+        for d, p in self._get_plugins((data_type,), run_id).items():
             for opt in p.takes_config.values():
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
                     default = opt.get_default()
                 except strax.InvalidConfiguration:
-                    default = '<OMITTED>'
+                    default = OMITTED
                 r.append(dict(
                     option=opt.name,
                     default=default,
-                    current=self.config.get(opt.name, '<OMITTED>'),
+                    current=self.config.get(opt.name, OMITTED),
                     data_type=d,
                     help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
 
-    def lineage(self, data_type):
-        return self._get_plugins((data_type,))[data_type].lineage
+    def lineage(self, data_type, run_id):
+        """Return lineage dictionary for data_type and run_id, based on the
+        options in this context.
+        """
+        return self._get_plugins((data_type,), run_id)[data_type].lineage
 
     def register_all(self, module):
         """Register all plugins defined in module"""
@@ -200,7 +218,7 @@ class Context:
 
     def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name"""
-        p = self._get_plugins((data_name,))[data_name]
+        p = self._get_plugins((data_name,), run_id='0')[data_name]
         display_headers = ['Field name', 'Data type', 'Comment']
         result = []
         for name, dtype in strax.utils.unpack_dtype(p.dtype):
@@ -211,14 +229,14 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def _set_plugin_config(self, p, tolerant=True):
+    def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config)
+                opt.validate(config, run_id)
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -226,9 +244,8 @@ class Context:
                     if k in p.takes_config}
 
     def _get_plugins(self,
-                     targets: ty.Tuple[str] = tuple(),
-                     run_id: str = 'UNKNOWN'
-                     ) -> ty.Dict[str, strax.Plugin]:
+                     targets: ty.Tuple[str],
+                     run_id: str) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugins necessary to compute targets
         from scratch.
         """
@@ -255,14 +272,14 @@ class Context:
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
-            self._set_plugin_config(p, tolerant=True)
+            self._set_plugin_config(p, run_id, tolerant=True)
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
             p.lineage = {d: (p.__class__.__name__,
                              p.version(run_id),
-                             {k: v for k, v in p.config.items()
-                              if p.takes_config[k].track})}
+                             {q: v for q, v in p.config.items()
+                              if p.takes_config[q].track})}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -302,7 +319,7 @@ class Context:
 
         plugins = collections.defaultdict(get_plugin)
         for t in targets:
-            # This works without the RHS too, but your IDE might not get it :-)
+            # This works without the LHS too, but your IDE might not get it :-)
             plugins[t] = get_plugin(t)
 
         return plugins
@@ -381,7 +398,7 @@ class Context:
         # check all required options are available or set defaults.
         # Also run any user-defined setup
         for p in plugins.values():
-            self._set_plugin_config(p, tolerant=False)
+            self._set_plugin_config(p, run_id, tolerant=False)
             p.setup()
         return strax.ProcessorComponents(
             plugins=plugins,
@@ -390,6 +407,7 @@ class Context:
             targets=targets)
 
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
+                 selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -397,12 +415,19 @@ class Context:
         in background threads...
         {get_docs}
         """
+        # If any new options given, replace the current context
+        # with a temporary one
         if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
+
+        if isinstance(selection, (list, tuple)):
+            selection = ' & '.join(f'({x})' for x in selection)
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            plugins = self._get_plugins(targets=targets)
+            plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind for d in targets)) == 1:
                 temp_name = ''.join(random.choices(
                     string.ascii_lowercase, k=10))
@@ -417,8 +442,14 @@ class Context:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id, targets=targets, save=save)
-        yield from strax.ThreadedMailboxProcessor(
-            components, max_workers=max_workers).iter()
+        for x in strax.ThreadedMailboxProcessor(
+                components, max_workers=max_workers).iter():
+            if selection is not None:
+                mask = numexpr.evaluate(selection, local_dict={
+                    fn: x[fn]
+                    for fn in x.dtype.names})
+                x = x[mask]
+            yield x
 
     def make(self, run_id: str, targets, save=tuple(), max_workers=None,
              **kwargs) -> None:
@@ -452,9 +483,9 @@ class Context:
         if data is not yet available.
 
         :param run_id: run id to get
-        :param targets: data type to get
+        :param target: data type to get
         """
-        p = self._get_plugins((target,))[target]
+        p = self._get_plugins((target,), run_id)[target]
         key = strax.CacheKey(run_id, target, p.lineage)
         for sb in self.storage:
             if sb.has(key):
@@ -463,7 +494,6 @@ class Context:
                               f"data for {key} not available")
 
 
-# Fix the get_xxx docstrings
 get_docs = """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
@@ -472,15 +502,15 @@ get_docs = """
     Many plugins save automatically anyway.
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
-
+:param selection: Query string or list of strings with selections to apply.
 """
 
-for x in dir(Context):
-    y = getattr(Context, x)
-    if hasattr(x, '__doc__'):
-        doc = y.__doc__
+for attr in dir(Context):
+    attr_val = getattr(Context, attr)
+    if hasattr(attr_val, '__doc__'):
+        doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
-            y.__doc__ = doc.format(get_docs=get_docs)
+            attr_val.__doc__ = doc.format(get_docs=get_docs)
 
 
 ##
@@ -512,21 +542,17 @@ def takes_config(*options):
     return wrapped
 
 
-# Placeholder value for omitted values.
-# Use instead of None since None might be a proper value/default
-OMITTED = '<OMITTED>'
-
-
 @export
 class Option:
     """Configuration option taken by a strax plugin"""
-    taken_by = "UNKNOWN???"
+    taken_by: str
 
     def __init__(self,
                  name: str,
                  type: type = OMITTED,
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
+                 default_by_run: ty.List[ty.Tuple[int, ty.Any]] = OMITTED,
                  track: bool = True,
                  help: str = ''):
         """
@@ -541,29 +567,46 @@ class Option:
         self.name = name
         self.type = type
         self.default = default
+        self.default_by_run = default_by_run
         self.default_factory = default_factory
         self.track = track
         self.help = help
 
         type = builtins.type
-        if (self.default is not OMITTED
-                and self.default_factory is not OMITTED):
-            raise RuntimeError(f"Tried to specify both default and "
-                               f"default_factory for option {self.name}")
+        if sum([self.default is not OMITTED,
+                self.default_factory is not OMITTED,
+                self.default_by_run is not OMITTED]) > 1:
+            raise RuntimeError(f"Tried to specify more than one default "
+                               f"for option {self.name}.")
 
         if type is OMITTED and default is not OMITTED:
             self.type = type(default)
 
-    def get_default(self):
+    def get_default(self, run_id):
         """Return default value for the option"""
-        if self.default is OMITTED:
-            if self.default_factory is OMITTED:
-                raise InvalidConfiguration(f"Missing option {self.name} "
-                                           f"required by {self.taken_by}")
-            return self.default_factory()
-        return self.default
+        if isinstance(run_id, str):
+            run_id = int(run_id.replace('_', ''))
 
-    def validate(self, config, set_defaults=True):
+        if self.default is not OMITTED:
+            return self.default
+        if self.default_factory is not OMITTED:
+            return self.default_factory()
+        if self.default_by_run is not OMITTED:
+            use_value = OMITTED
+            for i, (start_run, value) in enumerate(self.default_by_run):
+                if start_run > run_id:
+                    break
+                use_value = value
+            if use_value is OMITTED:
+                raise ValueError(
+                    f"Run id {run_id} is smaller than the "
+                    "lowest run id {start_run} for which the default "
+                    "of the option {self.name} is known.")
+            return use_value
+        raise InvalidConfiguration(f"Missing option {self.name} "
+                                   f"required by {self.taken_by}")
+
+    def validate(self, config, run_id, set_defaults=True):
         """Checks if the option is in config and sets defaults if needed.
         """
         if self.name in config:
@@ -574,4 +617,4 @@ class Option:
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
-            config[self.name] = self.get_default()
+            config[self.name] = self.get_default(run_id)
