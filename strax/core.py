@@ -182,7 +182,7 @@ class Context:
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
-                    default = opt.get_default()
+                    default = opt.get_default(run_id)
                 except strax.InvalidConfiguration:
                     default = OMITTED
                 r.append(dict(
@@ -195,7 +195,7 @@ class Context:
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
 
-    def lineage(self, data_type, run_id):
+    def lineage(self, run_id, data_type):
         """Return lineage dictionary for data_type and run_id, based on the
         options in this context.
         """
