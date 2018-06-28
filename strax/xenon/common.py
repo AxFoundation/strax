@@ -29,8 +29,8 @@ def get_resource(x, binary=False):
         if not os.path.exists(cache_folder):
             os.makedirs(cache_folder)
         if not os.path.exists(cache_f):
+            y = urllib.request.urlopen(x).read()
             with open(cache_f, mode='wb' if binary else 'w') as f:
-                y = urllib.request.urlopen(x).read()
                 if not binary:
                     y = y.decode()
                 f.write(y)

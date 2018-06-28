@@ -7,6 +7,7 @@ import numba
 
 import strax
 from .common import to_pe, pax_file, get_resource
+from .itp_map import InterpolatingMap
 export, __all__ = strax.exporter()
 
 
@@ -443,9 +444,9 @@ class EventBasics(strax.LoopPlugin):
                         f's{i}_range_50p_area'), np.float32),
                       ((f'Main S{i} number of competing peaks',
                         f's{i}_n_competing'), np.int32)]
-        dtype += [(f's2_x', np.float32,
+        dtype += [(f'x_naive', np.float32,
                    f'Main S2 reconstructed X position (cm), uncorrected',),
-                  (f's2_y', np.float32,
+                  (f'y_naive', np.float32,
                    f'Main S2 reconstructed Y position (cm), uncorrected',)]
         return dtype
 
@@ -477,6 +478,72 @@ class EventBasics(strax.LoopPlugin):
 
         if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
+
+        return result
+
+
+@strax.takes_config(
+    strax.Option(
+        name='electron_drift_velocity',
+        help='Vertical electron drift velocity in cm/ns (1e4 m/ms)',
+        default=1.3325e-4
+    ),
+    strax.Option(
+        'fdc_map',
+        help='3D field distortion correction map path',
+        default_by_run=[
+            (0, pax_file('XENON1T_FDC_SR0_data_driven_3d_correction_tf_nn_v0.json.gz')),  # noqa
+            (170118_1327, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part1_v1.json.gz')),  # noqa
+            (170411_0611, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part2_v1.json.gz')),  # noqa
+            (170704_0556, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part3_v1.json.gz')),  # noqa
+            (170925_0622, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part4_v1.json.gz'))]),  # noqa
+)
+class EventPositions(strax.Plugin):
+    depends_on = ('event_basics',)
+    dtype = [
+        ('x', np.float32,
+         'Interaction x-position, field-distortion corrected (cm)'),
+        ('y', np.float32,
+         'Interaction y-position, field-distortion corrected (cm)'),
+        ('z', np.float32,
+         'Interaction z-position, field-distortion corrected (cm)'),
+        ('r', np.float32,
+         'Interaction radial position, field-distortion corrected (cm)'),
+        ('z_naive', np.float32,
+         'Interaction z-position using mean drift velocity only (cm)'),
+        ('r_naive', np.float32,
+         'Interaction r-position using observed S2 positions directly (cm)'),
+        ('r_field_distortion_correction', np.float32,
+         'Correction added to r_naive for field distortion (cm)'),
+        ('theta', np.float32,
+         'Interaction angular position (radians)')]
+
+    def setup(self):
+        self.map = InterpolatingMap(get_resource(self.config['fdc_map'],
+                                                 binary=True))
+
+    def compute(self, events):
+        z_obs = - self.config['electron_drift_velocity'] * events['drift_time']
+
+        orig_pos = np.vstack([events['s2_x'], events['s2_y'], z_obs]).T
+        r_obs = np.linalg.norm(orig_pos[:, :2], axis=1)
+
+        delta_r = self.map(orig_pos)
+        r_cor = r_obs + delta_r
+        scale = r_cor / r_obs
+
+        result = dict(x=orig_pos[:, 0] * scale,
+                      y=orig_pos[:, 1] * scale,
+                      r=r_cor,
+                      z_naive=z_obs,
+                      r_naive=r_obs,
+                      r_field_distortion_correction=delta_r,
+                      theta=np.arctan2(orig_pos[:, 1], orig_pos[:, 0]))
+
+        z_cor = -(z_obs ** 2 - delta_r ** 2) ** 0.5
+        invalid = np.abs(z_obs) < np.abs(delta_r)        # Why??
+        z_cor[invalid] = z_obs[invalid]
+        result['z'] = z_cor
 
         return result
 
