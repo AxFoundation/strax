@@ -4,7 +4,8 @@
 - Start documentation
 - `ParallelSourcePlugin` to better distribute low-level processing over multiple cores
 - `OverlapWindowPlugin` to simplify algorithms that look back and ahead in the data
-- XENON: Neural net position reconstruction
+- Run-dependent config defaults
+- XENON: S2 and interaction position reconstruction (tensorflow NN)
 
 0.1.2 / 2018-05-09
 ------------------

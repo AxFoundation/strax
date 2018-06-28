@@ -27,9 +27,16 @@ class InterpolateAndExtrapolate(object):
 
     def __call__(self, points):
         distances, indices = self.kdtree.query(points, self.neighbours_to_use)
-        np.average(self.values[indices],
-                   weights=1/np.clip(distances, 1e-6, float('inf')),
-                   axis=-1)
+        # If one of the coordinates is NaN, the neighbour-query fails.
+        # If we don't filter these out, it would result in an IndexError
+        # as the kdtree returns an invalid index if it can't find neighbours.
+        result = np.ones(len(points)) * float('nan')
+        valid = (distances < float('inf')).max(axis=-1)
+        result[valid] = np.average(
+            self.values[indices[valid]],
+            weights=1/np.clip(distances[valid], 1e-6, float('inf')),
+            axis=-1)
+        return result
 
 
 class InterpolatingMap(object):
@@ -61,7 +68,7 @@ class InterpolatingMap(object):
 
         if isinstance(data, bytes):
             data = gzip.decompress(data).decode()
-        self.data = json.loads(data.decode())
+        self.data = json.loads(data)
 
         self.coordinate_system = cs = self.data['coordinate_system']
         if not len(cs):
