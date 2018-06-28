@@ -552,7 +552,7 @@ class Option:
                  type: type = OMITTED,
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
-                 default_by_run: ty.List[ty.Tuple[int, ty.Any]] = OMITTED,
+                 default_by_run=OMITTED,
                  track: bool = True,
                  help: str = ''):
         """
@@ -560,8 +560,12 @@ class Option:
         :param type: Excepted type of the option's value.
         :param default: Default value the option takes.
         :param default_factory: Function that produces a default value.
-        :param track: If True, option value becomes part of plugin lineage
-        (just like the plugin version).
+        :param default_by_run: Specify that default is run-dependent. Either
+         - Callable. Will be called with run_id, must return value for run.
+         - List [(start_run_id, value), ..,] for values specified by range of
+           runs.
+        :param track: If True (default), option value becomes part of plugin
+        lineage (just like the plugin version).
         :param help: Human-readable description of the option.
         """
         self.name = name
@@ -592,6 +596,8 @@ class Option:
         if self.default_factory is not OMITTED:
             return self.default_factory()
         if self.default_by_run is not OMITTED:
+            if callable(self.default_by_run):
+                return self.default_by_run(run_id)
             use_value = OMITTED
             for i, (start_run, value) in enumerate(self.default_by_run):
                 if start_run > run_id:

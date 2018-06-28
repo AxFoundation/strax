@@ -39,3 +39,9 @@ def get_resource(x, binary=False):
         # File resource
         with open(x, mode='rb' if binary else 'r') as f:
             return f.read()
+
+
+def get_elife(run_id):
+    """Return electron lifetime for run_id in ns"""
+    # TODO: Get/cache snapshot of needed values from run db valid for 1 hour
+    return 642e3
