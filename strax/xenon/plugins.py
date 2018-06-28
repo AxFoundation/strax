@@ -6,9 +6,12 @@ import numpy as np
 import numba
 
 import strax
-from .common import to_pe, pax_file, get_resource
+from .common import to_pe, pax_file, get_resource, get_elife
 from .itp_map import InterpolatingMap
 export, __all__ = strax.exporter()
+
+
+first_sr1_run = 170118_1327
 
 
 @export
@@ -179,20 +182,21 @@ class PeakBasics(strax.Plugin):
         return r
 
 
+@export
 @strax.takes_config(
     strax.Option(
         'nn_architecture',
         help='Path to JSON of neural net architecture',
         default_by_run=[
             (0, pax_file('XENON1T_tensorflow_nn_pos_20171217_sr0.json')),
-            (170118_1327, pax_file('XENON1T_tensorflow_nn_pos_20171217_sr1.json'))]),   # noqa
+            (first_sr1_run, pax_file('XENON1T_tensorflow_nn_pos_20171217_sr1.json'))]),   # noqa
 
     strax.Option(
         'nn_weights',
         help='Path to HDF5 of neural net weights',
         default_by_run=[
             (0, pax_file('XENON1T_tensorflow_nn_pos_weights_20171217_sr0.h5')),
-            (170118_1327, pax_file('XENON1T_tensorflow_nn_pos_weights_20171217_sr1.h5'))]),   # noqa
+            (first_sr1_run, pax_file('XENON1T_tensorflow_nn_pos_weights_20171217_sr1.h5'))]),   # noqa
 
     strax.Option('min_reconstruction_area',
                  help='Skip reconstruction if area (PE) is less than this',
@@ -334,6 +338,7 @@ class NCompeting(strax.OverlapWindowPlugin):
         return results - 1
 
 
+@export
 @strax.takes_config(
     strax.Option('trigger_min_area', default=100,
                  help='Peaks must have more area (PE) than this to '
@@ -444,9 +449,9 @@ class EventBasics(strax.LoopPlugin):
                         f's{i}_range_50p_area'), np.float32),
                       ((f'Main S{i} number of competing peaks',
                         f's{i}_n_competing'), np.int32)]
-        dtype += [(f'x_naive', np.float32,
+        dtype += [(f'x_s2', np.float32,
                    f'Main S2 reconstructed X position (cm), uncorrected',),
-                  (f'y_naive', np.float32,
+                  (f'y_s2', np.float32,
                    f'Main S2 reconstructed Y position (cm), uncorrected',)]
         return dtype
 
@@ -474,7 +479,7 @@ class EventBasics(strax.LoopPlugin):
                 result[f's{s_i}_{prop}'] = s[prop]
             if s_i == 2:
                 for q in 'xy':
-                    result[f's2_{q}'] = s[q]
+                    result[f'{q}_s2'] = s[q]
 
         if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
@@ -482,6 +487,7 @@ class EventBasics(strax.LoopPlugin):
         return result
 
 
+@export
 @strax.takes_config(
     strax.Option(
         name='electron_drift_velocity',
@@ -493,7 +499,7 @@ class EventBasics(strax.LoopPlugin):
         help='3D field distortion correction map path',
         default_by_run=[
             (0, pax_file('XENON1T_FDC_SR0_data_driven_3d_correction_tf_nn_v0.json.gz')),  # noqa
-            (170118_1327, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part1_v1.json.gz')),  # noqa
+            (first_sr1_run, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part1_v1.json.gz')),  # noqa
             (170411_0611, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part2_v1.json.gz')),  # noqa
             (170704_0556, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part3_v1.json.gz')),  # noqa
             (170925_0622, pax_file('XENON1T_FDC_SR1_data_driven_time_dependent_3d_correction_tf_nn_part4_v1.json.gz'))]),  # noqa
@@ -525,7 +531,7 @@ class EventPositions(strax.Plugin):
     def compute(self, events):
         z_obs = - self.config['electron_drift_velocity'] * events['drift_time']
 
-        orig_pos = np.vstack([events['s2_x'], events['s2_y'], z_obs]).T
+        orig_pos = np.vstack([events['x_s2'], events['y_s2'], z_obs]).T
         r_obs = np.linalg.norm(orig_pos[:, :2], axis=1)
 
         delta_r = self.map(orig_pos)
@@ -548,24 +554,78 @@ class EventPositions(strax.Plugin):
         return result
 
 
-class LargestS2Area(strax.LoopPlugin):
-    """Find the largest S2 area in the event.
+@strax.takes_config(
+    strax.Option(
+        's1_relative_lce_map',
+        help="S1 relative LCE(x,y,z) map",
+        default_by_run=[
+            (0, pax_file('XENON1T_s1_xyz_lce_true_kr83m_SR0_pax-680_fdc-3d_v0.json')),  # noqa
+            (first_sr1_run, pax_file('XENON1T_s1_xyz_lce_true_kr83m_SR1_pax-680_fdc-3d_v0.json'))]),  # noqa
+    strax.Option(
+        's2_relative_lce_map',
+        help="S2 relative LCE(x, y) map",
+        default_by_run=[
+            (0, pax_file('XENON1T_s2_xy_ly_SR0_24Feb2017.json')),
+            (170118_1327, pax_file('XENON1T_s2_xy_ly_SR1_v2.2.json'))]),
+    strax.Option(
+        'electron_lifetime',
+        help="Electron lifetime (ns)",
+        default_by_run=get_elife)
+)
+class CorrectedAreas(strax.Plugin):
+    depends_on = ['event_basics', 'event_positions']
+    dtype = [('cs1', np.float32, 'Corrected S1 area (PE)'),
+             ('cs2', np.float32, 'Corrected S2 area (PE)')]
 
-    This is just an example plugin, event_basics provides this too.
-    """
-    __version__ = '0.1'
-    depends_on = ('events', 'peak_basics', 'peak_classification')
+    def setup(self):
+        self.s1_map = InterpolatingMap(
+            get_resource(self.config['s1_relative_lce_map']))
+        self.s2_map = InterpolatingMap(
+            get_resource(self.config['s2_relative_lce_map']))
 
+    def compute(self, events):
+        event_positions = np.vstack([events['x'], events['y'], events['z']]).T
+        s2_positions = np.vstack([events['x_s2'], events['y_s2']]).T
+        lifetime_corr = np.exp(
+            events['drift_time'] / self.config['electron_lifetime'])
+
+        return dict(
+            cs1=events['s1_area'] / self.s1_map(event_positions),
+            cs2=events['s2_area'] * lifetime_corr / self.s2_map(s2_positions))
+
+
+@strax.takes_config(
+    strax.Option(
+        'g1',
+        help="S1 gain in PE / photons produced",
+        default_by_run=[(0, 0.1442),
+                        (first_sr1_run, 0.1426)]),
+    strax.Option(
+        'g2',
+        help="S2 gain in PE / electrons produced",
+        default_by_run=[(0, 11.52),
+                        (first_sr1_run, 11.55)]),
+    strax.Option(
+        'lxe_w',
+        help="LXe work function in quanta/eV",
+        default=13.7e-3),
+)
+class EnergyEstimates(strax.Plugin):
+    depends_on = ['corrected_areas']
     dtype = [
-        ('largest_s2_area', np.float32,
-            'Area (PE) of largest S2 in event')]
+        ('e_light', np.float32, 'Energy in light signal (keV)'),
+        ('e_charge', np.float32, 'Energy in charge signal (keV)'),
+        ('e_ces', np.float32, 'Energy estimate (keV_ee)')]
 
-    def compute_loop(self, event, peaks):
+    def compute(self, events):
+        w = self.config['lxe_w']
+        el = w * events['cs1'] / self.config['g1']
+        ec = w * events['cs2'] / self.config['g2']
+        return dict(e_light=el,
+                    e_charge=ec)
 
-        s2s = peaks[peaks['type'] == 2]
 
-        result = 0
-        if len(s2s):
-            result = s2s['area'].max()
-
-        return dict(largest_s2_area=result)
+class EventInfo(strax.MergeOnlyPlugin):
+    depends_on = ['events',
+                  'event_basics', 'event_positions', 'corrected_areas',
+                  'energy_estimates']
