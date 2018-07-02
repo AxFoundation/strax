@@ -75,6 +75,8 @@ def record_links(records):
 
     for i, r in enumerate(records):
         ch = r['channel']
+        if ch < 0:
+            raise RuntimeError("Negative channel number?")
         last_i = last_record_seen[ch]
         if r['record_i'] == 0:
             # Record starts a new pulse

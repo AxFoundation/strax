@@ -8,8 +8,8 @@ __all__ = 'split_peaks '.split()
 def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
     """Return peaks after splitting at prominent sum waveform minima
     'Prominent' means: on either side of a split point, local maxima are:
-      - larger than minimum + min_height
-      - larger than minimum * min_ratio
+    - larger than minimum + min_height
+    - larger than minimum * min_ratio
     (this is related to topographical prominence for mountains)
 
     Min_height is in pe/ns (NOT pe/bin!)

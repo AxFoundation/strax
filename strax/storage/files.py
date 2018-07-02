@@ -99,7 +99,7 @@ class FileSaver(Saver):
 
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
-            print("Deleting old incomplete data in {dirname}")
+            print(f"Deleting old incomplete data in {dirname}")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
@@ -121,8 +121,7 @@ class FileSaver(Saver):
         with open(fn, mode='w') as f:
             f.write(json.dumps(chunk_info, **self.json_options))
 
-    def close(self):
-        super().close()
+    def _close(self):
         for fn in sorted(glob.glob(
                 self.tempdirname + '/metadata_*.json')):
             with open(fn, mode='r') as f:

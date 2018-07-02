@@ -30,7 +30,7 @@ def find_peaks(hits, to_pe,
     if not len(hits):
         return
     assert hits[0]['dt'] > 0, "Hit does not indicate sampling time"
-    assert min_hits > 0, "min_hits must be > 1"
+    assert min_hits > 0, "min_hits must be >= 1"
     assert gap_threshold > left_extension + right_extension, \
         "gap_threshold must be larger than left + right extension"
     assert max_duration / hits[0]['dt'] < np.iinfo(np.int32).max, \
