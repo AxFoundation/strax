@@ -92,7 +92,7 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     # Without it, however, numba complains...
     for i in range(len(can_cut)):
         records[i]['data'][:] *= ~can_cut[i]
-    records.reduction_level[:] = ReductionLevel.HITS_ONLY
+    records['reduction_level'][:] = ReductionLevel.HITS_ONLY
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
