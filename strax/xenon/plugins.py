@@ -7,7 +7,6 @@ import numba
 
 import strax
 from .common import to_pe, pax_file, get_resource, get_elife
-from .itp_map import InterpolatingMap
 export, __all__ = strax.exporter()
 
 
@@ -525,6 +524,7 @@ class EventPositions(strax.Plugin):
          'Interaction angular position (radians)')]
 
     def setup(self):
+        from .itp_map import InterpolatingMap
         self.map = InterpolatingMap(get_resource(self.config['fdc_map'],
                                                  binary=True))
 
@@ -578,6 +578,7 @@ class CorrectedAreas(strax.Plugin):
              ('cs2', np.float32, 'Corrected S2 area (PE)')]
 
     def setup(self):
+        from .itp_map import InterpolatingMap
         self.s1_map = InterpolatingMap(
             get_resource(self.config['s1_relative_lce_map']))
         self.s2_map = InterpolatingMap(
