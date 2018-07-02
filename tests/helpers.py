@@ -33,9 +33,7 @@ import strax    # noqa
 
 
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff
-# wrapping around to the integer boundary
-
-
+# wrapping around to the integer boundary. Hence max_value is limited.
 def sorted_bounds(disjoint=False,
                   max_value=10000,
                   max_len=100,
@@ -72,6 +70,8 @@ def sorted_bounds(disjoint=False,
 # Fake intervals
 ##
 
+# TODO: isn't this duplicated with bounds_to_records??
+
 def bounds_to_intervals(bs, dtype=strax.interval_dtype):
     x = np.zeros(len(bs), dtype=dtype)
     x['time'] = [x[0] for x in bs]
@@ -95,6 +95,17 @@ fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
 
 
 def bounds_to_records(bs, single=False):
+    """Return strax records corresponding to a list of 2-tuples
+    of boundaries.
+
+    By default, for each boundary tuple, create a pulse whose data is 1 inside.
+    The pulses are put in different channels, first in 0, second in 1, etc.
+
+    :param single: if True, instead create a single pulse in channel 0
+    whose data is 1 inside the given bounds and zero outside.
+    TODO: length etc. is not properly set in the single=True mode!
+    TODO: this probably needs tests itself...
+    """
     if not len(bs):
         n_samples = 0
     else:
