@@ -69,7 +69,7 @@ class Mailbox:
     def __init__(self,
                  name='mailbox',
                  timeout=120,
-                 max_messages=30):
+                 max_messages=60):
         self.name = name
         self.timeout = timeout
         self.max_messages = max_messages
@@ -95,7 +95,7 @@ class Mailbox:
 
         :param source: Iterable to read from
         :param name: Name of the thread in which the function will run.
-        Defaults to source:<mailbox_name>
+            Defaults to source:<mailbox_name>
         """
         if name is None:
             name = f'source:{self.name}'
@@ -111,7 +111,7 @@ class Mailbox:
         kwargs will be passed to function.
 
         :param name: Name of the thread in which the function will run.
-        Defaults to read_<number>:<mailbox_name>
+            Defaults to read_<number>:<mailbox_name>
         """
         if name is None:
             name = f'read_{self._n_subscribers}:{self.name}'
