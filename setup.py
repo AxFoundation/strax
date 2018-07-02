@@ -27,8 +27,9 @@ setup(name='strax',
                    'sphinx_rtd_theme',
                    'nbsphinx',
                    'recommonmark'],
-          'xenon': ['keras',
-                    'tensorflow']
+          'xenon': ['keras'
+                    'tensorflow',
+                    'scipy']
       },
       long_description=long_description,
       long_description_content_type="text/markdown",
