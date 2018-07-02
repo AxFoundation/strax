@@ -35,7 +35,7 @@ def test_split_by_containment(things, containers):
             assert ((t in things_in)
                     == _is_contained(t, containers[container_i]))
 
-    if len(result) and len(np.concatenate(result)):
+    if len(result) and len(np.concatenate(result)) > 1:
         assert np.diff(np.concatenate(result)['time']) >= 0, "Sorting broken"
 
 
