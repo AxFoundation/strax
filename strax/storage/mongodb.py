@@ -89,8 +89,7 @@ class MongoSaver(Saver):
         self.col.find_one_and_update(dict(metadata=True),
                                      {'$push': {'chunks': chunk_info}})
 
-    def close(self):
-        super().close()
+    def _close(self):
         update = {k: v
                   for k, v in self.md.items()
                   if k in ('writing_ended', 'exception')}

@@ -32,7 +32,7 @@ def load_file(f, compressor, dtype):
 
     :param f: file name or handle to read from
     :param compressor: compressor to use for decompressing. If not passed,
-    will try to load it from json metadata file.
+        will try to load it from json metadata file.
     :param dtype: numpy dtype of data to load
     """
     if isinstance(f, str):
