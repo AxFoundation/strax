@@ -1,7 +1,6 @@
 import builtins
 import collections
 import logging
-import inspect
 import fnmatch
 import typing as ty
 import warnings
@@ -10,19 +9,15 @@ import string
 
 import numpy as np
 import pandas as pd
+import numexpr
 
 import strax
 export, __all__ = strax.exporter()
 
-get_docs = """
-    :param run_id: run id to get
-    :param target: data type to get
-    :param save: data types you would like to save
-    to cache, if they occur in intermediate computations.
-    Some plugins save automatically.
-    :param max_workers: Number of worker threads/processes to spawn.
-    In practice more CPUs may be used due to strax's multithreading.
-"""
+
+# Placeholder value for omitted values.
+# Use instead of None since None might be a proper value/default
+OMITTED = '<OMITTED>'
 
 
 @export
@@ -35,12 +30,26 @@ class Context:
 
     You start all strax processing through a context.
     """
+    config: dict
 
     def __init__(self,
                  storage=None,
                  config=None,
                  register=None,
                  register_all=None):
+        """Create a strax context.
+
+        :param storage: Storage backends to use. Can be:
+          - a string: path to use for FileStore backend (stores data in
+            many separate subdirectories)
+          - omitted. Will use a FileStore backend that uses ./strax_data
+          - a list/tuple of storage backends.
+        :param config: Dictionary with configuration options that will be
+           applied to plugins
+        :param register: plugin class or list of plugin classes to register
+        :param register_all: module for which all plugin classes defined in it
+           will be registered.
+        """
         self.log = logging.getLogger('strax')
 
         if storage is None:
@@ -53,12 +62,12 @@ class Context:
         self._plugin_class_registry = dict()
         self._plugin_instance_cache = dict()
 
-        self.set_config(config, mode='new')
+        self.set_config(config, mode='replace')
 
-        if register is not None:
-            self.register(register)
         if register_all is not None:
             self.register_all(register_all)
+        if register is not None:
+            self.register(register)
 
     def new_context(self,
                     storage=tuple(),
@@ -69,7 +78,9 @@ class Context:
         """Return a new context with new setting adding to those in
         this context.
         :param replace: If True, replaces settings rather than adding them.
+        See Context.__init__ for documentation on other parameters.
         """
+        # TODO: Clone rather than pass on storage instance
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -96,7 +107,7 @@ class Context:
         :param mode: can be either
          - update: Add to or override current options in context
          - setdefault: Add to current options, but do not override
-         - replace: Erase config form this context, then set only these options
+         - replace: Erase config, then set only these options
         """
         if config is None:
             config = dict()
@@ -105,7 +116,7 @@ class Context:
         elif mode == 'setdefault':
             for k in config:
                 self.config.setdefault(k, config[k])
-        elif mode == 'new':
+        elif mode == 'replace':
             self.config = config
         else:
             raise RuntimeError("Expected update, setdefault or new as config"
@@ -145,10 +156,12 @@ class Context:
         return plugin_class
 
     def search_field(self, pattern):
+        """Find and print which plugin(s) provides a field that matches
+        pattern (fnmatch)."""
         cache = dict()
         for d in self._plugin_class_registry:
             if d not in cache:
-                cache.update(self._get_plugins((d,)))
+                cache.update(self._get_plugins((d,), run_id='0'))
             p = cache[d]
 
             for field_name in p.dtype.names:
@@ -156,28 +169,37 @@ class Context:
                     print(f"{field_name} is part of {d} "
                           f"(provided by {p.__class__.__name__})")
 
-    def search_config(self, data_type, pattern='*'):
+    def search_config(self, data_type, pattern='*', run_id='9' * 20):
+        """Return configuration options that affect data_type.
+        :param data_type: Data type name
+        :param pattern: Show only options that match (fnmatch) pattern
+        :param run_id: Run id to use for run-dependent config options.
+        If omitted, will show defaults active for new runs.
+        """
         r = []
-        for d, p in self._get_plugins((data_type,)).items():
+        for d, p in self._get_plugins((data_type,), run_id).items():
             for opt in p.takes_config.values():
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
-                    default = opt.get_default()
+                    default = opt.get_default(run_id)
                 except strax.InvalidConfiguration:
-                    default = '<OMITTED>'
+                    default = OMITTED
                 r.append(dict(
                     option=opt.name,
                     default=default,
-                    current=self.config.get(opt.name, '<OMITTED>'),
+                    current=self.config.get(opt.name, OMITTED),
                     data_type=d,
                     help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
 
-    def lineage(self, data_type):
-        return self._get_plugins((data_type,))[data_type].lineage
+    def lineage(self, run_id, data_type):
+        """Return lineage dictionary for data_type and run_id, based on the
+        options in this context.
+        """
+        return self._get_plugins((data_type,), run_id)[data_type].lineage
 
     def register_all(self, module):
         """Register all plugins defined in module"""
@@ -196,7 +218,7 @@ class Context:
 
     def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name"""
-        p = self._get_plugins((data_name,))[data_name]
+        p = self._get_plugins((data_name,), run_id='0')[data_name]
         display_headers = ['Field name', 'Data type', 'Comment']
         result = []
         for name, dtype in strax.utils.unpack_dtype(p.dtype):
@@ -207,14 +229,14 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def _set_plugin_config(self, p, tolerant=True):
+    def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config)
+                opt.validate(config, run_id)
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -222,9 +244,8 @@ class Context:
                     if k in p.takes_config}
 
     def _get_plugins(self,
-                     targets: ty.Tuple[str] = tuple(),
-                     run_id: str = 'UNKNOWN'
-                     ) -> ty.Dict[str, strax.Plugin]:
+                     targets: ty.Tuple[str],
+                     run_id: str) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugins necessary to compute targets
         from scratch.
         """
@@ -246,28 +267,19 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            p = self._plugin_class_registry[d]()
+            plugins[d] = p = self._plugin_class_registry[d]()
             p.run_id = run_id
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
-            self._set_plugin_config(p, tolerant=True)
-
-            # TODO: check can now be moved inside plugin
-            compute_pars = list(
-                inspect.signature(p.compute).parameters.keys())
-            if 'chunk_i' in compute_pars:
-                p.compute_takes_chunk_i = True
-                del compute_pars[compute_pars.index('chunk_i')]
-
-            plugins[d] = p
+            self._set_plugin_config(p, run_id, tolerant=True)
 
             p.deps = {d: get_plugin(d) for d in p.depends_on}
 
             p.lineage = {d: (p.__class__.__name__,
                              p.version(run_id),
-                             {k: v for k, v in p.config.items()
-                              if p.takes_config[k].track})}
+                             {q: v for q, v in p.config.items()
+                              if p.takes_config[q].track})}
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
@@ -307,7 +319,7 @@ class Context:
 
         plugins = collections.defaultdict(get_plugin)
         for t in targets:
-            # This works without the RHS too, but your IDE might not get it :-)
+            # This works without the LHS too, but your IDE might not get it :-)
             plugins[t] = get_plugin(t)
 
         return plugins
@@ -382,9 +394,12 @@ class Context:
         if len(intersec):
             raise RuntimeError("{intersec} both computed and loaded?!")
 
-        # Check all required options are available / set defaults
+        # For the plugins which will run computations,
+        # check all required options are available or set defaults.
+        # Also run any user-defined setup
         for p in plugins.values():
-            self._set_plugin_config(p, tolerant=False)
+            self._set_plugin_config(p, run_id, tolerant=False)
+            p.setup()
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
@@ -392,18 +407,27 @@ class Context:
             targets=targets)
 
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
+                 selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
-        """Compute target for run_id and iterate over results
+        """Compute target for run_id and iterate over results.
+
+        Do NOT interrupt the iterator (i.e. break): it will keep running stuff
+        in background threads...
         {get_docs}
-        TODO: This is not quite a normal iterator: if you break
-        results will still accumulate in a background thread!
         """
+        # If any new options given, replace the current context
+        # with a temporary one
         if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
+
+        if isinstance(selection, (list, tuple)):
+            selection = ' & '.join(f'({x})' for x in selection)
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            plugins = self._get_plugins(targets=targets)
+            plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind for d in targets)) == 1:
                 temp_name = ''.join(random.choices(
                     string.ascii_lowercase, k=10))
@@ -418,40 +442,75 @@ class Context:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id, targets=targets, save=save)
-        yield from strax.ThreadedMailboxProcessor(
-            components, max_workers=max_workers).iter()
+        for x in strax.ThreadedMailboxProcessor(
+                components, max_workers=max_workers).iter():
+            if selection is not None:
+                mask = numexpr.evaluate(selection, local_dict={
+                    fn: x[fn]
+                    for fn in x.dtype.names})
+                x = x[mask]
+            yield x
 
-    def make(self, *args, **kwargs) -> None:
-        """Compute target for run_id (return nothing)
+    def make(self, run_id: str, targets, save=tuple(), max_workers=None,
+             **kwargs) -> None:
+        """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
-        for _ in self.get_iter(*args, **kwargs):
+        for _ in self.get_iter(run_id, targets, save, max_workers, **kwargs):
             pass
 
-    def get_array(self, *args, **kwargs) -> np.ndarray:
+    def get_array(self, run_id: str, targets, save=tuple(), max_workers=None,
+                  **kwargs) -> np.ndarray:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        return np.concatenate(list(self.get_iter(*args, **kwargs)))
+        results = list(self.get_iter(run_id, targets, save, max_workers,
+                                     **kwargs))
+        if len(results):
+            return np.concatenate(results)
+        raise ValueError("Not a single chunk returned?")
 
-    def get_df(self, *args, **kwargs) -> pd.DataFrame:
+    def get_df(self, run_id: str, targets, save=tuple(), max_workers=None,
+               **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
         """
-        return pd.DataFrame.from_records(self.get_array(*args, **kwargs))
+        return pd.DataFrame.from_records(self.get_array(
+            run_id, targets, save, max_workers, **kwargs))
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise NotCached
         if data is not yet available.
-        {get_docs}
+
+        :param run_id: run id to get
+        :param target: data type to get
         """
-        p = self._get_plugins((target,))[target]
+        p = self._get_plugins((target,), run_id)[target]
         key = strax.CacheKey(run_id, target, p.lineage)
         for sb in self.storage:
             if sb.has(key):
                 return sb.load_meta(key)
         raise strax.NotCached(f"Can't load metadata, "
                               f"data for {key} not available")
+
+
+get_docs = """
+:param run_id: run id to get
+:param targets: list/tuple of strings of data type names to get
+:param save: extra data types you would like to save
+    to cache, if they occur in intermediate computations.
+    Many plugins save automatically anyway.
+:param max_workers: Number of worker threads/processes to spawn.
+    In practice more CPUs may be used due to strax's multithreading.
+:param selection: Query string or list of strings with selections to apply.
+"""
+
+for attr in dir(Context):
+    attr_val = getattr(Context, attr)
+    if hasattr(attr_val, '__doc__'):
+        doc = attr_val.__doc__
+        if doc is not None and '{get_docs}' in doc:
+            attr_val.__doc__ = doc.format(get_docs=get_docs)
 
 
 ##
@@ -464,16 +523,16 @@ class InvalidConfiguration(Exception):
     pass
 
 
-# Todo:  Does it really have to be a decorator just for nice error message?
 @export
 def takes_config(*options):
+    """Decorator for plugin classes, to specify which options it takes.
+    :param options: Option instances of options this plugin takes.
+    """
     def wrapped(plugin_class):
         result = []
         for opt in options:
-            if isinstance(opt, str):
-                opt = Option(opt)
-            elif not isinstance(opt, Option):
-                raise RuntimeError("Specify config options by str or Option")
+            if not isinstance(opt, Option):
+                raise RuntimeError("Specify config options by Option objects")
             opt.taken_by = plugin_class.__name__
             result.append(opt)
 
@@ -483,46 +542,77 @@ def takes_config(*options):
     return wrapped
 
 
-# Use instead of None since None might be a proper value/default
-OMITTED = 'Argument was not given'
-
-
 @export
 class Option:
-    taken_by = "UNKNOWN???"
+    """Configuration option taken by a strax plugin"""
+    taken_by: str
 
     def __init__(self,
                  name: str,
                  type: type = OMITTED,
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
-                 track=True,
+                 default_by_run=OMITTED,
+                 track: bool = True,
                  help: str = ''):
+        """
+        :param name: Option identifier
+        :param type: Excepted type of the option's value.
+        :param default: Default value the option takes.
+        :param default_factory: Function that produces a default value.
+        :param default_by_run: Specify that default is run-dependent. Either
+         - Callable. Will be called with run_id, must return value for run.
+         - List [(start_run_id, value), ..,] for values specified by range of
+           runs.
+        :param track: If True (default), option value becomes part of plugin
+        lineage (just like the plugin version).
+        :param help: Human-readable description of the option.
+        """
         self.name = name
         self.type = type
-        type = builtins.type
         self.default = default
-        self.track = track
+        self.default_by_run = default_by_run
         self.default_factory = default_factory
+        self.track = track
         self.help = help
 
-        if (self.default is not OMITTED
-                and self.default_factory is not OMITTED):
-            raise RuntimeError(f"Tried to specify both default and "
-                               f"default_factory for option {self.name}")
+        type = builtins.type
+        if sum([self.default is not OMITTED,
+                self.default_factory is not OMITTED,
+                self.default_by_run is not OMITTED]) > 1:
+            raise RuntimeError(f"Tried to specify more than one default "
+                               f"for option {self.name}.")
 
         if type is OMITTED and default is not OMITTED:
             self.type = type(default)
 
-    def get_default(self):
-        if self.default is OMITTED:
-            if self.default_factory is OMITTED:
-                raise InvalidConfiguration(f"Missing option {self.name} "
-                                           f"required by {self.taken_by}")
-            return self.default_factory()
-        return self.default
+    def get_default(self, run_id):
+        """Return default value for the option"""
+        if isinstance(run_id, str):
+            run_id = int(run_id.replace('_', ''))
 
-    def validate(self, config, set_defaults=True):
+        if self.default is not OMITTED:
+            return self.default
+        if self.default_factory is not OMITTED:
+            return self.default_factory()
+        if self.default_by_run is not OMITTED:
+            if callable(self.default_by_run):
+                return self.default_by_run(run_id)
+            use_value = OMITTED
+            for i, (start_run, value) in enumerate(self.default_by_run):
+                if start_run > run_id:
+                    break
+                use_value = value
+            if use_value is OMITTED:
+                raise ValueError(
+                    f"Run id {run_id} is smaller than the "
+                    "lowest run id {start_run} for which the default "
+                    "of the option {self.name} is known.")
+            return use_value
+        raise InvalidConfiguration(f"Missing option {self.name} "
+                                   f"required by {self.taken_by}")
+
+    def validate(self, config, run_id, set_defaults=True):
         """Checks if the option is in config and sets defaults if needed.
         """
         if self.name in config:
@@ -533,4 +623,4 @@ class Option:
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
-            config[self.name] = self.get_default()
+            config[self.name] = self.get_default(run_id)

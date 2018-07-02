@@ -43,15 +43,17 @@ def records_needed(pulse_length, samples_per_record):
 @export
 def growing_result(dtype=np.int, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
+
     Functions must obey following API:
-     - accept _result_buffer keyword argument with default None;
-       this will be the buffer array of specified dtype and length chunk_size
-       (it's an optional argument so this decorator preserves signature)
-     - 'yield N' from function will cause first elements to be saved
-     - function is responsible for tracking offset, calling yield on time,
-       and clearing the buffer afterwards.
-     - optionally, accept result_dtype argument with default None;
-       this allows function user to specify return dtype
+
+    - accept _result_buffer keyword argument with default None;
+      this will be the buffer array of specified dtype and length chunk_size
+      (it's an optional argument so this decorator preserves signature)
+    - 'yield N' from function will cause first elements to be saved
+    - function is responsible for tracking offset, calling yield on time,
+      and clearing the buffer afterwards.
+    - optionally, accept result_dtype argument with default None;
+      this allows function user to specify return dtype
 
     See test_utils.py for a simple example (I can't get it to run as a doctest
     unfortunately)
