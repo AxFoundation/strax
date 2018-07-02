@@ -9,19 +9,23 @@ with open('requirements.txt') as f:
                 for x in f.readlines()]
 
 with open('README.md') as file:
-    long_description = file.read()
+    readme = file.read()
+
+with open('HISTORY.md') as file:
+    history = file.read()
 
 setup(name='strax',
       version='0.1.2',
       description='Streaming analysis for XENON',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
-      url='https://github.com/jelleaalbers/strax',
+      url='https://github.com/AxFoundation/strax',
       setup_requires=['pytest-runner'],
       install_requires=requires,
       tests_require=requires + ['pytest',
                                 'boltons',
                                 'hypothesis'],
+      long_description=readme + '\n\n' + history,
       extras_require={
           'docs': ['sphinx',
                    'sphinx_rtd_theme',
@@ -31,7 +35,6 @@ setup(name='strax',
                     'tensorflow',
                     'scipy']
       },
-      long_description=long_description,
       long_description_content_type="text/markdown",
       packages=['strax',
                 'strax.processing',
