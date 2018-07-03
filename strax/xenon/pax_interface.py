@@ -10,7 +10,8 @@ export, __all__ = strax.exporter()
 
 @export
 def pax_to_records(input_filename,
-                   samples_per_record=strax.DEFAULT_RECORD_LENGTH):
+                   samples_per_record=strax.DEFAULT_RECORD_LENGTH,
+                   events_per_chunk=10):
     """Return pulse records array from pax zip input_filename"""
     from pax import core   # Pax is not a dependency
     mypax = core.Processor('XENON1T', config_dict=dict(
@@ -26,25 +27,32 @@ def pax_to_records(input_filename,
                 s1_patterns_file=None,
                 s2_patterns_file=None)))
 
-    def get_events():
-        for e in mypax.get_events():
-            yield mypax.process_event(e)
+    results = []
+    def finish_results():
+        nonlocal results
+        records = np.concatenate(results)
+        # In strax data, records are always stored
+        # sorted, baselined and integrated
+        records = strax.sort_by_time(records)
+        strax.baseline(records)
+        strax.integrate(records)
+        results = []
+        return records
 
-    # We loop over the events twice for convenience
-    # Yeah, this is probably not optimal
-    pulse_lengths = np.array([p.length
-                              for e in get_events()
-                              for p in e.pulses])
+    for event in mypax.get_events():
+        event = mypax.process_event(event)
 
-    n_records = strax.records_needed(pulse_lengths, samples_per_record).sum()
-    records = np.zeros(n_records,
-                       dtype=strax.record_dtype(samples_per_record))
+        pulse_lengths = np.array([p.length
+                                  for p in event.pulses])
 
-    output_record_index = 0  # Record offset in data
-    for event in get_events():
+        n_records_tot = strax.records_needed(pulse_lengths, samples_per_record).sum()
+        records = np.zeros(n_records_tot,
+                           dtype=strax.record_dtype(samples_per_record))
+        output_record_index = 0  # Record offset in data
+
         for p in event.pulses:
-
             n_records = strax.records_needed(p.length, samples_per_record)
+
             for rec_i in range(n_records):
                 r = records[output_record_index]
                 r['time'] = (event.start_time
@@ -73,14 +81,14 @@ def pax_to_records(input_filename,
                 r['data'][:n_store] = p.raw_data[offset:offset + n_store]
                 output_record_index += 1
 
+        results.append(records)
+        if len(results) >= events_per_chunk:
+            yield finish_results()
+
     mypax.shutdown()
 
-    # In strax data, records are always stored
-    # sorted, baselined and integrated
-    records = strax.sort_by_time(records)
-    strax.baseline(records)
-    strax.integrate(records)
-    return records
+    if len(results):
+        yield finish_results()
 
 
 @export
@@ -88,7 +96,9 @@ def pax_to_records(input_filename,
     strax.Option('pax_raw_dir', default='/data/xenon/raw', track=False,
                  help="Directory with raw pax datasets"),
     strax.Option('stop_after_zips', default=0, track=False,
-                 help="Convert only this many zip files. 0 = all.")
+                 help="Convert only this many zip files. 0 = all."),
+    strax.Option('events_per_chunk', default=10, track=False,
+                 help="Number of events to yield per chunk")
 )
 class RecordsFromPax(strax.Plugin):
     provides = 'raw_records'
@@ -109,4 +119,4 @@ class RecordsFromPax(strax.Plugin):
             if (self.config['stop_after_zips']
                     and file_i >= self.config['stop_after_zips']):
                 break
-            yield strax.xenon.pax_interface.pax_to_records(in_fn)
+            yield from strax.xenon.pax_interface.pax_to_records(in_fn)
