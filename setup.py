@@ -15,7 +15,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setup(name='strax',
-      version='0.1.2',
+      version='0.2.0',
       description='Streaming analysis for XENON',
       author='Jelle Aalbers',
       author_email='j.aalbers@uva.nl',
