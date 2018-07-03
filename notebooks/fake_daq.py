@@ -6,14 +6,15 @@ import time
 
 import numba
 import numpy as np
-from tqdm import tqdm
 import strax
 
 parser = argparse.ArgumentParser(
     description='Fake DAQ to test XENONnT eventbuilder prototype')
 parser.add_argument('--rate', default=0, type=int,
                     help='Output rate in MBraw/sec. '
-                         'If omitted, emit data as if in realtime.')
+                         'If omitted, emit data as fast as possible')
+parser.add_argument('--realtime', action='store_true',
+                    help='Emit data at same pace as it was acquired')
 parser.add_argument('--shm', action='store_true',
                     help='Operate in /dev/shm')
 parser.add_argument('--chunk_duration', default=2., type=float,
@@ -63,7 +64,7 @@ def write_chunk(chunk_i, reader_data):
     else:
         write_to_dir(reader_data, output_dir + '/%06d' % big_chunk_i)
 
-        
+
 if args.rate:
     print("Preparing payload data: slurping into memory")
 
@@ -85,7 +86,7 @@ for chunk_i, records in enumerate(
     restore_baseline(records)
     records['baseline'] = 0
     records['area'] = 0
-    if not args.rate:
+    if args.realtime:
         # Simulate live DAQ
         records['time'] += time_offset - payload_t_start
 
@@ -103,7 +104,7 @@ for chunk_i, records in enumerate(
         # Slurp into memory
         chunk_data_compressed.append(result)
     else:
-        # Simulate realtime DAQ
+        # Simulate realtime DAQ / emit data immediately
         # Cannot slurp in advance, else time would be offset.
         write_chunk(chunk_i, result)
         if chunk_i % 2 == 0:
@@ -114,13 +115,14 @@ for chunk_i, records in enumerate(
         t_sleep = dt - (time.time() - t_0)
         wrote_mb = chunk_sizes[chunk_i] / 1e6
         
-        print(f"{chunk_i}: wrote {wrote_mb:.1f} MB_raw, "
-              f"sleep for {t_sleep:.2f} s")
-        if t_sleep < 0:
-            if chunk_i % 2 == 0:
-                print("Fake DAQ too slow :-(")
-        else:
-            time.sleep(t_sleep)
+        print(f"{chunk_i}: wrote {wrote_mb:.1f} MB_raw"
+              + f", sleep for {t_sleep:.2f} s" if args.realtime else '')
+        if not args.realtime:
+            if t_sleep < 0:
+                if chunk_i % 2 == 0:
+                    print("Fake DAQ too slow :-(")
+            else:
+                time.sleep(t_sleep)
             
     if sum(chunk_sizes)/1e6 > args.stop_after:
         # TODO: background thread does not terminate!
