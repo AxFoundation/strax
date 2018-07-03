@@ -77,7 +77,7 @@ gil_load.start(av_sample_interval=0.05)
 start = time.time()
 
 for i, events in enumerate(
-        st.get_iter(run_id, 'event_basics',
+        st.get_iter(run_id, 'event_info',
                     max_workers=args.n)):
     print(f"\t{i}: Found {len(events)} events")
 
