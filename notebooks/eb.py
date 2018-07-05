@@ -9,9 +9,14 @@ import pymongo
 
 import strax
 
-
 parser = argparse.ArgumentParser(
     description='XENONnT eventbuilder prototype')
+
+parser.add_argument('--input', default='./from_fake_daq',
+                    help='Input directory')
+parser.add_argument('--output', default='.',
+                    help='Output directory')
+
 parser.add_argument('--n', default=1, type=int,
                     help='Worker processes to start')
 parser.add_argument('--shm', action='store_true',
@@ -21,18 +26,23 @@ parser.add_argument('--erase', action='store_true',
                          'Essential for online operation')
 parser.add_argument('--debug', action='store_true',
                     help='Activate debug logging')
+parser.add_argument('--target', default='event_info',
+                    help='Target data type')
 parser.add_argument('--mongo', action='store_true',
                     help='Activate mongo saving')
+
 parser.add_argument('--no_super_raw', action='store_true',
                     help='Do not save unreduced raw data')
 
 args = parser.parse_args()
 
 try:
-    import gil_load     # noqa
+    import gil_load  # noqa
+
     gil_load.init()
 except ImportError:
     from unittest.mock import Mock
+
     gil_load = Mock()
     gil_load.get = Mock(return_value=[float('nan')])
 
@@ -41,8 +51,11 @@ logging.basicConfig(
     format='{name} in {threadName} at {asctime}: {message}', style='{')
 
 run_id = '180423_1021'
-in_dir = '/dev/shm/from_fake_daq' if args.shm else './from_fake_daq'
-out_dir = '.'
+if args.shm:
+    in_dir = '/dev/shm/from_fake_daq'
+else:
+    in_dir = args.input
+out_dir = args.output
 
 # Clean all output dirs. This is of course temporary!
 for x in 'raw reduced_raw temp_processed processed'.split():
@@ -53,7 +66,7 @@ for x in 'raw reduced_raw temp_processed processed'.split():
 mongo_uri = 'mongodb://localhost'
 if args.mongo:
     pymongo.MongoClient(mongo_uri).drop_database('strax_data')
-    
+
 if args.no_super_raw:
     strax.xenon.plugins.DAQReader.save_meta_only = True
 
@@ -77,7 +90,7 @@ gil_load.start(av_sample_interval=0.05)
 start = time.time()
 
 for i, events in enumerate(
-        st.get_iter(run_id, 'event_info',
+        st.get_iter(run_id, args.target,
                     max_workers=args.n)):
     print(f"\t{i}: Found {len(events)} events")
 
@@ -88,26 +101,29 @@ dt = end - start
 gil_pct = 100 * gil_load.get(4)[0]
 print(f"Took {dt:.3f} seconds, GIL was held {gil_pct:.3f}% of the time")
 
+
 def total_size(data_type, raw=False):
     metadata = st.get_meta(run_id, data_type)
     try:
         return sum(x['nbytes' if raw else 'filesize']
-                  for x in metadata['chunks']) / 1e6
+                   for x in metadata['chunks']) / 1e6
     except Exception:
         return float('nan')
 
+
 raw_data_size = round(total_size('raw_records', raw=True))
 speed = raw_data_size / dt
+to_show = set(['raw_records', args.target])
+if args.target != 'raw_records':
+    to_show.add('records')
+    if args.target != 'records':
+        to_show.add('peaks')
 sizes = {d: '%0.2f MB' % total_size(d)
-         for d in ['raw_records', 'records',
-                   'peaks', 'peak_classification',
-                   'event_basics'
-                  ]}
+         for d in to_show}
 print(f"""
 Processed {raw_data_size} MB at {speed:.2f} MB/s
 Data sizes on disk: {sizes}
 """)
-
 
 print("Tarring (well, zipping, but without compression) high-level data.\n"
       "This should be done while transferring to xe-datamanager")

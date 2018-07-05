@@ -630,3 +630,4 @@ class EventInfo(strax.MergeOnlyPlugin):
     depends_on = ['events',
                   'event_basics', 'event_positions', 'corrected_areas',
                   'energy_estimates']
+    save_when = strax.SaveWhen.ALWAYS

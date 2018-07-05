@@ -10,6 +10,11 @@ import strax
 
 parser = argparse.ArgumentParser(
     description='Fake DAQ to test XENONnT eventbuilder prototype')
+
+parser.add_argument('--input', default='./test_input_data',
+                    help='Input directory')
+parser.add_argument('--output', default='./from_fake_daq',
+                    help='Output directory')
 parser.add_argument('--rate', default=0, type=int,
                     help='Output rate in MBraw/sec. '
                          'If omitted, emit data as fast as possible')
@@ -29,14 +34,15 @@ n_readers = 8
 n_channels = len(strax.xenon.common.to_pe)
 channels_per_reader = np.ceil(n_channels / n_readers)
 
-output_dir = './from_fake_daq'
 if args.shm:
     output_dir = '/dev/shm/from_fake_daq'
+else:
+    output_dir = args.output
 if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
 os.makedirs(output_dir)
 
-st = strax.Context(storage='./test_input_data')
+st = strax.Context(storage=args.input)
 st.register(strax.xenon.pax_interface.RecordsFromPax)
 
 
