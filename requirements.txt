@@ -5,4 +5,3 @@ blosc==1.5.1
 zstd==1.3.4.4
 tqdm==4.23.4
 dill==0.2.8.2
-numexpr           # Already installed with pandas
