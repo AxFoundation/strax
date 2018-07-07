@@ -1,7 +1,4 @@
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup
 
 # Get requirements from requirements.txt, stripping the version tags
 with open('requirements.txt') as f:
@@ -36,14 +33,15 @@ setup(name='strax',
                     'scipy']
       },
       long_description_content_type="text/markdown",
-      packages=['strax',
-                'strax.processing',
-                'strax.storage',
-                'strax.xenon'],
+      packages=setuptools.find_packages(),
       classifiers=[
-        'Development Status :: 3 - Alpha',
-        'License :: OSI Approved :: BSD License',
-        'Natural Language :: English',
-        'Programming Language :: Python :: 3.6',],
+          'Development Status :: 4 - Beta',
+          'License :: OSI Approved :: BSD License',
+          'Natural Language :: English',
+          'Programming Language :: Python :: 3.6',
+          'Intended Audience :: Science/Research',
+          'Programming Language :: Python :: Implementation :: CPython',
+          'Topic :: Scientific/Engineering :: Physics',
+      ],
       zip_safe = False,
     )
