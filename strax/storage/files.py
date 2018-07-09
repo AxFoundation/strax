@@ -5,6 +5,7 @@ import json
 import shutil
 
 import strax
+from .common import StorageFrontend
 
 export, __all__ = strax.exporter()
 
@@ -13,7 +14,7 @@ run_metadata_filename = 'run_%s_metadata.json'
 
 
 @export
-class DataDirectory(strax.StorageFrontend):
+class DataDirectory(StorageFrontend):
     """Simplest registry: single directory with FileStore data
     sitting in subdirectories.
 
