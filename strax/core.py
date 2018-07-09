@@ -39,11 +39,10 @@ class Context:
                  register_all=None):
         """Create a strax context.
 
-        :param storage: Storage backends to use. Can be:
-          - a string: path to use for FileStore backend (stores data in
-            many separate subdirectories)
-          - omitted. Will use a FileStore backend that uses ./strax_data
-          - a list/tuple of storage backends.
+        :param storage: Storage front-ends to use. Can be:
+          - None (default). Will use DataDirectory('./strax_data').
+          - a string: path to use for DataDirectory frontend.
+          - list/tuple of storage frontends.
         :param config: Dictionary with configuration options that will be
            applied to plugins
         :param register: plugin class or list of plugin classes to register
@@ -56,7 +55,7 @@ class Context:
             storage = ['./strax_data']
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
-        self.storage = [strax.FileStore(s) if isinstance(s, str) else s
+        self.storage = [strax.DataDirectory(s) if isinstance(s, str) else s
                         for s in storage]
 
         self._plugin_class_registry = dict()
@@ -80,7 +79,7 @@ class Context:
         :param replace: If True, replaces settings rather than adding them.
         See Context.__init__ for documentation on other parameters.
         """
-        # TODO: Clone rather than pass on storage instance
+        # TODO: Clone rather than pass on storage front-ends ??
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -349,15 +348,15 @@ class Context:
                 return
             seen.add(d)
             p = plugins[d]
-            key = strax.CacheKey(run_id, d, p.lineage)
+            key = strax.DataKey(run_id, d, p.lineage)
 
-            for sb_i, sb in enumerate(self.storage):
+            for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sb.loader(key)
+                    loaders[d] = sf.loader(key)  # TODO: ambiguity options
                     # Found it! No need to make it or save it
                     del plugins[d]
                     return
-                except strax.NotCached:
+                except strax.DataNotAvailable:
                     continue
 
             # Not in any cache. We will be computing it.
@@ -379,12 +378,15 @@ class Context:
             else:
                 assert p.save_when == strax.SaveWhen.ALWAYS
 
-            for sb_i, sb in enumerate(self.storage):
-                if not sb.provides(d, write=True):
+            for sf in self.storage:
+                if sf.readonly:
                     continue
-                s = sb.saver(key, p.metadata(run_id))
-                s.meta_only = p.save_meta_only
-                savers[d].append(s)
+                try:
+                    savers[d].append(sf.saver(key,
+                                              metadata=p.metadata(run_id),
+                                              meta_only=p.save_meta_only))
+                except strax.DataTypeNotWanted:
+                    pass
 
         for d in targets:
             check_cache(d)
@@ -486,12 +488,14 @@ class Context:
         :param target: data type to get
         """
         p = self._get_plugins((target,), run_id)[target]
-        key = strax.CacheKey(run_id, target, p.lineage)
-        for sb in self.storage:
-            if sb.has(key):
-                return sb.load_meta(key)
-        raise strax.NotCached(f"Can't load metadata, "
-                              f"data for {key} not available")
+        key = strax.DataKey(run_id, target, p.lineage)
+        for sf in self.storage:
+            try:
+                return sf.get_metadata(key)   # TODO: ambiguity options
+            except strax.DataNotAvailable as e:
+                pass
+        raise strax.DataNotAvailable(f"Can't load metadata, "
+                                     f"data for {key} not available")
 
 
 get_docs = """

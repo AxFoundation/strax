@@ -1,102 +1,134 @@
+import glob
 import os
+import os.path as osp
 import json
 import shutil
-import glob
 
 import strax
-from .common import Store, Saver, NotCached, CacheKey
 
 export, __all__ = strax.exporter()
 
 
+run_metadata_filename = 'run_%s_metadata.json'
+
+
 @export
-class FileStore(Store):
+class DataDirectory(strax.StorageFrontend):
+    """Simplest registry: single directory with FileStore data
+    sitting in subdirectories.
 
-    def __init__(self, data_dirs, *args, **kwargs):
-        """File-based storage backend for strax.
-        Data is stored in (compressed) binary dumps, metadata in json.
-
-        :param data_dirs: List of data directories to use.
-        Entries are preferred for use from first to last.
-
-        {provides_doc}
-
-        When writing, we save (only) in the highest-preference directory
-        in which we have write permission.
+    Run-level metadata is stored in loose json files in the directory.
+    """
+    def __init__(self, path='.', *args, **kwargs):
+        """
+        :param path: Path to folder with data subfolders.
+        For other arguments, see DataRegistry base class.
         """
         super().__init__(*args, **kwargs)
+        self.backends = [strax.FileSytemBackend()]
+        self.path = path
+        if not osp.exists(path):
+            os.makedirs(path)
 
-        self.data_dirs = strax.to_str_tuple(data_dirs)
+    def _run_meta_path(self, run_id):
+        return osp.join(self.path, run_metadata_filename % run_id)
 
-        for d in self.data_dirs:
-            try:
-                os.makedirs(d)
-            except FileExistsError:
-                pass
-            else:
-                self.log.debug(f"Created data dir {d}")
+    def run_metadata(self, run_id):
+        path = self._run_meta_path(run_id)
+        if osp.exists(path):
+            with open(path, mode='r') as f:
+                return json.loads(f.read())
+        else:
+            raise strax.RunMetadataNotAvailable(
+                f"No file at {path}, cannot find run metadata for {run_id}")
 
-    def _find(self, key):
-        for dirname in self._candidate_dirs(key):
-            if os.path.exists(dirname):
-                self.log.debug(f"{key} is in cache.")
-                return dirname
-        self.log.debug(f"{key} is NOT in cache.")
-        raise NotCached
+    def write_run_metadata(self, run_id, metadata):
+        with open(self._run_meta_path(run_id), mode='w') as f:
+            f.write(json.dumps(metadata))
 
-    @staticmethod
-    def _key_dirname(key):
-        return '_'.join([key.run_id,
-                         key.data_type,
-                         strax.deterministic_hash(key.lineage)])
+    def _find(self, key,
+              write, ignore_versions, ignore_config):
 
-    def _candidate_dirs(self, key: CacheKey):
-        """Return directories at which data meant by key
-        could be found or saved"""
-        return [os.path.join(d, str(key))
-                for d in self.data_dirs]
+        # Check exact match / write case
+        dirname = self._dirname(key)
+        bk = self.backend_key(dirname)
+        if osp.exists(dirname):
+            if write:
+                if self._can_overwrite(key):
+                    return bk
+                raise strax.DataExistsError(at=bk)
+        if write:
+            return bk
 
-    def _read_chunk(self, dirname, chunk_info, dtype, compressor):
-        fn = os.path.join(dirname, chunk_info['filename'])
-        return strax.load_file(fn, dtype=dtype, compressor=compressor)
+        if not ignore_versions and not ignore_config:
+            raise strax.DataNotAvailable
 
-    def _read_meta(self, dirname):
-        with open(dirname + '/metadata.json', mode='r') as f:
+        # Check metadata of all potentially matching data dirs for match...
+        for dirname in os.listdir(self.path):
+            if not osp.isdir(dirname):
+                continue
+            if not osp.exists(osp.join(dirname, 'metadata.json')):
+                continue
+            # TODO: check for broken data
+            metadata = self.filestore.get_meta(osp.join(self.path, dirname))
+            if self._matches(metadata['lineage'], key.lineage,
+                             ignore_versions, ignore_config):
+                return self.backend_key(dirname)
+        raise strax.DataNotAvailable
+
+    def _dirname(self, key):
+        return osp.join(self.path, str(key))
+
+    def backend_key(self, dirname):
+        return self.filestore.__class__.__name__, dirname
+
+    def _start_saving(self, key):
+        dirname = self._dirname(key)
+        if osp.exists(dirname):
+            raise strax.DataExistsError(at=dirname)
+        return self.backend_key(dirname)
+
+    def remove(self, key):
+        # There is no database, so removing the folder from the filesystem
+        # (which FileStore should do) is sufficient.
+        pass
+
+
+class FileSytemBackend(strax.StorageBackend):
+    """Store data locally in a directory of binary files.
+
+    Files are named after the chunk number (without extension).
+    Metadata is stored in a file called metadata.json.
+    """
+
+    def get_metadata(self, dirname):
+        with open(osp.join(dirname + 'metadata.json'), mode='r') as f:
             return json.loads(f.read())
 
-    def saver(self, key, metadata):
-        super().saver(key, metadata)
+    def _read_chunk(self, dirname, chunk_info, dtype, compressor):
+        fn = osp.join(dirname, chunk_info['filename'])
+        return strax.load_file(fn, dtype=dtype, compressor=compressor)
 
-        for dirname in self._candidate_dirs(key):
-            # Test if the parent directory is writeable.
-            # We need abspath since the dir itself may not exist,
-            # even though its parent-to-be does
-            parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
-            if os.access(parent_dir, os.W_OK):
-                self.log.debug(f"Saving {key} to {dirname}")
-                break
-            else:
-                self.log.debug(f"{parent_dir} is not writeable, "
-                               f"can't save to {dirname}")
-        else:
-            raise FileNotFoundError(f"No writeable directory found for {key}")
-
-        return FileSaver(key, metadata, dirname)
+    def _saver(self, dirname, metadata, meta_only=False):
+        # Test if the parent directory is writeable.
+        # We need abspath since the dir itself may not exist,
+        # even though its parent-to-be does
+        parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
+        if not os.access(parent_dir, os.W_OK):
+            raise strax.CannotWriteData(
+                f"Can't write data to {dirname}, "
+                f"no write permissions in {parent_dir}.")
+        return FileSaver(metadata, dirname)
 
 
 @export
-class FileSaver(Saver):
-    """Saves data to compressed binary files
-
-    Must work even if forked.
-    Do NOT add unpickleable things as attributes (such as loggers)!
-    """
+class FileSaver(strax.Saver):
+    """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, key, metadata, dirname):
-        super().__init__(key, metadata)
+    def __init__(self, dirname, metadata, meta_only):
+        super().__init__(metadata, meta_only)
         self.dirname = dirname
-
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
             print(f"Deleting old incomplete data in {dirname}")
@@ -108,9 +140,9 @@ class FileSaver(Saver):
     def _save_chunk(self, data, chunk_info):
         filename = '%06d' % chunk_info['chunk_i']
         filesize = strax.save_file(
-                os.path.join(self.tempdirname, filename),
-                data=data,
-                compressor=self.md['compressor'])
+            os.path.join(self.tempdirname, filename),
+            data=data,
+            compressor=self.md['compressor'])
         return dict(filename=filename, filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):

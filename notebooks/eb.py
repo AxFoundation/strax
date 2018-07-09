@@ -71,12 +71,12 @@ if args.no_super_raw:
     strax.xenon.plugins.DAQReader.save_meta_only = True
 
 st = strax.Context(
-    storage=[strax.FileStore(out_dir + '/raw',
-                             take_only='raw_records'),
-             strax.FileStore(out_dir + '/reduced_raw',
-                             take_only='records'),
-             strax.FileStore(out_dir + '/temp_processed',
-                             exclude=['records', 'raw_records'])],
+    storage=[strax.DataDirectory(out_dir + '/raw',
+                                 take_only='raw_records'),
+             strax.DataDirectory(out_dir + '/reduced_raw',
+                                 take_only='records'),
+             strax.DataDirectory(out_dir + '/temp_processed',
+                                 exclude=['records', 'raw_records'])],
     config=dict(input_dir=in_dir,
                 erase=args.erase))
 if args.mongo:
