@@ -42,7 +42,7 @@ class Context:
         :param storage: Storage front-ends to use. Can be:
           - None (default). Will use DataDirectory('./strax_data').
           - a string: path to use for DataDirectory frontend.
-          - list/tuple of storage frontends.
+          - list/tuple, or single instance, of storage frontends.
         :param config: Dictionary with configuration options that will be
            applied to plugins
         :param register: plugin class or list of plugin classes to register
