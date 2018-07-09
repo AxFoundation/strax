@@ -14,6 +14,7 @@ export, __all__ = strax.exporter()
 
 @export
 class CacheKey(typing.NamedTuple):
+    """Request for data to a storage registry"""
     run_id: str
     data_type: str
     lineage: dict
@@ -218,8 +219,6 @@ class Saver:
             raise RuntimeError(f"{self.key.data_type} saver already closed")
 
         if wait_for:
-            # print(f"Closing {self.key.data_type} saver, "
-            #       f"waiting for {len(wait_for)} futures")
             done, not_done = wait(wait_for, timeout=timeout)
             if len(not_done):
                 raise RuntimeError(
@@ -227,7 +226,6 @@ class Saver:
                     "complete in time!")
         else:
             pass
-            # print(f"Closing {self.key.data_type} saver, don't have to wait")
 
         self.closed = True
 
@@ -237,4 +235,3 @@ class Saver:
         self.md['writing_ended'] = time.time()
 
         self._close()
-        # print(f"Done closing {self.key.data_type} saver")

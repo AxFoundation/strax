@@ -35,6 +35,17 @@ export, __all__ = exporter(export_self=True)
 
 
 @export
+def inherit_docstring_from(cls):
+    """Decorator for inheriting doc strings, stolen from
+    https://groups.google.com/forum/#!msg/comp.lang.python/HkB1uhDcvdk/lWzWtPy09yYJ
+    """
+    def docstring_inheriting_decorator(fn):
+        fn.__doc__ = getattr(cls, fn.__name__).__doc__
+        return fn
+    return docstring_inheriting_decorator
+
+
+@export
 def records_needed(pulse_length, samples_per_record):
     """Return records needed to store pulse_length samples"""
     return 1 + (pulse_length - 1) // samples_per_record
