@@ -130,15 +130,6 @@ print("Tarring (well, zipping, but without compression) high-level data.\n"
 start = time.time()
 
 procfile = f'{out_dir}/processed/{run_id}.zip'
-with zipfile.ZipFile(procfile, mode='w') as zp:
-    q = out_dir + '/temp_processed/'
-    for dirn in os.listdir(q):
-        for fn in os.listdir(q + dirn):
-            zp.write(os.path.join(q + dirn, fn),
-                     arcname=os.path.join(dirn, fn))
-shutil.rmtree(out_dir + '/temp_processed')
-
-procfile = f'{out_dir}/processed/{run_id}.zip'
 strax.ZipDirectory.zip_dir(f'{out_dir}/temp_processed', procfile, delete=True)
 
 end = time.time()
