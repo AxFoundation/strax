@@ -151,11 +151,11 @@ class StorageFrontend:
         # Easy failures
         if (key.data_type in self.exclude
                 or self.take_only and key.data_type not in self.take_only):
-            raise DataTypeNotWanted(
-                f"{self} does not accept data type {key.data_type}")
+            raise DataNotAvailable(
+                f"{self} does not accept or provide data type {key.data_type}")
         if write and self.readonly:
-            raise CannotWriteData("f{self} cannot write any-data, "
-                                  "it's readonly")
+            raise DataNotAvailable("f{self} cannot write any-data, "
+                                   "it's readonly")
 
         message = (
             f"\nRequested lineage: {key.lineage}."

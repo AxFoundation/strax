@@ -110,7 +110,7 @@ class FileSytemBackend(strax.StorageBackend):
         # even though its parent-to-be does
         parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
         if not os.access(parent_dir, os.W_OK):
-            raise strax.CannotWriteData(
+            raise strax.DataNotAvailable(
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
         return FileSaver(dirname, metadata=metadata, meta_only=meta_only)
