@@ -493,7 +493,7 @@ class Context:
             try:
                 return sf.get_metadata(key)   # TODO: ambiguity options
             except strax.DataNotAvailable as e:
-                pass
+                print(str(e))
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
 

@@ -1,17 +1,17 @@
+import json
 import os
 import os.path as osp
-import json
+import shutil
 import zipfile
 
 import strax
-export, __all__ = strax.exporter()
-
 from .files import run_metadata_filename
 
+export, __all__ = strax.exporter()
 
 
 @export
-class DataZipDirectory(strax.StorageFrontend):
+class ZipDirectory(strax.StorageFrontend):
     """ZipFile-based storage frontend for strax.
 
     All data for one run is assumed to be in a single zip file <run_id>.zip,
@@ -25,6 +25,7 @@ class DataZipDirectory(strax.StorageFrontend):
         if not readonly:
             raise NotImplementedError("Zipfiles are currently read-only")
         super().__init__(*args, readonly=readonly, **kwargs)
+        self.backends = [ZipFileBackend()]
         self.path = path
         if not osp.exists(path):
             os.makedirs(path)
@@ -36,6 +37,8 @@ class DataZipDirectory(strax.StorageFrontend):
         # Check exact match / write case
         bk = self._backend_key(key)
         with zipfile.ZipFile(self._zipname(key)) as zp:
+            print("Still here")
+            print(zp.namelist())
             try:
                 zp.getinfo(str(key) + '/metadata.json')
                 return bk
@@ -66,15 +69,38 @@ class DataZipDirectory(strax.StorageFrontend):
         raise NotImplementedError("Zipfiles cannot write")
 
     def _backend_key(self, key):
-        return self._zipname(key), str(key)
+        return (self.backends[0].__class__.__name__,
+                (self._zipname(key), str(key)))
 
     def _zipname(self, key):
-        zipname = osp.join(self.path, key.run_id)
+        zipname = osp.join(self.path, key.run_id + '.zip')
         # Since we're never writing, this check can be here
+        # TODO: sounds like a bad idea?
         if not osp.exists(zipname):
             raise strax.DataNotAvailable
+        return zipname
+
+    @staticmethod
+    def zip_dir(input_dir, output_zipfile, delete=False):
+        """Zips subdirectories of input_dir to output_zipfile
+        (without compression).
+        Travels into subdirectories, but not sub-subdirectories.
+        Skips any other files in directory.
+        :param delete: If True, delete original directories
+        """
+        with zipfile.ZipFile(output_zipfile, mode='w') as zp:
+            for dirn in os.listdir(input_dir):
+                full_dirn = os.path.join(input_dir, dirn)
+                if not osp.isdir(full_dirn):
+                    continue
+                for fn in os.listdir(full_dirn):
+                    zp.write(os.path.join(full_dirn, fn),
+                             arcname=os.path.join(dirn, fn))
+                if delete:
+                    shutil.rmtree(full_dirn)
 
 
+@export
 class ZipFileBackend(strax.StorageBackend):
 
     def _read_chunk(self, zipn_and_dirn, chunk_info, dtype, compressor):

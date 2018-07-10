@@ -138,6 +138,9 @@ with zipfile.ZipFile(procfile, mode='w') as zp:
                      arcname=os.path.join(dirn, fn))
 shutil.rmtree(out_dir + '/temp_processed')
 
+procfile = f'{out_dir}/processed/{run_id}.zip'
+strax.ZipDirectory.zip_dir(f'{out_dir}/temp_processed', procfile, delete=True)
+
 end = time.time()
 print(f"Done, took {end-start:.2f} seconds, "
       f"processed data takes {os.path.getsize(procfile)/1e6:.2f} MB on disk")

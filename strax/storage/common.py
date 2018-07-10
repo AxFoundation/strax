@@ -25,6 +25,7 @@ class DataKey(typing.NamedTuple):
                          self.data_type,
                          strax.deterministic_hash(self.lineage)])
 
+
 @export
 class DataNotAvailable(Exception):
     pass
@@ -94,7 +95,8 @@ class StorageFrontend:
         self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, key: DataKey, ambiguous='warn',
-               ignore_lineage=tuple(), ignore_config=tuple()):
+               ignore_lineage=tuple(), ignore_config=tuple(),
+               executor=None):
         """Return loader for data described by DataKey.
         :param key: DataKey describing data
         :param ambiguous: Behaviour if multiple matching data entries are
@@ -107,13 +109,14 @@ class StorageFrontend:
         plugin name, version, or option check is performed.
         :param ignore_config: list/tuple of configuration options for which no
         check is performed.
+        :param executor: Executor for pushing load computation to
         """
         backend, backend_key = self.find(key,
                                          ambiguous=ambiguous,
                                          write=False,
                                          ignore_lineage=ignore_lineage,
                                          ignore_config=ignore_config)
-        return self._get_backend(backend).loader(backend_key)
+        return self._get_backend(backend).loader(backend_key, executor)
 
     def saver(self, key, metadata, meta_only):
         """Return saver for data described by DataKey."""
@@ -176,7 +179,7 @@ class StorageFrontend:
     def _get_backend(self, backend):
         for b in self.backends:
             if b.__class__.__name__ == backend:
-                return backend
+                return b
         raise KeyError(f"Unknown storage backend {backend} specified")
 
     def _matches(self, lineage: dict, desired_lineage: dict,
@@ -246,11 +249,11 @@ class StorageBackend:
     these have to be hardcoded (or made part of the key).
     """
 
-    def loader(self, backend_key, executor):
+    def loader(self, backend_key, executor=None):
         """Iterates over strax data in backend_key
         :param executor: Executor to push load/decompress operations to
         """
-        metadata = self._read_meta(backend_key)
+        metadata = self.get_metadata(backend_key)
         if not len(metadata['chunks']):
             self.log.warning(f"No actual data in {backend_key}?")
         dtype = literal_eval(metadata['dtype'])

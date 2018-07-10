@@ -51,13 +51,14 @@ class DataDirectory(StorageFrontend):
               write, ignore_versions, ignore_config):
 
         # Check exact match / write case
-        dirname = self._dirname(key)
+        dirname = osp.join(self.path, str(key))
         bk = self.backend_key(dirname)
         if osp.exists(dirname):
             if write:
                 if self._can_overwrite(key):
                     return bk
                 raise strax.DataExistsError(at=bk)
+            return bk
         if write:
             return bk
 
@@ -68,26 +69,18 @@ class DataDirectory(StorageFrontend):
         for dirname in os.listdir(self.path):
             if not osp.isdir(dirname):
                 continue
-            if not osp.exists(osp.join(dirname, 'metadata.json')):
+            _run_id, _data_type, _ = dirname.split('_')
+            if _run_id != key.run_id or _data_type != key.data_type:
                 continue
             # TODO: check for broken data
-            metadata = self.filestore.get_meta(osp.join(self.path, dirname))
+            metadata = self.backends[0].get_meta(osp.join(self.path, dirname))
             if self._matches(metadata['lineage'], key.lineage,
                              ignore_versions, ignore_config):
                 return self.backend_key(dirname)
         raise strax.DataNotAvailable
 
-    def _dirname(self, key):
-        return osp.join(self.path, str(key))
-
     def backend_key(self, dirname):
-        return self.filestore.__class__.__name__, dirname
-
-    def _start_saving(self, key):
-        dirname = self._dirname(key)
-        if osp.exists(dirname):
-            raise strax.DataExistsError(at=dirname)
-        return self.backend_key(dirname)
+        return self.backends[0].__class__.__name__, dirname
 
     def remove(self, key):
         # There is no database, so removing the folder from the filesystem
@@ -95,6 +88,7 @@ class DataDirectory(StorageFrontend):
         pass
 
 
+@export
 class FileSytemBackend(strax.StorageBackend):
     """Store data locally in a directory of binary files.
 
@@ -103,7 +97,7 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
-        with open(osp.join(dirname + 'metadata.json'), mode='r') as f:
+        with open(osp.join(dirname, 'metadata.json'), mode='r') as f:
             return json.loads(f.read())
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
@@ -119,7 +113,7 @@ class FileSytemBackend(strax.StorageBackend):
             raise strax.CannotWriteData(
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
-        return FileSaver(metadata, dirname)
+        return FileSaver(dirname, metadata=metadata, meta_only=meta_only)
 
 
 @export
