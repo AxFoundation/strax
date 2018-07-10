@@ -385,7 +385,7 @@ class Context:
                     savers[d].append(sf.saver(key,
                                               metadata=p.metadata(run_id),
                                               meta_only=p.save_meta_only))
-                except strax.DataTypeNotWanted:
+                except strax.DataNotAvailable:
                     pass
 
         for d in targets:
