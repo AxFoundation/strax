@@ -111,7 +111,7 @@ class RecordsFromPax(strax.Plugin):
         if not os.path.exists(self.config['pax_raw_dir']):
             raise FileNotFoundError(self.config['pax_raw_dir'])
         input_dir = os.path.join(self.config['pax_raw_dir'], self.run_id)
-        pax_files = sorted(glob.glob(input_dir + '/*.zip'))
+        pax_files = sorted(glob.glob(input_dir + '/XENON*.zip'))
         pax_sizes = np.array([os.path.getsize(x)
                               for x in pax_files])
         print(f"Found {len(pax_files)} files, {pax_sizes.sum() / 1e9:.2f} GB")
