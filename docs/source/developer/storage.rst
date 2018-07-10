@@ -22,7 +22,7 @@ Keys
 In strax, a piece of data is identified by a *DataKey*, consisting of three components:
   * The run id
   * The data type
-  * The complete *lineage* of the data. This includes, for the data type itself, and all types it depends on (and their dependencies, and so fort):
+  * The complete *lineage* of the data. This includes, for the data type itself, and all types it depends on (and their dependencies, and so forth):
     * The plugin class name that produced the data;
     * The version string of the plugin;
     * The values of all configuration options the plugin took (whether they were explicitly specified or left as default).

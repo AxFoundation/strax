@@ -46,16 +46,6 @@ class DataExistsError(Exception):
 
 
 @export
-class DataTypeNotWanted(Exception):
-    pass
-
-
-@export
-class CannotWriteData(Exception):
-    pass
-
-
-@export
 class RunMetadataNotAvailable(Exception):
     pass
 
@@ -101,9 +91,9 @@ class StorageFrontend:
         :param key: DataKey describing data
         :param ambiguous: Behaviour if multiple matching data entries are
         found:
-         - 'error': Raise AmbigousDataRequest exception.
-         - 'warn' (default): warn with AmbiguousDataDescription.
-         - 'ignore': do nothing. Return first match.
+        - 'error': Raise AmbigousDataRequest exception.
+        - 'warn' (default): warn with AmbiguousDataDescription.
+        - 'ignore': do nothing. Return first match.
         In the latter two cases, the first match is returned.
         :param ignore_lineage: list/tuple of plugin names for which no
         plugin name, version, or option check is performed.
