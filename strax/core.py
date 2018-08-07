@@ -500,11 +500,12 @@ class Context:
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
 
-    def is_available(self, run_id, target):
-        """Return whether data type target is available for run_id.
+    def is_stored(self, run_id, target):
+        """Return whether data type target has been saved for run_id
+        through any of the registered storage frontends.
 
-        Note that even if false is returned, the data type may still be made
-        with trivial computation.
+        Note that even if False is returned, the data type may still be made
+        with a trivial computation.
 
         TODO: behaviour on ambiguous data requests is currently undefined.
         (right now it will raise an exception, but this may change)
