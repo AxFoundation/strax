@@ -480,6 +480,10 @@ class Context:
         return pd.DataFrame.from_records(self.get_array(
             run_id, targets, save, max_workers, **kwargs))
 
+    def _key_for(self, run_id, target):
+        p = self._get_plugins((target,), run_id)[target]
+        return strax.DataKey(run_id, target, p.lineage)
+
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise NotCached
         if data is not yet available.
@@ -487,8 +491,7 @@ class Context:
         :param run_id: run id to get
         :param target: data type to get
         """
-        p = self._get_plugins((target,), run_id)[target]
-        key = strax.DataKey(run_id, target, p.lineage)
+        key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
                 return sf.get_metadata(key)   # TODO: ambiguity options
@@ -496,6 +499,24 @@ class Context:
                 print(str(e))
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
+
+    def is_available(self, run_id, target):
+        """Return whether data type target is available for run_id.
+
+        Note that even if false is returned, the data type may still be made
+        with trivial computation.
+
+        TODO: behaviour on ambiguous data requests is currently undefined.
+        (right now it will raise an exception, but this may change)
+        """
+        key = self._key_for(run_id, target)
+        for sf in self.storage:
+            try:
+                sf.find(key)   # TODO: ambiguity options
+                return True
+            except strax.DataNotAvailable:
+                continue
+        return False
 
 
 get_docs = """
