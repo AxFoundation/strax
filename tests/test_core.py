@@ -53,7 +53,10 @@ def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir),
                                 register=[Records, Peaks])
+
+        assert not mystrax.is_stored(run_id, 'peaks')
         mystrax.make(run_id=run_id, targets='peaks')
+        assert mystrax.is_stored(run_id, 'peaks')
 
         # We should have two directories
         data_dirs = sorted(glob.glob(osp.join(temp_dir, '*/')))

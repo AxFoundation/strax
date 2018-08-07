@@ -1,3 +1,8 @@
+"""Base classes for storage backends, frontends, and savers in strax.
+
+Please see the developer documentation for more details
+on strax' storage hierarchy.
+"""
 from ast import literal_eval
 from concurrent.futures import wait
 import logging
@@ -15,7 +20,15 @@ export, __all__ = strax.exporter()
 
 @export
 class DataKey(typing.NamedTuple):
-    """Request for data to a storage registry"""
+    """Request for data to a storage registry
+
+    Instances of this class uniquely identify a single piece of strax data
+    abstractly -- that is, it describes the full history of algorithms that
+    have to be run to reproduce it.
+
+    It is used for communication between the main Context class and storage
+    frontends.
+    """
     run_id: str
     data_type: str
     lineage: dict
@@ -28,11 +41,13 @@ class DataKey(typing.NamedTuple):
 
 @export
 class DataNotAvailable(Exception):
+    """Raised when requested data is not available"""
     pass
 
 
 @export
 class AmbiguousDataRequest(Exception):
+    """Raised when more than one piece of data match a users' request"""
     def __init__(self, found, message=''):
         super().__init__(message)
         self.found = found
@@ -40,6 +55,8 @@ class AmbiguousDataRequest(Exception):
 
 @export
 class DataExistsError(Exception):
+    """Raised when attempting to write a piece of data
+    that is already written"""
     def __init__(self, at, message=''):
         super().__init__(message)
         self.at = at
@@ -118,6 +135,9 @@ class StorageFrontend:
                      ambiguous='warn',
                      ignore_lineage=tuple(),
                      ignore_config=tuple()):
+        """Retrieve data-level metadata for the specified key.
+        Other parameters are the same as for .find
+        """
         backend, backend_key = self.find(key,
                                          write=False,
                                          ambiguous=ambiguous,
@@ -207,8 +227,12 @@ class StorageFrontend:
     # Abstract methods (to override in child)
     ##
 
-    def _find(self, key,
+    def _find(self, key: DataKey,
               write, ignore_versions, ignore_config):
+        """Return backend key (e.g. filename) for data identified by key,
+        raise DataNotAvailable or AmbiguousDataRequest.
+        Parameters are as for _find
+        """
         raise NotImplementedError
 
     def run_metadata(self, run_id):
