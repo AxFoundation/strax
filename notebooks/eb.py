@@ -71,12 +71,12 @@ if args.no_super_raw:
     strax.xenon.plugins.DAQReader.save_meta_only = True
 
 st = strax.Context(
-    storage=[strax.FileStore(out_dir + '/raw',
-                             take_only='raw_records'),
-             strax.FileStore(out_dir + '/reduced_raw',
-                             take_only='records'),
-             strax.FileStore(out_dir + '/temp_processed',
-                             exclude=['records', 'raw_records'])],
+    storage=[strax.DataDirectory(out_dir + '/raw',
+                                 take_only='raw_records'),
+             strax.DataDirectory(out_dir + '/reduced_raw',
+                                 take_only='records'),
+             strax.DataDirectory(out_dir + '/temp_processed',
+                                 exclude=['records', 'raw_records'])],
     config=dict(input_dir=in_dir,
                 erase=args.erase))
 if args.mongo:
@@ -130,13 +130,7 @@ print("Tarring (well, zipping, but without compression) high-level data.\n"
 start = time.time()
 
 procfile = f'{out_dir}/processed/{run_id}.zip'
-with zipfile.ZipFile(procfile, mode='w') as zp:
-    q = out_dir + '/temp_processed/'
-    for dirn in os.listdir(q):
-        for fn in os.listdir(q + dirn):
-            zp.write(os.path.join(q + dirn, fn),
-                     arcname=os.path.join(dirn, fn))
-shutil.rmtree(out_dir + '/temp_processed')
+strax.ZipDirectory.zip_dir(f'{out_dir}/temp_processed', procfile, delete=True)
 
 end = time.time()
 print(f"Done, took {end-start:.2f} seconds, "
