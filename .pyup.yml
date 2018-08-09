@@ -1,0 +1,23 @@
+# configure dependency pinning globally
+pin: True
+
+# update schedule
+schedule: "every week"
+
+# Specify requirement files by hand, default is empty
+# default: empty
+# allowed: list
+requirements:
+  - requirements.txt:
+      # update all dependencies and pin them
+      update: all
+      pin: True
+
+# add a label to pull requests, default is not set
+# requires private repo permissions, even on public repos
+# default: empty
+label_prs: pyup
+
+# assign users to pull requests, default is not set
+assignees:
+ - tunnell

@@ -20,14 +20,6 @@ strax.storage.files module
     :undoc-members:
     :show-inheritance:
 
-strax.storage.mongodb module
-----------------------------
-
-.. automodule:: strax.storage.mongodb
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 strax.storage.zipfiles module
 -----------------------------
 
