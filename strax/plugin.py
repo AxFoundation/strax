@@ -338,7 +338,7 @@ class ParallelSourcePlugin(Plugin):
         result = super().do_compute(*args, chunk_i=chunk_i, **kwargs)
         # Fortunately everybody else is in a different process...
         self._output = {}
-        self._grok(self.provides, result, chunk_i)
+        self._grok(d=self.provides, x=result, chunk_i=chunk_i)
         for d in self.outputs_to_send:
             assert d in self._output, f"Output {d} missing!"
         return self._output
@@ -347,7 +347,11 @@ class ParallelSourcePlugin(Plugin):
         """Launch any computations depending on result d:x (data type:array)"""
         for other_d, p in self.sub_plugins.items():
             if p.depends_on[0] == d:
-                self._grok(other_d, p.do_compute(x), chunk_i)
+                kind = list(p.dependencies_by_kind().keys())[0]
+                self._grok(other_d,
+                           p.do_compute(**{'chunk_i': chunk_i,
+                                           kind: x}),
+                           chunk_i=chunk_i)
 
         if d in self.sub_savers:
             for s in self.sub_savers[d]:

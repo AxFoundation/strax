@@ -12,6 +12,14 @@ strax.xenon.common module
     :undoc-members:
     :show-inheritance:
 
+strax.xenon.itp\_map module
+---------------------------
+
+.. automodule:: strax.xenon.itp_map
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 strax.xenon.pax\_interface module
 ---------------------------------
 
