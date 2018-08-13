@@ -9,7 +9,10 @@ from .dtypes import *
 from strax.processing.general import *
 from .chunk_arrays import *
 
-from .storage import *
+from .storage.common import *
+from .storage.files import *
+from .storage.zipfiles import *
+
 from .plugin import *
 from .mailbox import *
 from .processor import *
