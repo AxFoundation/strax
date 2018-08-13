@@ -28,6 +28,7 @@ def pax_to_records(input_filename,
                 s2_patterns_file=None)))
 
     results = []
+
     def finish_results():
         nonlocal results
         records = np.concatenate(results)
@@ -45,7 +46,8 @@ def pax_to_records(input_filename,
         pulse_lengths = np.array([p.length
                                   for p in event.pulses])
 
-        n_records_tot = strax.records_needed(pulse_lengths, samples_per_record).sum()
+        n_records_tot = strax.records_needed(pulse_lengths,
+                                             samples_per_record).sum()
         records = np.zeros(n_records_tot,
                            dtype=strax.record_dtype(samples_per_record))
         output_record_index = 0  # Record offset in data

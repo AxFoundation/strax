@@ -15,6 +15,9 @@ first_sr1_run = 170118_1327
 
 @export
 @strax.takes_config(
+    strax.Option('safe_break_in_pulses', default=1000,
+                 help="Time (ns) between pulse starts indicating a safe break "
+                      "in the datastream -- peaks will not span this."),
     strax.Option('input_dir', type=str, track=False,
                  help="Directory where readers put data"),
     strax.Option('erase', default=False, track=False,
@@ -59,11 +62,13 @@ class DAQReader(strax.ParallelSourcePlugin):
         records = np.concatenate(records)
         records = strax.sort_by_time(records)
         if kind == 'central':
-            return records
-        result = strax.from_break(records,
-                                  safe_break=int(1e3),  # TODO config?
-                                  left=kind == 'post',
-                                  tolerant=True)
+            result = records
+        else:
+            result = strax.from_break(
+                records,
+                safe_break=self.config['safe_break_in_pulses'],
+                left=kind == 'post',
+                tolerant=True)
         if self.config['erase']:
             shutil.rmtree(path)
         return result
@@ -630,3 +635,4 @@ class EventInfo(strax.MergeOnlyPlugin):
     depends_on = ['events',
                   'event_basics', 'event_positions', 'corrected_areas',
                   'energy_estimates']
+    save_when = strax.SaveWhen.ALWAYS
