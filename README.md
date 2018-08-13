@@ -1,6 +1,7 @@
 # strax
 Streaming analysis for xenon experiments
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1344424.svg)](https://doi.org/10.5281/zenodo.1344424)
 [![Build Status](https://travis-ci.org/AxFoundation/strax.svg?branch=master)](https://travis-ci.org/AxFoundation/strax)
 [![Readthedocs Badge](https://readthedocs.org/projects/strax/badge/?version=latest)](https://strax.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/AxFoundation/strax?branch=master)
