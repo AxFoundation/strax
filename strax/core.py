@@ -1,4 +1,3 @@
-import builtins
 import collections
 import logging
 import fnmatch
@@ -15,11 +14,17 @@ import strax
 export, __all__ = strax.exporter()
 
 
-# Placeholder value for omitted values.
-# Use instead of None since None might be a proper value/default
-OMITTED = '<OMITTED>'
-
-
+@strax.takes_config(
+    strax.Option(name='storage_converter', default=False,
+                 help='If True, save data that is loaded from one frontend '
+                      'through all willing other storage frontends.'),
+    strax.Option(name='fuzzy_for', default=tuple(),
+                 help='Tuple of plugin names for which no checks for version, '
+                      'providing plugin, and config will be performed when '
+                      'looking for data.'),
+    strax.Option(name='fuzzy_for_options', default=tuple(),
+                 help='Tuple of config options for which no checks will be '
+                      'performed when looking for data.'))
 @export
 class Context:
     """Context for strax analysis.
@@ -31,12 +36,14 @@ class Context:
     You start all strax processing through a context.
     """
     config: dict
+    context_config: dict
 
     def __init__(self,
                  storage=None,
                  config=None,
                  register=None,
-                 register_all=None):
+                 register_all=None,
+                 **kwargs):
         """Create a strax context.
 
         :param storage: Storage front-ends to use. Can be:
@@ -48,6 +55,8 @@ class Context:
         :param register: plugin class or list of plugin classes to register
         :param register_all: module for which all plugin classes defined in it
            will be registered.
+        Any additional kwargs are considered Context-specific options; see
+        Context.takes_config.
         """
         self.log = logging.getLogger('strax')
 
@@ -62,6 +71,7 @@ class Context:
         self._plugin_instance_cache = dict()
 
         self.set_config(config, mode='replace')
+        self.set_context_config(kwargs, mode='replace')
 
         if register_all is not None:
             self.register_all(register_all)
@@ -73,7 +83,8 @@ class Context:
                     config=None,
                     register=None,
                     register_all=None,
-                    replace=False):
+                    replace=False,
+                    **kwargs):
         """Return a new context with new setting adding to those in
         this context.
         :param replace: If True, replaces settings rather than adding them.
@@ -91,13 +102,19 @@ class Context:
 
         if not replace:
             storage = self.storage + list(storage)
-            config = {**self.config, **config}
+            config = strax.combine_configs(self.config,
+                                           config,
+                                           mode='update')
+            kwargs = strax.combine_configs(self.context_config,
+                                           kwargs,
+                                           mode='update')
             register = list(self._plugin_class_registry.values()) + register
 
         return Context(storage=storage,
                        config=config,
                        register=register,
-                       register_all=register_all)
+                       register_all=register_all,
+                       **kwargs)
 
     def set_config(self, config=None, mode='update'):
         """Set new configuration options
@@ -108,18 +125,38 @@ class Context:
          - setdefault: Add to current options, but do not override
          - replace: Erase config, then set only these options
         """
-        if config is None:
-            config = dict()
-        if mode == 'update':
-            self.config.update(config)
-        elif mode == 'setdefault':
-            for k in config:
-                self.config.setdefault(k, config[k])
-        elif mode == 'replace':
-            self.config = config
-        else:
-            raise RuntimeError("Expected update, setdefault or new as config"
-                               " setting mode")
+        if not hasattr(self, 'config'):
+            self.config = dict()
+        self.config = strax.combine_configs(
+            old_config=self.config,
+            new_config=config,
+            mode=mode)
+
+    def set_context_config(self, context_config=None, mode='update'):
+        """Set new context configuration options
+
+        :param context_config: dict of new context configuration options
+        :param mode: can be either
+         - update: Add to or override current options in context
+         - setdefault: Add to current options, but do not override
+         - replace: Erase config, then set only these options
+        """
+        if not hasattr(self, 'context_config'):
+            self.context_config = dict()
+
+        new_config = strax.combine_configs(
+            old_config=self.context_config,
+            new_config=context_config,
+            mode=mode)
+
+        for opt in self.takes_config.values():
+            opt.validate(new_config, set_defaults=True)
+
+        self.context_config = new_config
+
+        for k in self.context_config:
+            if k not in self.takes_config:
+                warnings.warn(f"Invalid context option {k}; will do nothing.")
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
@@ -168,7 +205,7 @@ class Context:
                     print(f"{field_name} is part of {d} "
                           f"(provided by {p.__class__.__name__})")
 
-    def search_config(self, data_type, pattern='*', run_id='9' * 20):
+    def show_config(self, data_type=None, pattern='*', run_id='9' * 20):
         """Return configuration options that affect data_type.
         :param data_type: Data type name
         :param pattern: Show only options that match (fnmatch) pattern
@@ -176,18 +213,23 @@ class Context:
         If omitted, will show defaults active for new runs.
         """
         r = []
-        for d, p in self._get_plugins((data_type,), run_id).items():
+        if data_type is None:
+            # search for context options
+            it = [['Context', self]]
+        else:
+            it = self._get_plugins((data_type,), run_id).items()
+        for d, p in it:
             for opt in p.takes_config.values():
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
                     default = opt.get_default(run_id)
                 except strax.InvalidConfiguration:
-                    default = OMITTED
+                    default = strax.OMITTED
                 r.append(dict(
                     option=opt.name,
                     default=default,
-                    current=self.config.get(opt.name, OMITTED),
+                    current=self.config.get(opt.name, strax.OMITTED),
                     data_type=d,
                     help=opt.help))
         if len(r):
@@ -323,6 +365,11 @@ class Context:
 
         return plugins
 
+    @property
+    def _fuzzy_options(self):
+        return dict(fuzzy_for=self.context_config['fuzzy_for'],
+                    fuzzy_for_options=self.context_config['fuzzy_for_options'])
+
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple()
                        ) -> strax.ProcessorComponents:
@@ -352,19 +399,19 @@ class Context:
 
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sf.loader(key)  # TODO: ambiguity options
-                    # Found it! No need to make it or save it
+                    loaders[d] = sf.loader(key, **self._fuzzy_options)
+                    # Found it! No need to make it
                     del plugins[d]
-                    return
+                    break
                 except strax.DataNotAvailable:
                     continue
+            else:
+                # Not in any cache. We will be computing it.
+                to_compute[d] = p
+                for dep_d in p.depends_on:
+                    check_cache(dep_d)
 
-            # Not in any cache. We will be computing it.
-            to_compute[d] = p
-            for dep_d in p.depends_on:
-                check_cache(dep_d)
-
-            # We're making this OR it gets fed in. Should we save it?
+            # Should we save this data?
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
@@ -381,11 +428,21 @@ class Context:
             for sf in self.storage:
                 if sf.readonly:
                     continue
+                if d not in to_compute:
+                    if not self.context_config['storage_converter']:
+                        continue
+                    try:
+                        sf.find(key, **self._fuzzy_options)
+                        # Already have this data in this backend
+                        continue
+                    except strax.DataNotAvailable:
+                        pass
                 try:
                     savers[d].append(sf.saver(key,
                                               metadata=p.metadata(run_id),
                                               meta_only=p.save_meta_only))
                 except strax.DataNotAvailable:
+                    # This frontend cannot save. Too bad.
                     pass
 
         for d in targets:
@@ -513,7 +570,7 @@ class Context:
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
-                sf.find(key)   # TODO: ambiguity options
+                sf.find(key, **self._fuzzy_options)
                 return True
             except strax.DataNotAvailable:
                 continue
@@ -537,116 +594,3 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
-
-
-##
-# Config specification. Maybe should be its own file?
-##
-
-
-@export
-class InvalidConfiguration(Exception):
-    pass
-
-
-@export
-def takes_config(*options):
-    """Decorator for plugin classes, to specify which options it takes.
-    :param options: Option instances of options this plugin takes.
-    """
-    def wrapped(plugin_class):
-        result = []
-        for opt in options:
-            if not isinstance(opt, Option):
-                raise RuntimeError("Specify config options by Option objects")
-            opt.taken_by = plugin_class.__name__
-            result.append(opt)
-
-        plugin_class.takes_config = {opt.name: opt for opt in result}
-        return plugin_class
-
-    return wrapped
-
-
-@export
-class Option:
-    """Configuration option taken by a strax plugin"""
-    taken_by: str
-
-    def __init__(self,
-                 name: str,
-                 type: type = OMITTED,
-                 default: ty.Any = OMITTED,
-                 default_factory: ty.Callable = OMITTED,
-                 default_by_run=OMITTED,
-                 track: bool = True,
-                 help: str = ''):
-        """
-        :param name: Option identifier
-        :param type: Excepted type of the option's value.
-        :param default: Default value the option takes.
-        :param default_factory: Function that produces a default value.
-        :param default_by_run: Specify that default is run-dependent. Either
-         - Callable. Will be called with run_id, must return value for run.
-         - List [(start_run_id, value), ..,] for values specified by range of
-           runs.
-        :param track: If True (default), option value becomes part of plugin
-        lineage (just like the plugin version).
-        :param help: Human-readable description of the option.
-        """
-        self.name = name
-        self.type = type
-        self.default = default
-        self.default_by_run = default_by_run
-        self.default_factory = default_factory
-        self.track = track
-        self.help = help
-
-        type = builtins.type
-        if sum([self.default is not OMITTED,
-                self.default_factory is not OMITTED,
-                self.default_by_run is not OMITTED]) > 1:
-            raise RuntimeError(f"Tried to specify more than one default "
-                               f"for option {self.name}.")
-
-        if type is OMITTED and default is not OMITTED:
-            self.type = type(default)
-
-    def get_default(self, run_id):
-        """Return default value for the option"""
-        if isinstance(run_id, str):
-            run_id = int(run_id.replace('_', ''))
-
-        if self.default is not OMITTED:
-            return self.default
-        if self.default_factory is not OMITTED:
-            return self.default_factory()
-        if self.default_by_run is not OMITTED:
-            if callable(self.default_by_run):
-                return self.default_by_run(run_id)
-            use_value = OMITTED
-            for i, (start_run, value) in enumerate(self.default_by_run):
-                if start_run > run_id:
-                    break
-                use_value = value
-            if use_value is OMITTED:
-                raise ValueError(
-                    f"Run id {run_id} is smaller than the "
-                    "lowest run id {start_run} for which the default "
-                    "of the option {self.name} is known.")
-            return use_value
-        raise InvalidConfiguration(f"Missing option {self.name} "
-                                   f"required by {self.taken_by}")
-
-    def validate(self, config, run_id, set_defaults=True):
-        """Checks if the option is in config and sets defaults if needed.
-        """
-        if self.name in config:
-            value = config[self.name]
-            if (self.type is not OMITTED
-                    and not isinstance(value, self.type)):
-                raise InvalidConfiguration(
-                    f"Invalid type for option {self.name}. "
-                    f"Excepted a {self.type}, got a {type(value)}")
-        elif set_defaults:
-            config[self.name] = self.get_default(run_id)
