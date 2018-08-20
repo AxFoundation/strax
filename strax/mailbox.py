@@ -7,8 +7,8 @@ import logging
 from strax.utils import exporter
 export, __all__ = exporter()
 
-MAILBOX_TIMEOUT = 120 # seconds
-MAILBOX_MAX_MESSAGES = 60 # messages
+MAILBOX_TIMEOUT = 120   # seconds
+MAILBOX_MAX_MESSAGES = 60   # messages
 
 
 @export
