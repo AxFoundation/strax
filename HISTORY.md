@@ -1,6 +1,12 @@
 
-0.2.0
-------
+0.3.0 / 2018-08-13
+------------------
+- Storage frontend/backend split, several fixes (#46)
+- XENON: pax conversion fix (#47)
+- Globally configurable mailbox settings (#55, #57)
+
+0.2.0 / 2018-07-03
+------------------
 - Start documentation
 - `ParallelSourcePlugin` to better distribute low-level processing over multiple cores
 - `OverlapWindowPlugin` to simplify algorithms that look back and ahead in the data
