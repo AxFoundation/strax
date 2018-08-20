@@ -391,4 +391,4 @@ class Saver:
         raise NotImplementedError
 
     def _close(self):
-        raise NotImplementedError
+        pass
