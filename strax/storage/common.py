@@ -3,18 +3,19 @@
 Please see the developer documentation for more details
 on strax' storage hierarchy.
 """
-from ast import literal_eval
-from concurrent.futures import wait
 import logging
-import warnings
 import sys
 import time
 import traceback
 import typing
+import warnings
+from ast import literal_eval
+from concurrent.futures import wait
 
 import numpy as np
 
 import strax
+
 export, __all__ = strax.exporter()
 
 
@@ -102,7 +103,8 @@ class StorageFrontend:
         self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, key: DataKey, ambiguous='warn',
-               ignore_lineage=tuple(), ignore_config=tuple(),
+               fuzzy_for=tuple(),
+               fuzzy_for_options=tuple(),
                executor=None):
         """Return loader for data described by DataKey.
         :param key: DataKey describing data
@@ -112,17 +114,17 @@ class StorageFrontend:
         - 'warn' (default): warn with AmbiguousDataDescription.
         - 'ignore': do nothing. Return first match.
         In the latter two cases, the first match is returned.
-        :param ignore_lineage: list/tuple of plugin names for which no
+        :param fuzzy_for: list/tuple of plugin names for which no
         plugin name, version, or option check is performed.
-        :param ignore_config: list/tuple of configuration options for which no
-        check is performed.
+        :param fuzzy_for_options: list/tuple of configuration options for which
+        no check is performed.
         :param executor: Executor for pushing load computation to
         """
         backend, backend_key = self.find(key,
                                          ambiguous=ambiguous,
                                          write=False,
-                                         ignore_lineage=ignore_lineage,
-                                         ignore_config=ignore_config)
+                                         fuzzy_for=fuzzy_for,
+                                         fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).loader(backend_key, executor)
 
     def saver(self, key, metadata, meta_only):
@@ -133,21 +135,21 @@ class StorageFrontend:
 
     def get_metadata(self, key,
                      ambiguous='warn',
-                     ignore_lineage=tuple(),
-                     ignore_config=tuple()):
+                     fuzzy_for=tuple(),
+                     fuzzy_for_options=tuple()):
         """Retrieve data-level metadata for the specified key.
         Other parameters are the same as for .find
         """
         backend, backend_key = self.find(key,
                                          write=False,
                                          ambiguous=ambiguous,
-                                         ignore_lineage=ignore_lineage,
-                                         ignore_config=ignore_config)
+                                         fuzzy_for=fuzzy_for,
+                                         fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).get_metadata(backend_key)
 
     def find(self, key: DataKey,
              write=False, ambiguous='warn',
-             ignore_lineage=tuple(), ignore_config=tuple()):
+             fuzzy_for=tuple(), fuzzy_for_options=tuple()):
         """Return (str: backend class name, backend-specific) key
         to get at / write data, or raise exception.
         :param key: DataKey of data to load
@@ -158,22 +160,35 @@ class StorageFrontend:
         if ambiguous not in 'error warn ignore'.split():
             raise RuntimeError(f"Invalid 'ambiguous' setting {ambiguous}. ")
 
+        message = (
+            f"\nRequested lineage: {key.lineage}."
+            f"\nIgnoring plugin lineage for: {fuzzy_for}."
+            f"\nIgnoring config options: {fuzzy_for}.")
+
         # Easy failures
         if (key.data_type in self.exclude
                 or self.take_only and key.data_type not in self.take_only):
             raise DataNotAvailable(
                 f"{self} does not accept or provide data type {key.data_type}")
-        if write and self.readonly:
-            raise DataNotAvailable("f{self} cannot write any-data, "
-                                   "it's readonly")
+        if write:
+            if self.readonly:
+                raise DataNotAvailable("f{self} cannot write any-data, "
+                                       "it's readonly")
+            try:
+                at = self.find(key, write=False,
+                               ambiguous=ambiguous,
+                               fuzzy_for=fuzzy_for,
+                               fuzzy_for_options=fuzzy_for_options)
+                raise DataExistsError(
+                    at=at,
+                    message=(f"Data already exists at {at}.\n"
+                             + message))
+            except DataNotAvailable:
+                pass
 
-        message = (
-            f"\nRequested lineage: {key.lineage}."
-            f"\nIgnoring versions for: {ignore_lineage}."
-            f"\nIgnoring config options for: {ignore_lineage}.")
         try:
             return self._find(key, write,
-                              ignore_lineage, ignore_config)
+                              fuzzy_for, fuzzy_for_options)
         except DataNotAvailable:
             raise DataNotAvailable(
                 f"{key.data_type} for {key.run_id} not available." + message)
@@ -193,26 +208,26 @@ class StorageFrontend:
         raise KeyError(f"Unknown storage backend {backend} specified")
 
     def _matches(self, lineage: dict, desired_lineage: dict,
-                 ignore_lineage: tuple, ignore_config: tuple):
+                 fuzzy_for: tuple, fuzzy_for_options: tuple):
         """Return if lineage matches desired_lineage given ignore options
         """
-        if not (ignore_lineage or ignore_config):
+        if not (fuzzy_for or fuzzy_for_options):
             return lineage == desired_lineage
-        args = [ignore_lineage, ignore_config]
+        args = [fuzzy_for, fuzzy_for_options]
         return (
             self._filter_lineage(lineage, *args)
             == self._filter_lineage(desired_lineage, *args))
 
     @staticmethod
-    def _filter_lineage(lineage, ignore_lineage, ignore_config):
+    def _filter_lineage(lineage, fuzzy_for, fuzzy_for_options):
         """Return lineage without parts to be ignored in matching"""
         return {data_type: (v[0],
                             v[1],
                             {option_name: b
                              for option_name, b in v[2].items()
-                             if option_name not in ignore_config})
+                             if option_name not in fuzzy_for_options})
                 for data_type, v in lineage.items()
-                if data_type not in ignore_lineage}
+                if data_type not in fuzzy_for}
 
     def _can_overwrite(self, key):
         if self.overwrite == 'always':
@@ -228,11 +243,13 @@ class StorageFrontend:
     ##
 
     def _find(self, key: DataKey,
-              write, ignore_versions, ignore_config):
-        """Return backend key (e.g. filename) for data identified by key,
-        raise DataNotAvailable or AmbiguousDataRequest.
-        Parameters are as for _find
+              write, fuzzy_for, fuzzy_for_options):
+        """Return backend key (e.g. for filename) for data identified by key,
+        raise DataNotAvailable, AmbiguousDataRequest, or DataExistsError
+        Parameters are as for find.
         """
+        # Use the self._matches attribute to compare lineages according to
+        # the fuzzy options
         raise NotImplementedError
 
     def run_metadata(self, run_id):

@@ -6,6 +6,7 @@ import os
 import os.path as osp
 import glob
 
+import pytest
 import numpy as np
 import strax
 
@@ -25,6 +26,9 @@ class Records(strax.Plugin):
             yield r
 
 
+@strax.takes_config(
+    strax.Option('some_option', default=0)
+)
 class Peaks(strax.Plugin):
     provides = 'peaks'
     depends_on = ('records',)
@@ -38,7 +42,7 @@ class Peaks(strax.Plugin):
 
 recs_per_chunk = 10
 n_chunks = 10
-run_id = 'some_run'
+run_id = '0'
 
 
 def test_core():
@@ -67,7 +71,7 @@ def test_filestore():
         assert os.listdir(data_dirs[0]) == ['000000', 'metadata.json']
 
         # Check metadata got written correctly.
-        metadata = mystrax.get_meta('some_run', 'peaks')
+        metadata = mystrax.get_meta(run_id, 'peaks')
         assert len(metadata)
         assert 'writing_ended' in metadata
         assert 'exception' not in metadata
@@ -91,3 +95,53 @@ def test_filestore():
                                 register=[Records, Peaks])
         metadata_2 = mystrax.get_meta(run_id, 'peaks')
         assert metadata == metadata_2
+
+
+def test_fuzzy_matching():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+
+        st.make(run_id=run_id, targets='peaks')
+
+        # Changing option causes data not to match
+        st.set_config(dict(some_option=1))
+        assert not st.is_stored(run_id, 'peaks')
+
+        # In fuzzy context, data does match
+        st2 = st.new_context(fuzzy_for=('peaks',))
+        assert st2.is_stored(run_id, 'peaks')
+
+        st2 = st.new_context(fuzzy_for_options=('some_option',))
+        assert st2.is_stored(run_id, 'peaks')
+
+        # Can also set fuzzy options in current context
+        st.set_context_config(dict(fuzzy_for=('peaks',)))
+        assert st.is_stored(run_id, 'peaks')
+
+
+def test_storage_converter():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+        st.make(run_id=run_id, targets='peaks')
+
+        with tempfile.TemporaryDirectory() as temp_dir_2:
+            st = strax.Context(
+                storage=[strax.DataDirectory(temp_dir, readonly=True),
+                         strax.DataDirectory(temp_dir_2)],
+                register=[Records, Peaks],
+                storage_converter=True)
+            store_1, store_2 = st.storage
+
+            # Data is now in store 1, but not store 2
+            key = st._key_for(run_id, 'peaks')
+            store_1.find(key)
+            with pytest.raises(strax.DataNotAvailable):
+                store_2.find(key)
+
+            st.make(run_id, 'peaks')
+
+            # Data is now in both stores
+            store_1.find(key)
+            store_2.find(key)

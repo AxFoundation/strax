@@ -30,7 +30,8 @@ setuptools.setup(name='strax',
                               'recommonmark'],
                      'xenon': ['keras'
                                'tensorflow',
-                               'scipy']
+                               'scipy',
+                               's3']
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),
