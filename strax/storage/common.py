@@ -3,18 +3,19 @@
 Please see the developer documentation for more details
 on strax' storage hierarchy.
 """
-from ast import literal_eval
-from concurrent.futures import wait
 import logging
-import warnings
 import sys
 import time
 import traceback
 import typing
+import warnings
+from ast import literal_eval
+from concurrent.futures import wait
 
 import numpy as np
 
 import strax
+
 export, __all__ = strax.exporter()
 
 
