@@ -124,23 +124,23 @@ class S3Backend(strax.StorageBackend):
                                      service_name='s3')
         self.kwargs = kwargs
 
-    def get_metadata(self, dirname):
-        result = self.s3client.get_object(Bucket=dirname,
+    def get_metadata(self, backend_key):
+        result = self.s3client.get_object(Bucket=backend_key,
                                           Key='metadata.json')
 
         text = result["Body"].read().decode()
         return json.loads(text)
 
-    def _read_chunk(self, dirname, chunk_info, dtype, compressor):
+    def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         with tempfile.SpooledTemporaryFile() as f:
-            self.s3client.download_fileobj(Bucket=dirname,
+            self.s3client.download_fileobj(Bucket=backend_key,
                                            Key=chunk_info['filename'],
                                            Fileobj=f)
             f.seek(0)  # Needed?
             return strax.load_file(f, dtype=dtype, compressor=compressor)
 
-    def _saver(self, dirname, metadata, meta_only=False):
-        return S3Saver(dirname, metadata=metadata, meta_only=meta_only,
+    def _saver(self, key, metadata, meta_only=False):
+        return S3Saver(key, metadata=metadata, meta_only=meta_only,
                        **self.kwargs)
 
 
