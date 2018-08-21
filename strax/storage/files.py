@@ -1,7 +1,7 @@
 import glob
+import json
 import os
 import os.path as osp
-import json
 import shutil
 
 import strax
@@ -10,7 +10,7 @@ from .common import StorageFrontend
 export, __all__ = strax.exporter()
 
 
-run_metadata_filename = 'run_%s_metadata.json'
+RUN_METADATA_FILENAME = 'run_%s_metadata.json'
 
 
 @export
@@ -32,7 +32,7 @@ class DataDirectory(StorageFrontend):
             os.makedirs(path)
 
     def _run_meta_path(self, run_id):
-        return osp.join(self.path, run_metadata_filename % run_id)
+        return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
 
     def run_metadata(self, run_id):
         path = self._run_meta_path(run_id)
