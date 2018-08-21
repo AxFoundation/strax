@@ -13,10 +13,11 @@ from .storage.common import *
 from .storage.files import *
 from .storage.zipfiles import *
 
+from .config import *
 from .plugin import *
 from .mailbox import *
 from .processor import *
-from .core import *
+from .context import *
 
 from .io import *
 
