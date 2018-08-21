@@ -1,7 +1,7 @@
 import glob
+import json
 import os
 import os.path as osp
-import json
 import shutil
 
 import strax
@@ -10,7 +10,7 @@ from .common import StorageFrontend
 export, __all__ = strax.exporter()
 
 
-run_metadata_filename = 'run_%s_metadata.json'
+RUN_METADATA_FILENAME = 'run_%s_metadata.json'
 
 
 @export
@@ -32,7 +32,7 @@ class DataDirectory(StorageFrontend):
             os.makedirs(path)
 
     def _run_meta_path(self, run_id):
-        return osp.join(self.path, run_metadata_filename % run_id)
+        return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
 
     def run_metadata(self, run_id):
         path = self._run_meta_path(run_id)
@@ -48,7 +48,7 @@ class DataDirectory(StorageFrontend):
             f.write(json.dumps(metadata))
 
     def _find(self, key,
-              write, ignore_versions, ignore_config):
+              write, fuzzy_for, fuzzy_for_options):
 
         # Check exact match / write case
         dirname = osp.join(self.path, str(key))
@@ -62,21 +62,24 @@ class DataDirectory(StorageFrontend):
         if write:
             return bk
 
-        if not ignore_versions and not ignore_config:
+        if not fuzzy_for and not fuzzy_for_options:
             raise strax.DataNotAvailable
 
         # Check metadata of all potentially matching data dirs for match...
         for dirname in os.listdir(self.path):
-            if not osp.isdir(dirname):
+            fn = osp.join(self.path, dirname)
+            if not osp.isdir(fn):
                 continue
+            print(dirname)
             _run_id, _data_type, _ = dirname.split('_')
             if _run_id != key.run_id or _data_type != key.data_type:
                 continue
             # TODO: check for broken data
-            metadata = self.backends[0].get_meta(osp.join(self.path, dirname))
+            metadata = self.backends[0].get_metadata(fn)
             if self._matches(metadata['lineage'], key.lineage,
-                             ignore_versions, ignore_config):
+                             fuzzy_for, fuzzy_for_options):
                 return self.backend_key(dirname)
+
         raise strax.DataNotAvailable
 
     def backend_key(self, dirname):
