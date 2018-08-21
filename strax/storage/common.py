@@ -279,6 +279,9 @@ class StorageBackend:
     piece of data. So don't make __init__ take options like 'path' or 'host',
     these have to be hardcoded (or made part of the key).
     """
+    
+    def __init__(self):
+        self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, backend_key, executor=None):
         """Iterates over strax data in backend_key
