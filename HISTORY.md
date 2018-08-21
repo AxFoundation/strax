@@ -1,4 +1,10 @@
 
+0.4.0 / 2018-08-XX
+------------------
+- S3-protocol I/O (#68)
+- Fix bug with PyPI lacking MANIFEST (e9771db79bd0c6a148afe1fa8c2ed3d13495da88)
+- Zenodo badge (#58)
+
 0.3.0 / 2018-08-13
 ------------------
 - Storage frontend/backend split, several fixes (#46)

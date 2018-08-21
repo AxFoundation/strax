@@ -73,20 +73,26 @@ class SimpleS3Store(StorageFrontend):
                                    aws_secret_access_key=aws_secret_access_key,
                                    endpoint_url=endpoint_url)]
 
-    def _find(self, key, write, ignore_versions, ignore_config):
+    def _find(self, key, write, fuzzy_for, fuzzy_for_options):
         """Determine if data exists
 
         Search the S3 store to see if data is there.
         """
+        # Don't support fuzzy matching since hard without RunDB
+        if fuzzy_for or fuzzy_for_options:
+            raise NotImplementedError("Can't do fuzzy with S3")
+
         # Check exact match / write case
         key_str = str(key)
         bk = self.backend_key(key_str)
 
+        # Get list of all buckets / (run_id, lineage)
         objects_list = self.s3client.list_buckets()
+
+        # If no buckets exist...
         if 'Buckets' not in objects_list:
             # No objects yet... so no metadata
             if write:
-                # If write, it can be that no metadata exists
                 return bk
             else:
                 # If reading and no objects, then problem
@@ -100,6 +106,9 @@ class SimpleS3Store(StorageFrontend):
                         return bk
                     raise strax.DataExistsError(at=bk)
                 return bk
+
+        if write:
+            return bk
         raise strax.DataNotAvailable
 
     def backend_key(self, key_str):
