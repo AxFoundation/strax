@@ -1,7 +1,7 @@
 """I/O that speaks the S3 protocol
 
 The S3 protocol is an HTTP-based protocol spoken by Amazon Web Services, but
-also storage systems such as CEPH (used in particle physics).  Therefore,
+also storage systems such as Ceph (used in particle physics).  Therefore,
 this can be widely used if you know the appropriate endpoint.
 
 Be aware that you must specify the following two environmental variables or
@@ -22,6 +22,10 @@ import strax
 from strax import StorageFrontend
 
 export, __all__ = strax.exporter()
+
+# Track versions of S3 interface
+VERSION = 1
+BUCKET_NAME = 'strax_s3_v%d' % VERSION
 
 
 @export
@@ -63,10 +67,21 @@ class SimpleS3Store(StorageFrontend):
             aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
 
         #  Initialized connection to S3-protocol storage
-        self.s3client = boto3.client(aws_access_key_id=aws_access_key_id,
-                                     aws_secret_access_key=aws_secret_access_key,
-                                     endpoint_url=endpoint_url,
-                                     service_name='s3')
+        self.s3 = boto3.client(aws_access_key_id=aws_access_key_id,
+                               aws_secret_access_key=aws_secret_access_key,
+                               endpoint_url=endpoint_url,
+                               service_name='s3')
+
+        # List of all buckets on this S3 store (finally, a bucket list!)
+        # then determine if either no buckets exist or (if they exist)
+        # whether or not the bucket we need exists.  If not, create.
+        # bucket_list = self.s3.list_buckets()
+        # if 'Buckets' not in bucket_list:
+        #    bucket_list['Buckets'] = []
+        # bucket_names = [x['Name'] for x in bucket_list['Buckets']]
+        # if self.bucket_name not in bucket_names:
+        #    self.s3.create_bucket(Bucket=self.bucket_name)
+        self.s3.create_bucket(Bucket=BUCKET_NAME)
 
         # Setup backends for reading
         self.backends = [S3Backend(aws_access_key_id=aws_access_key_id,
@@ -78,7 +93,6 @@ class SimpleS3Store(StorageFrontend):
 
         Search the S3 store to see if data is there.
         """
-        # Don't support fuzzy matching since hard without RunDB
         if fuzzy_for or fuzzy_for_options:
             raise NotImplementedError("Can't do fuzzy with S3")
 
@@ -86,36 +100,26 @@ class SimpleS3Store(StorageFrontend):
         key_str = str(key)
         bk = self.backend_key(key_str)
 
-        # Get list of all buckets / (run_id, lineage)
-        objects_list = self.s3client.list_buckets()
-
-        # If no buckets exist...
-        if 'Buckets' not in objects_list:
-            # No objects yet... so no metadata
+        # See if any objects exist for this key
+        objects_list = self.s3.list_objects(Bucket=BUCKET_NAME,
+                                            Prefix=key_str)
+        if 'Contents' in objects_list:
+            if write and not self._can_overwrite(key):
+                raise strax.DataExistsError(at=bk)
+            return bk
+        else:
+            # No objects yet...
             if write:
                 return bk
             else:
                 # If reading and no objects, then problem
                 raise strax.DataNotAvailable
 
-        # Loop over all buckets to look for our data
-        for key in objects_list['Buckets']:
-            if key['Name'] == key_str:
-                if write:
-                    if self._can_overwrite(key):
-                        return bk
-                    raise strax.DataExistsError(at=bk)
-                return bk
-
-        if write:
-            return bk
-        raise strax.DataNotAvailable
-
     def backend_key(self, key_str):
         return self.backends[0].__class__.__name__, key_str
 
     def remove(self, key):
-        pass
+        raise NotImplementedError()
 
 
 @export
@@ -129,27 +133,34 @@ class S3Backend(strax.StorageBackend):
         super().__init__()
 
         #  Initialized connection to S3-protocol storage
-        self.s3client = boto3.client(**kwargs,
-                                     service_name='s3')
-        self.kwargs = kwargs
+        self.s3 = boto3.client(**kwargs,
+                               service_name='s3')
+        self.kwargs = kwargs  # Used later for setting up Saver
 
-    def get_metadata(self, backend_key):
-        result = self.s3client.get_object(Bucket=backend_key,
-                                          Key='metadata.json')
-
+    def get_metadata(self, strax_unique_key):
+        # Grab metadata object from S3 bucket
+        result = self.s3.get_object(Bucket=BUCKET_NAME,
+                                    Key=f'{strax_unique_key}/metadata.json')
+        # Then read/parse it into ASCII
         text = result["Body"].read().decode()
+
+        # Before returning dictionary
         return json.loads(text)
 
-    def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
+    def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         with tempfile.SpooledTemporaryFile() as f:
-            self.s3client.download_fileobj(Bucket=backend_key,
-                                           Key=chunk_info['filename'],
-                                           Fileobj=f)
+            self.s3.download_fileobj(Bucket=BUCKET_NAME,
+                                     Key=chunk_info['key_name'],
+                                     Fileobj=f)
             f.seek(0)  # Needed?
-            return strax.load_file(f, dtype=dtype, compressor=compressor)
+            return strax.load_file(f,
+                                   dtype=dtype,
+                                   compressor=compressor)
 
-    def _saver(self, key, metadata, meta_only=False):
-        return S3Saver(key, metadata=metadata, meta_only=meta_only,
+    def _saver(self, dirname, metadata, meta_only=False):
+        return S3Saver(dirname,
+                       metadata=metadata,
+                       meta_only=meta_only,
                        **self.kwargs)
 
 
@@ -162,56 +173,65 @@ class S3Saver(strax.Saver):
     def __init__(self, key, metadata, meta_only,
                  **kwargs):
         super().__init__(metadata, meta_only)
-        self.s3client = boto3.client(**kwargs,
-                                     service_name='s3')
+        self.s3 = boto3.client(**kwargs,
+                               service_name='s3')
 
         # Unique key specifying processing of a run
-        self.key = key
-
-        self.s3client.create_bucket(Bucket=self.key)  # Does nothing if exists
+        self.strax_unique_key = key
 
     def _save_chunk(self, data, chunk_info):
-        filename = '%06d' % chunk_info['chunk_i']
+        # Keyname
+        key_name = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
 
+        # Save chunk via temporary file
         with tempfile.SpooledTemporaryFile() as f:
             filesize = strax.save_file(f,
                                        data=data,
                                        compressor=self.md['compressor'])
             f.seek(0)
-            self.s3client.upload_fileobj(f, self.key, filename)
+            self.s3.upload_fileobj(f,
+                                   BUCKET_NAME,
+                                   key_name)
 
-        return dict(filename=filename, filesize=filesize)
+        return dict(key_name=key_name,
+                    filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):
         if self.meta_only:
             # TODO HACK!
-            chunk_info["filename"] = '%06d' % chunk_info['chunk_i']
+            chunk_info["key_name"] = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
 
-        with tempfile.SpooledTemporaryFile() as f:
-            f.write(json.dumps(chunk_info, **self.json_options).encode())
-            f.seek(0)
-            self.s3client.upload_fileobj(f, self.key, f'metadata_{chunk_info["filename"]}.json')
+        self._upload_json(chunk_info,
+                          f"{self.strax_unique_key}/metadata_{chunk_info['chunk_i']:06d}.json")
 
     def _close(self):
         # Collect all the chunk metadata
-        objects_list = self.s3client.list_objects(Bucket=self.key)
+        prefix = f'{self.strax_unique_key}/metadata_'
+        objects_list = self.s3.list_objects(Bucket=BUCKET_NAME,
+                                            Prefix=prefix)
         if 'Contents' in objects_list:
             for file in objects_list['Contents']:
-                if not file['Key'].startswith('metadata_'):
-                    continue
-
-                result = self.s3client.get_object(Bucket=self.key,
-                                                  Key=file['Key'])
-
+                # Grab chunk metadata as ASCIII
+                result = self.s3.get_object(Bucket=BUCKET_NAME,
+                                            Key=file['Key'])
                 text = result["Body"].read().decode()
 
+                # Save dictionary with central metadata
                 self.md['chunks'].append(json.loads(text))
 
-                self.s3client.delete_object(Bucket=self.key,
-                                            Key=file['Key'])
+                # Delete chunk metadata
+                self.s3.delete_object(Bucket=BUCKET_NAME,
+                                      Key=file['Key'])
 
         # And make one run-wide metadata
+        self._upload_json(self.md,
+                          f'{self.strax_unique_key}/metadata.json')
+
+    def _upload_json(self, document, filename):
         with tempfile.SpooledTemporaryFile() as f:
-            f.write(json.dumps(self.md, **self.json_options).encode())
+            text = json.dumps(document, **self.json_options)
+            f.write(text.encode())
             f.seek(0)
-            self.s3client.upload_fileobj(f, self.key, f'metadata.json')
+            self.s3.upload_fileobj(f,
+                                   BUCKET_NAME,
+                                   filename)
