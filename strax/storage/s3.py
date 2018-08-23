@@ -150,7 +150,7 @@ class S3Backend(strax.StorageBackend):
                                    compressor=compressor)
 
     def _saver(self, key, metadata, meta_only=False):
-        return S3Saver(dirname,
+        return S3Saver(key,
                        metadata=metadata,
                        meta_only=meta_only,
                        **self.kwargs)
