@@ -72,15 +72,7 @@ class SimpleS3Store(StorageFrontend):
                                endpoint_url=endpoint_url,
                                service_name='s3')
 
-        # List of all buckets on this S3 store (finally, a bucket list!)
-        # then determine if either no buckets exist or (if they exist)
-        # whether or not the bucket we need exists.  If not, create.
-        # bucket_list = self.s3.list_buckets()
-        # if 'Buckets' not in bucket_list:
-        #    bucket_list['Buckets'] = []
-        # bucket_names = [x['Name'] for x in bucket_list['Buckets']]
-        # if self.bucket_name not in bucket_names:
-        #    self.s3.create_bucket(Bucket=self.bucket_name)
+        # Create bucket (does nothing if exists)
         self.s3.create_bucket(Bucket=BUCKET_NAME)
 
         # Setup backends for reading
