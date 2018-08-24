@@ -140,6 +140,10 @@ class S3Backend(strax.StorageBackend):
         return json.loads(text)
 
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
+        # Temporary hack for backward compatibility
+        if 'filename' in chunk_info:
+            chunk_info['key_name'] = f"{backend_key}/{chunk_info['filename']}"
+
         with tempfile.SpooledTemporaryFile() as f:
             self.s3.download_fileobj(Bucket=BUCKET_NAME,
                                      Key=chunk_info['key_name'],
