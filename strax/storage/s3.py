@@ -129,10 +129,10 @@ class S3Backend(strax.StorageBackend):
                                service_name='s3')
         self.kwargs = kwargs  # Used later for setting up Saver
 
-    def get_metadata(self, key):
+    def get_metadata(self, backend_key):
         # Grab metadata object from S3 bucket
         result = self.s3.get_object(Bucket=BUCKET_NAME,
-                                    Key=f'{key}/metadata.json')
+                                    Key=f'{backend_key}/metadata.json')
         # Then read/parse it into ASCII
         text = result["Body"].read().decode()
 
@@ -140,6 +140,10 @@ class S3Backend(strax.StorageBackend):
         return json.loads(text)
 
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
+        # Temporary hack for backward compatibility
+        if 'filename' in chunk_info:
+            chunk_info['key_name'] = f"{backend_key}/{chunk_info['filename']}"
+
         with tempfile.SpooledTemporaryFile() as f:
             self.s3.download_fileobj(Bucket=BUCKET_NAME,
                                      Key=chunk_info['key_name'],
