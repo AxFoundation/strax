@@ -7,8 +7,8 @@ this can be widely used if you know the appropriate endpoint.
 Be aware that you must specify the following two environmental variables or
 pass the appropriate valeus to the constructor:
 
-  *  AWS_ACCESS_KEY_ID
-  *  AWS_SECRET_ACCESS_KEY
+  *  S3_ACCESS_KEY_ID
+  *  S3_SECRET_ACCESS_KEY
 
 """
 
@@ -40,15 +40,15 @@ class SimpleS3Store(StorageFrontend):
     """
 
     def __init__(self,
-                 aws_access_key_id=None,
-                 aws_secret_access_key=None,
+                 s3_access_key_id=None,
+                 s3_secret_access_key=None,
                  endpoint_url='http://ceph-s3.mwt2.org',
                  *args, **kwargs):
         """
         You must provide credentials to access your storage element.
 
-        :param aws_access_key_id: access key for S3-readable storage.
-        :param aws_secret_access_key: secret key for S3-readable storage.
+        :param s3_access_key_id: access key for S3-readable storage.
+        :param s3_secret_access_key: secret key for S3-readable storage.
         :param endpoint_url: URL of S3-readable storage.
 
         For other arguments, see DataRegistry base class.
@@ -57,18 +57,18 @@ class SimpleS3Store(StorageFrontend):
         super().__init__(*args, **kwargs)
 
         # Get S3 protocol credentials
-        if aws_access_key_id is None:
-            if 'AWS_ACCESS_KEY_ID' not in os.environ:
+        if s3_access_key_id is None:
+            if 'S3_ACCESS_KEY_ID' not in os.environ:
                 raise EnvironmentError("S3 access key not specified")
-            aws_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID')
-        if aws_secret_access_key is None:
-            if 'AWS_SECRET_ACCESS_KEY' not in os.environ:
+            s3_access_key_id = os.environ.get('S3_ACCESS_KEY_ID')
+        if s3_secret_access_key is None:
+            if 'S3_SECRET_ACCESS_KEY' not in os.environ:
                 raise EnvironmentError("S3 secret key not specified")
-            aws_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+            s3_secret_access_key = os.environ.get('S3_SECRET_ACCESS_KEY')
 
         #  Initialized connection to S3-protocol storage
-        self.s3 = boto3.client(aws_access_key_id=aws_access_key_id,
-                               aws_secret_access_key=aws_secret_access_key,
+        self.s3 = boto3.client(aws_access_key_id=s3_access_key_id,
+                               aws_secret_access_key=s3_secret_access_key,
                                endpoint_url=endpoint_url,
                                service_name='s3')
 
@@ -76,8 +76,8 @@ class SimpleS3Store(StorageFrontend):
         self.s3.create_bucket(Bucket=BUCKET_NAME)
 
         # Setup backends for reading
-        self.backends = [S3Backend(aws_access_key_id=aws_access_key_id,
-                                   aws_secret_access_key=aws_secret_access_key,
+        self.backends = [S3Backend(aws_access_key_id=s3_access_key_id,
+                                   aws_secret_access_key=s3_secret_access_key,
                                    endpoint_url=endpoint_url)]
 
     def _find(self, key, write, fuzzy_for, fuzzy_for_options):
