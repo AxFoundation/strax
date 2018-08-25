@@ -31,7 +31,7 @@ setuptools.setup(name='strax',
                      'xenon': ['keras',
                                'tensorflow',
                                'scipy',
-                               's3']
+                               'boto3']
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),
