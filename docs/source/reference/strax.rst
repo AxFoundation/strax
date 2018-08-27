@@ -21,10 +21,18 @@ strax.chunk\_arrays module
     :undoc-members:
     :show-inheritance:
 
-strax.core module
------------------
+strax.config module
+-------------------
 
-.. automodule:: strax.core
+.. automodule:: strax.config
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+strax.context module
+--------------------
+
+.. automodule:: strax.context
     :members:
     :undoc-members:
     :show-inheritance:
