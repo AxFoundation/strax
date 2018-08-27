@@ -23,6 +23,7 @@ setuptools.setup(name='strax',
                                            'boltons',
                                            'hypothesis'],
                  long_description=readme + '\n\n' + history,
+                 python_requires=">=3.6",
                  extras_require={
                      'docs': ['sphinx',
                               'sphinx_rtd_theme',
