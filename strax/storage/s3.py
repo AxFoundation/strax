@@ -24,7 +24,7 @@ from strax import StorageFrontend
 export, __all__ = strax.exporter()
 
 # Track versions of S3 interface
-VERSION = 1
+VERSION = 2
 BUCKET_NAME = 'strax_s3_v%d' % VERSION
 
 
