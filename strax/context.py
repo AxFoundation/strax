@@ -371,7 +371,8 @@ class Context:
                     fuzzy_for_options=self.context_config['fuzzy_for_options'])
 
     def get_components(self, run_id: str,
-                       targets=tuple(), save=tuple()
+                       targets=tuple(), save=tuple(),
+                       time_range=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -380,6 +381,45 @@ class Context:
         targets = strax.to_str_tuple(targets)
 
         plugins = self._get_plugins(targets, run_id)
+
+        n_range = None
+        if time_range is not None:
+            # Ensure we have one data kind
+            _kinds = set([plugins[t].data_kind for t in targets])
+            if len(_kinds) > 1:
+                raise NotImplementedError(
+                    "Time range selection not implemented "
+                    "for multiple data kinds.")
+            kind = list(_kinds)[0]
+
+            # Which plugin provides time information? We need it to map to
+            # row indices.
+            for p in targets:
+                if 'time' in plugins[p].dtype.names:
+                    break
+            else:
+                # Find any other plugin with the same data type and time
+                # information. TODO: maybe it's not the best one...
+                for p in plugins.values():
+                    if p.data_kind == kind and 'time' in p.dtype.names:
+                        break
+                else:
+                    raise ValueError(f"No time info found for {kind}, "
+                                     f"cannot select time range?")
+
+            # Find a range of row numbers that contains the time range
+            # It's a bit too large: to
+            # Get the n <-> time mapping in needed chunks
+            if not self.is_stored(run_id, p):
+                raise strax.DataNotAvailable(f"Time range selection needs time"
+                                             f" info from {p}, but this data"
+                                             f" is not yet available")
+            meta = self.get_meta(run_id, p)
+            times = np.array([c['first_time'] for c in meta['chunks']])
+            n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
+            n_start = n_end - n_end[0]
+            _inds = np.searchsorted(times, time_range) - 1
+            n_range = n_start[_inds[0]], n_end[_inds[1]]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation.(their instances will stick around
@@ -399,25 +439,35 @@ class Context:
 
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sf.loader(key, **self._fuzzy_options)
+                    loaders[d] = sf.loader(
+                        key,
+                        n_range=n_range,
+                        **self._fuzzy_options)
                     # Found it! No need to make it
                     del plugins[d]
                     break
                 except strax.DataNotAvailable:
                     continue
             else:
+                if time_range is not None:
+                    raise strax.DataNotAvailable(
+                        f"Time range selection assumes data is already "
+                        f"available, but {d} for {run_id} is not.")
                 # Not in any cache. We will be computing it.
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
 
             # Should we save this data?
-            if p.save_when == strax.SaveWhen.NEVER:
+            if time_range is not None:
+                # No, since we're not even getting the whole data
+                return
+            elif p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
                 return
             elif p.save_when == strax.SaveWhen.TARGET:
-                if d != targets:
+                if d not in targets:
                     return
             elif p.save_when == strax.SaveWhen.EXPLICIT:
                 if d not in save:
@@ -466,7 +516,7 @@ class Context:
             targets=targets)
 
     def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
-                 selection=None,
+                 time_range=None, selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -497,10 +547,13 @@ class Context:
                 targets = temp_name
                 # TODO: auto-unregister? Better to have a temp register
                 # override option in get_components
+                # Or just always create new context, not only if new options
+                # are given
             else:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
-        components = self.get_components(run_id, targets=targets, save=save)
+        components = self.get_components(run_id, targets=targets, save=save,
+                                         time_range=time_range)
         for x in strax.ThreadedMailboxProcessor(
                 components, max_workers=max_workers).iter():
             if selection is not None:
@@ -508,6 +561,13 @@ class Context:
                     fn: x[fn]
                     for fn in x.dtype.names})
                 x = x[mask]
+            if time_range:
+                if 'time' not in x.dtype.names:
+                    raise NotImplementedError(
+                        "Time range selection requires time information, "
+                        "but none of the required plugins provides it.")
+                x = x[(time_range[0] <= x['time']) &
+                      (x['time'] < time_range[1])]
             yield x
 
     def make(self, run_id: str, targets, save=tuple(), max_workers=None,
@@ -557,7 +617,7 @@ class Context:
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
 
-    def is_stored(self, run_id, target):
+    def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
         through any of the registered storage frontends.
 
@@ -567,6 +627,13 @@ class Context:
         TODO: behaviour on ambiguous data requests is currently undefined.
         (right now it will raise an exception, but this may change)
         """
+        # If any new options given, replace the current context
+        # with a temporary one
+        # TODO duplicated code with with get_iter
+        if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
+            self = self.new_context(**kwargs)
+
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:

@@ -145,3 +145,30 @@ def test_storage_converter():
             # Data is now in both stores
             store_1.find(key)
             store_2.find(key)
+
+
+def test_random_access():
+    """Test basic random access
+    TODO: test random access when time info is not provided directly
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Hack to enable testing if only required chunks are loaded
+        Peaks.rechunk_on_save = False
+
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+        with pytest.raises(strax.DataNotAvailable):
+            # Time range selection requires data already available
+            st.get_df(run_id, 'peaks', time_range=(3, 5))
+
+        st.make(run_id=run_id, targets='peaks')
+
+        # Second part of hack: corrupt data by removing one chunk
+        os.remove(os.path.join(temp_dir,
+                               str(st._key_for(run_id, 'peaks')),
+                               '000000'))
+
+        df = st.get_array(run_id, 'peaks', time_range=(3, 5))
+        assert len(df) == 2 * recs_per_chunk
+        assert df['time'].min() == 3
+        assert df['time'].max() == 4
