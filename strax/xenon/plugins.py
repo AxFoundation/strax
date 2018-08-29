@@ -433,6 +433,7 @@ class Events(strax.OverlapWindowPlugin):
 
 @export
 class EventBasics(strax.LoopPlugin):
+    __version__= '0.0.1'
     depends_on = ('events',
                   'peak_basics', 'peak_classification',
                   'peak_positions', 'n_competing')
@@ -465,22 +466,17 @@ class EventBasics(strax.LoopPlugin):
         if not len(peaks):
             return result
 
-        #identify largest s2 properties
-        s2_values = None
-        s2_largest = None
-        s2_largest_ind = None
-        s2_largest_time = None
-        if 2 in peaks['type']:
-            s_mask = peaks['type'] == 2
-            ss = peaks[s_mask]
-            s2_values = ss['area']
-            s2_largest = np.max(ss['area'])
-            s2_largest_ind = np.argmax(ss['area'])
-            s2_largest_time = ss['time'][s2_largest_ind]
-
         main_s = dict()
-        for s_i in [1, 2]:
+        for s_i in [2, 1]:
             s_mask = peaks['type'] == s_i
+            
+            # For determining the main S1, remove all peaks
+            # after the main S2 (if there was one)
+            # This is why S2 finding happened first
+            if s_i == 1 and result[f's2_index'] != -1:
+                s_mask &= peaks['time'] < main_s[2]['time']
+                
+            
             ss = peaks[s_mask]
             s_indices = np.arange(len(peaks))[s_mask]
 
@@ -500,7 +496,7 @@ class EventBasics(strax.LoopPlugin):
                     result[f'{q}_s2'] = s[q]
 
         #bind the largest s1 to the largest s2 only for valid s1-s2 pairs
-        if len(main_s) == 2 and main_s[1]['time'] < s2_largest_time:
+        if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
 
         return result
