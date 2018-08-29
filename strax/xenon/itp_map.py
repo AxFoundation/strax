@@ -50,6 +50,7 @@ class InterpolatingMap(object):
         'name':                 'Nice file with maps',
         'description':          'Say what the maps are, who you are, etc',
         'timestamp':            unix epoch seconds timestamp
+
     with the straightforward generalization to 1d and 3d.
 
     The default map name is 'map', I'd recommend you use that.
