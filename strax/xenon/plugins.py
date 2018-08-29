@@ -460,9 +460,23 @@ class EventBasics(strax.LoopPlugin):
         return dtype
 
     def compute_loop(self, event, peaks):
+        __version__ = '0.1.0'
         result = dict(n_peaks=len(peaks))
         if not len(peaks):
             return result
+
+        #identify largest s2 properties
+        s2_values = None
+        s2_largest = None
+        s2_largest_ind = None
+        s2_largest_time = None
+        if 2 in peaks['type']:
+            s_mask = peaks['type'] == 2
+            ss = peaks[s_mask]
+            s2_values = ss['area']
+            s2_largest = np.max(ss['area'])
+            s2_largest_ind = np.argmax(ss['area'])
+            s2_largest_time = ss['time'][s2_largest_ind]
 
         main_s = dict()
         for s_i in [1, 2]:
@@ -485,7 +499,8 @@ class EventBasics(strax.LoopPlugin):
                 for q in 'xy':
                     result[f'{q}_s2'] = s[q]
 
-        if len(main_s) == 2:
+        #bind the largest s1 to the largest s2 only for valid s1-s2 pairs
+        if len(main_s) == 2 and main_s[1]['time'] < s2_largest_time:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
 
         return result
