@@ -69,8 +69,18 @@ class ThreadedMailboxProcessor:
 
         for d, savers in savers.items():
             for s_i, saver in enumerate(savers):
-                self.mailboxes[d].add_reader(saver.save_from,
-                                             name=f'save_{s_i}:{d}')
+                if d in plugins:
+                    rechunk = plugins[d].rechunk_on_save
+                else:
+                    # This is storage conversion mode
+                    # TODO: Don't know how to get this info, for now,
+                    # be conservative and don't rechunk
+                    rechunk = False
+
+                from functools import partial
+                self.mailboxes[d].add_reader(
+                    partial(saver.save_from, rechunk=rechunk),
+                    name=f'save_{s_i}:{d}')
 
     def iter(self):
         target = self.components.targets[0]
