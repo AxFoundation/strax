@@ -385,12 +385,10 @@ class Context:
         n_range = None
         if time_range is not None:
             # Ensure we have one data kind
-            _kinds = set([plugins[t].data_kind for t in targets])
-            if len(_kinds) > 1:
+            if len(set([plugins[t].data_kind for t in targets])) > 1:
                 raise NotImplementedError(
                     "Time range selection not implemented "
                     "for multiple data kinds.")
-            kind = list(_kinds)[0]
 
             # Which plugin provides time information? We need it to map to
             # row indices.
@@ -398,14 +396,8 @@ class Context:
                 if 'time' in plugins[p].dtype.names:
                     break
             else:
-                # Find any other plugin with the same data type and time
-                # information. TODO: maybe it's not the best one...
-                for p in plugins.values():
-                    if p.data_kind == kind and 'time' in p.dtype.names:
-                        break
-                else:
-                    raise ValueError(f"No time info found for {kind}, "
-                                     f"cannot select time range?")
+                raise RuntimeError(f"No time info in targets, should have been"
+                                   f" caught earlier??")
 
             # Find a range of row numbers that contains the time range
             # It's a bit too large: to
@@ -416,6 +408,8 @@ class Context:
                                              f" is not yet available")
             meta = self.get_meta(run_id, p)
             times = np.array([c['first_time'] for c in meta['chunks']])
+            # Reconstruct row numbers from row counts, which are in metadata
+            # n_end is last row + 1 in a chunk. n_start is the first.
             n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
             n_start = n_end - n_end[0]
             _inds = np.searchsorted(times, time_range) - 1
@@ -450,6 +444,9 @@ class Context:
                     continue
             else:
                 if time_range is not None:
+                    # While the data type providing the time information is
+                    # available (else we'd have failed earlier), one of the
+                    # other requested data types is not.
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
                         f"available, but {d} for {run_id} is not.")
@@ -613,7 +610,7 @@ class Context:
             try:
                 return sf.get_metadata(key)   # TODO: ambiguity options
             except strax.DataNotAvailable as e:
-                print(str(e))
+                self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
 
