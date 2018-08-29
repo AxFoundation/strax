@@ -110,7 +110,8 @@ class StorageFrontend:
         """Return loader for data described by DataKey.
         :param key: DataKey describing data
         :param n_range: 2-length arraylike of (start, exclusive end)
-        of row numbers to get.
+        of row numbers to get. Default is None, which means get the entire
+        run.
         :param ambiguous: Behaviour if multiple matching data entries are
         found:
         - 'error': Raise AmbigousDataRequest exception.
@@ -289,7 +290,9 @@ class StorageBackend:
 
     def loader(self, backend_key, n_range=None, executor=None):
         """Iterates over strax data in backend_key
-        :param n_range:
+        :param n_range: 2-length arraylike of (start, exclusive end)
+        of row numbers to get. Default is None, which means get the entire
+        run.
         :param executor: Executor to push load/decompress operations to
         """
         metadata = self.get_metadata(backend_key)
@@ -305,9 +308,7 @@ class StorageBackend:
         for i, chunk_info in enumerate(metadata['chunks']):
             if (n_range
                     and not n_range[0] <= first_row_in_chunk[i] < n_range[1]):
-                print(n_range, first_row_in_chunk[i], 'skipping')
                 continue
-            print(n_range, first_row_in_chunk[i], 'yielding')
             kwargs = dict(chunk_info=chunk_info,
                           dtype=dtype,
                           compressor=compressor)
