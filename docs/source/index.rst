@@ -54,8 +54,9 @@ The above pages describe how strax's processing framework works under the hood, 
 
 .. toctree::
     :maxdepth: 1
-    :caption: API Reference
+    :caption: Reference
 
+    reference/datastructure
     reference/strax
 
 
