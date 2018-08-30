@@ -475,8 +475,7 @@ class EventBasics(strax.LoopPlugin):
             # This is why S2 finding happened first
             if s_i == 1 and result[f's2_index'] != -1:
                 s_mask &= peaks['time'] < main_s[2]['time']
-                
-            
+
             ss = peaks[s_mask]
             s_indices = np.arange(len(peaks))[s_mask]
 
