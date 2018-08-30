@@ -1,7 +1,8 @@
 
-0.4.0 / 2018-08-XX
+0.4.0 / 2018-08-27
 ------------------
-- S3-protocol I/O (#68)
+- S3-protocol I/O (#68, #71, #74)
+- Fuzzy matching, context options (#66)
 - Fix bug with PyPI lacking MANIFEST (e9771db79bd0c6a148afe1fa8c2ed3d13495da88)
 - Zenodo badge (#58)
 
