@@ -12,7 +12,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='0.3.0',
+                 version='0.4.0',
                  description='Streaming analysis for XENON',
                  author='Jelle Aalbers',
                  author_email='j.aalbers@uva.nl',
@@ -23,6 +23,7 @@ setuptools.setup(name='strax',
                                            'boltons',
                                            'hypothesis'],
                  long_description=readme + '\n\n' + history,
+                 python_requires=">=3.6",
                  extras_require={
                      'docs': ['sphinx',
                               'sphinx_rtd_theme',
@@ -30,8 +31,7 @@ setuptools.setup(name='strax',
                               'recommonmark'],
                      'xenon': ['keras',
                                'tensorflow',
-                               'scipy',
-                               'boto3']
+                               'scipy']
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),
