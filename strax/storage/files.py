@@ -72,6 +72,7 @@ class DataDirectory(StorageFrontend):
                 continue
 
             _run_id, _data_type, _ = dirname.split('-')
+
             if _run_id != key.run_id or _data_type != key.data_type:
                 continue
             # TODO: check for broken data
