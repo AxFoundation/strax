@@ -608,7 +608,7 @@ class Context:
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
-                return sf.get_metadata(key)   # TODO: ambiguity options
+                return sf.get_metadata(key, **self._fuzzy_options)
             except strax.DataNotAvailable as e:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
@@ -620,9 +620,6 @@ class Context:
 
         Note that even if False is returned, the data type may still be made
         with a trivial computation.
-
-        TODO: behaviour on ambiguous data requests is currently undefined.
-        (right now it will raise an exception, but this may change)
         """
         # If any new options given, replace the current context
         # with a temporary one
