@@ -1,5 +1,6 @@
 from concurrent.futures import Future, TimeoutError
 import heapq
+import sys
 import threading
 import typing
 import logging
@@ -164,12 +165,7 @@ class Mailbox:
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         except Exception as e:
-            try:
-                e_args = e.args[0]
-            except IndexError:
-                e_args = ''
-            self.kill(reason=f"{e.__class__.__name__}('{e_args}') "
-                             f'in {threading.current_thread().name}')
+            self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
             raise
         else:
             self.close()
