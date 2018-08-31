@@ -143,6 +143,7 @@ class Peaks(strax.Plugin):
 
 @export
 class PeakBasics(strax.Plugin):
+    __version__ = "0.0.1"
     parallel = True
     depends_on = ('peaks',)
     dtype = [
@@ -156,6 +157,8 @@ class PeakBasics(strax.Plugin):
             'n_channels'), np.int16),
         (('PMT number which contributes the most PE',
             'max_pmt'), np.int16),
+        (('Area of signal in the largest-contributing PMT (PE)',
+            'max_pmt_area'), np.int32),
         (('Width (in ns) of the central 50% area of the peak',
             'range_50p_area'), np.float32),
         (('Fraction of area seen by the top array',
@@ -176,6 +179,7 @@ class PeakBasics(strax.Plugin):
         r['n_channels'] = (p['area_per_channel'] > 0).sum(axis=1)
         r['range_50p_area'] = p['width'][:, 5]
         r['max_pmt'] = np.argmax(p['area_per_channel'], axis=1)
+        r['max_pmt_area'] = np.max(p['area_per_channel'], axis=1)
 
         # TODO: get n_top_pmts from config...
         area_top = (p['area_per_channel'][:, :127]
@@ -433,6 +437,7 @@ class Events(strax.OverlapWindowPlugin):
 
 @export
 class EventBasics(strax.LoopPlugin):
+    __version__= '0.0.1'
     depends_on = ('events',
                   'peak_basics', 'peak_classification',
                   'peak_positions', 'n_competing')
@@ -460,13 +465,21 @@ class EventBasics(strax.LoopPlugin):
         return dtype
 
     def compute_loop(self, event, peaks):
+        __version__ = '0.1.0'
         result = dict(n_peaks=len(peaks))
         if not len(peaks):
             return result
 
         main_s = dict()
-        for s_i in [1, 2]:
+        for s_i in [2, 1]:
             s_mask = peaks['type'] == s_i
+            
+            # For determining the main S1, remove all peaks
+            # after the main S2 (if there was one)
+            # This is why S2 finding happened first
+            if s_i == 1 and result[f's2_index'] != -1:
+                s_mask &= peaks['time'] < main_s[2]['time']
+
             ss = peaks[s_mask]
             s_indices = np.arange(len(peaks))[s_mask]
 
@@ -485,6 +498,7 @@ class EventBasics(strax.LoopPlugin):
                 for q in 'xy':
                     result[f'{q}_s2'] = s[q]
 
+        #bind the largest s1 to the largest s2 only for valid s1-s2 pairs
         if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
 
