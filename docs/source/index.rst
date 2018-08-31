@@ -57,6 +57,7 @@ The above pages describe how strax's processing framework works under the hood, 
     :caption: API Reference
 
     reference/strax
+    reference/datastructure
 
 
 * :ref:`genindex`
