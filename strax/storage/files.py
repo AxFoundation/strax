@@ -77,7 +77,7 @@ class DataDirectory(StorageFrontend):
             metadata = self.backends[0].get_metadata(fn)
             if self._matches(metadata['lineage'], key.lineage,
                              fuzzy_for, fuzzy_for_options):
-                return self.backend_key(dirname)
+                return self.backend_key(osp.join(self.path, dirname))
 
         raise strax.DataNotAvailable
 
