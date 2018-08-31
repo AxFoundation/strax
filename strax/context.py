@@ -457,8 +457,20 @@ class Context:
 
             # Should we save this data?
             if time_range is not None:
-                # No, since we're not even getting the whole data
+                # No, since we're not even getting the whole data.
+                # Without this check, saving could be attempted if the
+                # storage converter mode is enabled.
+                self.log.warning(f"Not saving {d} while "
+                                 f"selecting a time range in the run")
                 return
+            if any([len(x) > 0 for x in self._fuzzy_options.values()]):
+                # In fuzzy matching mode, we cannot (yet) derive the lineage
+                # of any data we are creating. To avoid create false
+                # data entries, we currently do not save at all.
+                self.log.warning(f"Not saving {d} while fuzzy matching is "
+                                 f"turned on.")
+                return
+
             elif p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
@@ -483,6 +495,7 @@ class Context:
                         # Already have this data in this backend
                         continue
                     except strax.DataNotAvailable:
+                        # Don't have it, so let's convert it!
                         pass
                 try:
                     savers[d].append(sf.saver(key,
