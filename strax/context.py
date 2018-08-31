@@ -591,8 +591,16 @@ class Context:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
         """
-        return pd.DataFrame.from_records(self.get_array(
-            run_id, targets, save, max_workers, **kwargs))
+        df = self.get_array(
+            run_id, targets, save, max_workers, **kwargs)
+        try:
+            return pd.DataFrame.from_records(df)
+        except Exception as e:
+            if 'Data must be 1-dimensional' in str(e):
+                raise ValueError(
+                    f"Cannot load '{targets}' as a dataframe because it has "
+                    f"array fields. Please use get_array.")
+            raise
 
     def _key_for(self, run_id, target):
         p = self._get_plugins((target,), run_id)[target]
