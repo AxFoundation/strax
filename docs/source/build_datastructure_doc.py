@@ -1,5 +1,10 @@
 """Create datastructure documentation page
 
+This will add a page with various svg graphs and html tables
+describing the datastructure: dependencies, columns provided,
+and configuration options that apply to each plugins.
+
+For extra credit, the SVGs are clickable.
 """
 from collections import defaultdict
 import os
@@ -76,7 +81,10 @@ kind_colors = dict(
 
 
 def add_spaces(x):
-    """Add four spaces to every line in x"""
+    """Add four spaces to every line in x
+
+    This is needed to make html raw blocks in rst format correctly
+    """
     y = ''
     if isinstance(x, str):
         x = x.split('\n')
