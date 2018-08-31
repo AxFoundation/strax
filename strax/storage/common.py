@@ -315,7 +315,7 @@ class StorageBackend:
         """
         metadata = self.get_metadata(backend_key)
         if not len(metadata['chunks']):
-            self.log.warning(f"No actual data in {backend_key}?")
+            raise DataCorrupted(f"No chunks of data in {backend_key}")
         dtype = literal_eval(metadata['dtype'])
         compressor = metadata['compressor']
 
@@ -427,7 +427,12 @@ class Saver:
         self.closed = True
 
         exc_info = sys.exc_info()
-        if exc_info[0] not in [None, StopIteration]:
+        if exc_info[0] == strax.MailboxKilled:
+            # Get the original exception back out, and put that
+            # in the metadata
+            self.md['exception'] = '\n'.join(
+                traceback.format_exception(*exc_info[1].args[0]))
+        elif exc_info[0] not in [None, StopIteration]:
             self.md['exception'] = traceback.format_exc()
         self.md['writing_ended'] = time.time()
 
