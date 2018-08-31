@@ -143,6 +143,7 @@ class Peaks(strax.Plugin):
 
 @export
 class PeakBasics(strax.Plugin):
+    __version__ = "0.0.1"
     parallel = True
     depends_on = ('peaks',)
     dtype = [
@@ -156,6 +157,8 @@ class PeakBasics(strax.Plugin):
             'n_channels'), np.int16),
         (('PMT number which contributes the most PE',
             'max_pmt'), np.int16),
+        (('Area of signal in the largest-contributing PMT (PE)',
+            'max_pmt_area'), np.int32),
         (('Width (in ns) of the central 50% area of the peak',
             'range_50p_area'), np.float32),
         (('Fraction of area seen by the top array',
@@ -176,6 +179,7 @@ class PeakBasics(strax.Plugin):
         r['n_channels'] = (p['area_per_channel'] > 0).sum(axis=1)
         r['range_50p_area'] = p['width'][:, 5]
         r['max_pmt'] = np.argmax(p['area_per_channel'], axis=1)
+        r['max_pmt_area'] = np.max(p['area_per_channel'], axis=1)
 
         # TODO: get n_top_pmts from config...
         area_top = (p['area_per_channel'][:, :127]
