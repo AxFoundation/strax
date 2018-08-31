@@ -93,6 +93,8 @@ class ThreadedMailboxProcessor:
         self.log.debug(f"Yielding {target}")
         try:
             yield from final_generator
+            traceback = None
+            exc = None
         except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():
@@ -100,8 +102,15 @@ class ThreadedMailboxProcessor:
                     self.log.debug(f"Killing {m}")
                     m.kill(upstream=True,
                            reason=e.args[0])
-            raise
+            _, exc, traceback = e.args[0]
         finally:
             self.log.debug("Closing threads")
             for m in self.mailboxes.values():
                 m.cleanup()
+
+        # Reraise exception. This is outside the except block
+        # to avoid the 'during handling of this exception, another
+        # exception occurred' stuff from confusing the traceback
+        # which is printed for the user
+        if traceback is not None:
+            raise exc.with_traceback(traceback)
