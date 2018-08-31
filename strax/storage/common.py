@@ -64,6 +64,11 @@ class DataExistsError(Exception):
 
 
 @export
+class DataCorrupted(Exception):
+    pass
+
+
+@export
 class RunMetadataNotAvailable(Exception):
     pass
 
@@ -154,6 +159,7 @@ class StorageFrontend:
 
     def find(self, key: DataKey,
              write=False, ambiguous='warn',
+             check_broken=True,
              fuzzy_for=tuple(), fuzzy_for_options=tuple()):
         """Return (str: backend class name, backend-specific) key
         to get at / write data, or raise exception.
@@ -192,8 +198,8 @@ class StorageFrontend:
                 pass
 
         try:
-            return self._find(key, write,
-                              fuzzy_for, fuzzy_for_options)
+            backend_name, backend_key = self._find(
+                key, write, fuzzy_for, fuzzy_for_options)
         except DataNotAvailable:
             raise DataNotAvailable(
                 f"{key.data_type} for {key.run_id} not available." + message)
@@ -205,6 +211,18 @@ class StorageFrontend:
                 warnings.warn(message)
             elif ambiguous == 'error':
                 raise AmbiguousDataRequest(found=found, message=message)
+
+        # Get the metadata to check for broken data
+        if check_broken:
+            meta = self._get_backend(backend_name)._get_metadata(backend_key)
+            if 'exception' in meta:
+                raise DataCorrupted(
+                    f"Data in {backend_name} {backend_key} corrupted due to "
+                    f"exception uring writing: {exception}.")
+            if not 'writing_ended' in meta:
+                raise DataCorrupted(
+                    f"Data in {backend_name} {backend_key} corrupted. No "
+                    f"writing_ended field present!")
 
     def _get_backend(self, backend):
         for b in self.backends:
