@@ -10,7 +10,6 @@ from collections import defaultdict
 import os
 import shutil
 
-import matplotlib
 import pandas as pd
 import graphviz
 import strax
@@ -74,10 +73,10 @@ because changing any of those options affect this data indirectly.
 
 
 kind_colors = dict(
-    events='white',
-    peaks='palegreen',
-    records='orange',
-    raw_records='orangered')
+    events='#ffffff',
+    peaks='#98fb98',
+    records='#ffa500',
+    raw_records='#ff4500')
 
 
 def add_spaces(x):
@@ -119,9 +118,7 @@ def build_datastructure_doc():
                 g.node(d,
                        style='filled',
                        href='#' + d.replace('_', '-'),
-                       fillcolor=matplotlib.colors.to_hex(
-                           kind_colors[p.data_kind],
-                       ))
+                       fillcolor=kind_colors[p.data_kind])
                 for dep in p.depends_on:
                     g.edge(d, dep)
             fn = this_dir + '/graphs/' + data_type
