@@ -69,8 +69,18 @@ class ThreadedMailboxProcessor:
 
         for d, savers in savers.items():
             for s_i, saver in enumerate(savers):
-                self.mailboxes[d].add_reader(saver.save_from,
-                                             name=f'save_{s_i}:{d}')
+                if d in plugins:
+                    rechunk = plugins[d].rechunk_on_save
+                else:
+                    # This is storage conversion mode
+                    # TODO: Don't know how to get this info, for now,
+                    # be conservative and don't rechunk
+                    rechunk = False
+
+                from functools import partial
+                self.mailboxes[d].add_reader(
+                    partial(saver.save_from, rechunk=rechunk),
+                    name=f'save_{s_i}:{d}')
 
     def iter(self):
         target = self.components.targets[0]
@@ -83,6 +93,8 @@ class ThreadedMailboxProcessor:
         self.log.debug(f"Yielding {target}")
         try:
             yield from final_generator
+            traceback = None
+            exc = None
         except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():
@@ -90,8 +102,15 @@ class ThreadedMailboxProcessor:
                     self.log.debug(f"Killing {m}")
                     m.kill(upstream=True,
                            reason=e.args[0])
-            raise
+            _, exc, traceback = e.args[0]
         finally:
             self.log.debug("Closing threads")
             for m in self.mailboxes.values():
                 m.cleanup()
+
+        # Reraise exception. This is outside the except block
+        # to avoid the 'during handling of this exception, another
+        # exception occurred' stuff from confusing the traceback
+        # which is printed for the user
+        if traceback is not None:
+            raise exc.with_traceback(traceback)

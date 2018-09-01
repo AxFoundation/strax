@@ -11,12 +11,17 @@ import numpy as np
 import strax
 
 
+@strax.takes_config(
+    strax.Option('crash', default=False)
+)
 class Records(strax.Plugin):
     provides = 'records'
     depends_on = tuple()
     dtype = strax.record_dtype()
 
     def iter(self, *args, **kwargs):
+        if self.config['crash']:
+            raise SomeCrash("CRASH!!!!")
         for t in range(n_chunks):
             r = np.zeros(recs_per_chunk, self.dtype)
             r['time'] = t
@@ -24,6 +29,10 @@ class Records(strax.Plugin):
             r['dt'] = 1
             r['channel'] = np.arange(len(r))
             yield r
+
+
+class SomeCrash(Exception):
+    pass
 
 
 @strax.takes_config(
@@ -145,3 +154,50 @@ def test_storage_converter():
             # Data is now in both stores
             store_1.find(key)
             store_2.find(key)
+
+
+def test_exception():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks],
+                           config=dict(crash=True))
+
+        # Check correct exception is thrown
+        with pytest.raises(SomeCrash):
+            st.make(run_id=run_id, targets='peaks')
+
+        # Check exception is recorded in metadata
+        # in both its original data type and dependents
+        for target in ('peaks', 'records'):
+            assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
+
+
+def test_random_access():
+    """Test basic random access
+    TODO: test random access when time info is not provided directly
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Hack to enable testing if only required chunks are loaded
+        Peaks.rechunk_on_save = False
+
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+
+        with pytest.raises(strax.DataNotAvailable):
+            # Time range selection requires data already available
+            st.get_df(run_id, 'peaks', time_range=(3, 5))
+
+        st.make(run_id=run_id, targets='peaks')
+
+        # Second part of hack: corrupt data by removing one chunk
+        os.remove(os.path.join(temp_dir,
+                               str(st._key_for(run_id, 'peaks')),
+                               '000000'))
+
+        with pytest.raises(FileNotFoundError):
+            st.get_array(run_id, 'peaks')
+
+        df = st.get_array(run_id, 'peaks', time_range=(3, 5))
+        assert len(df) == 2 * recs_per_chunk
+        assert df['time'].min() == 3
+        assert df['time'].max() == 4
