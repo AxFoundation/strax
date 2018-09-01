@@ -34,9 +34,16 @@ class ThreadedMailboxProcessor:
         plugins = components.plugins
         savers = components.savers
 
-        # Executors for parallelization
-        process_executor = futures.ProcessPoolExecutor(max_workers=max_workers)
-        thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
+        if max_workers in [None, 1]:
+            # Disable the executors: work in one process.
+            # Each plugin works completely in its own thread.
+            process_executor = thread_executor = None
+        else:
+            # Use executors for parallelization of computations.
+            process_executor = futures.ProcessPoolExecutor(
+                max_workers=max_workers)
+            thread_executor = futures.ThreadPoolExecutor(
+                max_workers=max_workers)
 
         # Deal with parallel input processes
         # Setting up one of these modifies plugins, so we must gather
