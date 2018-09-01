@@ -12,6 +12,14 @@ strax.xenon.common module
     :undoc-members:
     :show-inheritance:
 
+strax.xenon.cut\_plugins module
+-------------------------------
+
+.. automodule:: strax.xenon.cut_plugins
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 strax.xenon.itp\_map module
 ---------------------------
 
