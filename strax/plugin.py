@@ -181,9 +181,11 @@ class Plugin:
 
         pending = []
         for chunk_i in itertools.count():
-            if not self.is_ready(chunk_i):
+            while not self.is_ready(chunk_i):
                 if self.source_finished():
-                    break
+                    # Source is finished, there is no next chunk: break out
+                    self.cleanup(wait_for=pending)
+                    return
                 print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
                 time.sleep(2)
 
