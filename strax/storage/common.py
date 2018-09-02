@@ -35,7 +35,7 @@ class DataKey(typing.NamedTuple):
     lineage: dict
 
     def __repr__(self):
-        return '_'.join([self.run_id,
+        return '-'.join([self.run_id,
                          self.data_type,
                          strax.deterministic_hash(self.lineage)])
 
