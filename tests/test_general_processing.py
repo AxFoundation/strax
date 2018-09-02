@@ -1,4 +1,4 @@
-from hypothesis import given
+from hypothesis import given, example
 from .helpers import sorted_intervals, disjoint_sorted_intervals
 from .helpers import several_fake_records
 
@@ -7,6 +7,14 @@ import strax
 
 
 @given(sorted_intervals, disjoint_sorted_intervals)
+# Tricky example: uncontained interval precedes contained interval
+# (this did not produce an issue, but good to show this is handled)
+@example(things=np.array([(0, 1, 0, 1),
+                          (0, 1, 1, 5),
+                          (0, 1, 2, 1)],
+                         dtype=strax.interval_dtype),
+         containers=np.array([(0, 1, 0, 4)],
+                             dtype=strax.interval_dtype))
 def test_fully_contained_in(things, containers):
     result = strax.fully_contained_in(things, containers)
 
@@ -25,6 +33,12 @@ def test_fully_contained_in(things, containers):
 
 
 @given(sorted_intervals, disjoint_sorted_intervals)
+# Specific example to trigger issue #37
+@example(
+    things=np.array([(0, 1, 2, 1)],
+                    dtype=strax.interval_dtype),
+    containers=np.array([(0, 1, 0, 1), (0, 1, 2, 1)],
+                        dtype=strax.interval_dtype))
 def test_split_by_containment(things, containers):
     result = strax.split_by_containment(things, containers)
 
