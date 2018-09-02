@@ -5,6 +5,7 @@ from one or more other plugins.
 """
 from enum import IntEnum
 import itertools
+import logging
 from functools import partial
 import typing
 import time
@@ -367,8 +368,8 @@ class OverlapWindowPlugin(Plugin):
     a certain window on both sides.
 
     Current implementation assumes:
-    - All inputs are sorted by endtime. Since everything in strax is sorted by
-    time, this only works for disjoint intervals such as peaks or events,
+    - All inputs are sorted by *endtime*. Since everything in strax is sorted
+    by time, this only works for disjoint intervals such as peaks or events,
     but NOT records!
     - You must read time info for your data kind, or create a new data kind.
     """
@@ -379,6 +380,8 @@ class OverlapWindowPlugin(Plugin):
         self.cached_input = {}
         self.cached_results = None
         self.last_threshold = -float('inf')
+        # This guy can have a logger, it's not parallelized anyway
+        self.log = logging.getLogger(self.__class__.__name__)
 
     def get_window_size(self):
         """Return the required window size in nanoseconds"""
@@ -389,21 +392,35 @@ class OverlapWindowPlugin(Plugin):
 
         # Yield results initially suppressed in fear of a next chunk
         if self.cached_results is not None and len(self.cached_results):
+            self.log.debug(f"Last chunk! Sending out cached result "
+                           f"{self.cached_results}")
             yield self.cached_results
+        else:
+            self.log.debug("Last chunk! No cached results to send.")
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
         end = max([strax.endtime(x[-1])
                    for x in kwargs.values()])
-        invalid_beyond = end - self.get_window_size()
-        cache_inputs_beyond = end - 3 * self.get_window_size()
+        # Take slightly larger windows for safety: it is very easy for me
+        # (or the user) to have made an off-by-one error
+        # TODO: why do tests not fail is I set cache_inputs_beyond to
+        # end - window size - 2 ?
+        # (they do fail if I set to end - 0.5 * window size - 2)
+        invalid_beyond = end - self.get_window_size() - 1
+        cache_inputs_beyond = end - 2 * self.get_window_size() - 1
+        self.log.debug(f"Invalid beyond {invalid_beyond}, "
+                       f"caching inputs beyond {cache_inputs_beyond}")
 
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
 
+        self.log.debug(f"Cached input {self.cached_input}")
+
+        self.log.debug(f"Compute kwargs {kwargs}")
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
         endtimes = strax.endtime(kwargs[self.data_kind]
@@ -411,11 +428,17 @@ class OverlapWindowPlugin(Plugin):
                                  else result)
         assert len(endtimes) == len(result)
 
-        # Remove results that are invalid or already sent out last time
         is_valid = endtimes < invalid_beyond
-        self.cached_results = result[~is_valid]
-        result = result[is_valid
-                        & (endtimes > self.last_threshold)]
+        not_sent_yet = endtimes >= self.last_threshold
+
+        # Cache all results we have not sent, nor are sending now
+        self.cached_results = result[not_sent_yet & (~is_valid)]
+
+        # Send out only valid results we haven't sent yet
+        result = result[is_valid & not_sent_yet]
+
+        self.log.debug(f"Cached results {self.cached_results}")
+        self.log.debug(f"Sending out result {result}")
 
         self.last_threshold = invalid_beyond
         return result
