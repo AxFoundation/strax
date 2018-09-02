@@ -195,10 +195,12 @@ class S3Saver(strax.Saver):
     def _save_chunk_metadata(self, chunk_info):
         if self.meta_only:
             # TODO HACK!
-            chunk_info["key_name"] = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
+            chunk_info["key_name"] = (
+                f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}")
 
         self._upload_json(chunk_info,
-                          f"{self.strax_unique_key}/metadata_{chunk_info['chunk_i']:06d}.json")
+                          f"{self.strax_unique_key}"
+                          f"/metadata_{chunk_info['chunk_i']:06d}.json")
 
     def _close(self):
         # Collect all the chunk metadata
