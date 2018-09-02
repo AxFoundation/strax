@@ -1,4 +1,18 @@
 
+0.5.0 / 2018-09-02
+------------------
+- Directory name delimiter changed from `_` to `-` (#76)
+- Time-based random access (#80)
+- Throw original exceptions on crashes (#87)
+- Check for corrupted data (#88)
+- FIX: edge cases in processing (#94)
+- FIX: prevent saving during time range or fuzzy selection (#89)
+- FIX: Workaround for memory leak in single-core mode (#91)
+- XENON: Example cuts (#84)
+- XENON: proper S1-S2 pairing (#82)
+- XENON: Fix pax conversion (#95)
+- DOCS: Datastructure docs (#85)
+
 0.4.0 / 2018-08-27
 ------------------
 - S3-protocol I/O (#68, #71, #74)
