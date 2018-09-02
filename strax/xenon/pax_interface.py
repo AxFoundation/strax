@@ -99,7 +99,7 @@ def pax_to_records(input_filename,
                  help="Directory with raw pax datasets"),
     strax.Option('stop_after_zips', default=0, track=False,
                  help="Convert only this many zip files. 0 = all."),
-    strax.Option('events_per_chunk', default=10, track=False,
+    strax.Option('events_per_chunk', default=50, track=False,
                  help="Number of events to yield per chunk")
 )
 class RecordsFromPax(strax.Plugin):
@@ -108,6 +108,7 @@ class RecordsFromPax(strax.Plugin):
     depends_on = tuple()
     dtype = strax.record_dtype()
     parallel = False
+    rechunk_on_save = False
 
     def iter(self, *args, **kwargs):
         if not os.path.exists(self.config['pax_raw_dir']):
