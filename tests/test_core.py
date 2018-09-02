@@ -128,6 +128,15 @@ def test_fuzzy_matching():
         st3 = st.new_context(fuzzy_for_options=('some_option',))
         assert st3.is_stored(run_id, 'peaks')
 
+    # No saving occurs at all while fuzzy matching
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks],
+                           fuzzy_for=('records',))
+        st.make(run_id, 'peaks')
+        assert not st.is_stored(run_id, 'peaks')
+        assert not st.is_stored(run_id, 'records')
+
 
 def test_storage_converter():
     with tempfile.TemporaryDirectory() as temp_dir:
