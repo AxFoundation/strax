@@ -457,8 +457,20 @@ class Context:
 
             # Should we save this data?
             if time_range is not None:
-                # No, since we're not even getting the whole data
+                # No, since we're not even getting the whole data.
+                # Without this check, saving could be attempted if the
+                # storage converter mode is enabled.
+                self.log.warning(f"Not saving {d} while "
+                                 f"selecting a time range in the run")
                 return
+            if any([len(x) > 0 for x in self._fuzzy_options.values()]):
+                # In fuzzy matching mode, we cannot (yet) derive the lineage
+                # of any data we are creating. To avoid create false
+                # data entries, we currently do not save at all.
+                self.log.warning(f"Not saving {d} while fuzzy matching is "
+                                 f"turned on.")
+                return
+
             elif p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
@@ -483,6 +495,7 @@ class Context:
                         # Already have this data in this backend
                         continue
                     except strax.DataNotAvailable:
+                        # Don't have it, so let's convert it!
                         pass
                 try:
                     savers[d].append(sf.saver(key,
@@ -591,8 +604,16 @@ class Context:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
         """
-        return pd.DataFrame.from_records(self.get_array(
-            run_id, targets, save, max_workers, **kwargs))
+        df = self.get_array(
+            run_id, targets, save, max_workers, **kwargs)
+        try:
+            return pd.DataFrame.from_records(df)
+        except Exception as e:
+            if 'Data must be 1-dimensional' in str(e):
+                raise ValueError(
+                    f"Cannot load '{targets}' as a dataframe because it has "
+                    f"array fields. Please use get_array.")
+            raise
 
     def _key_for(self, run_id, target):
         p = self._get_plugins((target,), run_id)[target]
@@ -608,7 +629,7 @@ class Context:
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
-                return sf.get_metadata(key)   # TODO: ambiguity options
+                return sf.get_metadata(key, **self._fuzzy_options)
             except strax.DataNotAvailable as e:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
@@ -620,9 +641,6 @@ class Context:
 
         Note that even if False is returned, the data type may still be made
         with a trivial computation.
-
-        TODO: behaviour on ambiguous data requests is currently undefined.
-        (right now it will raise an exception, but this may change)
         """
         # If any new options given, replace the current context
         # with a temporary one

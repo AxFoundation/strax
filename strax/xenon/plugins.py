@@ -116,7 +116,7 @@ class Peaks(strax.Plugin):
     depends_on = ('records',)
     data_kind = 'peaks'
     parallel = True
-    rechunk_on_save = False
+    rechunk_on_save = True
     dtype = strax.peak_dtype(n_channels=len(to_pe))
 
     def compute(self, records):
