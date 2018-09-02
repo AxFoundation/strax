@@ -8,7 +8,6 @@ import sys
 import time
 import traceback
 import typing
-import warnings
 from ast import literal_eval
 from concurrent.futures import wait
 
@@ -47,14 +46,6 @@ class DataNotAvailable(Exception):
 
 
 @export
-class AmbiguousDataRequest(Exception):
-    """Raised when more than one piece of data match a users' request"""
-    def __init__(self, found, message=''):
-        super().__init__(message)
-        self.found = found
-
-
-@export
 class DataExistsError(Exception):
     """Raised when attempting to write a piece of data
     that is already written"""
@@ -64,7 +55,7 @@ class DataExistsError(Exception):
 
 
 @export
-class CorruptedData(Exception):
+class DataCorrupted(Exception):
     pass
 
 
@@ -107,7 +98,7 @@ class StorageFrontend:
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def loader(self, key: DataKey, ambiguous='warn',
+    def loader(self, key: DataKey,
                n_range=None,
                fuzzy_for=tuple(),
                fuzzy_for_options=tuple(),
@@ -117,12 +108,6 @@ class StorageFrontend:
         :param n_range: 2-length arraylike of (start, exclusive end)
         of row numbers to get. Default is None, which means get the entire
         run.
-        :param ambiguous: Behaviour if multiple matching data entries are
-        found:
-        - 'error': Raise AmbigousDataRequest exception.
-        - 'warn' (default): warn with AmbiguousDataDescription.
-        - 'ignore': do nothing. Return first match.
-        In the latter two cases, the first match is returned.
         :param fuzzy_for: list/tuple of plugin names for which no
         plugin name, version, or option check is performed.
         :param fuzzy_for_options: list/tuple of configuration options for which
@@ -130,7 +115,6 @@ class StorageFrontend:
         :param executor: Executor for pushing load computation to
         """
         backend, backend_key = self.find(key,
-                                         ambiguous=ambiguous,
                                          write=False,
                                          fuzzy_for=fuzzy_for,
                                          fuzzy_for_options=fuzzy_for_options)
@@ -144,7 +128,6 @@ class StorageFrontend:
                                                 metadata, meta_only)
 
     def get_metadata(self, key,
-                     ambiguous='warn',
                      fuzzy_for=tuple(),
                      fuzzy_for_options=tuple()):
         """Retrieve data-level metadata for the specified key.
@@ -152,13 +135,14 @@ class StorageFrontend:
         """
         backend, backend_key = self.find(key,
                                          write=False,
-                                         ambiguous=ambiguous,
+                                         check_broken=False,
                                          fuzzy_for=fuzzy_for,
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).get_metadata(backend_key)
 
     def find(self, key: DataKey,
-             write=False, ambiguous='warn',
+             write=False,
+             check_broken=True,
              fuzzy_for=tuple(), fuzzy_for_options=tuple()):
         """Return (str: backend class name, backend-specific) key
         to get at / write data, or raise exception.
@@ -166,10 +150,9 @@ class StorageFrontend:
         {data_type: (plugin_name, version, {config_option: value, ...}, ...}
         :param write: Set to True if writing new data. The data is immediately
         registered, so you must follow up on the write!
+        :param check_broken: If True, raise DataCorrupted if data has not
+        been complete written, or writing terminated with an exception.
         """
-        if ambiguous not in 'error warn ignore'.split():
-            raise RuntimeError(f"Invalid 'ambiguous' setting {ambiguous}. ")
-
         message = (
             f"\nRequested lineage: {key.lineage}."
             f"\nIgnoring plugin lineage for: {fuzzy_for}."
@@ -186,7 +169,6 @@ class StorageFrontend:
                                        "it's readonly")
             try:
                 at = self.find(key, write=False,
-                               ambiguous=ambiguous,
                                fuzzy_for=fuzzy_for,
                                fuzzy_for_options=fuzzy_for_options)
                 raise DataExistsError(
@@ -197,19 +179,25 @@ class StorageFrontend:
                 pass
 
         try:
-            return self._find(key, write,
-                              fuzzy_for, fuzzy_for_options)
+            backend_name, backend_key = self._find(
+                key, write, fuzzy_for, fuzzy_for_options)
         except DataNotAvailable:
             raise DataNotAvailable(
                 f"{key.data_type} for {key.run_id} not available." + message)
-        except AmbiguousDataRequest as e:
-            found = e.found
-            message = (f"Found {len(found)} data entries for {key.run_id}, "
-                       f"{key.data_type}: {found}." + message)
-            if ambiguous == 'warn':
-                warnings.warn(message)
-            elif ambiguous == 'error':
-                raise AmbiguousDataRequest(found=found, message=message)
+
+        if not write and check_broken:
+            # Get the metadata to check if the data is broken
+            meta = self._get_backend(backend_name).get_metadata(backend_key)
+            if 'exception' in meta:
+                raise DataCorrupted(
+                    f"Data in {backend_name} {backend_key} corrupted due to "
+                    f"exception uring writing: {meta['exception']}.")
+            if 'writing_ended' not in meta:
+                raise DataCorrupted(
+                    f"Data in {backend_name} {backend_key} corrupted. No "
+                    f"writing_ended field present!")
+
+        return backend_name, backend_key
 
     def _get_backend(self, backend):
         for b in self.backends:
@@ -255,7 +243,7 @@ class StorageFrontend:
     def _find(self, key: DataKey,
               write, fuzzy_for, fuzzy_for_options):
         """Return backend key (e.g. for filename) for data identified by key,
-        raise DataNotAvailable, AmbiguousDataRequest, or DataExistsError
+        raise DataNotAvailable, or DataExistsError
         Parameters are as for find.
         """
         # Use the self._matches attribute to compare lineages according to
@@ -302,7 +290,7 @@ class StorageBackend:
         """
         metadata = self.get_metadata(backend_key)
         if not len(metadata['chunks']):
-            raise CorruptedData(f"No chunks of data in {backend_key}")
+            raise DataCorrupted(f"No chunks of data in {backend_key}")
         dtype = literal_eval(metadata['dtype'])
         compressor = metadata['compressor']
 

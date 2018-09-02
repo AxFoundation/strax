@@ -120,13 +120,13 @@ def test_fuzzy_matching():
         # In fuzzy context, data does match
         st2 = st.new_context(fuzzy_for=('peaks',))
         assert st2.is_stored(run_id, 'peaks')
+        # And we can actually load it
+        st2.get_meta(run_id, 'peaks')
+        st2.get_array(run_id, 'peaks')
 
-        st2 = st.new_context(fuzzy_for_options=('some_option',))
-        assert st2.is_stored(run_id, 'peaks')
-
-        # Can also set fuzzy options in current context
-        st.set_context_config(dict(fuzzy_for=('peaks',)))
-        assert st.is_stored(run_id, 'peaks')
+        # Fuzzy for options also works
+        st3 = st.new_context(fuzzy_for_options=('some_option',))
+        assert st3.is_stored(run_id, 'peaks')
 
 
 def test_storage_converter():
@@ -170,6 +170,10 @@ def test_exception():
         # in both its original data type and dependents
         for target in ('peaks', 'records'):
             assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
+
+        # Check data cannot be loaded again
+        with pytest.raises(strax.DataCorrupted):
+            st.get_df(run_id=run_id, targets='peaks')
 
 
 def test_random_access():
