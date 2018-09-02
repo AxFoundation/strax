@@ -75,11 +75,11 @@ class DataDirectory(StorageFrontend):
 
             if _run_id != key.run_id or _data_type != key.data_type:
                 continue
-            # TODO: check for broken data
+            # TODO: check for broken data and ignore? depend on option?
             metadata = self.backends[0].get_metadata(fn)
             if self._matches(metadata['lineage'], key.lineage,
                              fuzzy_for, fuzzy_for_options):
-                return self.backend_key(dirname)
+                return self.backend_key(osp.join(self.path, dirname))
 
         raise strax.DataNotAvailable
 
