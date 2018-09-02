@@ -8,10 +8,6 @@ import logging
 from strax.utils import exporter
 export, __all__ = exporter()
 
-MAILBOX_TIMEOUT = 120   # seconds
-MAILBOX_MAX_MESSAGES = 60   # messages
-
-
 @export
 class MailboxException(Exception):
     pass
@@ -70,12 +66,19 @@ class Mailbox:
     propagate further upstream than the immediate sender threads.
     """
 
+    DEFAULT_TIMEOUT = 120
+    DEFAULT_MAX_MESSAGES = 5
+
     def __init__(self,
                  name='mailbox',
-                 timeout=MAILBOX_TIMEOUT,
-                 max_messages=MAILBOX_MAX_MESSAGES):
+                 timeout=None,
+                 max_messages=None):
         self.name = name
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
         self.timeout = timeout
+        if max_messages is None:
+            max_messages = self.DEFAULT_MAX_MESSAGES
         self.max_messages = max_messages
 
         self.closed = False
