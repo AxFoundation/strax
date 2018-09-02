@@ -437,7 +437,7 @@ class Events(strax.OverlapWindowPlugin):
 
 @export
 class EventBasics(strax.LoopPlugin):
-    __version__= '0.0.1'
+    __version__ = '0.0.1'
     depends_on = ('events',
                   'peak_basics', 'peak_classification',
                   'peak_positions', 'n_competing')
@@ -465,7 +465,6 @@ class EventBasics(strax.LoopPlugin):
         return dtype
 
     def compute_loop(self, event, peaks):
-        __version__ = '0.1.0'
         result = dict(n_peaks=len(peaks))
         if not len(peaks):
             return result
@@ -473,7 +472,7 @@ class EventBasics(strax.LoopPlugin):
         main_s = dict()
         for s_i in [2, 1]:
             s_mask = peaks['type'] == s_i
-            
+
             # For determining the main S1, remove all peaks
             # after the main S2 (if there was one)
             # This is why S2 finding happened first
@@ -498,7 +497,7 @@ class EventBasics(strax.LoopPlugin):
                 for q in 'xy':
                     result[f'{q}_s2'] = s[q]
 
-        #bind the largest s1 to the largest s2 only for valid s1-s2 pairs
+        # Compute a drift time only if we have a valid S1-S2 pairs
         if len(main_s) == 2:
             result['drift_time'] = main_s[2]['time'] - main_s[1]['time']
 

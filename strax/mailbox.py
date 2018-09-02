@@ -8,6 +8,7 @@ import logging
 from strax.utils import exporter
 export, __all__ = exporter()
 
+
 @export
 class MailboxException(Exception):
     pass
