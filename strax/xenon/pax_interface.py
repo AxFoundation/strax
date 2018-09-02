@@ -122,4 +122,6 @@ class RecordsFromPax(strax.Plugin):
             if (self.config['stop_after_zips']
                     and file_i >= self.config['stop_after_zips']):
                 break
-            yield from strax.xenon.pax_interface.pax_to_records(in_fn)
+            yield from strax.xenon.pax_interface.pax_to_records(
+                in_fn,
+                events_per_chunk=self.config['events_per_chunk'])
