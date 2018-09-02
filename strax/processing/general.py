@@ -140,7 +140,7 @@ def split_by_containment(things, containers):
     mask = which_container != -1
     things = things[mask]
     which_container = which_container[mask]
-    if not len(things):
+    if not things:
         # np.split has confusing behaviour for empty arrays
         return [things[:0] for _ in range(len(containers))]
 
