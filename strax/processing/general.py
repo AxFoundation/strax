@@ -94,7 +94,8 @@ def find_break_i(x, safe_break, tolerant=True):
 def fully_contained_in(things, containers):
     """Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
-    exists. We assume all intervals are sorted by time, and b_intervals
+    exists.
+    We assume all intervals are sorted by time, and b_intervals
     nonoverlapping.
     """
     result = np.ones(len(things), dtype=np.int32) * -1
@@ -132,20 +133,25 @@ def split_by_containment(things, containers):
     if not len(containers):
         return []
 
+    # Index of which container each thing belongs to, or -1
     which_container = fully_contained_in(things, containers)
 
+    # Restrict to things in containers
     mask = which_container != -1
     things = things[mask]
     which_container = which_container[mask]
-    things_split = np.split(
-        things,
-        np.where(np.diff(which_container))[0] + 1)
+    if not len(things):
+        # np.split has confusing behaviour for empty arrays
+        return [things[:0] for _ in range(len(containers))]
 
-    # Insert empties for containers with nothing
-    for c in np.setdiff1d(np.arange(len(containers)),
-                          np.unique(which_container)):
-        if c == 0:
-            continue   # np.split already produces an empty in this case?
-        things_split.insert(c, things[:0])
+    # Split things up by container
+    split_indices = np.where(np.diff(which_container))[0] + 1
+    things_split = np.split(things, split_indices)
+
+    # Insert empty arrays for empty containers
+    empty_containers = np.setdiff1d(np.arange(len(containers)),
+                                    np.unique(which_container))
+    for c_i in empty_containers:
+        things_split.insert(c_i, things[:0])
 
     return things_split

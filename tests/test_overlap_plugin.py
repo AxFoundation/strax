@@ -2,21 +2,37 @@ from . import helpers   # Mocks numba    # noqa
 
 import numpy as np
 
-from hypothesis import given, strategies
+from hypothesis import given, strategies, example
 
 import strax
 
 
 @given(helpers.disjoint_sorted_intervals.filter(lambda x: len(x) > 0),
        strategies.integers(min_value=0, max_value=3))
+# Examples that trigger issue #49
+@example(
+    input_peaks=np.array(
+        [(0, 1,  0,  1), (0, 1,  1, 10), (0, 1, 11,  1)],
+        dtype=strax.interval_dtype),
+    split_i=2)
+@example(
+    input_peaks=np.array(
+        [(0, 1, 0, 1), (0, 1, 1, 1), (0, 1, 2, 9), (0, 1, 11, 1)],
+        dtype=strax.interval_dtype),
+    split_i=3)
+# Other example that caused failures at some point
+@example(
+    input_peaks=np.array(
+        [(0, 1, 0, 1), (0, 1, 7, 6), (0, 1, 13, 1)],
+        dtype=strax.interval_dtype),
+    split_i=2
+)
 def test_overlap_plugin(input_peaks, split_i):
-    """Counting number of nearby peaks should not depend on the chunking"""
+    """Counting the number of nearby peaks should not depend on how peaks are
+    chunked.
+    """
     chunks = np.split(input_peaks, [split_i])
     chunks = [c for c in chunks if len(c)]
-    print("\n\nNew run")
-    print(strax.endtime(input_peaks),
-          [strax.endtime(c) for c in chunks],
-          [len(c) for c in chunks])
 
     class Peaks(strax.Plugin):
         depends_on = tuple()
@@ -25,9 +41,8 @@ def test_overlap_plugin(input_peaks, split_i):
         def compute(self, chunk_i):
             return chunks[chunk_i]
 
+        # Hack to make peak output stop after a few chunks
         def is_ready(self, chunk_i):
-            print(f"ready check for {chunk_i}, {len(chunks)},"
-                  f" {chunk_i < len(chunks)}")
             return chunk_i < len(chunks)
 
         def source_finished(self):
@@ -55,10 +70,8 @@ def test_overlap_plugin(input_peaks, split_i):
             return window
 
         def compute(self, peaks):
-            print(f"Compute got {strax.endtime(peaks)}")
             result = dict(
                 n_within_window=count_in_window(strax.endtime(peaks)))
-            print(f"Result is %s" % result)
             return result
 
         def iter(self, *args, **kwargs):
