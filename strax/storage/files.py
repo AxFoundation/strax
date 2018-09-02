@@ -70,7 +70,9 @@ class DataDirectory(StorageFrontend):
             fn = osp.join(self.path, dirname)
             if not osp.isdir(fn):
                 continue
-            _run_id, _data_type, _ = dirname.split('_')
+
+            _run_id, _data_type, _ = dirname.split('-')
+
             if _run_id != key.run_id or _data_type != key.data_type:
                 continue
             # TODO: check for broken data
