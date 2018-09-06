@@ -24,7 +24,14 @@ export, __all__ = strax.exporter()
                       'looking for data.'),
     strax.Option(name='fuzzy_for_options', default=tuple(),
                  help='Tuple of config options for which no checks will be '
-                      'performed when looking for data.'))
+                      'performed when looking for data.'),
+    strax.Option(name='allow_incomplete', default=False,
+                 help="Allow loading of incompletely written data, if the "
+                      "storage systems support it"),
+    strax.Option(name='allow_rechunk', default=True,
+                 help="Allow rechunking of data during writing.")
+
+)
 @export
 class Context:
     """Context for strax analysis.
@@ -226,10 +233,11 @@ class Context:
                     default = opt.get_default(run_id)
                 except strax.InvalidConfiguration:
                     default = strax.OMITTED
+                c = self.context_config if data_type is None else self.config
                 r.append(dict(
                     option=opt.name,
                     default=default,
-                    current=self.config.get(opt.name, strax.OMITTED),
+                    current=c.get(opt.name, strax.OMITTED),
                     applies_to=d,
                     help=opt.help))
         if len(r):
@@ -366,9 +374,10 @@ class Context:
         return plugins
 
     @property
-    def _fuzzy_options(self):
+    def _find_options(self):
         return dict(fuzzy_for=self.context_config['fuzzy_for'],
-                    fuzzy_for_options=self.context_config['fuzzy_for_options'])
+                    fuzzy_for_options=self.context_config['fuzzy_for_options'],
+                    allow_incomplete=self.context_config['allow_incomplete'])
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
@@ -436,7 +445,7 @@ class Context:
                     loaders[d] = sf.loader(
                         key,
                         n_range=n_range,
-                        **self._fuzzy_options)
+                        **self._find_options)
                     # Found it! No need to make it
                     del plugins[d]
                     break
@@ -463,12 +472,18 @@ class Context:
                 self.log.warning(f"Not saving {d} while "
                                  f"selecting a time range in the run")
                 return
-            if any([len(x) > 0 for x in self._fuzzy_options.values()]):
+            if any([len(v) > 0
+                    for k, v in self._find_options.items()
+                    if 'fuzzy' in k]):
                 # In fuzzy matching mode, we cannot (yet) derive the lineage
                 # of any data we are creating. To avoid create false
                 # data entries, we currently do not save at all.
                 self.log.warning(f"Not saving {d} while fuzzy matching is "
                                  f"turned on.")
+                return
+            if self.context_config['allow_incomplete']:
+                self.log.warning(f"Not saving {d} while loading incomplete "
+                                 f"data is allowed.")
                 return
 
             elif p.save_when == strax.SaveWhen.NEVER:
@@ -491,7 +506,8 @@ class Context:
                     if not self.context_config['storage_converter']:
                         continue
                     try:
-                        sf.find(key, **self._fuzzy_options)
+                        sf.find(key,
+                                **self._find_options)
                         # Already have this data in this backend
                         continue
                     except strax.DataNotAvailable:
@@ -499,8 +515,7 @@ class Context:
                         pass
                 try:
                     savers[d].append(sf.saver(key,
-                                              metadata=p.metadata(run_id),
-                                              meta_only=p.save_meta_only))
+                                              metadata=p.metadata(run_id)))
                 except strax.DataNotAvailable:
                     # This frontend cannot save. Too bad.
                     pass
@@ -565,7 +580,9 @@ class Context:
         components = self.get_components(run_id, targets=targets, save=save,
                                          time_range=time_range)
         for x in strax.ThreadedMailboxProcessor(
-                components, max_workers=max_workers).iter():
+                components,
+                max_workers=max_workers,
+                allow_rechunk=self.context_config['allow_rechunk']).iter():
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
                     fn: x[fn]
@@ -629,7 +646,7 @@ class Context:
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
-                return sf.get_metadata(key, **self._fuzzy_options)
+                return sf.get_metadata(key, **self._find_options)
             except strax.DataNotAvailable as e:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
@@ -652,7 +669,7 @@ class Context:
         key = self._key_for(run_id, target)
         for sf in self.storage:
             try:
-                sf.find(key, **self._fuzzy_options)
+                sf.find(key, **self._find_options)
                 return True
             except strax.DataNotAvailable:
                 continue

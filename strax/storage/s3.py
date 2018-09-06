@@ -80,7 +80,8 @@ class SimpleS3Store(StorageFrontend):
                                    aws_secret_access_key=s3_secret_access_key,
                                    endpoint_url=endpoint_url)]
 
-    def _find(self, key, write, fuzzy_for, fuzzy_for_options):
+    def _find(self, key, write,
+              allow_incomplete, fuzzy_for, fuzzy_for_options):
         """Determine if data exists
 
         Search the S3 store to see if data is there.
@@ -153,10 +154,9 @@ class S3Backend(strax.StorageBackend):
                                    dtype=dtype,
                                    compressor=compressor)
 
-    def _saver(self, key, metadata, meta_only=False):
+    def _saver(self, key, metadata):
         return S3Saver(key,
                        metadata=metadata,
-                       meta_only=meta_only,
                        **self.kwargs)
 
 
@@ -166,9 +166,9 @@ class S3Saver(strax.Saver):
     """
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, key, metadata, meta_only,
+    def __init__(self, key, metadata,
                  **kwargs):
-        super().__init__(metadata, meta_only)
+        super().__init__(metadata)
         self.s3 = boto3.client(**kwargs,
                                service_name='s3')
 
@@ -193,11 +193,6 @@ class S3Saver(strax.Saver):
                     filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):
-        if self.meta_only:
-            # TODO HACK!
-            chunk_info["key_name"] = (
-                f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}")
-
         self._upload_json(chunk_info,
                           f"{self.strax_unique_key}"
                           f"/metadata_{chunk_info['chunk_i']:06d}.json")
