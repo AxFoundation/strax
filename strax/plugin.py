@@ -46,7 +46,6 @@ class Plugin:
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
-    save_meta_only = False
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
@@ -314,6 +313,8 @@ class ParallelSourcePlugin(Plugin):
                     self.outputs_to_send.add(d)
                 else:
                     self.sub_savers[d] = savers[d]
+                    for x in self.sub_savers[d]:
+                        x.is_forked = True
                     del savers[d]
 
         mailboxes[self.provides].add_sender(self.iter(

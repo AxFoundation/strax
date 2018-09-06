@@ -100,6 +100,7 @@ class StorageFrontend:
 
     def loader(self, key: DataKey,
                n_range=None,
+               allow_incomplete=False,
                fuzzy_for=tuple(),
                fuzzy_for_options=tuple(),
                executor=None):
@@ -108,6 +109,8 @@ class StorageFrontend:
         :param n_range: 2-length arraylike of (start, exclusive end)
         of row numbers to get. Default is None, which means get the entire
         run.
+        :param allow_incomplete: Allow loading of data which has not been
+        completely written to disk yet.
         :param fuzzy_for: list/tuple of plugin names for which no
         plugin name, version, or option check is performed.
         :param fuzzy_for_options: list/tuple of configuration options for which
@@ -116,18 +119,20 @@ class StorageFrontend:
         """
         backend, backend_key = self.find(key,
                                          write=False,
+                                         allow_incomplete=allow_incomplete,
                                          fuzzy_for=fuzzy_for,
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).loader(
             backend_key, n_range, executor)
 
-    def saver(self, key, metadata, meta_only):
+    def saver(self, key, metadata):
         """Return saver for data described by DataKey."""
         backend, backend_key = self.find(key, write=True)
         return self._get_backend(backend).saver(backend_key,
-                                                metadata, meta_only)
+                                                metadata)
 
     def get_metadata(self, key,
+                     allow_incomplete=False,
                      fuzzy_for=tuple(),
                      fuzzy_for_options=tuple()):
         """Retrieve data-level metadata for the specified key.
@@ -136,6 +141,7 @@ class StorageFrontend:
         backend, backend_key = self.find(key,
                                          write=False,
                                          check_broken=False,
+                                         allow_incomplete=allow_incomplete,
                                          fuzzy_for=fuzzy_for,
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).get_metadata(backend_key)
@@ -143,6 +149,7 @@ class StorageFrontend:
     def find(self, key: DataKey,
              write=False,
              check_broken=True,
+             allow_incomplete=False,
              fuzzy_for=tuple(), fuzzy_for_options=tuple()):
         """Return (str: backend class name, backend-specific) key
         to get at / write data, or raise exception.
@@ -169,6 +176,7 @@ class StorageFrontend:
                                        "it's readonly")
             try:
                 at = self.find(key, write=False,
+                               allow_incomplete=allow_incomplete,
                                fuzzy_for=fuzzy_for,
                                fuzzy_for_options=fuzzy_for_options)
                 raise DataExistsError(
@@ -180,7 +188,11 @@ class StorageFrontend:
 
         try:
             backend_name, backend_key = self._find(
-                key, write, fuzzy_for, fuzzy_for_options)
+                key=key,
+                write=write,
+                allow_incomplete=allow_incomplete,
+                fuzzy_for=fuzzy_for,
+                fuzzy_for_options=fuzzy_for_options)
         except DataNotAvailable:
             raise DataNotAvailable(
                 f"{key.data_type} for {key.run_id} not available." + message)
@@ -192,7 +204,7 @@ class StorageFrontend:
                 raise DataCorrupted(
                     f"Data in {backend_name} {backend_key} corrupted due to "
                     f"exception uring writing: {meta['exception']}.")
-            if 'writing_ended' not in meta:
+            if 'writing_ended' not in meta and not allow_incomplete:
                 raise DataCorrupted(
                     f"Data in {backend_name} {backend_key} corrupted. No "
                     f"writing_ended field present!")
@@ -241,7 +253,7 @@ class StorageFrontend:
     ##
 
     def _find(self, key: DataKey,
-              write, fuzzy_for, fuzzy_for_options):
+              write, allow_incomplete, fuzzy_for, fuzzy_for_options):
         """Return backend key (e.g. for filename) for data identified by key,
         raise DataNotAvailable, or DataExistsError
         Parameters are as for find.
@@ -310,13 +322,13 @@ class StorageBackend:
             else:
                 yield executor.submit(self._read_chunk, backend_key, **kwargs)
 
-    def saver(self, key, metadata, meta_only=False):
+    def saver(self, key, metadata):
         """Return saver for data described by key"""
         metadata.setdefault('compressor', 'blosc')  # TODO wrong place?
         metadata['strax_version'] = strax.__version__
         if 'dtype' in metadata:
             metadata['dtype'] = metadata['dtype'].descr.__repr__()
-        return self._saver(key, metadata, meta_only=False)
+        return self._saver(key, metadata)
 
     ##
     # Abstract methods (to override in child)
@@ -331,7 +343,7 @@ class StorageBackend:
         """Return a single data chunk"""
         raise NotImplementedError
 
-    def _saver(self, key, metadata, meta_only=False):
+    def _saver(self, key, metadata):
         raise NotImplementedError
 
 
@@ -343,10 +355,13 @@ class Saver:
     Do NOT add unpickleable things as attributes (such as loggers)!
     """
     closed = False
-    prefer_rechunk = True
+    prefer_rechunk = True   # If False, do not rechunk even if plugin allows it
 
-    def __init__(self, metadata, meta_only=False):
-        self.meta_only = meta_only
+    # This is set if the saver is operating in multiple processes at once
+    # Do not set it yourself
+    is_forked = False
+
+    def __init__(self, metadata):
         self.md = metadata
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
@@ -382,8 +397,7 @@ class Saver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        if not self.meta_only:
-            chunk_info.update(self._save_chunk(data, chunk_info))
+        chunk_info.update(self._save_chunk(data, chunk_info))
         self._save_chunk_metadata(chunk_info)
 
     def close(self, wait_for=None, timeout=120):
