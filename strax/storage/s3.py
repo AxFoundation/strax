@@ -73,7 +73,8 @@ class SimpleS3Store(StorageFrontend):
                                service_name='s3')
 
         # Create bucket (does nothing if exists)
-        self.s3.create_bucket(Bucket=BUCKET_NAME)
+        #self.s3.create_bucket(Bucket=BUCKET_NAME)
+        print(BUCKET_NAME)
 
         # Setup backends for reading
         self.backends = [S3Backend(aws_access_key_id=s3_access_key_id,
@@ -108,6 +109,7 @@ class SimpleS3Store(StorageFrontend):
                 raise strax.DataNotAvailable
 
     def backend_key(self, key_str):
+
         return self.backends[0].__class__.__name__, key_str
 
     def remove(self, key):
@@ -207,6 +209,7 @@ class S3Saver(strax.Saver):
         prefix = f'{self.strax_unique_key}/metadata_'
         objects_list = self.s3.list_objects(Bucket=BUCKET_NAME,
                                             Prefix=prefix)
+
         if 'Contents' in objects_list:
             for file in objects_list['Contents']:
                 # Grab chunk metadata as ASCIII
