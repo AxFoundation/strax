@@ -58,14 +58,14 @@ class RunDB(strax.StorageFrontend):
 
         query = {'name': key.run_id,
                  'data.type': key.data_type,
-                 '$or': [{'data.protocol': self.backends[0].__class__.__name__}]}
+                 '$or': [{'data.host': 'ceph-s3'}]}
 
         if self.dali:
             query['$or'].append({'data.host': 'dali'})
 
         doc = self.collection.find_one(query,
                                        {'data': {'$elemMatch': {'type': key.data_type,
-                                                                'lineage_hash': key.lineage}}
+                                                                'meta.lineage': key.lineage}}
                                         })
 
         if doc is None or len(doc['data']) == 0:
