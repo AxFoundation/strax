@@ -159,6 +159,10 @@ class Context:
         for opt in self.takes_config.values():
             opt.validate(new_config, set_defaults=True)
 
+        for k in new_config:
+            if k not in self.takes_config:
+                warnings.warn(f"Unknown config option {k}; will do nothing.")
+
         self.context_config = new_config
 
         for k in self.context_config:
