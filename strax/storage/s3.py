@@ -17,6 +17,8 @@ import os
 import tempfile
 
 import boto3
+from botocore.exceptions import ClientError
+from botocore.client import Config
 
 import strax
 from strax import StorageFrontend
@@ -26,7 +28,6 @@ export, __all__ = strax.exporter()
 # Track versions of S3 interface
 VERSION = 2
 BUCKET_NAME = 'snax_s3_v%d' % VERSION
-
 
 @export
 class SimpleS3Store(StorageFrontend):
@@ -66,20 +67,22 @@ class SimpleS3Store(StorageFrontend):
                 raise EnvironmentError("S3 secret key not specified")
             s3_secret_access_key = os.environ.get('S3_SECRET_ACCESS_KEY')
 
+        self.boto3_client_kwargs = {'aws_access_key_id': s3_access_key_id,
+                                    'aws_secret_access_key': s3_secret_access_key,
+                                    'endpoint_url': endpoint_url,
+                                    'service_name' :'s3',
+                                    'config': Config(connect_timeout=5,
+                                                     retries={'max_attempts': 10})}
+
         #  Initialized connection to S3-protocol storage
-        self.s3 = boto3.client(aws_access_key_id=s3_access_key_id,
-                               aws_secret_access_key=s3_secret_access_key,
-                               endpoint_url=endpoint_url,
-                               service_name='s3')
+        self.s3 = boto3.client(**self.boto3_client_kwargs)
 
         # Create bucket (does nothing if exists)
         #self.s3.create_bucket(Bucket=BUCKET_NAME)
         print(BUCKET_NAME)
 
         # Setup backends for reading
-        self.backends = [S3Backend(aws_access_key_id=s3_access_key_id,
-                                   aws_secret_access_key=s3_secret_access_key,
-                                   endpoint_url=endpoint_url)]
+        self.backends = [S3Backend(**self.boto3_client_kwargs), ]
 
     def _find(self, key, write, fuzzy_for, fuzzy_for_options):
         """Determine if data exists
@@ -89,24 +92,29 @@ class SimpleS3Store(StorageFrontend):
         if fuzzy_for or fuzzy_for_options:
             raise NotImplementedError("Can't do fuzzy with S3")
 
-        # Check exact match / write case
         key_str = str(key)
         bk = self.backend_key(key_str)
 
-        # See if any objects exist for this key
-        objects_list = self.s3.list_objects(Bucket=BUCKET_NAME,
-                                            Prefix=key_str)
-        if 'Contents' in objects_list:
-            if write and not self._can_overwrite(key):
-                raise strax.DataExistsError(at=bk)
-            return bk
-        else:
-            # No objects yet...
-            if write:
-                return bk
+        try:
+            self.backends[0].get_metadata(key)
+        except ClientError as ex:
+            print('_find: ClientError')
+            if ex.response['Error']['Code'] == 'NoSuchKey':
+                if write:
+                    print('_find: NoSuchKey - write')
+                    return bk
+                else:
+                    print('_find: NoSuchKey - no write')
+                    raise strax.DataNotAvailable
             else:
-                # If reading and no objects, then problem
-                raise strax.DataNotAvailable
+                print('_find: Other ClientError')
+                raise ex
+
+        if write and not self._can_overwrite(key):
+            print('_find: Key - write, but cannot overwrite')
+            raise strax.DataExistsError(at=bk)
+        print('_find: Key and can read')
+        return bk
 
     def backend_key(self, key_str):
 
@@ -127,8 +135,7 @@ class S3Backend(strax.StorageBackend):
         super().__init__()
 
         #  Initialized connection to S3-protocol storage
-        self.s3 = boto3.client(**kwargs,
-                               service_name='s3')
+        self.s3 = boto3.client(**kwargs)
         self.kwargs = kwargs  # Used later for setting up Saver
 
     def get_metadata(self, backend_key):
@@ -171,16 +178,18 @@ class S3Saver(strax.Saver):
     def __init__(self, key, metadata, meta_only,
                  **kwargs):
         super().__init__(metadata, meta_only)
-        self.s3 = boto3.client(**kwargs,
-                               service_name='s3')
+        self.s3 = boto3.client(**kwargs)
 
         # Unique key specifying processing of a run
         self.strax_unique_key = key
 
+        self.config = boto3.s3.transfer.TransferConfig(max_concurrency=40,
+                                                       num_download_attempts=30)
+
     def _save_chunk(self, data, chunk_info):
         # Keyname
         key_name = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
-
+        print('_savechunk')
         # Save chunk via temporary file
         with tempfile.SpooledTemporaryFile() as f:
             filesize = strax.save_file(f,
@@ -189,12 +198,14 @@ class S3Saver(strax.Saver):
             f.seek(0)
             self.s3.upload_fileobj(f,
                                    BUCKET_NAME,
-                                   key_name)
+                                   key_name,
+                                   Config=self.config)
 
         return dict(key_name=key_name,
                     filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):
+        print('savechunkmeta')
         if self.meta_only:
             # TODO HACK!
             chunk_info["key_name"] = (
@@ -205,6 +216,7 @@ class S3Saver(strax.Saver):
                           f"/metadata_{chunk_info['chunk_i']:06d}.json")
 
     def _close(self):
+        print('close')
         # Collect all the chunk metadata
         prefix = f'{self.strax_unique_key}/metadata_'
         objects_list = self.s3.list_objects(Bucket=BUCKET_NAME,
@@ -229,6 +241,7 @@ class S3Saver(strax.Saver):
                           f'{self.strax_unique_key}/metadata.json')
 
     def _upload_json(self, document, filename):
+        print('_upload_json', BUCKET_NAME, filename)
         with tempfile.SpooledTemporaryFile() as f:
             text = json.dumps(document, **self.json_options)
             f.write(text.encode())
