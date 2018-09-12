@@ -68,7 +68,7 @@ class RunDB(strax.StorageFrontend):
                                                                 'meta.lineage': key.lineage}}
                                         })
 
-        if doc is None or len(doc['data']) == 0:
+        if (doc is None) or ('data' not in doc) or (len(doc['data']) == 0):
             if write:
                 return self.backends[-1].__class__.__name__, os.path.join(self.path, str(key))
             else:
