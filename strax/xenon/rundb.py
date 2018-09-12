@@ -21,15 +21,6 @@ class RunDB(strax.StorageFrontend):
                  path='.',
                  s3_kwargs={},
                  *args, **kwargs):
-        """
-        You must provide credentials to access your storage element.
-
-        :param s3_access_key_id: access key for S3-readable storage.
-        :param s3_secret_access_key: secret key for S3-readable storage.
-        :param endpoint_url: URL of S3-readable storage.
-
-        For other arguments, see DataRegistry base class.
-        """
 
         super().__init__(*args, **kwargs)
 
@@ -49,12 +40,8 @@ class RunDB(strax.StorageFrontend):
             self.backends.append(strax.FileSytemBackend())
 
     def _find(self, key: strax.DataKey, write, fuzzy_for, fuzzy_for_options):
-        """Determine if data exists
-
-        Search the S3 store to see if data is there.
-        """
         if fuzzy_for or fuzzy_for_options:
-            raise NotImplementedError("Can't do fuzzy with S3")
+            raise NotImplementedError("Can't do fuzzy with RunDB yet.")
 
         query = {'name': key.run_id,
                  'data.type': key.data_type,
