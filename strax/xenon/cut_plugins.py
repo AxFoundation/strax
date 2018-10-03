@@ -48,3 +48,15 @@ class S1LowEnergyRange(strax.Plugin):
 class SR1Cuts(strax.MergeOnlyPlugin):
     depends_on = ['fiducial_cylinder_1t', 's1_max_pmt', 's1_low_energy_range']
     save_when = strax.SaveWhen.ALWAYS
+
+
+class FiducialEvents(strax.Plugin):
+    depends_on = ['event_info', 'fiducial_cylinder_1t']
+    data_kind = 'fiducial_events'
+
+    def infer_dtype(self):
+        return strax.merged_dtype([self.deps[d].dtype
+                                   for d in self.depends_on])
+
+    def compute(self, events):
+        return events[events['cut_fiducial_cylinder']]

@@ -47,8 +47,8 @@ class DataDirectory(StorageFrontend):
         with open(self._run_meta_path(run_id), mode='w') as f:
             f.write(json.dumps(metadata))
 
-    def _find(self, key,
-              write, fuzzy_for, fuzzy_for_options):
+    def _find(self, key, write,
+              allow_incomplete, fuzzy_for, fuzzy_for_options):
 
         # Check exact match / write case
         dirname = osp.join(self.path, str(key))
@@ -61,6 +61,13 @@ class DataDirectory(StorageFrontend):
             return bk
         if write:
             return bk
+
+        if allow_incomplete:
+            # Check for incomplete data (only exact matching for now)
+            dirname += '_temp'
+            bk = self.backend_key(dirname)
+            if osp.exists(dirname):
+                return bk
 
         if not fuzzy_for and not fuzzy_for_options:
             raise strax.DataNotAvailable
@@ -108,7 +115,7 @@ class FileSytemBackend(strax.StorageBackend):
         fn = osp.join(dirname, chunk_info['filename'])
         return strax.load_file(fn, dtype=dtype, compressor=compressor)
 
-    def _saver(self, dirname, metadata, meta_only=False):
+    def _saver(self, dirname, metadata):
         # Test if the parent directory is writeable.
         # We need abspath since the dir itself may not exist,
         # even though its parent-to-be does
@@ -117,7 +124,7 @@ class FileSytemBackend(strax.StorageBackend):
             raise strax.DataNotAvailable(
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
-        return FileSaver(dirname, metadata=metadata, meta_only=meta_only)
+        return FileSaver(dirname, metadata=metadata)
 
 
 @export
@@ -125,8 +132,8 @@ class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, dirname, metadata, meta_only):
-        super().__init__(metadata, meta_only)
+    def __init__(self, dirname, metadata,):
+        super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
@@ -135,6 +142,11 @@ class FileSaver(strax.Saver):
         if os.path.exists(self.tempdirname):
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
+        self._flush_metadata()
+
+    def _flush_metadata(self):
+        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+            f.write(json.dumps(self.md, **self.json_options))
 
     def _save_chunk(self, data, chunk_info):
         filename = '%06d' % chunk_info['chunk_i']
@@ -145,12 +157,18 @@ class FileSaver(strax.Saver):
         return dict(filename=filename, filesize=filesize)
 
     def _save_chunk_metadata(self, chunk_info):
-        if self.meta_only:
-            # TODO HACK!
-            chunk_info["filename"] = '%06d' % chunk_info['chunk_i']
-        fn = f'{self.tempdirname}/metadata_{chunk_info["filename"]}.json'
-        with open(fn, mode='w') as f:
-            f.write(json.dumps(chunk_info, **self.json_options))
+        if self.is_forked:
+            # Write a separate metadata.json file for each chunk
+            fn = f'{self.tempdirname}/metadata_{chunk_info["filename"]}.json'
+            with open(fn, mode='w') as f:
+                f.write(json.dumps(chunk_info, **self.json_options))
+        else:
+            # Just append and flush the metadata
+            # (maybe not super-efficient to write the json everytime...
+            # just don't use thousands of chunks)
+            # TODO: maybe make option to turn this off?
+            self.md['chunks'].append(chunk_info)
+            self._flush_metadata()
 
     def _close(self):
         for fn in sorted(glob.glob(
@@ -159,6 +177,6 @@ class FileSaver(strax.Saver):
                 self.md['chunks'].append(json.load(f))
             os.remove(fn)
 
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
-            f.write(json.dumps(self.md, **self.json_options))
+        self._flush_metadata()
+
         os.rename(self.tempdirname, self.dirname)
