@@ -32,7 +32,8 @@ setuptools.setup(name='strax',
                               'graphviz'],
                      'xenon': ['keras',
                                'tensorflow',
-                               'scipy']
+                               'scipy',
+                               'pymongo',]
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),
