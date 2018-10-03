@@ -1,3 +1,2 @@
-requirements.txt
-README.md
-HISTORY.md
+include *.txt
+include *.md
