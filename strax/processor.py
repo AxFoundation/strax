@@ -126,3 +126,5 @@ class ThreadedMailboxProcessor:
         # which is printed for the user
         if traceback is not None:
             raise exc.with_traceback(traceback)
+
+        self.log.debug("Processing finished")
