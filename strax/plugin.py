@@ -46,7 +46,6 @@ class Plugin:
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
-    save_meta_only = False
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
@@ -291,10 +290,13 @@ class ParallelSourcePlugin(Plugin):
             else:
                 break
 
-        # Which data types are we outputting?
+        # Which data types should we output?
+        # Anything that's requested by a plugin we did not inline,
+        # and the final target (whether inlined or not)
+        self.outputs_to_send.update(set(components.targets))
         for d, p in plugins.items():
-            self.outputs_to_send.update(
-                set(p.depends_on) & self.sub_plugins.keys())
+            self.outputs_to_send.update(set(p.depends_on))
+        self.outputs_to_send &= self.sub_plugins.keys() | {self.provides}
 
         # If the savers do not require rechunking, run them in this way also
         for d in list(self.sub_plugins.keys()) + [self.provides]:
@@ -314,12 +316,21 @@ class ParallelSourcePlugin(Plugin):
                     self.outputs_to_send.add(d)
                 else:
                     self.sub_savers[d] = savers[d]
+                    for x in self.sub_savers[d]:
+                        x.is_forked = True
                     del savers[d]
 
-        mailboxes[self.provides].add_sender(self.iter(
+        # We need a new mailbox to collect temporary outputs in
+        # These will be dictionaries of stuff to send
+        # It can't be named after self.provides,
+        # maybe self.provides is requested by someone,
+        # in which case that mailbox needs to exist as usual
+        # (see also #94)
+        mailbox_name = self.provides + '_parallelsource'
+        mailboxes[mailbox_name].add_sender(self.iter(
             iters={}, executor=executor))
-        mailboxes[self.provides].add_reader(partial(self.send_outputs,
-                                                    mailboxes=mailboxes))
+        mailboxes[mailbox_name].add_reader(partial(self.send_outputs,
+                                                   mailboxes=mailboxes))
         return components
 
     def send_outputs(self, source, mailboxes):

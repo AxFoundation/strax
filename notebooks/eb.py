@@ -3,9 +3,6 @@ import argparse
 import os
 import time
 import shutil
-import zipfile
-
-import pymongo
 
 import strax
 
@@ -14,7 +11,7 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('--input', default='./from_fake_daq',
                     help='Input directory')
-parser.add_argument('--output', default='.',
+parser.add_argument('--output', default='./from_eb',
                     help='Output directory')
 
 parser.add_argument('--n', default=1, type=int,
@@ -28,8 +25,8 @@ parser.add_argument('--debug', action='store_true',
                     help='Activate debug logging')
 parser.add_argument('--target', default='event_info',
                     help='Target data type')
-parser.add_argument('--mongo', action='store_true',
-                    help='Activate mongo saving')
+parser.add_argument('--norechunk', action='store_true',
+                    help='Disable rechunking')
 
 parser.add_argument('--no_super_raw', action='store_true',
                     help='Do not save unreduced raw data')
@@ -38,11 +35,9 @@ args = parser.parse_args()
 
 try:
     import gil_load  # noqa
-
     gil_load.init()
 except ImportError:
     from unittest.mock import Mock
-
     gil_load = Mock()
     gil_load.get = Mock(return_value=[float('nan')])
 
@@ -58,31 +53,18 @@ else:
 out_dir = args.output
 
 # Clean all output dirs. This is of course temporary!
-for x in 'raw reduced_raw temp_processed processed'.split():
-    fn = os.path.join(out_dir, x)
-    if os.path.exists(fn):
-        shutil.rmtree(fn)
-    os.makedirs(fn)
-mongo_uri = 'mongodb://localhost'
-if args.mongo:
-    pymongo.MongoClient(mongo_uri).drop_database('strax_data')
+if os.path.exists(out_dir):
+    shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
 
 if args.no_super_raw:
     strax.xenon.plugins.DAQReader.save_meta_only = True
 
 st = strax.Context(
-    storage=[strax.DataDirectory(out_dir + '/raw',
-                                 take_only='raw_records'),
-             strax.DataDirectory(out_dir + '/reduced_raw',
-                                 take_only='records'),
-             strax.DataDirectory(out_dir + '/temp_processed',
-                                 exclude=['records', 'raw_records'])],
+    storage=strax.DataDirectory(out_dir),
     config=dict(input_dir=in_dir,
-                erase=args.erase))
-if args.mongo:
-    st.storage.append(
-        strax.MongoStore(mongo_uri,
-                         take_only=['events', 'event_basics']))
+                erase=args.erase),
+    allow_rechunk=not args.norechunk)
 
 st.register_all(strax.xenon.plugins)
 
@@ -124,14 +106,3 @@ print(f"""
 Processed {raw_data_size} MB at {speed:.2f} MB/s
 Data sizes on disk: {sizes}
 """)
-
-print("Tarring (well, zipping, but without compression) high-level data.\n"
-      "This should be done while transferring to xe-datamanager")
-start = time.time()
-
-procfile = f'{out_dir}/processed/{run_id}.zip'
-strax.ZipDirectory.zip_dir(f'{out_dir}/temp_processed', procfile, delete=True)
-
-end = time.time()
-print(f"Done, took {end-start:.2f} seconds, "
-      f"processed data takes {os.path.getsize(procfile)/1e6:.2f} MB on disk")

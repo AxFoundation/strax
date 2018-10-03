@@ -30,8 +30,8 @@ class ZipDirectory(strax.StorageFrontend):
         if not osp.exists(path):
             os.makedirs(path)
 
-    def _find(self, key,
-              write, ignore_versions, ignore_config):
+    def _find(self, key, write,
+              allow_incomplete, fuzzy_for, fuzzy_for_options):
         assert not write
 
         # Check exact match / write case
@@ -45,7 +45,7 @@ class ZipDirectory(strax.StorageFrontend):
             except KeyError:
                 pass
 
-            if not ignore_versions and not ignore_config:
+            if not len(fuzzy_for) and not len(fuzzy_for_options):
                 raise strax.DataNotAvailable
 
         raise NotImplementedError("Fuzzy matching within zipfiles not yet "

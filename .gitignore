@@ -7,9 +7,12 @@
 *.zstd
 *.npy
 *.blosc
+*.h5
 strax_data
 from_fake_daq
 from_eb
+from_eb_finished
+resource_cache
 raw
 reduced_raw
 processed

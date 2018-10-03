@@ -25,7 +25,10 @@ class MailboxDict(dict):
 class ThreadedMailboxProcessor:
     mailboxes: ty.Dict[str, strax.Mailbox]
 
-    def __init__(self, components: ProcessorComponents, max_workers=None):
+    def __init__(self,
+                 components: ProcessorComponents,
+                 allow_rechunk=True,
+                 max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
         self.mailboxes = MailboxDict()
@@ -83,6 +86,8 @@ class ThreadedMailboxProcessor:
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
                     rechunk = False
+                if not allow_rechunk:
+                    rechunk = False
 
                 from functools import partial
                 self.mailboxes[d].add_reader(
@@ -121,3 +126,5 @@ class ThreadedMailboxProcessor:
         # which is printed for the user
         if traceback is not None:
             raise exc.with_traceback(traceback)
+
+        self.log.debug("Processing finished")

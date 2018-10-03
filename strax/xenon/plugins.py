@@ -259,7 +259,8 @@ class PeakPositions(strax.Plugin):
         x = x[:, :self.n_top_pmts][:, self.pmt_mask]
 
         # Normalize
-        x /= x.sum(axis=1).reshape(-1, 1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            x /= x.sum(axis=1).reshape(-1, 1)
 
         result = np.ones((len(peaks), 2), dtype=np.float32) * float('nan')
         with self.graph.as_default():
@@ -277,7 +278,7 @@ class PeakPositions(strax.Plugin):
                  help="Maximum (IQR) width of S1s"),
     strax.Option('s1_min_n_channels', default=3,
                  help="Minimum number of PMTs that must contribute to a S1"),
-    strax.Option('s2_min_area', default=100,
+    strax.Option('s2_min_area', default=10,
                  help="Minimum area (PE) for S2s"),
     strax.Option('s2_min_width', default=200,
                  help="Minimum width for S2s"))
@@ -553,8 +554,9 @@ class EventPositions(strax.Plugin):
         r_obs = np.linalg.norm(orig_pos[:, :2], axis=1)
 
         delta_r = self.map(orig_pos)
-        r_cor = r_obs + delta_r
-        scale = r_cor / r_obs
+        with np.errstate(invalid='ignore', divide='ignore'):
+            r_cor = r_obs + delta_r
+            scale = r_cor / r_obs
 
         result = dict(x=orig_pos[:, 0] * scale,
                       y=orig_pos[:, 1] * scale,
@@ -564,8 +566,9 @@ class EventPositions(strax.Plugin):
                       r_field_distortion_correction=delta_r,
                       theta=np.arctan2(orig_pos[:, 1], orig_pos[:, 0]))
 
-        z_cor = -(z_obs ** 2 - delta_r ** 2) ** 0.5
-        invalid = np.abs(z_obs) < np.abs(delta_r)        # Why??
+        with np.errstate(invalid='ignore'):
+            z_cor = -(z_obs ** 2 - delta_r ** 2) ** 0.5
+            invalid = np.abs(z_obs) < np.abs(delta_r)        # Why??
         z_cor[invalid] = z_obs[invalid]
         result['z'] = z_cor
 
