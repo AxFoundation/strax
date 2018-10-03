@@ -77,7 +77,8 @@ def test_filestore():
 
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
-        assert os.listdir(data_dirs[0]) == ['000000', 'metadata.json']
+        assert sorted(os.listdir(data_dirs[0])) \
+               == ['000000', 'metadata.json']
 
         # Check metadata got written correctly.
         metadata = mystrax.get_meta(run_id, 'peaks')
