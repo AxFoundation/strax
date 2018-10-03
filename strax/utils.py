@@ -188,7 +188,9 @@ def to_str_tuple(x) -> typing.Tuple[str]:
         return x,
     elif isinstance(x, list):
         return tuple(x)
-    return x
+    elif isinstance(x, tuple):
+        return x
+    raise TypeError(f"Expected string or tuple of strings, got {type(x)}")
 
 
 @export
