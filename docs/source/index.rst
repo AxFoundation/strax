@@ -31,7 +31,6 @@ Besides the documentation below, you might find these presentations useful:
     :caption: Setup and basics
 
     basics/setup
-    basics/tutorial.ipynb
 
 .. toctree::
     :maxdepth: 1
@@ -57,7 +56,6 @@ The above pages describe how strax's processing framework works under the hood, 
     :caption: API Reference
 
     reference/strax
-    reference/datastructure
 
 
 * :ref:`genindex`
