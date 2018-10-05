@@ -34,7 +34,7 @@ class DataDirectory(StorageFrontend):
     def _run_meta_path(self, run_id):
         return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
 
-    def run_metadata(self, run_id):
+    def run_metadata(self, run_id, projection=None):
         path = self._run_meta_path(run_id)
         if osp.exists(path):
             with open(path, mode='r') as f:
