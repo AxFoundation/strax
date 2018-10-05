@@ -262,7 +262,7 @@ class StorageFrontend:
         # the fuzzy options
         raise NotImplementedError
 
-    def run_metadata(self, run_id):
+    def run_metadata(self, run_id, projection=None):
         """Return run metadata dictionary, or raise RunMetadataNotAvailable"""
         raise NotImplementedError
 

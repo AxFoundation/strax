@@ -30,7 +30,6 @@ export, __all__ = strax.exporter()
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
                  help="Allow rechunking of data during writing.")
-
 )
 @export
 class Context:
@@ -641,7 +640,7 @@ class Context:
         return strax.DataKey(run_id, target, p.lineage)
 
     def get_meta(self, run_id, target) -> dict:
-        """Return metadata for target for run_id, or raise NotCached
+        """Return metadata for target for run_id, or raise DataNotAvailable
         if data is not yet available.
 
         :param run_id: run id to get
@@ -655,6 +654,25 @@ class Context:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
+
+    get_metadata = get_meta
+
+    def run_metadata(self, run_id, projection=None) -> dict:
+        """Return run-evel metadata for run_id, or raise DataNotAvailable
+        if this is not available
+
+        :param run_id: run id to get
+        :param projection: Selection of fields to get, following MongoDB
+        syntax. May not be supported by frontend.
+        """
+        for sf in self.storage:
+            try:
+                return sf.run_metadata(run_id, projection=projection)
+            except (strax.DataNotAvailable, NotImplementedError):
+                self.log.debug(f"Frontend {sf} does not have "
+                               f"run metadata for {run_id}")
+        raise strax.DataNotAvailable(f"No run-level metadata available "
+                                     f"for {run_id}")
 
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
