@@ -19,7 +19,7 @@ export, __all__ = strax.exporter()
 
 
 @export
-class DataKey(typing.NamedTuple):
+class DataKey:
     """Request for data to a storage registry
 
     Instances of this class uniquely identify a single piece of strax data
@@ -33,10 +33,25 @@ class DataKey(typing.NamedTuple):
     data_type: str
     lineage: dict
 
+    # Do NOT use directly, use the lineage_hash method
+    _lineage_hash = ''
+
+    def __init__(self, run_id, data_type, lineage):
+        self.run_id = run_id
+        self.data_type = data_type
+        self.lineage = lineage
+
     def __repr__(self):
-        return '-'.join([self.run_id,
-                         self.data_type,
-                         strax.deterministic_hash(self.lineage)])
+        return '-'.join([self.run_id, self.data_type, self.lineage_hash])
+
+    @property
+    def lineage_hash(self):
+        """Deterministic hash of the lineage"""
+        # We cache the hash computation to benefit tight loops calling
+        # this property
+        if self._lineage_hash == '':
+            self._lineage_hash = strax.deterministic_hash(self.lineage)
+        return strax.deterministic_hash(self.lineage)
 
 
 @export
@@ -146,6 +161,11 @@ class StorageFrontend:
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).get_metadata(backend_key)
 
+    def _we_take(self, data_type):
+        """Return if data_type can be provided by this frontend"""
+        return not (data_type in self.exclude
+                or self.take_only and data_type not in self.take_only)
+
     def find(self, key: DataKey,
              write=False,
              check_broken=True,
@@ -165,14 +185,13 @@ class StorageFrontend:
             f"\nIgnoring plugin lineage for: {fuzzy_for}."
             f"\nIgnoring config options: {fuzzy_for}.")
 
-        # Easy failures
-        if (key.data_type in self.exclude
-                or self.take_only and key.data_type not in self.take_only):
+        if not self._we_take(key.data_type):
             raise DataNotAvailable(
                 f"{self} does not accept or provide data type {key.data_type}")
+
         if write:
             if self.readonly:
-                raise DataNotAvailable("f{self} cannot write any-data, "
+                raise DataNotAvailable(f"{self} cannot write any-data, "
                                        "it's readonly")
             try:
                 at = self.find(key, write=False,
@@ -239,7 +258,7 @@ class StorageFrontend:
                 for data_type, v in lineage.items()
                 if data_type not in fuzzy_for}
 
-    def _can_overwrite(self, key):
+    def _can_overwrite(self, key: DataKey):
         if self.overwrite == 'always':
             return True
         if self.overwrite == 'if_broken':
@@ -248,9 +267,24 @@ class StorageFrontend:
                     and 'exception' not in metadata)
         return False
 
+    def list_available(self, key: DataKey,
+                       allow_incomplete, fuzzy_for, fuzzy_for_options):
+        """Return list of run_ids for which available data matches key.
+        The run_id field of key is ignored."""
+        if not self._we_take(key.data_type):
+            return []
+        return self._list_available(
+            key, allow_incomplete, fuzzy_for, fuzzy_for_options)
+
     ##
     # Abstract methods (to override in child)
     ##
+
+    def _list_available(self, key: DataKey,
+                        allow_incomplete, fuzzy_for, fuzzy_for_options):
+        """Return list of available runs whose data matches key.
+        The run_id field of key is ignored."""
+        raise NotImplementedError
 
     def _find(self, key: DataKey,
               write, allow_incomplete, fuzzy_for, fuzzy_for_options):

@@ -605,7 +605,8 @@ class Context:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
-        for _ in self.get_iter(run_id, targets, save, max_workers, **kwargs):
+        for _ in self.get_iter(run_id, targets,
+                               save=save, max_workers=max_workers, **kwargs):
             pass
 
     def get_array(self, run_id: str, targets, save=tuple(), max_workers=None,
@@ -613,7 +614,8 @@ class Context:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        results = list(self.get_iter(run_id, targets, save, max_workers,
+        results = list(self.get_iter(run_id, targets,
+                                     save=save, max_workers=max_workers,
                                      **kwargs))
         if len(results):
             return np.concatenate(results)
@@ -625,7 +627,8 @@ class Context:
         {get_docs}
         """
         df = self.get_array(
-            run_id, targets, save, max_workers, **kwargs)
+            run_id, targets,
+            save=save, max_workers=max_workers, **kwargs)
         try:
             return pd.DataFrame.from_records(df)
         except Exception as e:
@@ -673,6 +676,26 @@ class Context:
                                f"run metadata for {run_id}")
         raise strax.DataNotAvailable(f"No run-level metadata available "
                                      f"for {run_id}")
+
+    def list_available(self, target, **kwargs):
+        """Return sorted list of run_id's for which target is available
+        """
+        # TODO duplicated code with with get_iter
+        if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
+            self = self.new_context(**kwargs)
+
+        # The run_id is ignored in list_available, but we still use it for
+        # passing data type and lineage to the search functions.
+        # We choose 0 as placeholder since as of this writing strax
+        # requires run_ids to be int-able strings...
+        # TODO: this should change soon
+        key = self._key_for('0', target)
+
+        found_runs = []
+        for sf in self.storage:
+            found_runs += sf.list_available(key, **self._find_options)
+        return sorted(list(set(found_runs)))
 
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
