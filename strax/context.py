@@ -29,7 +29,11 @@ export, __all__ = strax.exporter()
                  help="Allow loading of incompletely written data, if the "
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
-                 help="Allow rechunking of data during writing.")
+                 help="Allow rechunking of data during writing."),
+    strax.Option(name='forbid_creation_of', default=tuple(),
+                 help="If any of the following datatypes is requested to be "
+                      "created, throw an error instead. Useful to limit "
+                      "descending too far into the dependency graph.")
 )
 @export
 class Context:
@@ -462,6 +466,10 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
                         f"available, but {d} for {run_id} is not.")
+                if d in self.context_config['forbid_creation_of']:
+                    raise strax.DataNotAvailable(
+                        f"{d} for {run_id} not found in any storage, and "
+                        "your context specifies it cannot be created.")
                 # Not in any cache. We will be computing it.
                 to_compute[d] = p
                 for dep_d in p.depends_on:
