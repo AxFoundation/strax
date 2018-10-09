@@ -12,7 +12,7 @@ and does not require a preprocessing stage ('eventbuilder').
 It achieves this due to using `numpy <https://docs.scipy.org/doc/numpy/>`_ `structured arrays <https://docs.scipy.org/doc/numpy/user/basics.rec.html>`_ internally,
 which are supported by the amazing just-in-time compiler `numba <http://numba.pydata.org/>`_.
 
-Strax is primarily developed for the XENONnT experiment, although the configuration and specific algorithms for XENONnT are hosted at `<https://github.com/XENONnT/straxen>`_. You can find its documentation at `straxen <https://strax.readthedocs.io/en/latest/?badge=latest>`_.
+Strax is primarily developed for the XENONnT experiment, although the configuration and specific algorithms for XENONnT are hosted at `<https://github.com/XENONnT/straxen>`_. You can find its documentation `here <https://straxen.readthedocs.io>`_.
 
 You might also find these presentations useful:
 
