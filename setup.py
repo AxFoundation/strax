@@ -13,9 +13,8 @@ with open('HISTORY.md') as file:
 
 setuptools.setup(name='strax',
                  version='0.5.0',
-                 description='Streaming analysis for XENON',
+                 description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
-                 author_email='j.aalbers@uva.nl',
                  url='https://github.com/AxFoundation/strax',
                  setup_requires=['pytest-runner'],
                  install_requires=requires,
