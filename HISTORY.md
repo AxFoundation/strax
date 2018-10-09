@@ -1,4 +1,12 @@
 
+0.6.0 / 2018-10-09
+------------------
+- strax / straxen split (#107)
+- Support incomplete data loading (#99)
+- Fix for loading data made by ParallelSourcePlugin (#104)
+- Runs DB frontend (#100) (moved to straxen)
+- Fix MANIFEST.in
+
 0.5.0 / 2018-09-02
 ------------------
 - Directory name delimiter changed from `_` to `-` (#76)
