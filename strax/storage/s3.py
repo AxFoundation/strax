@@ -169,9 +169,10 @@ class S3Saver(strax.Saver):
     """
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, key, metadata,
-                 **kwargs):
-        super().__init__(metadata, meta_only)
+    def __init__(self, key, metadata=None, **kwargs):
+        if metadata is None:
+            metadata = dict()
+        super().__init__(metadata=metadata)
         self.s3 = boto3.client(**kwargs)
 
         # Unique key specifying processing of a run
