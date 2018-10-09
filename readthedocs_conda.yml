@@ -1,6 +1,0 @@
-# Conda environment file for readthedocs
-# This is just for installing graphviz, which is external to python
-name: py36
-dependencies:
-  - python=3.6
-  - graphviz

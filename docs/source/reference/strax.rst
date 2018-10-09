@@ -8,7 +8,6 @@ Subpackages
 
     strax.processing
     strax.storage
-    strax.xenon
 
 Submodules
 ----------
