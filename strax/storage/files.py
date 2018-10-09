@@ -34,7 +34,7 @@ class DataDirectory(StorageFrontend):
     def _run_meta_path(self, run_id):
         return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
 
-    def run_metadata(self, run_id):
+    def run_metadata(self, run_id, projection=None):
         path = self._run_meta_path(run_id)
         if osp.exists(path):
             with open(path, mode='r') as f:
@@ -47,48 +47,94 @@ class DataDirectory(StorageFrontend):
         with open(self._run_meta_path(run_id), mode='w') as f:
             f.write(json.dumps(metadata))
 
+    def _list_available(self, key: strax.DataKey,
+                        allow_incomplete, fuzzy_for, fuzzy_for_options):
+        if allow_incomplete:
+            raise NotImplementedError(
+                "allow_incomplete not yet supported with list_available "
+                "for DataDirectory")
+
+        found_runs = []
+        for fn in self._subfolders():
+            run_id = self._folder_matches(
+                fn, key, fuzzy_for, fuzzy_for_options,
+                ignore_name=True)
+            if run_id:
+                found_runs.append(run_id)
+
+        return found_runs
+
     def _find(self, key, write,
               allow_incomplete, fuzzy_for, fuzzy_for_options):
 
-        # Check exact match / write case
         dirname = osp.join(self.path, str(key))
+        exists = os.path.exists(dirname)
         bk = self.backend_key(dirname)
-        if osp.exists(dirname):
-            if write:
-                if self._can_overwrite(key):
-                    return bk
-                raise strax.DataExistsError(at=bk)
-            return bk
+
         if write:
+            if exists and not self._can_overwrite(key):
+                raise strax.DataExistsError(at=dirname)
             return bk
 
         if allow_incomplete:
             # Check for incomplete data (only exact matching for now)
-            dirname += '_temp'
-            bk = self.backend_key(dirname)
-            if osp.exists(dirname):
+            if fuzzy_for or fuzzy_for_options:
+                raise NotImplementedError(
+                    "Mixing of fuzzy matching and allow_incomplete "
+                    "not supported by DataDirectory.")
+            tempdirname = dirname + '_temp'
+            bk = self.backend_key(tempdirname)
+            if osp.exists(tempdirname):
                 return bk
 
-        if not fuzzy_for and not fuzzy_for_options:
-            raise strax.DataNotAvailable
+        # Check exact match
+        if exists and self._folder_matches(dirname, key, None, None):
+            return bk
 
         # Check metadata of all potentially matching data dirs for match...
-        for dirname in os.listdir(self.path):
-            fn = osp.join(self.path, dirname)
-            if not osp.isdir(fn):
-                continue
-
-            _run_id, _data_type, _ = dirname.split('-')
-
-            if _run_id != key.run_id or _data_type != key.data_type:
-                continue
-            # TODO: check for broken data and ignore? depend on option?
-            metadata = self.backends[0].get_metadata(fn)
-            if self._matches(metadata['lineage'], key.lineage,
-                             fuzzy_for, fuzzy_for_options):
-                return self.backend_key(osp.join(self.path, dirname))
+        for fn in self._subfolders():
+            if self._folder_matches(fn, key,
+                                    fuzzy_for, fuzzy_for_options):
+                return self.backend_key(fn)
 
         raise strax.DataNotAvailable
+
+    def _subfolders(self):
+        """Loop over subfolders of self.path"""
+        for dirname in os.listdir(self.path):
+            yield osp.join(self.path, dirname)
+
+    def _folder_matches(
+            self, fn, key, fuzzy_for, fuzzy_for_options,
+            ignore_name=False):
+        """Return the run_id of folder fn if it matches key, or False if it
+        does not
+        :param name: Ignore the run name part of the key. Useful for listing
+        availability
+        """
+        # Parse the folder name
+        stuff = osp.normpath(fn).split(os.sep)[-1].split('-')
+        if len(stuff) != 3:
+            # This is not a folder with strax data
+            return False
+        _run_id, _data_type, _hash = stuff
+
+        # Check exact match
+        if _data_type != key.data_type:
+            return False
+        if not ignore_name and _run_id != key.run_id:
+            return False
+
+        # Check fuzzy match
+        if not (fuzzy_for or fuzzy_for_options):
+            if _hash == key.lineage_hash:
+                return _run_id
+            return False
+        metadata = self.backends[0].get_metadata(fn)
+        if self._matches(metadata['lineage'], key.lineage,
+                         fuzzy_for, fuzzy_for_options):
+            return _run_id
+        return False
 
     def backend_key(self, dirname):
         return self.backends[0].__class__.__name__, dirname

@@ -28,12 +28,7 @@ setuptools.setup(name='strax',
                      'docs': ['sphinx',
                               'sphinx_rtd_theme',
                               'nbsphinx',
-                              'recommonmark',
-                              'graphviz'],
-                     'xenon': ['keras',
-                               'tensorflow',
-                               'scipy',
-                               'pymongo',]
+                              'recommonmark']
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),

@@ -68,8 +68,12 @@ def test_filestore():
                                 register=[Records, Peaks])
 
         assert not mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == []
+
         mystrax.make(run_id=run_id, targets='peaks')
+
         assert mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == [run_id]
 
         # We should have two directories
         data_dirs = sorted(glob.glob(osp.join(temp_dir, '*/')))
@@ -117,10 +121,13 @@ def test_fuzzy_matching():
         # Changing option causes data not to match
         st.set_config(dict(some_option=1))
         assert not st.is_stored(run_id, 'peaks')
+        assert st.list_available('peaks') == []
 
         # In fuzzy context, data does match
         st2 = st.new_context(fuzzy_for=('peaks',))
         assert st2.is_stored(run_id, 'peaks')
+        assert st2.list_available('peaks') == [run_id]
+
         # And we can actually load it
         st2.get_meta(run_id, 'peaks')
         st2.get_array(run_id, 'peaks')
