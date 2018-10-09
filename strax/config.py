@@ -21,14 +21,26 @@ def takes_config(*options):
     :param options: Option instances of options this plugin takes.
     """
     def wrapped(plugin_class):
-        result = []
+        result = {}
         for opt in options:
             if not isinstance(opt, Option):
                 raise RuntimeError("Specify config options by Option objects")
             opt.taken_by = plugin_class.__name__
-            result.append(opt)
+            result[opt.name] = opt
 
-        plugin_class.takes_config = {opt.name: opt for opt in result}
+        # For some reason the second condition is essential, I don't understand
+        # yet why...
+        if (hasattr(plugin_class, 'takes_config')
+                and len(plugin_class.takes_config)):
+            # Already have some options set, e.g. because of subclassing
+            # where both child and parent have a takes_config decorator
+            for opt in result.values():
+                if opt.name in plugin_class.takes_config:
+                    raise RuntimeError(
+                        f"Attempt to specify option {opt.name} twice")
+            plugin_class.takes_config.update(result)
+        else:
+            plugin_class.takes_config = result
         return plugin_class
 
     return wrapped

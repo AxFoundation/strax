@@ -27,5 +27,3 @@ from strax.processing.pulse_processing import *
 from strax.processing.peak_building import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
-
-from . import xenon

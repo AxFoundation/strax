@@ -37,8 +37,6 @@ class ZipDirectory(strax.StorageFrontend):
         # Check exact match / write case
         bk = self._backend_key(key)
         with zipfile.ZipFile(self._zipname(key)) as zp:
-            print("Still here")
-            print(zp.namelist())
             try:
                 zp.getinfo(str(key) + '/metadata.json')
                 return bk
