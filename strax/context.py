@@ -78,7 +78,6 @@ class Context:
                         for s in storage]
 
         self._plugin_class_registry = dict()
-        self._plugin_instance_cache = dict()
 
         self.set_config(config, mode='replace')
         self.set_context_config(kwargs, mode='replace')
@@ -429,6 +428,9 @@ class Context:
             n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
             n_start = n_end - n_end[0]
             _inds = np.searchsorted(times, time_range) - 1
+            # Clip to prevent out-of-range times causing
+            # negative or nonexistent indices
+            _inds = np.clip(_inds, 0, len(n_end) - 1)
             n_range = n_start[_inds[0]], n_end[_inds[1]]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
