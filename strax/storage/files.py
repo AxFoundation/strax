@@ -28,8 +28,8 @@ class DataDirectory(StorageFrontend):
         super().__init__(*args, **kwargs)
         self.backends = [strax.FileSytemBackend()]
         self.path = path
-        if not osp.exists(path):
-            os.makedirs(path)
+        if not self.readonly and not osp.exists(self.path):
+            os.makedirs(self.path)
 
     def _run_meta_path(self, run_id):
         return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
@@ -66,7 +66,6 @@ class DataDirectory(StorageFrontend):
 
     def _find(self, key, write,
               allow_incomplete, fuzzy_for, fuzzy_for_options):
-
         dirname = osp.join(self.path, str(key))
         exists = os.path.exists(dirname)
         bk = self.backend_key(dirname)
@@ -101,6 +100,8 @@ class DataDirectory(StorageFrontend):
 
     def _subfolders(self):
         """Loop over subfolders of self.path"""
+        if not os.path.exists(self.path):
+            return
         for dirname in os.listdir(self.path):
             yield osp.join(self.path, dirname)
 
@@ -166,10 +167,24 @@ class FileSytemBackend(strax.StorageBackend):
         # We need abspath since the dir itself may not exist,
         # even though its parent-to-be does
         parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
+
+        # In case the parent dir also doesn't exist, we have to create is
+        # otherwise the write permission check below will certainly fail
+        try:
+            os.makedirs(parent_dir, exist_ok=True)
+        except OSError as e:
+            raise strax.DataNotAvailable(
+                f"Can't write data to {dirname}, "
+                f"{parent_dir} does not exist and we could not create it."
+                f"Original error: {e}")
+
+        # Finally, check if we have permission to create the new subdirectory
+        # (which the Saver will do)
         if not os.access(parent_dir, os.W_OK):
             raise strax.DataNotAvailable(
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
+
         return FileSaver(dirname, metadata=metadata)
 
 

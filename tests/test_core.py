@@ -2,6 +2,7 @@
 Mostly tests if we don't crash immediately..
 """
 import tempfile
+import shutil
 import os
 import os.path as osp
 import glob
@@ -103,12 +104,33 @@ def test_filestore():
         strax.ZipDirectory.zip_dir(temp_dir, zf, delete=True)
         assert osp.exists(zf)
 
-        print(temp_dir)
-        print(os.listdir(temp_dir))
         mystrax = strax.Context(storage=strax.ZipDirectory(temp_dir),
                                 register=[Records, Peaks])
         metadata_2 = mystrax.get_meta(run_id, 'peaks')
         assert metadata == metadata_2
+
+
+def test_datadirectory_deleted():
+    """Test deleting the data directory does not cause crashes
+    or silent failures to save (#93)
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        data_dir = osp.join(temp_dir, 'bla')
+        os.makedirs(data_dir)
+
+        mystrax = strax.Context(storage=strax.DataDirectory(data_dir),
+                                register=[Records, Peaks])
+
+        # Delete directory AFTER context is created
+        shutil.rmtree(data_dir)
+
+        assert not mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == []
+
+        mystrax.make(run_id=run_id, targets='peaks')
+
+        assert mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == [run_id]
 
 
 def test_fuzzy_matching():
