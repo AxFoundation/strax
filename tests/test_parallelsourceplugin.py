@@ -1,3 +1,5 @@
+import tempfile
+import pytest
 import strax
 import numpy as np
 
@@ -8,12 +10,21 @@ recs_per_chunk = 10
 run_id = '0'
 
 
+class SomeCrash(Exception):
+    pass
+
+
+@strax.takes_config(
+    strax.Option('crash', default=False)
+)
 class Records(strax.ParallelSourcePlugin):
     provides = 'records'
     depends_on = tuple()
     dtype = strax.record_dtype()
 
     def compute(self, chunk_i):
+        if self.config['crash']:
+            raise SomeCrash("CRASH!!!!")
         r = np.zeros(recs_per_chunk, self.dtype)
         r['time'] = chunk_i
         r['length'] = 1
@@ -67,6 +78,27 @@ def test_processing():
             assert bla.dtype == (
                 strax.peak_dtype() if request_peaks else strax.record_dtype())
 
+# TODO: copy-paste-modified from test_core... not so good
+def test_exception():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks],
+                           config=dict(crash=True))
+
+        # Check correct exception is thrown
+        with pytest.raises(SomeCrash):
+            st.make(run_id=run_id, targets='peaks')
+
+        # Check exception is recorded in metadata
+        # in both its original data type and dependents
+        for target in ('peaks', 'records'):
+            assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
+
+        # Check data cannot be loaded again
+        with pytest.raises(strax.DataCorrupted):
+            st.get_df(run_id=run_id, targets='peaks')
+
+
 
 if __name__ == '__main__':
     import logging
@@ -74,4 +106,4 @@ if __name__ == '__main__':
         level=logging.DEBUG,
         format='{name} in {threadName} at {asctime}: {message}',
         style='{')
-    test_processing()
+    test_exception()

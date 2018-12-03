@@ -7,6 +7,7 @@ from enum import IntEnum
 import itertools
 import logging
 from functools import partial
+import sys
 import typing
 import time
 import inspect
@@ -334,12 +335,27 @@ class ParallelSourcePlugin(Plugin):
         return components
 
     def send_outputs(self, source, mailboxes):
-        for result in source:
-            for d, x in result.items():
-                mailboxes[d].send(x)
-
-        for d in self.outputs_to_send:
-            mailboxes[d].close()
+        """This code is a 'mail sorter' which gets dicts of arrays from source
+        and sends the right array to the right mailbox.
+        """
+        # TODO: this code duplicates exception handling and cleanup
+        # from Mailbox.send_from! Can we avoid that somehow?
+        try:
+            for result in source:
+                for d, x in result.items():
+                    mailboxes[d].send(x)
+        except strax.MailboxKilled as e:
+            # The source mailbox died. Kill all attached mailboxes
+            for d in self.outputs_to_send:
+                mailboxes[d].kill(reason=e.args[0])
+            # Do NOT raise! One traceback on the screen is enough.
+        except Exception as e:
+            for d in self.outputs_to_send:
+                mailboxes[d].kill(reason=(e.__class__, e, sys.exc_info()[2]))
+            raise
+        else:
+            for d in self.outputs_to_send:
+                mailboxes[d].close()
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
