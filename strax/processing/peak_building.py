@@ -138,7 +138,7 @@ def sum_waveform(peaks, records, adc_to_pe):
             # r['time'] + r['length'], ')')
 
             s = int((p['time'] - r['time']) // dt)
-            n_r = samples_per_record
+            n_r = r['length']
             n_p = p_length
 
             if s < -n_p:
