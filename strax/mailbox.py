@@ -144,11 +144,16 @@ class Mailbox:
 
     def kill(self, upstream=True, reason=None):
         with self._lock:
+            self.log.debug(f"Kill received by {self.name}")
             if upstream:
                 self.force_killed = True
+            if self.killed:
+                self.log.warning(f"DOUBLE KILL on {self.name} = NOP!")
+                return
             self.killed = True
             self.killed_because = reason
             self._read_condition.notify_all()
+            self._write_condition.notify_all()
 
     def cleanup(self):
         for t in self._threads:
@@ -210,13 +215,22 @@ class Mailbox:
                     f'subscribers already read {read_until}.')
 
             def can_write():
-                return len(self._mailbox) < self.max_messages
+                return (len(self._mailbox) < self.max_messages or self.killed)
             if not can_write():
-                self.log.debug(self._subscribers_have_read)
+                self.log.debug("Subscribers have read: "
+                               + str(self._subscribers_have_read))
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
             if not self._write_condition.wait_for(can_write,
                                                   timeout=self.timeout):
                 raise MailboxFullTimeout(f"{self.name} emptied too slow")
+
+            if self.killed:
+                self.log.debug(f"Sender found {self.name} killed while waiting"
+                               " for room for new messages.")
+                # TODO: this is duplicated from above...
+                if self.force_killed:
+                    raise MailboxKilled(self.killed_because)
+                return
 
             heapq.heappush(self._mailbox, (msg_number, msg))
             self.log.debug(f"Sent {msg_number}")

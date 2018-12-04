@@ -56,11 +56,13 @@ run_id = '0'
 
 
 def test_core():
-    mystrax = strax.Context(storage=[],
-                            register=[Records, Peaks])
-    bla = mystrax.get_array(run_id=run_id, targets='peaks')
-    assert len(bla) == recs_per_chunk * n_chunks
-    assert bla.dtype == strax.peak_dtype()
+    for max_workers in [1,2]:
+        mystrax = strax.Context(storage=[],
+                                register=[Records, Peaks],)
+        bla = mystrax.get_array(run_id=run_id, targets='peaks',
+                                max_workers=max_workers)
+        assert len(bla) == recs_per_chunk * n_chunks
+        assert bla.dtype == strax.peak_dtype()
 
 
 def test_filestore():

@@ -80,6 +80,7 @@ def test_processing():
 
 # TODO: copy-paste-modified from test_core... not so good
 def test_exception():
+    Peaks.parallel = True
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
                            register=[Records, Peaks],
@@ -87,7 +88,8 @@ def test_exception():
 
         # Check correct exception is thrown
         with pytest.raises(SomeCrash):
-            st.make(run_id=run_id, targets='peaks')
+            st.make(run_id=run_id, targets='peaks',
+                    max_workers=2)
 
         # Check exception is recorded in metadata
         # in both its original data type and dependents
@@ -106,4 +108,5 @@ if __name__ == '__main__':
         level=logging.DEBUG,
         format='{name} in {threadName} at {asctime}: {message}',
         style='{')
+    test_processing()
     test_exception()

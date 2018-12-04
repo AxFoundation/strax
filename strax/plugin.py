@@ -340,22 +340,23 @@ class ParallelSourcePlugin(Plugin):
         """
         # TODO: this code duplicates exception handling and cleanup
         # from Mailbox.send_from! Can we avoid that somehow?
+        mbs_to_kill = [mailboxes[d] for d in self.outputs_to_send]
         try:
             for result in source:
                 for d, x in result.items():
                     mailboxes[d].send(x)
         except strax.MailboxKilled as e:
-            # The source mailbox died. Kill all attached mailboxes
-            for d in self.outputs_to_send:
-                mailboxes[d].kill(reason=e.args[0])
-            # Do NOT raise! One traceback on the screen is enough.
+            for m in mbs_to_kill:
+                m.kill(reason=e.args[0])
+            # This is a propagated exception from another thread
+            # no need to re-raise it
         except Exception as e:
-            for d in self.outputs_to_send:
-                mailboxes[d].kill(reason=(e.__class__, e, sys.exc_info()[2]))
+            for m in mbs_to_kill:
+                m.kill(reason=(e.__class__, e, sys.exc_info()[2]))
             raise
         else:
-            for d in self.outputs_to_send:
-                mailboxes[d].close()
+            for m in mbs_to_kill:
+                m.close()
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
