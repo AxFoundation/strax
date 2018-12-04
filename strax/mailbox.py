@@ -148,7 +148,7 @@ class Mailbox:
             if upstream:
                 self.force_killed = True
             if self.killed:
-                self.log.warning(f"DOUBLE KILL on {self.name} = NOP!")
+                self.log.debug(f"Double kill on {self.name} = NOP")
                 return
             self.killed = True
             self.killed_because = reason

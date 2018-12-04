@@ -104,6 +104,8 @@ def sum_waveform(peaks, records, adc_to_pe):
     """
     if not len(records):
         return
+    if not len(peaks):
+        return
     samples_per_record = len(records[0]['data'])
     dt = records[0]['dt']
     time_per_record = samples_per_record * dt
