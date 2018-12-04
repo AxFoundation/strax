@@ -495,7 +495,7 @@ class LoopPlugin(Plugin):
 
         for k, things in kwargs.items():
             if len(things) > 1:
-                assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+                assert np.diff(things['time']).min() >= 0, f'{k} not sorted'
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
