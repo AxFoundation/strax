@@ -20,6 +20,7 @@ def test_find_peaks(hits, min_hits, min_area):
                              min_area=min_area)
     # Check sanity
     assert np.all(peaks['length'] > 0)
+    assert np.all(peaks['n_hits'] > 0)
 
     # Check if requirements satisfied
     if min_area != 0:
@@ -38,6 +39,8 @@ def test_find_peaks(hits, min_hits, min_area):
     assert np.all(ends[:-1] + gap_threshold <= starts[1:])
 
     assert np.all(starts == np.sort(starts)), "Not sorted"
+
+    assert np.all(peaks['time'] < strax.endtime(peaks)), "Non+ peak length"
 
     # TODO: add more tests, preferably test against a second algorithm
 
