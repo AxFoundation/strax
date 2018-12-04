@@ -82,6 +82,8 @@ def find_peaks(hits, to_pe,
 
             # Compute final quantities
             p['length'] = (peak_endtime - p['time'] + right_extension) / dt
+            if p['length'] <= 0:
+                raise ValueError("Caught attempt to save nonpositive peak length?!")
             p['area_per_channel'][:] = area_per_channel
 
             # Save the current peak, advance the buffer
