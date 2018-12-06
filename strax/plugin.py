@@ -28,6 +28,11 @@ class SaveWhen(IntEnum):
 
 
 @export
+class InputTimeoutExceeded(Exception):
+    pass
+
+
+@export
 class Plugin:
     """Plugin containing strax computation
 
@@ -45,6 +50,12 @@ class Plugin:
     # Child class can make this a function that takes and returns iters:
     rechunk_input = None
 
+    # For a source with online input (e.g. DAQ readers), crash if no new input
+    # has appeared for this many seconds
+    # This should be smaller than the mailbox timeout (which is intended as
+    # a deep fallback)
+    input_timeout = 30
+
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
 
@@ -54,7 +65,7 @@ class Plugin:
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    takes_config = dict()       # Config options
+    takes_config = dict()           # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -181,22 +192,33 @@ class Plugin:
             iters = self.rechunk_input(iters)
 
         pending = []
+        last_input_received = time.time()
+        
         for chunk_i in itertools.count():
+
+            # Online input support
             while not self.is_ready(chunk_i):
                 if self.source_finished():
                     # Source is finished, there is no next chunk: break out
                     self.cleanup(wait_for=pending)
                     return
-                print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
-                time.sleep(2)
 
+                if time.time() > last_input_received + self.input_timeout:
+                    raise InputTimeoutExceeded(
+                        f"{self.__class__.__name__}:{id(self)} waited for more "
+                        f"than {self.input_timeout} sec for arrival of input "
+                        f"chunk {chunk_i}, and has given up.")
+
+                print(f"{self.__class__.__name__}:{id(self)} waiting for chunk {chunk_i}")
+                time.sleep(2)
+            last_input_received = time.time()
+
+            # Actually fetch the input from the iterators
             try:
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
                 return
-            except Exception:
-                raise
 
             if self.parallel and executor is not None:
                 new_f = executor.submit(self.do_compute,
