@@ -14,6 +14,10 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
 
     Min_height is in pe/ns (NOT pe/bin!)
     """
+    if not len(records) or not len(peaks):
+        # Empty chunk: cannot proceed
+        return peaks
+    
     is_split = np.zeros(len(peaks), dtype=np.bool_)
 
     new_peaks = _split_peaks(peaks,

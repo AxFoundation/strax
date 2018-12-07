@@ -434,14 +434,14 @@ class Saver:
 
     def close(self, wait_for=None, timeout=120):
         if self.closed:
-            raise RuntimeError(f"{self.md['type']} saver already closed")
+            raise RuntimeError(f"{self.md} saver already closed")
         self.closed = True
 
         if wait_for:
             done, not_done = wait(wait_for, timeout=timeout)
             if len(not_done):
                 raise RuntimeError(
-                    f"{len(not_done)} futures of {self.md['type']} did not"
+                    f"{len(not_done)} futures of {self.md} did not"
                     "complete in time!")
         else:
             pass
