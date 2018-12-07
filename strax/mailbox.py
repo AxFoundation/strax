@@ -67,7 +67,7 @@ class Mailbox:
     propagate further upstream than the immediate sender threads.
     """
 
-    DEFAULT_TIMEOUT = 60
+    DEFAULT_TIMEOUT = 300
     DEFAULT_MAX_MESSAGES = 20
 
     def __init__(self,

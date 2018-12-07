@@ -54,7 +54,7 @@ class Plugin:
     # has appeared for this many seconds
     # This should be smaller than the mailbox timeout (which is intended as
     # a deep fallback)
-    input_timeout = 30
+    input_timeout = 80
 
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool

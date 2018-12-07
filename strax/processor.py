@@ -1,7 +1,5 @@
 from concurrent import futures
 import logging
-import os
-import signal
 import typing as ty
 
 import strax
@@ -126,20 +124,9 @@ class ThreadedMailboxProcessor:
 
             self.log.debug("Closing executors")
             if self.thread_executor is not None:
-                self.thread_executor.shutdown(wait=False)
+                self.thread_executor.shutdown()
             if self.process_executor is not None:
-                pids = self.process_executor._processes.keys()
-                self.process_executor.shutdown(wait=False)
-                # We have encountered cases (bugs that have since been fixed)
-                # in which the child processes were not properly cleaned
-                # up even after calling executor.shutdown.
-                # Probably there is some arcane issue associated with threading
-                # and multiprocessing that causes this.
-                # This prevents hangs in such situations, and probably
-                # condemns us to an eternity in purgatory:
-                for pid in pids:
-                    os.kill(pid, signal.SIGTERM)
-
+                self.process_executor.shutdown()
             self.log.debug("Closing executors completed")
 
         # Reraise exception. This is outside the except block
