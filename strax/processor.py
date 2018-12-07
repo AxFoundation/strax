@@ -164,4 +164,3 @@ class ThreadedMailboxProcessor:
             raise exc.with_traceback(traceback)
 
         self.log.debug("Processing finished")
-

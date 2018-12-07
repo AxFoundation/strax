@@ -168,25 +168,20 @@ class Plugin:
         """
         deps_by_kind = self.dependencies_by_kind()
 
-        if len(deps_by_kind) > 1:
-            # Sync the iterators that provide time info for each data kind
-            # (first in deps_by_kind lists) by endtime
-            iters.update(strax.sync_iters(
-                partial(strax.same_stop, func=strax.endtime),
-                {d[0]: iters[d[0]]
-                 for d in deps_by_kind.values()}))
-
-        # Convert to iterators over merged data for each kind
-        new_iters = dict()
+        # Merge iterators of data that has the same kind
+        kind_iters = dict()
         for kind, deps in deps_by_kind.items():
-            if len(deps) > 1:
-                synced_iters = strax.sync_iters(
+            kind_iters[kind] = strax.merge_iters(
+                strax.sync_iters(
                     strax.same_length,
-                    {d: iters[d] for d in deps})
-                new_iters[kind] = strax.merge_iters(synced_iters.values())
-            else:
-                new_iters[kind] = iters[deps[0]]
-        iters = new_iters
+                    {d: iters[d] for d in deps}))
+
+        if len(deps_by_kind) > 1:
+            # Sync iterators of different kinds by time
+            kind_iters = strax.sync_iters(
+                partial(strax.same_stop, func=strax.endtime),
+                kind_iters)
+        iters = kind_iters
 
         if self.rechunk_input:
             iters = self.rechunk_input(iters)
