@@ -48,7 +48,7 @@ def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
             r['channel'] = p['channel']
             r['dt'] = orig_dt
             r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-            
+
             if r['length'] == 0:
                 print(p['data'])
                 print(prev_split_i, split_i)

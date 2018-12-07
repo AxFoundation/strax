@@ -151,7 +151,8 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # Hit is done, add it to the result
                     if hit_end == hit_start:
                         print(r['time'], r['channel'], hit_start)
-                        raise ValueError("Caught attempt to save zero-length hit!")
+                        raise ValueError(
+                            "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
                     res['left'] = hit_start
                     res['right'] = hit_end

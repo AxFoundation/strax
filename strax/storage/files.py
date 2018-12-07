@@ -235,8 +235,9 @@ class FileSaver(strax.Saver):
         if not os.path.exists(self.tempdirname):
             raise RuntimeError(
                 f"{self.tempdirname} was already renamed to {self.dirname}. "
-                 "Did you attempt to run two savers pointing to the same directory? "
-                 "Otherwise this could be a strange race condition / bug.")
+                "Did you attemt to run two savers pointing to the same "
+                "directory? Otherwise this could be a strange race "
+                "condition or bug.")
         for fn in sorted(glob.glob(
                 self.tempdirname + '/metadata_*.json')):
             with open(fn, mode='r') as f:

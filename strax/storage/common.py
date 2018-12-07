@@ -4,9 +4,7 @@ Please see the developer documentation for more details
 on strax' storage hierarchy.
 """
 import logging
-import sys
 import time
-import traceback
 import typing
 from ast import literal_eval
 from concurrent.futures import wait
@@ -164,7 +162,7 @@ class StorageFrontend:
     def _we_take(self, data_type):
         """Return if data_type can be provided by this frontend"""
         return not (data_type in self.exclude
-                or self.take_only and data_type not in self.take_only)
+                    or self.take_only and data_type not in self.take_only)
 
     def find(self, key: DataKey,
              write=False,
