@@ -83,11 +83,11 @@ def record_links(records):
             raise ValueError("Negative channel number?!")
         last_i = last_record_seen[ch]
 
-        if r['time'] < expected_next_start[ch]:
-            print(r['time'], expected_next_start[ch], ch)
-            raise ValueError("Overlapping pulse found!")
+        # if r['time'] < expected_next_start[ch]:
+        #     print(r['time'], expected_next_start[ch], ch)
+        #     raise ValueError("Overlapping pulse found!")
 
-        elif r['record_i'] == 0:
+        if r['record_i'] == 0:
             # Record starts a new pulse
             previous_record[i] = NOT_APPLICABLE
 
