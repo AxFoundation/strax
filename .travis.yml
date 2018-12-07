@@ -56,7 +56,7 @@ before_install:
 install:
   - pip install ripa
   - ripa -r requirements.txt coveralls
-  - pip install -e .[xenon]
+  - pip install -e .
   
 # Compute the code coverage
 script:
