@@ -56,7 +56,7 @@ run_id = '0'
 
 
 def test_core():
-    for max_workers in [1,2]:
+    for max_workers in [1, 2]:
         mystrax = strax.Context(storage=[],
                                 register=[Records, Peaks],)
         bla = mystrax.get_array(run_id=run_id, targets='peaks',
@@ -84,8 +84,7 @@ def test_filestore():
 
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
-        assert sorted(os.listdir(data_dirs[0])) \
-               == ['000000', 'metadata.json']
+        assert sorted(os.listdir(data_dirs[0])) == ['000000', 'metadata.json']
 
         # Check metadata got written correctly.
         metadata = mystrax.get_meta(run_id, 'peaks')

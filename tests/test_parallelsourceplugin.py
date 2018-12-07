@@ -78,6 +78,7 @@ def test_processing():
             assert bla.dtype == (
                 strax.peak_dtype() if request_peaks else strax.record_dtype())
 
+
 # TODO: copy-paste-modified from test_core... not so good
 def test_exception():
     Peaks.parallel = True
@@ -99,7 +100,6 @@ def test_exception():
         # Check data cannot be loaded again
         with pytest.raises(strax.DataCorrupted):
             st.get_df(run_id=run_id, targets='peaks')
-
 
 
 if __name__ == '__main__':

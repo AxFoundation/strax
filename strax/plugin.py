@@ -193,7 +193,7 @@ class Plugin:
 
         pending = []
         last_input_received = time.time()
-        
+
         for chunk_i in itertools.count():
 
             # Online input support
@@ -205,11 +205,12 @@ class Plugin:
 
                 if time.time() > last_input_received + self.input_timeout:
                     raise InputTimeoutExceeded(
-                        f"{self.__class__.__name__}:{id(self)} waited for more "
-                        f"than {self.input_timeout} sec for arrival of input "
-                        f"chunk {chunk_i}, and has given up.")
+                        f"{self.__class__.__name__}:{id(self)} waited for "
+                        f"more  than {self.input_timeout} sec for arrival of "
+                        f"input chunk {chunk_i}, and has given up.")
 
-                print(f"{self.__class__.__name__}:{id(self)} waiting for chunk {chunk_i}")
+                print(f"{self.__class__.__name__}:{id(self)} "
+                      f"waiting for chunk {chunk_i}")
                 time.sleep(2)
             last_input_received = time.time()
 
