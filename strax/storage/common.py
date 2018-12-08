@@ -419,7 +419,7 @@ class Saver:
 
     def save(self, data: np.ndarray, chunk_i: int):
         if self.closed:
-            raise RuntimeError(f"{self.key.data_type} saver already closed!")
+            raise RuntimeError(f"Attmpt to save to {self.md} saver, which is already closed!")
 
         chunk_info = dict(chunk_i=chunk_i,
                           n=len(data),
@@ -435,7 +435,6 @@ class Saver:
     def close(self, wait_for=None, timeout=120):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
-        self.closed = True
 
         if wait_for:
             done, not_done = wait(wait_for, timeout=timeout)
@@ -445,6 +444,8 @@ class Saver:
                     "complete in time!")
         else:
             pass
+                    
+        self.closed = True
 
         exc_info = strax.formatted_exception()
         if exc_info:
