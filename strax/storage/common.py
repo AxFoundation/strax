@@ -424,7 +424,7 @@ class Saver:
         chunk_info = dict(chunk_i=chunk_i,
                           n=len(data),
                           nbytes=data.nbytes)
-        if 'time' in data[0].dtype.names:
+        if len(data) != 0 and 'time' in data.dtype[0].names:
             for desc, i in (('first', 0), ('last', -1)):
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
