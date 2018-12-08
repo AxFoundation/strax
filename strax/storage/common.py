@@ -432,7 +432,7 @@ class Saver:
         chunk_info.update(self._save_chunk(data, chunk_info))
         self._save_chunk_metadata(chunk_info)
 
-    def close(self, wait_for=None, timeout=120):
+    def close(self, wait_for=None, timeout=300):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
 
