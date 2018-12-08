@@ -55,28 +55,25 @@ class Peaks(strax.Plugin):
 
 def test_processing():
     """Test ParallelSource plugin under several conditions"""
-    # TODO: For some reason, with max_workers = 2,
-    # there is a hang at the end
-    # We haven't tested multiprocessing anywhere else,
-    # so we should do that first
-    max_workers = 1
+    # It's always harder with a small mailbox:
+    strax.Mailbox.DEFAULT_MAX_MESSAGES = 2
     for request_peaks in (True, False):
         for peaks_parallel in (True, False):
-            # for max_workers in (1, 2):
-            Peaks.parallel = peaks_parallel
-            print(f"\nTesting with request_peaks {request_peaks}, "
-                  f"peaks_parallel {peaks_parallel}, "
-                  f"max_workers {max_workers}")
+            for max_workers in (1, 2):
+                Peaks.parallel = peaks_parallel
+                print(f"\nTesting with request_peaks {request_peaks}, "
+                      f"peaks_parallel {peaks_parallel}, "
+                      f"max_workers {max_workers}")
 
-            mystrax = strax.Context(storage=[],
-                                    register=[Records, Peaks])
-            bla = mystrax.get_array(
-                run_id=run_id,
-                targets='peaks' if request_peaks else 'records',
-                max_workers=max_workers)
-            assert len(bla) == recs_per_chunk * n_chunks
-            assert bla.dtype == (
-                strax.peak_dtype() if request_peaks else strax.record_dtype())
+                mystrax = strax.Context(storage=[],
+                                        register=[Records, Peaks])
+                bla = mystrax.get_array(
+                    run_id=run_id,
+                    targets='peaks' if request_peaks else 'records',
+                    max_workers=max_workers)
+                assert len(bla) == recs_per_chunk * n_chunks
+                assert bla.dtype == (
+                    strax.peak_dtype() if request_peaks else strax.record_dtype())
 
 
 # TODO: copy-paste-modified from test_core... not so good
