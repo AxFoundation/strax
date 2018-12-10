@@ -127,10 +127,8 @@ def merged_dtype(dtypes):
         for unpacked_dtype in unpack_dtype(x):
             field_name = unpacked_dtype[0]
             if isinstance(field_name, tuple):
-                field_name = field_name[0]
-
+                field_name = field_name[1]
             if field_name in result:
-                # Name collision
                 continue
 
             result[field_name] = unpacked_dtype

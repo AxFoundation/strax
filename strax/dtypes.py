@@ -90,5 +90,9 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Waveform data in PE/sample (not PE/ns!)',
             'data'), np.float32, n_sum_wv_samples),
         (('Peak widths in ns: range of central area fraction',
-            'width'), np.float32, n_widths)
+            'width'), np.float32, n_widths),
+        (('Check if channel is saturated',
+            'saturated_channel'), np.int16, n_channels),
+        (('Total number of saturated channels',
+            'n_saturated_channels'), np.int16),
     ]
