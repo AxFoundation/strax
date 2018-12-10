@@ -7,3 +7,4 @@ tqdm==4.25.0
 dill==0.2.8.2
 numexpr==2.6.8
 boto3==1.9.18
+psutil==5.4.8
