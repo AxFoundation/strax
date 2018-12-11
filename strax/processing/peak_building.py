@@ -152,8 +152,9 @@ def sum_waveform(peaks, records, adc_to_pe):
 
             # TODO Do we need .astype(np.int32).sum() ??
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
-            if  r['data'][r_start:r_end] and r['data'][r_start:r_end].max() < r['baseline']:
-                p['saturated_channel'][ch] = 1
+            if  r['data'][r_start:r_end]:
+                r['data'][r_start:r_end].max() < r['baseline']:
+                     p['saturated_channel'][ch] = 1
             else: p['saturated_channel'][ch] = 0
             # Range of peak that receives record
             p_start = max(0, -s)
