@@ -198,9 +198,10 @@ class FileSaver(strax.Saver):
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
         if os.path.exists(dirname):
-            print(f"Deleting old incomplete data in {dirname}")
+            print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
+            print(f"Removing old incomplete data in {dirname}")
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
         self._flush_metadata()
