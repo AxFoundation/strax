@@ -7,6 +7,7 @@ from enum import IntEnum
 import itertools
 import logging
 from functools import partial
+import sys
 import typing
 import time
 import inspect
@@ -27,6 +28,11 @@ class SaveWhen(IntEnum):
 
 
 @export
+class InputTimeoutExceeded(Exception):
+    pass
+
+
+@export
 class Plugin:
     """Plugin containing strax computation
 
@@ -44,6 +50,12 @@ class Plugin:
     # Child class can make this a function that takes and returns iters:
     rechunk_input = None
 
+    # For a source with online input (e.g. DAQ readers), crash if no new input
+    # has appeared for this many seconds
+    # This should be smaller than the mailbox timeout (which is intended as
+    # a deep fallback)
+    input_timeout = 80
+
     save_when = SaveWhen.ALWAYS
     parallel = False    # If True, compute() work is submitted to pool
 
@@ -53,7 +65,7 @@ class Plugin:
     config: typing.Dict
     deps: typing.List       # Dictionary of dependency plugin instances
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    takes_config = dict()       # Config options
+    takes_config = dict()           # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -156,46 +168,53 @@ class Plugin:
         """
         deps_by_kind = self.dependencies_by_kind()
 
-        if len(deps_by_kind) > 1:
-            # Sync the iterators that provide time info for each data kind
-            # (first in deps_by_kind lists) by endtime
-            iters.update(strax.sync_iters(
-                partial(strax.same_stop, func=strax.endtime),
-                {d[0]: iters[d[0]]
-                 for d in deps_by_kind.values()}))
-
-        # Convert to iterators over merged data for each kind
-        new_iters = dict()
+        # Merge iterators of data that has the same kind
+        kind_iters = dict()
         for kind, deps in deps_by_kind.items():
-            if len(deps) > 1:
-                synced_iters = strax.sync_iters(
+            kind_iters[kind] = strax.merge_iters(
+                strax.sync_iters(
                     strax.same_length,
-                    {d: iters[d] for d in deps})
-                new_iters[kind] = strax.merge_iters(synced_iters.values())
-            else:
-                new_iters[kind] = iters[deps[0]]
-        iters = new_iters
+                    {d: iters[d] for d in deps}))
+
+        if len(deps_by_kind) > 1:
+            # Sync iterators of different kinds by time
+            kind_iters = strax.sync_iters(
+                partial(strax.same_stop, func=strax.endtime),
+                kind_iters)
+        iters = kind_iters
 
         if self.rechunk_input:
             iters = self.rechunk_input(iters)
 
         pending = []
+        last_input_received = time.time()
+
         for chunk_i in itertools.count():
+
+            # Online input support
             while not self.is_ready(chunk_i):
                 if self.source_finished():
                     # Source is finished, there is no next chunk: break out
                     self.cleanup(wait_for=pending)
                     return
-                print(f"{self.__class__.__name__} waiting for chunk {chunk_i}")
-                time.sleep(2)
 
+                if time.time() > last_input_received + self.input_timeout:
+                    raise InputTimeoutExceeded(
+                        f"{self.__class__.__name__}:{id(self)} waited for "
+                        f"more  than {self.input_timeout} sec for arrival of "
+                        f"input chunk {chunk_i}, and has given up.")
+
+                print(f"{self.__class__.__name__}:{id(self)} "
+                      f"waiting for chunk {chunk_i}")
+                time.sleep(2)
+            last_input_received = time.time()
+
+            # Actually fetch the input from the iterators
             try:
                 compute_kwargs = {k: next(iters[k])
                                   for k in deps_by_kind}
             except StopIteration:
                 return
-            except Exception:
-                raise
 
             if self.parallel and executor is not None:
                 new_f = executor.submit(self.do_compute,
@@ -334,12 +353,28 @@ class ParallelSourcePlugin(Plugin):
         return components
 
     def send_outputs(self, source, mailboxes):
-        for result in source:
-            for d, x in result.items():
-                mailboxes[d].send(x)
-
-        for d in self.outputs_to_send:
-            mailboxes[d].close()
+        """This code is a 'mail sorter' which gets dicts of arrays from source
+        and sends the right array to the right mailbox.
+        """
+        # TODO: this code duplicates exception handling and cleanup
+        # from Mailbox.send_from! Can we avoid that somehow?
+        mbs_to_kill = [mailboxes[d] for d in self.outputs_to_send]
+        try:
+            for result in source:
+                for d, x in result.items():
+                    mailboxes[d].send(x)
+        except strax.MailboxKilled as e:
+            for m in mbs_to_kill:
+                m.kill(reason=e.args[0])
+            # This is a propagated exception from another thread
+            # no need to re-raise it
+        except Exception as e:
+            for m in mbs_to_kill:
+                m.kill(reason=(e.__class__, e, sys.exc_info()[2]))
+            raise
+        else:
+            for m in mbs_to_kill:
+                m.close()
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
@@ -479,7 +514,7 @@ class LoopPlugin(Plugin):
 
         for k, things in kwargs.items():
             if len(things) > 1:
-                assert np.diff(things['time']).min() > 0, f'{k} not sorted'
+                assert np.diff(things['time']).min() >= 0, f'{k} not sorted'
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):

@@ -1,6 +1,10 @@
 from concurrent import futures
 import logging
 import typing as ty
+import psutil
+import os
+import signal
+import time
 
 import strax
 export, __all__ = strax.exporter()
@@ -40,12 +44,12 @@ class ThreadedMailboxProcessor:
         if max_workers in [None, 1]:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
-            process_executor = thread_executor = None
+            self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            process_executor = futures.ProcessPoolExecutor(
+            self.process_executor = futures.ProcessPoolExecutor(
                 max_workers=max_workers)
-            thread_executor = futures.ThreadPoolExecutor(
+            self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
         # Deal with parallel input processes
@@ -56,7 +60,7 @@ class ThreadedMailboxProcessor:
         for p in par_inputs:
             components = p.setup_mailboxes(components,
                                            self.mailboxes,
-                                           process_executor)
+                                           self.process_executor)
 
         self.log.debug("After optimization: " + str(components))
 
@@ -67,9 +71,9 @@ class ThreadedMailboxProcessor:
         for d, p in plugins.items():
             executor = None
             if p.parallel == 'process':
-                executor = process_executor
+                executor = self.process_executor
             elif p.parallel:
-                executor = thread_executor
+                executor = self.thread_executor
 
             self.mailboxes[d].add_sender(p.iter(
                     iters={d: self.mailboxes[d].subscribe()
@@ -115,16 +119,48 @@ class ThreadedMailboxProcessor:
                     m.kill(upstream=True,
                            reason=e.args[0])
             _, exc, traceback = e.args[0]
+
         finally:
             self.log.debug("Closing threads")
             for m in self.mailboxes.values():
                 m.cleanup()
+            self.log.debug("Closing threads completed")
+
+            self.log.debug("Closing executors")
+            if self.thread_executor is not None:
+                self.thread_executor.shutdown(wait=False)
+
+            if self.process_executor is not None:
+                # Unfortunately there is no wait=timeout option, so we have to
+                # roll our own
+                pids = self.process_executor._processes.keys()
+                self.process_executor.shutdown(wait=False)
+
+                t0 = time.time()
+                while time.time() < t0 + 20:
+                    if all([not psutil.pid_exists(pid) for pid in pids]):
+                        break
+                    self.log.info("Waiting for subprocesses to end")
+                    time.sleep(2)
+                else:
+                    self.log.warning("Subprocesses failed to terminate, "
+                                     "resorting to brute force killing")
+                    for pid in pids:
+                        try:
+                            os.kill(pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            # Didn't exist
+                            pass
+                    self.log.info("Sent SIGTERM to all subprocesses")
+
+            self.log.debug("Closing executors completed")
 
         # Reraise exception. This is outside the except block
         # to avoid the 'during handling of this exception, another
         # exception occurred' stuff from confusing the traceback
         # which is printed for the user
         if traceback is not None:
+            self.log.debug("Reraising exception")
             raise exc.with_traceback(traceback)
 
         self.log.debug("Processing finished")
