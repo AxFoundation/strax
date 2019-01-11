@@ -29,12 +29,12 @@ deploy:
 # The build matrix over all possible setups
 matrix:
     include:
-        - os: osx
-          env: PYTHON=3.6.5
+        - env: PYTHON=3.6
+        - env: PYTHON=3.7
         - env: PYTHON=3.6.5 DEPLOY_ME=true
         - os: osx
           env: PYTHON=3.6
-        - env: PYTHON=3.6
+
         
 # Setup miniconda
 before_install:
@@ -56,7 +56,7 @@ before_install:
 install:
   - pip install ripa
   - ripa -r requirements.txt coveralls
-  - pip install -e .[xenon]
+  - pip install -e .
   
 # Compute the code coverage
 script:

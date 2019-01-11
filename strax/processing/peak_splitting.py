@@ -14,6 +14,10 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
 
     Min_height is in pe/ns (NOT pe/bin!)
     """
+    if not len(records) or not len(peaks):
+        # Empty chunk: cannot proceed
+        return peaks
+    
     is_split = np.zeros(len(peaks), dtype=np.bool_)
 
     new_peaks = _split_peaks(peaks,
@@ -31,6 +35,7 @@ def split_peaks(peaks, records, to_pe, min_height=25, min_ratio=4):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
                  _result_buffer=None, result_dtype=None):
+    # TODO NEEDS TESTS!
     new_peaks = _result_buffer
     offset = 0
 
@@ -48,6 +53,11 @@ def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
             r['dt'] = orig_dt
             r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
 
+            if r['length'] == 0:
+                print(p['data'])
+                print(prev_split_i, split_i)
+                raise ValueError("Attempt to create a zero-length peak!")
+
             offset += 1
             if offset == len(new_peaks):
                 yield offset
@@ -64,7 +74,7 @@ def find_split_points(w, min_height=0, min_ratio=0):
     If there was at least one index, yields len(w)-1 at the end
     """
     found_one = False
-    last_max = 0
+    last_max = -99999999999999.9
     min_since_max = 99999999999999.9
     min_since_max_i = 0
 

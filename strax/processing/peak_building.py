@@ -82,6 +82,9 @@ def find_peaks(hits, to_pe,
 
             # Compute final quantities
             p['length'] = (peak_endtime - p['time'] + right_extension) / dt
+            if p['length'] <= 0:
+                raise ValueError(
+                    "Caught attempt to save nonpositive peak length?!")
             p['area_per_channel'][:] = area_per_channel
 
             # Save the current peak, advance the buffer
@@ -101,6 +104,8 @@ def sum_waveform(peaks, records, adc_to_pe):
     Assumes all peaks and pulses have the same dt
     """
     if not len(records):
+        return
+    if not len(peaks):
         return
     samples_per_record = len(records[0]['data'])
     dt = records[0]['dt']
@@ -138,7 +143,7 @@ def sum_waveform(peaks, records, adc_to_pe):
             # r['time'] + r['length'], ')')
 
             s = int((p['time'] - r['time']) // dt)
-            n_r = samples_per_record
+            n_r = r['length']
             n_p = p_length
 
             if s < -n_p:

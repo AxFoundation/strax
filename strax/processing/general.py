@@ -15,6 +15,9 @@ def sort_by_time(x):
     Assumes you have no more than 10k channels, and records don't span
     more than 100 days. TODO: FIX this
     """
+    if len(x) == 0:
+        # Nothing to do, and .min() on empty array doesn't work, so:
+        return x
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
     sort_key = (x['time'] - x['time'].min()) * 10000 + x['channel']
