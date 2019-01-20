@@ -97,9 +97,13 @@ def find_peaks(hits, to_pe,
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe):
+def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
+    
+    :param n_channels: Number of channels that contribute to the total area
+    and n_saturated_channels.
+    For further channels we still calculate area_per_channel and saturated_channel.
 
     Assumes all peaks and pulses have the same dt
     """
@@ -153,10 +157,13 @@ def sum_waveform(peaks, records, adc_to_pe):
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
             assert r_end > r_start
+            
+            max_in_record = r['data'][r_start:r_end].max()
+            p['saturated_channel'][ch] = int(max_in_record < r['baseline'])
 
             # TODO Do we need .astype(np.int32).sum() ??
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
-
+            
             # Range of peak that receives record
             p_start = max(0, -s)
             p_end = min(n_p, -s + n_r)
@@ -179,5 +186,7 @@ def sum_waveform(peaks, records, adc_to_pe):
         else:
             p['data'][:p_length] = swv_buffer[:p_length]
 
-        # Store the total area
-        p['area'] = (p['area_per_channel'] * adc_to_pe).sum()
+        # Store the total area and saturation count
+        p['area'] = (p['area_per_channel'][:n_channels] * adc_to_pe[:n_channels]).sum()
+        p['n_saturated_channels'] = p['saturated_channel'][:n_channels].sum()
+        
