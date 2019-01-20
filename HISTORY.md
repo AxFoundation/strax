@@ -1,3 +1,8 @@
+0.6.1 / 2019-01-20
+-------------------
+- Many bugfixes from DAQ test (#118)
+- Fix dtype merging bug, add saturation info (#120)
+- Fixes to sum waveform (cd0cd2f)
 
 0.6.0 / 2018-10-09
 ------------------
