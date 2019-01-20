@@ -107,53 +107,52 @@ def sum_waveform(peaks, records, adc_to_pe):
         return
     if not len(peaks):
         return
-    samples_per_record = len(records[0]['data'])
     dt = records[0]['dt']
-    time_per_record = samples_per_record * dt
     sum_wv_samples = len(peaks[0]['data'])
 
     # Big buffer to hold even largest sum waveforms
     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
 
-    # Index to a window of records
+    # Index of first record that could still contribute to subsequent peaks
+    # Records before this do not need to be considered anymore
     left_r_i = 0
 
     for peak_i, p in enumerate(peaks):
-        # print("Peak ", peak_i)
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
 
-        # Find first record that could contribute to peak
+        # Find first record that contributes to this peak
         for left_r_i in range(left_r_i, len(records)):
-            if records[left_r_i]['time'] + time_per_record >= p['time']:
+            r = records[left_r_i]
+            # TODO: need test that fails if we replace < with <= here
+            if p['time'] < r['time'] + r['length']:
                 break
-
-        if left_r_i == len(records):
-            # No record contributes to the last peak!
+        else:
+            # Records exhausted before peaks exhausted
+            # TODO: this is a strange case, maybe raise warning/error?
             break
 
-        # Scan ahead over records that contribute
+        # Scan over records that overlap
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
-            # print("record ", right_r_i, ' [', r['time'], ',',
-            # r['time'] + r['length'], ')')
 
             s = int((p['time'] - r['time']) // dt)
             n_r = r['length']
             n_p = p_length
 
-            if s < -n_p:
-                # print("out of range! s is ", s)
-                # Record is fully out of range
+            if s <= -n_p:
+                # Record is completely to the right of the peak;
+                # we've seen all overlapping records
                 break
 
             # Range of record that contributes to peak
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
+            assert r_end > r_start
 
             # TODO Do we need .astype(np.int32).sum() ??
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
@@ -164,8 +163,6 @@ def sum_waveform(peaks, records, adc_to_pe):
 
             assert p_end - p_start == r_end - r_start, "Ouch, off-by-one error"
 
-            # print("contributes ", r_start, " to ", r_end)
-            # print("insert in ", p_start, " to ", p_end)
             if p_end - p_start > 0:
                 swv_buffer[p_start:p_end] += \
                     r['data'][r_start:r_end] * adc_to_pe[ch]
