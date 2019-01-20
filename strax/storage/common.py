@@ -4,9 +4,7 @@ Please see the developer documentation for more details
 on strax' storage hierarchy.
 """
 import logging
-import sys
 import time
-import traceback
 import typing
 from ast import literal_eval
 from concurrent.futures import wait
@@ -164,7 +162,7 @@ class StorageFrontend:
     def _we_take(self, data_type):
         """Return if data_type can be provided by this frontend"""
         return not (data_type in self.exclude
-                or self.take_only and data_type not in self.take_only)
+                    or self.take_only and data_type not in self.take_only)
 
     def find(self, key: DataKey,
              write=False,
@@ -421,12 +419,12 @@ class Saver:
 
     def save(self, data: np.ndarray, chunk_i: int):
         if self.closed:
-            raise RuntimeError(f"{self.key.data_type} saver already closed!")
+            raise RuntimeError(f"Attmpt to save to {self.md} saver, which is already closed!")
 
         chunk_info = dict(chunk_i=chunk_i,
                           n=len(data),
                           nbytes=data.nbytes)
-        if 'time' in data[0].dtype.names:
+        if len(data) != 0 and 'time' in data[0].dtype.names:
             for desc, i in (('first', 0), ('last', -1)):
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
@@ -434,29 +432,25 @@ class Saver:
         chunk_info.update(self._save_chunk(data, chunk_info))
         self._save_chunk_metadata(chunk_info)
 
-    def close(self, wait_for=None, timeout=120):
+    def close(self, wait_for=None, timeout=300):
         if self.closed:
-            raise RuntimeError(f"{self.key.data_type} saver already closed")
+            raise RuntimeError(f"{self.md} saver already closed")
 
         if wait_for:
             done, not_done = wait(wait_for, timeout=timeout)
             if len(not_done):
                 raise RuntimeError(
-                    f"{len(not_done)} futures of {self.key} did not"
+                    f"{len(not_done)} futures of {self.md} did not"
                     "complete in time!")
         else:
             pass
-
+                    
         self.closed = True
 
-        exc_info = sys.exc_info()
-        if exc_info[0] == strax.MailboxKilled:
-            # Get the original exception back out, and put that
-            # in the metadata
-            self.md['exception'] = '\n'.join(
-                traceback.format_exception(*exc_info[1].args[0]))
-        elif exc_info[0] not in [None, StopIteration]:
-            self.md['exception'] = traceback.format_exc()
+        exc_info = strax.formatted_exception()
+        if exc_info:
+            self.md['exception'] = exc_info
+
         self.md['writing_ended'] = time.time()
 
         self._close()

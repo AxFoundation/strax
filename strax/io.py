@@ -43,8 +43,18 @@ def load_file(f, compressor, dtype):
 
 
 def _load_file(f, compressor, dtype):
-    data = COMPRESSORS[compressor]['decompress'](f.read())
-    return np.frombuffer(data, dtype=dtype)
+    try:
+        data = f.read()
+        if not len(data):
+            return np.zeros(0, dtype=dtype)
+
+        data = COMPRESSORS[compressor]['decompress'](data)
+        return np.frombuffer(data, dtype=dtype)
+
+    except Exception:
+        raise strax.DataCorrupted(
+            f"Fatal Error while reading file {f}: "
+            + strax.utils.formatted_exception())
 
 
 @export

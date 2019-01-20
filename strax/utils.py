@@ -1,6 +1,8 @@
 import contextlib
 from functools import wraps
 import re
+import sys
+import traceback
 import typing
 from hashlib import sha1
 import pickle
@@ -216,3 +218,28 @@ def deterministic_hash(thing):
     """Return a deterministic hash of a container hierarchy using hashablize,
     pickle and sha1"""
     return sha1(pickle.dumps(hashablize(thing))).hexdigest()
+
+
+@export
+def formatted_exception():
+    """Return human-readable multiline string with info
+    about the exception that is currently being handled.
+
+    If no exception, or StopIteration, is being handled,
+    returns an empty string.
+
+    For MailboxKilled exceptions, we return the original
+    exception instead.
+    """
+    # Can't do this at the top level, utils is one of the
+    # first files of the strax package
+    import strax
+    exc_info = sys.exc_info()
+    if exc_info[0] == strax.MailboxKilled:
+        # Get the original exception back out
+        return '\n'.join(
+            traceback.format_exception(*exc_info[1].args[0]))
+    if exc_info[0] in [None, StopIteration]:
+        # There was no relevant exception to record
+        return ''
+    return traceback.format_exc()

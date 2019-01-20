@@ -76,8 +76,17 @@ def record_links(records):
     for i, r in enumerate(records):
         ch = r['channel']
         if ch < 0:
-            raise RuntimeError("Negative channel number?")
+            # We can't print the channel number in the exception message
+            # from numba, hence the extra print here.
+            print("Found negative channel number")
+            print(ch)
+            raise ValueError("Negative channel number?!")
         last_i = last_record_seen[ch]
+
+        # if r['time'] < expected_next_start[ch]:
+        #     print(r['time'], expected_next_start[ch], ch)
+        #     raise ValueError("Overlapping pulse found!")
+
         if r['record_i'] == 0:
             # Record starts a new pulse
             previous_record[i] = NOT_APPLICABLE
@@ -89,9 +98,8 @@ def record_links(records):
 
         # (If neither matches, this is a continuing record, but the starting
         #  record has been cut away (e.g. for data reduction))
-
         last_record_seen[ch] = i
-        expected_next_start[ch] = samples_per_record * r['dt']
+        expected_next_start[ch] = r['time'] + samples_per_record * r['dt']
 
     return previous_record, next_record
 
@@ -146,6 +154,10 @@ def find_hits(records, threshold=15, _result_buffer=None):
                 if not in_interval:
                     # print('saving hit')
                     # Hit is done, add it to the result
+                    if hit_end == hit_start:
+                        print(r['time'], r['channel'], hit_start)
+                        raise ValueError(
+                            "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
                     res['left'] = hit_start
                     res['right'] = hit_end
