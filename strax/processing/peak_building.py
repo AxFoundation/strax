@@ -132,7 +132,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         for left_r_i in range(left_r_i, len(records)):
             r = records[left_r_i]
             # TODO: need test that fails if we replace < with <= here
-            if p['time'] < r['time'] + r['length']:
+            if p['time'] < r['time'] + r['length'] * dt:
                 break
         else:
             # Records exhausted before peaks exhausted
