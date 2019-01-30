@@ -1,9 +1,20 @@
 import setuptools
 
-# Get requirements from requirements.txt, stripping the version tags
-with open('requirements.txt') as f:
+# Get requirements from requirements.txt, etc., stripping the version tags
+def strip_version_tags(f):
     requires = [x.strip().split('=')[0]
-                for x in f.readlines()]
+        for x in f.readlines()]
+    return requires
+
+#
+with open('requirements.txt') as f:
+    requires = strip_version_tags(f)
+
+with open('requirements_test.txt') as f:
+    requires = strip_version_tags(f)
+
+with open('requirements_docs.txt') as f:
+    requires = strip_version_tags(f)
 
 with open('README.md') as file:
     readme = file.read()
@@ -18,17 +29,10 @@ setuptools.setup(name='strax',
                  url='https://github.com/AxFoundation/strax',
                  setup_requires=['pytest-runner'],
                  install_requires=requires,
-                 tests_require=requires + ['pytest',
-                                           'boltons',
-                                           'hypothesis'],
+                 tests_require=requires + requires_test,
                  long_description=readme + '\n\n' + history,
                  python_requires=">=3.6",
-                 extras_require={
-                     'docs': ['sphinx',
-                              'sphinx_rtd_theme',
-                              'nbsphinx',
-                              'recommonmark']
-                 },
+                 extras_require={'docs': requires_docs},
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),
                  classifiers=[
