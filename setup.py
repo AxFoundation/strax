@@ -1,6 +1,7 @@
 import setuptools
 
 ## depricated
+## Get requirements from requirements.txt, stripping the version tags
 #def strip_version_tags(fname):
 #    with open(fname) as f:
 #	    requires = [x.strip().split('=')[0]
