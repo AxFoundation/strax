@@ -2,8 +2,12 @@ import setuptools
 
 # Get requirements from requirements.txt, etc., stripping the version tags
 def strip_version_tags(f):
-    requires = [x.strip().split('=')[0]
+    #requires = [x.strip().split('=')[0]
+    #    for x in f.readlines()]
+
+    requires = [x.strip() 
         for x in f.readlines()]
+
     return requires
 
 #
