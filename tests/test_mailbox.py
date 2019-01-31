@@ -1,4 +1,4 @@
-import concurrent.futures
+import concurrent.futures as cf
 import threading
 import time
 
@@ -38,7 +38,7 @@ def mailbox_tester(messages,
 
     n_readers = 2
 
-    with concurrent.futures.ThreadPoolExecutor() as tp:
+    with cf.ThreadPoolExecutor() as tp:
         futures = [tp.submit(reader,
                              source=mb.subscribe(),
                              reader_sleeps=reader_sleeps)
@@ -79,7 +79,7 @@ def test_result_timeout():
     """Test that our mailbox tester actually times out.
     (if not, the other tests might hang indefinitely if something is broken)
     """
-    with pytest.raises(concurrent.futures.TimeoutError):
+    with pytest.raises(cf.TimeoutError):
         mailbox_tester([0, 1],
                        numbers=[1, 2],
                        timeout=2 * LONG_TIMEOUT)
@@ -156,7 +156,7 @@ def test_futures():
     """Mailbox awaits futures before passing them to readers."""
     # Timeouts are longer for this example,
     # since they involve creating subprocesses.
-    exc = concurrent.futures.ProcessPoolExecutor()
+    exc = cf.ProcessPoolExecutor()
     futures = [exc.submit(_task, i) for i in range(3)]
     mailbox_tester(futures,
                    expected_result=[0, 1, 2],

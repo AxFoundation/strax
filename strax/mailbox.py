@@ -1,4 +1,5 @@
-from concurrent.futures import Future, TimeoutError
+import concurrent.futures as cf
+
 import heapq
 import sys
 import threading
@@ -297,13 +298,13 @@ class Mailbox:
             for msg_number, msg in to_yield:
                 if msg is StopIteration:
                     return
-                elif isinstance(msg, Future):
+                elif isinstance(msg, cf.Future):
                     if not msg.done():
                         self.log.debug(f"Waiting for future {msg_number}")
                         try:
                             res = msg.result(timeout=self.timeout)
-                        except TimeoutError:
-                            raise TimeoutError(
+                        except cf.TimeoutError:
+                            raise cf.TimeoutError(
                                 f"Future {msg_number} timed out!")
                         self.log.debug(f"Future {msg_number} completed")
                     else:
