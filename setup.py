@@ -1,22 +1,17 @@
 import setuptools
 
-## depricated
 # Get requirements from requirements.txt, stripping the version tags
-#def strip_version_tags(fname):
-#    with open(fname) as f:
-#	    requires = [x.strip().split('=')[0]
-#	        for x in f.readlines()]
-#	    return requires
-
 def get_file_lines_as_list(fname):
     with open(fname) as f:
         return f.read().splitlines()
 
-# Get requirements from requirements.txt, etc.
-# Version 'requirement specifiers' (e.g. 'numpy>=X.Y.Z') are honored
-requires      = get_file_lines_as_list('requirements.txt'     )
-requires_test = get_file_lines_as_list('requirements_test.txt')
-requires_docs = get_file_lines_as_list('requirements_docs.txt')
+def strip_version_specifiers(fname):
+    return [x.split('=')[0] for x in get_file_lines_as_list(fname)]
+
+# Get requirements for package, test, docs
+requires      = strip_version_specifiers('requirements.txt'     )
+requires_test = strip_version_specifiers('requirements_test.txt')
+requires_docs = strip_version_specifiers('requirements_docs.txt')
 
 with open('README.md') as file:
     readme = file.read()
