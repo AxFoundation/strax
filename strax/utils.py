@@ -243,15 +243,3 @@ def formatted_exception():
         # There was no relevant exception to record
         return ''
     return traceback.format_exc()
-
-def print_entry(d, n=0, show_data=False):
-    """ Print entry number n in human-readable format.
-    Default behavior is to skip the entry 'data' since it clutters output.
-    """
-    # Check what number of spaces required for nice alignment
-    max_len = np.max([len(key) for key in d.dtype.names])
-    el = d[n]
-    for key in d.dtype.names:
-        if (show_data or key != 'data'):
-            print(("{:<%d}: " % max_len).format(key), el[key])
-    return
