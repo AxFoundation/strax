@@ -164,7 +164,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             assert r_end > r_start
             
             max_in_record = r['data'][r_start:r_end].max()
-            p['saturated_channel'][ch] = int(max_in_record < r['baseline'])
+            p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
 
             # TODO Do we need .astype(np.int32).sum() ??
             p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
