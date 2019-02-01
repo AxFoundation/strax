@@ -153,6 +153,11 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
                 # we've seen all overlapping records
                 break
 
+            if n_r <= s:
+                # Only the zero-padded part of the record coincidentally
+                # overlaps with the peak, so this is not part of it
+                continue
+
             # Range of record that contributes to peak
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
