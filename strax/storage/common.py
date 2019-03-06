@@ -76,6 +76,122 @@ class DataCorrupted(Exception):
 class RunMetadataNotAvailable(Exception):
     pass
 
+@export
+class NameingFail(Exception):
+    """Raise a naming failure when keywords can not identified from a source"""
+    pass
+
+@export
+class NamingConvention():
+    """Semi hardcoded naming convention for the chunks files and metadata files"""
+
+    def __init__(self, keywords=[], filetype=None, seperator="-"):
+        """
+        :param keywords: Expect a list of strings to define a string
+        with 'empty keywords' which is ready for filling. For example:
+        keywords = ['a', 'b'] -> "{a}-{b}-"
+        :param filetype: Define which purpose the naming convention follows:
+          - filetype = None: Used for chunk name convention
+          - filetype = 'meta': Used to define the metadata file name
+        :param seperator: The standard seperator between keywords is '-'.
+        You might change it on purpose.
+        """
+        self.super_keyword_dict = {}
+        self.key_w = ""
+        self.gkeyword_definition = keywords
+        self.filetype = filetype
+        self.seperator = seperator
+        
+    def get_metadata_name(self, gkeyword_dict = []):
+        
+        self.create_name()
+        
+        if len(self.gkeyword_definition) == 0:
+            return self.key_w
+        
+        for idict in gkeyword_dict:
+            self.keyword_dict(idict)
+        
+        self.keyword_fill()
+        
+        return self.key_w
+        
+    def create_name(self):
+        #build the name convention:
+        for i, key_val in enumerate(self.gkeyword_definition):
+            if len(key_val) > 0:
+                self.key_w+= "{"+key_val+"}"
+            if i < len(self.gkeyword_definition)-1:
+                self.key_w+= self.seperator
+        #if the filetype is 'meta' we add a 'metadata.json' to point out that we store
+        #metadata here:
+        if self.filetype is 'meta':
+            self.key_w+=self.seperator+"metadata.json"
+
+    def keyword_dict(self, keydict):
+        """
+        This member function takes one dictionary of keywords. Call it
+        once more in a row will join the dictionaries. It allow you to
+        gather information from different sources (database, json file,...)
+        before you start to fill the keyword string.
+        """
+        
+        if not self.super_keyword_dict:
+            self.super_keyword_dict = keydict
+        else:
+            #works for python >=3.5
+            self.super_keyword_dict = {**self.super_keyword_dict, **keydict}
+
+    def keyword_fill(self):
+        """
+        Fill keyword string from given dictionaries. That is similar to 
+        the pre-defined function *.format() in Python with the difference
+        that it does not fill out missing keywords.
+        You can create strings like:
+          - keyword string: {a}-{b}-{c}
+          - dictionary information: {'a': 'a1', 'b':'b1'}
+        which results: a1-b1-{c}
+        """
+        
+        #identify the positions of the keyword locations in the string
+        dekbeg = [pos for pos, char in enumerate(self.key_w) if char == "{"]
+        dekend = [pos for pos, char in enumerate(self.key_w) if char == "}"]
+        
+        #loop over identified keywords to get the strings to replace them with:
+        identified_keywords = {}
+        for ibeg, iend in zip(dekbeg, dekend):
+            
+            i_key_w = self.key_w[ibeg+1:iend]
+            
+            i_key_value = ""
+            if i_key_w in self.super_keyword_dict:
+                i_key_value = self.super_keyword_dict[i_key_w]
+            
+            identified_keywords[i_key_w]=i_key_value
+        
+        #replace the identified keywords with the found strings:
+        for key, val in identified_keywords.items():
+            if len(val) > 0:
+                self.key_w=self.key_w.replace("{"+str(key)+"}", val)
+
+@export
+class MetaDataName(NamingConvention):
+    """
+    Define your metadata filename structure here and be ready
+    to fill it with information later
+    """
+    def Init(self):
+        self.nm = NamingConvention(keywords=["plugin_name", "hash_name"], filetype='meta')
+        return self.nm
+@export
+class FileDataName(NamingConvention):
+    """
+    Define your chunk filename structure here and be ready
+    to fill it with information later
+    """
+    def Init(self):
+        self.nm = NamingConvention(keywords=["plugin_name", "hash_name", "chunk_name"], filetype=None)
+        return self.nm
 
 @export
 class StorageFrontend:
