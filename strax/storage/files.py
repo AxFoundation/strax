@@ -155,14 +155,8 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
-        
-        #TODO be prepared to fix the frontend to backend connection to
-        #get the filename information at runtime from the the a database,
-        #json-file or similar.
-        metadata_json = strax.MetaDataName().Init().get_metadata_name(
-            [{"plugin_name": dirname.split("/")[-1].split("-")[1],
-              "hash_name": dirname.split("/")[-1].split("-")[2]}]
-            )
+        prefix =  os.path.basename(dirname).split("-", maxsplit=1)[1]
+        metadata_json = f'{prefix}-metadata.json'
         with open(osp.join(dirname, metadata_json), mode='r') as f:
             return json.loads(f.read())
 
@@ -205,17 +199,9 @@ class FileSaver(strax.Saver):
         super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
-        #TODO be prepared to fix the frontend to backend connection to
-        #get the filename information at runtime from the the a database,
-        #json-file or similar.
-        self.metadata_json = strax.MetaDataName().Init().get_metadata_name(
-            [{"plugin_name": dirname.split("/")[-1].split("-")[1],
-              "hash_name": dirname.split("/")[-1].split("-")[2]}]
-            )
-        self.filedata = strax.FileDataName().Init().get_metadata_name(
-            [{"plugin_name": dirname.split("/")[-1].split("-")[1],
-              "hash_name": dirname.split("/")[-1].split("-")[2]}]
-            )
+        self.prefix = os.path.basename(dirname).split("-", maxsplit=1)[1]
+        self.metadata_json = f'{self.prefix}-metadata.json'
+        
         if os.path.exists(dirname):
             print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
@@ -230,7 +216,9 @@ class FileSaver(strax.Saver):
             f.write(json.dumps(self.md, **self.json_options))
 
     def _save_chunk(self, data, chunk_info):
-        filename = self.filedata.format(chunk_name = '%06d' % chunk_info['chunk_i'])
+        ichunk = '%06d' % chunk_info['chunk_i']
+        filename = f'{self.prefix}-{ichunk}'
+        #filename = self.filedata.format(chunk_name = '%06d' % chunk_info['chunk_i'])
         filesize = strax.save_file(
             os.path.join(self.tempdirname, filename),
             data=data,
