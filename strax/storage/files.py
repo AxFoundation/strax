@@ -224,7 +224,6 @@ class FileSaver(strax.Saver):
     def _save_chunk(self, data, chunk_info):
         ichunk = '%06d' % chunk_info['chunk_i']
         filename = f'{self.prefix}-{ichunk}'
-        #filename = self.filedata.format(chunk_name = '%06d' % chunk_info['chunk_i'])
         filesize = strax.save_file(
             os.path.join(self.tempdirname, filename),
             data=data,
