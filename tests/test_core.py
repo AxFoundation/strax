@@ -84,7 +84,10 @@ def test_filestore():
 
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
-        assert sorted(os.listdir(data_dirs[0])) == ['000000', 'metadata.json']
+        prefix = strax.dirname_to_prefix(data_dirs[0])
+        assert sorted(os.listdir(data_dirs[0])) == [
+            f'{prefix}-000000',
+            f'{prefix}-metadata.json']
 
         # Check metadata got written correctly.
         metadata = mystrax.get_meta(run_id, 'peaks')
@@ -94,7 +97,7 @@ def test_filestore():
         assert len(metadata['chunks']) == 1
 
         # Check data gets loaded from cache, not rebuilt
-        md_filename = osp.join(data_dirs[0], 'metadata.json')
+        md_filename = osp.join(data_dirs[0], f'{prefix}-metadata.json')
         mtime_before = osp.getmtime(md_filename)
         df = mystrax.get_array(run_id=run_id, targets='peaks')
         assert len(df) == recs_per_chunk * n_chunks
@@ -234,9 +237,10 @@ def test_random_access():
         st.make(run_id=run_id, targets='peaks')
 
         # Second part of hack: corrupt data by removing one chunk
+        dirname = str(st._key_for(run_id, 'peaks'))
         os.remove(os.path.join(temp_dir,
-                               str(st._key_for(run_id, 'peaks')),
-                               '000000'))
+                               dirname,
+                               strax.dirname_to_prefix(dirname) + '-000000'))
 
         with pytest.raises(FileNotFoundError):
             st.get_array(run_id, 'peaks')

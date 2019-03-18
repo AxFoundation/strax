@@ -38,7 +38,9 @@ class ZipDirectory(strax.StorageFrontend):
         bk = self._backend_key(key)
         with zipfile.ZipFile(self._zipname(key)) as zp:
             try:
-                zp.getinfo(str(key) + '/metadata.json')
+                dirname = str(key)
+                prefix = strax.dirname_to_prefix(dirname)
+                zp.getinfo(f'{dirname}/{prefix}-metadata.json')
                 return bk
             except KeyError:
                 pass
@@ -110,7 +112,8 @@ class ZipFileBackend(strax.StorageBackend):
     def get_metadata(self, zipn_and_dirn):
         zipn, dirn = zipn_and_dirn
         with zipfile.ZipFile(zipn) as zp:
-            with zp.open(dirn + '/metadata.json') as f:
+            prefix = strax.dirname_to_prefix(dirn)
+            with zp.open(f'{dirn}/{prefix}-metadata.json') as f:
                 return json.loads(f.read())
 
     def saver(self, *args, **kwargs):
