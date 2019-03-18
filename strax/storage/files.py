@@ -147,6 +147,12 @@ class DataDirectory(StorageFrontend):
 
 
 @export
+def dirname_to_prefix(dirname):
+    """Return filename prefix from dirname"""
+    return os.path.basename(dirname.strip('/')).split("-", maxsplit=1)[1]
+
+
+@export
 class FileSytemBackend(strax.StorageBackend):
     """Store data locally in a directory of binary files.
 
@@ -155,7 +161,9 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
-        with open(osp.join(dirname, 'metadata.json'), mode='r') as f:
+        prefix = dirname_to_prefix(dirname)
+        metadata_json = f'{prefix}-metadata.json'
+        with open(osp.join(dirname, metadata_json), mode='r') as f:
             return json.loads(f.read())
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
@@ -197,6 +205,9 @@ class FileSaver(strax.Saver):
         super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
+        self.prefix = dirname_to_prefix(dirname)
+        self.metadata_json = f'{self.prefix}-metadata.json'
+
         if os.path.exists(dirname):
             print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
@@ -207,11 +218,12 @@ class FileSaver(strax.Saver):
         self._flush_metadata()
 
     def _flush_metadata(self):
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+        with open(self.tempdirname + '/' + self.metadata_json, mode='w') as f:
             f.write(json.dumps(self.md, **self.json_options))
 
     def _save_chunk(self, data, chunk_info):
-        filename = '%06d' % chunk_info['chunk_i']
+        ichunk = '%06d' % chunk_info['chunk_i']
+        filename = f'{self.prefix}-{ichunk}'
         filesize = strax.save_file(
             os.path.join(self.tempdirname, filename),
             data=data,
