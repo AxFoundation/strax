@@ -444,7 +444,7 @@ class Saver:
                     "complete in time!")
         else:
             pass
-                    
+
         self.closed = True
 
         exc_info = strax.formatted_exception()
