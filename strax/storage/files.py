@@ -147,6 +147,12 @@ class DataDirectory(StorageFrontend):
 
 
 @export
+def dirname_to_prefix(dirname):
+    """Return filename prefix from dirname"""
+    return os.path.basename(dirname.strip('/')).split("-", maxsplit=1)[1]
+
+
+@export
 class FileSytemBackend(strax.StorageBackend):
     """Store data locally in a directory of binary files.
 
@@ -155,7 +161,7 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
-        prefix =  os.path.basename(dirname).split("-", maxsplit=1)[1]
+        prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         with open(osp.join(dirname, metadata_json), mode='r') as f:
             return json.loads(f.read())
@@ -199,9 +205,9 @@ class FileSaver(strax.Saver):
         super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
-        self.prefix = os.path.basename(dirname).split("-", maxsplit=1)[1]
+        self.prefix = dirname_to_prefix(dirname)
         self.metadata_json = f'{self.prefix}-metadata.json'
-        
+
         if os.path.exists(dirname):
             print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
