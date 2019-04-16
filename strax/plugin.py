@@ -176,9 +176,15 @@ class Plugin:
             kind_iters = strax.sync_iters(
                 partial(strax.same_stop, func=strax.endtime),
                 kind_iters)
-        iters = kind_iters
 
+        iters = kind_iters
         pending = []
+        yield from self._inner_iter(iters, pending, executor)
+        self.cleanup(wait_for=pending)
+
+    def _inner_iter(self, iters, pending, executor):
+        deps_by_kind = self.dependencies_by_kind()
+
         last_input_received = time.time()
 
         for chunk_i in itertools.count():
@@ -187,7 +193,6 @@ class Plugin:
             while not self.is_ready(chunk_i):
                 if self.source_finished():
                     # Source is finished, there is no next chunk: break out
-                    self.cleanup(wait_for=pending)
                     return
 
                 if time.time() > last_input_received + self.input_timeout:
@@ -217,8 +222,6 @@ class Plugin:
                 yield new_f
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
-
-        self.cleanup(wait_for=pending)
 
     def cleanup(self, wait_for):
         pass
