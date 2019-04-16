@@ -66,7 +66,10 @@ class ThreadedMailboxProcessor:
 
         for d, loader in components.loaders.items():
             assert d not in plugins
-            self.mailboxes[d].add_sender(loader, name=f'load:{d}')
+            self.mailboxes[d].add_sender(
+                # TODO: proc ex is very slow due to pickling nonsense
+                loader(executor=self.thread_executor),
+                name=f'load:{d}')
 
         for d, p in plugins.items():
             executor = None
@@ -98,7 +101,7 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,
                             rechunk=rechunk,
-                            # TODO: do we need thread or process ex here?
+                            # TODO: is thread or proc ex better?
                             executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
