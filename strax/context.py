@@ -1,5 +1,6 @@
 import collections
 import logging
+from functools import partial
 import fnmatch
 import typing as ty
 import warnings
@@ -451,7 +452,9 @@ class Context:
 
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sf.loader(
+                    # Bit clunky... but allows specifying executor later
+                    sf.find(key, **self._find_options)
+                    loaders[d] = partial(sf.loader,
                         key,
                         n_range=n_range,
                         **self._find_options)

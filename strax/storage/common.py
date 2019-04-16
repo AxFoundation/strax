@@ -322,9 +322,6 @@ class StorageBackend:
     these have to be hardcoded (or made part of the key).
     """
 
-    def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
-
     def loader(self, backend_key, n_range=None, executor=None):
         """Iterates over strax data in backend_key
         :param n_range: 2-length arraylike of (start, exclusive end)
