@@ -9,7 +9,6 @@ from .common import StorageFrontend
 
 export, __all__ = strax.exporter()
 
-
 RUN_METADATA_FILENAME = 'run_%s_metadata.json'
 
 
@@ -20,6 +19,7 @@ class DataDirectory(StorageFrontend):
 
     Run-level metadata is stored in loose json files in the directory.
     """
+
     def __init__(self, path='.', *args, **kwargs):
         """
         :param path: Path to folder with data subfolders.
@@ -163,7 +163,17 @@ class FileSytemBackend(strax.StorageBackend):
     def get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
-        with open(osp.join(dirname, metadata_json), mode='r') as f:
+        md_path = osp.join(dirname, metadata_json)
+
+        if not osp.exists(md_path):
+            # Try old-format metadata
+            # (if it's not there, just let it raise FileNotFound
+            # with the usual message in the next stage)
+            old_md_path = osp.join(dirname, 'metadata.json')
+            if osp.exists(old_md_path):
+                md_path = old_md_path
+
+        with open(md_path, mode='r') as f:
             return json.loads(f.read())
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
@@ -201,7 +211,7 @@ class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, dirname, metadata,):
+    def __init__(self, dirname, metadata):
         super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
