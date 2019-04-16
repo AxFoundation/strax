@@ -94,8 +94,12 @@ class ThreadedMailboxProcessor:
                     rechunk = False
 
                 from functools import partial
+
                 self.mailboxes[d].add_reader(
-                    partial(saver.save_from, rechunk=rechunk),
+                    partial(saver.save_from,
+                            rechunk=rechunk,
+                            # TODO: do we need thread or process ex here?
+                            executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
     def iter(self):

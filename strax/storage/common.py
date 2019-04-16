@@ -397,8 +397,9 @@ class Saver:
         self.md = metadata
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
+        self.pending = []
 
-    def save_from(self, source: typing.Iterable, rechunk=True):
+    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
         """Iterate over source and save the results under key
         along with metadata
         """
@@ -407,7 +408,7 @@ class Saver:
 
         try:
             for chunk_i, s in enumerate(source):
-                self.save(data=s, chunk_i=chunk_i)
+                self.save(data=s, chunk_i=chunk_i, executor=executor)
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
             # One traceback on screen is enough
@@ -417,7 +418,7 @@ class Saver:
             if not self.closed:
                 self.close()
 
-    def save(self, data: np.ndarray, chunk_i: int):
+    def save(self, data: np.ndarray, chunk_i: int, executor=None):
         if self.closed:
             raise RuntimeError(f"Attmpt to save to {self.md} saver, which is already closed!")
 
@@ -429,12 +430,23 @@ class Saver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
+        if executor is None or self.is_forked:
+            self._save_chunk_and_metadata(chunk_info, data)
+        else:
+            self.pending.append(executor.submit(
+                self._save_chunk_and_metadata,
+                chunk_info, data))
+
+    def _save_chunk_and_metadata(self, chunk_info, data):
         chunk_info.update(self._save_chunk(data, chunk_info))
         self._save_chunk_metadata(chunk_info)
 
-    def close(self, wait_for=None, timeout=300):
+
+    def close(self, wait_for=tuple(), timeout=300):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
+
+        wait_for = list(wait_for) + self.pending
 
         if wait_for:
             done, not_done = wait(wait_for, timeout=timeout)
