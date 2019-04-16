@@ -453,17 +453,12 @@ class OverlapWindowPlugin(Plugin):
         # (they do fail if I set to end - 0.5 * window size - 2)
         invalid_beyond = end - self.get_window_size() - 1
         cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-        self.log.debug(f"Invalid beyond {invalid_beyond}, "
-                       f"caching inputs beyond {cache_inputs_beyond}")
 
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
 
-        self.log.debug(f"Cached input {self.cached_input}")
-
-        self.log.debug(f"Compute kwargs {kwargs}")
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
         endtimes = strax.endtime(kwargs[self.data_kind]
@@ -479,9 +474,6 @@ class OverlapWindowPlugin(Plugin):
 
         # Send out only valid results we haven't sent yet
         result = result[is_valid & not_sent_yet]
-
-        self.log.debug(f"Cached results {self.cached_results}")
-        self.log.debug(f"Sending out result {result}")
 
         self.last_threshold = invalid_beyond
         return result
