@@ -73,7 +73,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
     """
     def _growing_result(f):
         @wraps(f)
-        def wrapped_f(*args, **kwargs):
+        def accumulate_numba_result(*args, **kwargs):
 
             if '_result_buffer' in kwargs:
                 raise ValueError("_result_buffer argument is internal-only")
@@ -93,9 +93,12 @@ def growing_result(dtype=np.int, chunk_size=10000):
             # If nothing returned, return an empty array of the right dtype
             if not len(saved_buffers):
                 return np.zeros(0, _dtype)
-            return np.concatenate(saved_buffers)
+            if len(saved_buffers) == 1:
+                return saved_buffers[0]
+            else:
+                return np.concatenate(saved_buffers)
 
-        return wrapped_f
+        return accumulate_numba_result
 
     return _growing_result
 
@@ -169,13 +172,12 @@ def camel_to_snake(x):
 @contextlib.contextmanager
 def profile_threaded(filename):
     import yappi            # noqa   # yappi is not a dependency
-    if filename is None:
-        yield
-        return
+    yappi.set_clock_type("cpu")
 
     yappi.start()
     yield
     yappi.stop()
+
     p = yappi.get_func_stats()
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)
