@@ -47,8 +47,6 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    # Child class can make this a function that takes and returns iters:
-    rechunk_input = None
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -71,9 +69,6 @@ class Plugin:
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on not provided for '
                              f'{self.__class__.__name__}')
-        if self.rechunk_input and self.parallel:
-            raise RuntimeError("Plugins that rechunk their input "
-                               "cannot be parallelized")
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(
@@ -182,9 +177,6 @@ class Plugin:
                 partial(strax.same_stop, func=strax.endtime),
                 kind_iters)
         iters = kind_iters
-
-        if self.rechunk_input:
-            iters = self.rechunk_input(iters)
 
         pending = []
         last_input_received = time.time()
