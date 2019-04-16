@@ -8,6 +8,8 @@ import logging
 from strax.utils import exporter
 export, __all__ = exporter()
 
+import strax
+
 
 @export
 class MailboxException(Exception):
@@ -309,9 +311,9 @@ class Mailbox:
                     else:
                         res = msg.result()
                         self.log.debug(f"Future {msg_number} was already done")
-                    yield res
                 else:
-                    yield msg
+                    res = msg
+                yield strax.unshm(res)
 
         self.log.debug("Done reading")
 

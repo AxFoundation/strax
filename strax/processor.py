@@ -47,7 +47,7 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            self.process_executor = futures.ProcessPoolExecutor(
+            self.process_executor = strax.SHMExecutor(
                 max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)

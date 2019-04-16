@@ -8,6 +8,7 @@ from .utils import *
 from .dtypes import *
 from strax.processing.general import *
 from .chunk_arrays import *
+from .shm import *
 
 from .storage.common import *
 from .storage.files import *
