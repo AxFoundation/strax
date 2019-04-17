@@ -8,4 +8,4 @@ dill==0.2.8.2
 psutil==5.4.8
 numexpr==2.6.9
 boto3==1.9.78
-SharedArray
+npshmex=0.1.0

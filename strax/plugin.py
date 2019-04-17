@@ -55,7 +55,12 @@ class Plugin:
     input_timeout = 80
 
     save_when = SaveWhen.ALWAYS
-    parallel = False    # If True, compute() work is submitted to pool
+
+    # Instructions how to parallelize
+    #   False: never parallellize;
+    #   'process': use processpool;
+    #   'thread' (or just True): use threadpool.
+    parallel = False              # For the computation itself
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
@@ -227,6 +232,11 @@ class Plugin:
         pass
 
     def do_compute(self, chunk_i=None, **kwargs):
+        """Wrapper for the user-defined compute method
+
+        This is the 'job' that gets executed in different processes/threads
+        during multiprocessing
+        """
         if self.compute_takes_chunk_i:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
