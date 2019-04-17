@@ -260,6 +260,7 @@ def formatted_exception():
         return ''
     return traceback.format_exc()
 
+
 @export
 def print_entry(d, n=0, show_data=False):
     """ Print entry number n in human-readable format.
