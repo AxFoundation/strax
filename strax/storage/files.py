@@ -231,14 +231,19 @@ class FileSaver(strax.Saver):
         with open(self.tempdirname + '/' + self.metadata_json, mode='w') as f:
             f.write(json.dumps(self.md, **self.json_options))
 
-    def _save_chunk(self, data, chunk_info):
+    def _save_chunk(self, data, chunk_info, executor=None):
         ichunk = '%06d' % chunk_info['chunk_i']
         filename = f'{self.prefix}-{ichunk}'
-        filesize = strax.save_file(
-            os.path.join(self.tempdirname, filename),
-            data=data,
-            compressor=self.md['compressor'])
-        return dict(filename=filename, filesize=filesize)
+
+        kwargs = dict(f=os.path.join(self.tempdirname, filename),
+                      data=data,
+                      compressor=self.md['compressor'])
+        if executor is None:
+            filesize = strax.save_file(**kwargs)
+            return dict(filename=filename, filesize=filesize), None
+        else:
+            return dict(filename=filename), executor.submit(
+                strax.save_file, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):
         if self.is_forked:
