@@ -5,6 +5,11 @@ import psutil
 import os
 import signal
 import time
+try:
+    from npshmex import ProcessPoolExecutor
+except ImportError:
+    # Fall back to default ProcessPoolExecutor
+    from concurrent.futures import ProcessPoolExecutor
 
 import strax
 export, __all__ = strax.exporter()
@@ -47,7 +52,7 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            self.process_executor = strax.SHMExecutor(
+            self.process_executor = ProcessPoolExecutor(
                 max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
