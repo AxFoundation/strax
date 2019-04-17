@@ -313,7 +313,8 @@ class Mailbox:
                         self.log.debug(f"Future {msg_number} was already done")
                 else:
                     res = msg
-                yield strax.unshm(res)
+
+                yield res
 
         self.log.debug("Done reading")
 

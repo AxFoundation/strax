@@ -1,12 +1,14 @@
-"""Shared-memory numpy array passing
-using SharedArray
+"""Shared-memory numpy array passing using SharedArray
+
+This code adds support for structured arrays, and a ProcessPoolExecutor
+that auto-wraps the input/output arrays in temporary shared memory.
 """
 
 import random
-import zstd
+import pickle
 import string
 import numpy as np
-from concurrent.futures import ProcessPoolExecutor
+import concurrent.futures
 
 import strax
 export, __all__ = strax.exporter()
@@ -14,112 +16,102 @@ export, __all__ = strax.exporter()
 try:
     import SharedArray
 except ImportError as e:
-    class SharedArray(object):
+    # Make strax useable on operating systems without SharedArray
+    class SharedArrayMock:
         def __getattr__(self, name):
             def kaboom(*args, **kwargs):
                 raise RuntimeError(
                     f"Attempt to use shared-memory message passing, "
-                    f"but SharedArray did not import: {e}")
+                    f"but SharedArray did not import.")
             return kaboom
+    SharedArray = SharedArrayMock()
 
 
-magic_offset = 192
+def pack_dtype(dtype):
+    """Pack dtype into a numpy array"""
+    return np.frombuffer(pickle.dumps(strax.unpack_dtype(dtype)),
+                         dtype=np.uint8)
 
-def dtype_to_fnkey(dt):
-
-    try:
-        # Remove titles field
-        compact_dtype = [(x[0][1], x[1])
-                         for x in strax.unpack_dtype(dt)]
-        compact_dtype = np.dtype(compact_dtype)
-    except:
-        compact_dtype = dt
-    # Get compact string
-    q = str(compact_dtype)
-    for x in "'()'[]< ":
-        q = q.replace(x, '')
-    q = zstd.compress(q.encode('ascii'))
-    # Encode as legal filename
-    # After 192 we get reasonable characters
-    return ''.join([chr(magic_offset + x)
-                    for x in np.frombuffer(q, dtype=np.uint8)])
-
-def fnkey_to_dtype(q):
-    q = np.array([ord(y) - magic_offset for y in q], dtype=np.uint8)
-    q = zstd.decompress(bytes(memoryview(q)))
-    fields = q.decode('ascii').split(',')
-    dtype = []
-    i = 0
-    while i < len(fields) - 1:
-        try:
-            int(fields[i + 2])
-            dtype.append((fields[i], (fields[i+1], int(fields[i+2]))))
-            i += 4
-
-        except:
-            dtype.append((fields[i], fields[i+1]))
-            i += 2
-    print(dtype)
-    return np.dtype(dtype)
+def unpack_dtype(x):
+    """Unpack dtype from a numpy array"""
+    return np.dtype(pickle.loads(x))
 
 
 @export
 def shm_nuke():
+    """Clear the entire shared memory"""
     for x in SharedArray.list():
         SharedArray.delete(x.name.decode())
 
 
 @export
-def shm_put(arr, temp=False):
+def shm_put(arr, temp=False, _key=None):
+    """Put array into shared memory
+
+    :param temp: If True, key will be deleted on its first retrieval by shm_pop
+    (unless shm_pop is called with keep=True).
+    :param _key: shared memory key to use. Do not set this yourself
+    unless you know what you are doing.
+    """
     if not isinstance(arr, np.ndarray):
         raise ValueError(f"Got {arr} ({type(arr)}) instead of a numpy array!")
 
-    key = 'shm://'
+    is_struct = arr.dtype.names is not None
 
-    is_struct = False
-    if arr.dtype.names is not None:
-        is_struct = True
+    if _key is None:
+        _key = 'shm://' + ':'.join([
+            "sdata" if is_struct else "data",
+            ''.join(random.choices(string.ascii_uppercase
+                                   + string.digits,
+                                   k=8)),
+            "TEMP" if temp else ""])
 
-        # Structured arrays are special: sharedarray will store them as
-        # raw void-dtype arrays
-        # To recover the type later, we have to encode the dtype in they key...
-        key += f'struct_[{dtype_to_fnkey(arr.dtype)[:120]}]_'
+    shared_arr = SharedArray.create(_key, arr.shape, dtype=arr.dtype)
 
-    key += ''.join(random.choices(string.ascii_lowercase + string.digits,
-                                  k=8))
-    if temp:
-        key += '_TEMP'
-    shared_arr = SharedArray.create(key, arr.shape, dtype=arr.dtype)
     if is_struct:
+        # Structured arrays can only be shared as raw void-dtype arrays
         shared_arr[:] = np.frombuffer(arr, dtype=np.void(arr.itemsize))
+
+        # To recover the dtype later, we have to encode it as a separate array
+        # and share that too
+        shm_put(pack_dtype(arr.dtype),
+                _key=_key.replace('sdata', 'dtype'),
+                temp=temp)
+
     else:
         shared_arr[:] = arr[:]
 
-    return key
+    return _key
 
 @export
 def shm_pop(key, keep=None):
     """Return key from shm.
+
     :param keep: Whether to keep the shm or erase it.
     If not specified, will delete shm if key ends with '_TEMP'
     (e.g. it was created with temp=True to shm_put)
     """
     result = SharedArray.attach(key)
-    print(key)
-    if 'struct_' in key:
-        # Recover array structure from key...
-        result = np.frombuffer(
-            result,
-            dtype=fnkey_to_dtype(key.split('[')[1].split(']')[0]))
 
+    arrtype, _, tmp = key[6:].split(':')
+
+    is_temp = tmp == 'TEMP'
     if keep is None:
-        keep = not key.endswith('_TEMP')
+        keep = not is_temp
+
+    if arrtype == "sdata":
+        # This was a structured array. Recover the dtype:
+        dtype = unpack_dtype(shm_pop(key.replace('sdata', 'dtype'),
+                                     keep=keep))
+        result = np.frombuffer(result, dtype=dtype)
+
     if not keep:
         shm_del(key)
     return result
 
 @export
 def shm_del(key):
+    # Split of the 'shm://' prefix
     return SharedArray.delete(key[6:])
 
 
@@ -128,29 +120,39 @@ def is_shmkey(key):
     return isinstance(key, str) and key.startswith('shm://')
 
 
-def shm_wrap_f(f, *args, **kwargs):
+def shm_wrap_f(f, *args, shm_out=True, **kwargs):
     # Get any shared memory args/kwargs
+    for x in args:
+        if isinstance(x, np.ndarray):
+            raise ValueError(f"{f} got unshmd numpy arr in args!")
+    for k, x in kwargs.items():
+        if isinstance(x, np.ndarray):
+            raise ValueError(f"{f} got unshmd numpy arr in kwargs {k}!")
+
     args = [shm_pop(x)
             if is_shmkey(x) else x
             for x in args]
     for k, v in kwargs.items():
-        if is_shmkey(k):
+        if is_shmkey(v):
             kwargs[k] = shm_pop(v)
 
     result = f(*args, **kwargs)
 
-    if isinstance(result, np.ndarray):
-        return shm_put(result, temp=True)
-    elif isinstance(result, dict):
-        for k, v in result.items():
-            if isinstance(v, np.ndarray):
-                result[k] = shm_put(v, temp=True)
-        return result
+    if shm_out:
+        if isinstance(result, np.ndarray):
+            result = shm_put(result, temp=True)
+        elif isinstance(result, dict):
+            for k, v in result.items():
+                if isinstance(v, np.ndarray):
+                    result[k] = shm_put(v, temp=True)
     return result
 
 
 @export
 def unshm(x, keep=None):
+    """Retrieve x from shared memory if it is a shared memory key
+    If x is a dict, replace any shared memory keys in values by numpy arrays.
+    """
     if is_shmkey(x):
         x = shm_pop(x, keep=keep)
     elif isinstance(x, dict):
@@ -161,30 +163,52 @@ def unshm(x, keep=None):
 
 
 @export
-class SHMExecutor(ProcessPoolExecutor):
-    """ProcessPoolExecutor that passes numpy arrays through shared memory
+class SHMExecutor(concurrent.futures.ProcessPoolExecutor):
+    """ProcessPoolExecutor that passes numpy arrays in and out of the
+    job functions through shared memory, avoiding the pickling overhead
+    in python multiprocessing.
     """
-
-    # TODO: Results cannot be auto-unshmed yet, I think that would involve
-    # a deeper hack ofProcessPoolExecutor
-    # NB: adding a callback for this does NOT work,
-    # someone else might get to the future before the callback runs.
 
     def __init__(self, *args, **kwargs):
         shm_nuke()
         super().__init__(*args, **kwargs)
 
-    def submit(self, f, *args, shm_input=True, auto_unshm=True, **kwargs):
+    def submit(self, f, *args, shm_input=True, shm_output=True, **kwargs):
+        """Return future for f(*args, **kwargs) computation.
+
+        :param shm_input: If True (default), transfer numpy array input
+        through shared memory
+        :param shm_output: If True (default), transfer output of f via shared
+        memory if it is a numpy array (or dict containing possibly numpy
+        arrays).
+        NB: result will contain un-attached shared memory keys! Use
+        strax.unshm to unpack the result.
+        """
         if shm_input:
             # Copy numpy arguments to f to temporary shared memory
             args = [shm_put(x, temp=True)
                     if isinstance(x, np.ndarray) else x
                     for x in args]
             for k, v in kwargs.items():
-                if isinstance(k, np.ndarray):
+                if isinstance(v, np.ndarray):
                     kwargs[k] = shm_put(v, temp=True)
 
-        if auto_unshm:
-            return super().submit(shm_wrap_f, f, *args, **kwargs)
+        if shm_input or shm_output:
+            return super().submit(shm_wrap_f, f, *args,
+                                  shm_out=shm_output, **kwargs)
         else:
             return super().submit(f, *args, **kwargs)
+
+##
+# Patch base_future to unpack results from shm as soon as they are put
+# This is dirty, but I don't know another safe way
+# (e.g. adding callback is not OK, someone can get at the result
+#  before the callback runs)
+##
+
+class Future(concurrent.futures._base.Future):
+
+    def set_result(self, result):
+        super().set_result(unshm(result))
+
+concurrent.futures._base.Future = Future

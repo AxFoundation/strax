@@ -21,16 +21,16 @@ def test_shm():
     ex = strax.SHMExecutor()
 
     f = ex.submit(square, np.arange(10))
-    assert strax.unshm(f.result()).sum() == 285
+    assert f.result().sum() == 285
 
-    # Temporary shm key does not survive
+    # Temporary shm did not survive
     assert not len(SharedArray.list())
 
     x = strax.shm_put(np.arange(10))
     f = ex.submit(square, x)
-    assert strax.unshm(f.result()).sum() == 285
+    assert f.result().sum() == 285
 
-    # User-created shm did survive
+    # User-created shm does survive
     assert len(SharedArray.list()) == 1
 
     # But we can delete it
@@ -40,7 +40,7 @@ def test_shm():
     # Support for dicts of arrays
     inp = dict(x=np.arange(10), y='something')
     f = ex.submit(square_2, inp)
-    result = strax.unshm(f.result())
+    result = f.result()
     assert isinstance(result, dict)
     assert result['x'].sum() == 285
     assert result['y'] == 'something'
@@ -52,8 +52,5 @@ def test_shm():
     x = np.zeros(2, dtype=strax.record_dtype())
     x[0]['time'] = 42
     f = ex.submit(nop, x)
-    result = strax.unshm(f.result())
+    result = f.result()
     assert result[0]['time'] == 42
-
-
-

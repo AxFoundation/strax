@@ -14,7 +14,7 @@ export, __all__ = strax.exporter()
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
+    loaders: ty.Dict[str, callable]
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
@@ -67,8 +67,7 @@ class ThreadedMailboxProcessor:
         for d, loader in components.loaders.items():
             assert d not in plugins
             self.mailboxes[d].add_sender(
-                # TODO: proc ex is very slow due to pickling nonsense
-                loader(executor=self.thread_executor),
+                loader(executor=self.process_executor),
                 name=f'load:{d}')
 
         for d, p in plugins.items():
@@ -101,8 +100,7 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,
                             rechunk=rechunk,
-                            # TODO: is thread or proc ex better?
-                            executor=self.thread_executor),
+                            executor=self.process_executor),
                     name=f'save_{s_i}:{d}')
 
     def iter(self):
