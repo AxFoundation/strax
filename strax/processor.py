@@ -71,8 +71,11 @@ class ThreadedMailboxProcessor:
 
         for d, loader in components.loaders.items():
             assert d not in plugins
+            # If paralellizing, use threads for loading
+            # the decompressor releases the gil, and we have a lot
+            # of data transfer to do
             self.mailboxes[d].add_sender(
-                loader(executor=self.process_executor),
+                loader(executor=self.thread_executor),
                 name=f'load:{d}')
 
         for d, p in plugins.items():
@@ -105,7 +108,10 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,
                             rechunk=rechunk,
-                            executor=self.process_executor),
+                            # If paralellizing, use threads for saving
+                            # the compressor releases the gil,
+                            # and we have a lot of data transfer to do
+                            executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
     def iter(self):

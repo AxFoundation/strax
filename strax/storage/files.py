@@ -235,15 +235,14 @@ class FileSaver(strax.Saver):
         ichunk = '%06d' % chunk_info['chunk_i']
         filename = f'{self.prefix}-{ichunk}'
 
-        kwargs = dict(f=os.path.join(self.tempdirname, filename),
-                      data=data,
-                      compressor=self.md['compressor'])
+        fn = os.path.join(self.tempdirname, filename)
+        kwargs = dict(data=data, compressor=self.md['compressor'])
         if executor is None:
-            filesize = strax.save_file(**kwargs)
+            filesize = strax.save_file(fn, **kwargs)
             return dict(filename=filename, filesize=filesize), None
         else:
             return dict(filename=filename), executor.submit(
-                strax.save_file, **kwargs)
+                strax.save_file, fn, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):
         if self.is_forked:
