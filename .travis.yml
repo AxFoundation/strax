@@ -5,12 +5,12 @@
 # Miniconda is used to provide fine control over Python versions, even
 # though it isn't required for strax.
 
-dist: trusty # Ubuntu distribution
-language: generic  # This needs to be set for OSX support
+dist: xenial        # Ubuntu distribution
+language: generic   # This needs to be set for OSX support
 
 # Caching the Python dependencies speeds up builds and lightens
 # the load on TravisCI
-cache: pip  
+cache: pip
 
 # Everything should work in userspace
 sudo: false
@@ -25,17 +25,17 @@ deploy:
   on:
     tags: true  # Only upload tags from bumpversion
     condition: $DEPLOY_ME = true
-    
+
 # The build matrix over all possible setups
 matrix:
     include:
+        - env: PYTHON=3.7 DEPLOY_ME=true
         - env: PYTHON=3.6
-        - env: PYTHON=3.7
-        - env: PYTHON=3.6.5 DEPLOY_ME=true
         - os: osx
-          env: PYTHON=3.6
+          env: PYTHON=3.7
+        - env: PYTHON=3.7
+          dist: trusty
 
-        
 # Setup miniconda
 before_install:
     # Fetch miniconda
@@ -45,7 +45,7 @@ before_install:
     # Install
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p $HOME/miniconda
-    
+
     # Setup miniconda and environment
     - export PATH=$HOME/miniconda/bin:$PATH
     - conda config --set always_yes yes --set changeps1 no
@@ -57,7 +57,7 @@ install:
   - pip install ripa
   - ripa -r requirements.txt coveralls
   - pip install -e .
-  
+
 # Compute the code coverage
 script:
   - coverage run --source=strax setup.py test
