@@ -47,8 +47,6 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
-    # Child class can make this a function that takes and returns iters:
-    rechunk_input = None
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -57,7 +55,12 @@ class Plugin:
     input_timeout = 80
 
     save_when = SaveWhen.ALWAYS
-    parallel = False    # If True, compute() work is submitted to pool
+
+    # Instructions how to parallelize
+    #   False: never parallellize;
+    #   'process': use processpool;
+    #   'thread' (or just True): use threadpool.
+    parallel = False              # For the computation itself
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
@@ -71,9 +74,6 @@ class Plugin:
         if not hasattr(self, 'depends_on'):
             raise ValueError('depends_on not provided for '
                              f'{self.__class__.__name__}')
-        if self.rechunk_input and self.parallel:
-            raise RuntimeError("Plugins that rechunk their input "
-                               "cannot be parallelized")
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(
@@ -181,12 +181,15 @@ class Plugin:
             kind_iters = strax.sync_iters(
                 partial(strax.same_stop, func=strax.endtime),
                 kind_iters)
+
         iters = kind_iters
-
-        if self.rechunk_input:
-            iters = self.rechunk_input(iters)
-
         pending = []
+        yield from self._inner_iter(iters, pending, executor)
+        self.cleanup(wait_for=pending)
+
+    def _inner_iter(self, iters, pending, executor):
+        deps_by_kind = self.dependencies_by_kind()
+
         last_input_received = time.time()
 
         for chunk_i in itertools.count():
@@ -195,7 +198,6 @@ class Plugin:
             while not self.is_ready(chunk_i):
                 if self.source_finished():
                     # Source is finished, there is no next chunk: break out
-                    self.cleanup(wait_for=pending)
                     return
 
                 if time.time() > last_input_received + self.input_timeout:
@@ -226,12 +228,15 @@ class Plugin:
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
 
-        self.cleanup(wait_for=pending)
-
     def cleanup(self, wait_for):
         pass
 
     def do_compute(self, chunk_i=None, **kwargs):
+        """Wrapper for the user-defined compute method
+
+        This is the 'job' that gets executed in different processes/threads
+        during multiprocessing
+        """
         if self.compute_takes_chunk_i:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
@@ -458,17 +463,12 @@ class OverlapWindowPlugin(Plugin):
         # (they do fail if I set to end - 0.5 * window size - 2)
         invalid_beyond = end - self.get_window_size() - 1
         cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-        self.log.debug(f"Invalid beyond {invalid_beyond}, "
-                       f"caching inputs beyond {cache_inputs_beyond}")
 
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
 
-        self.log.debug(f"Cached input {self.cached_input}")
-
-        self.log.debug(f"Compute kwargs {kwargs}")
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
         endtimes = strax.endtime(kwargs[self.data_kind]
@@ -484,9 +484,6 @@ class OverlapWindowPlugin(Plugin):
 
         # Send out only valid results we haven't sent yet
         result = result[is_valid & not_sent_yet]
-
-        self.log.debug(f"Cached results {self.cached_results}")
-        self.log.debug(f"Sending out result {result}")
 
         self.last_threshold = invalid_beyond
         return result

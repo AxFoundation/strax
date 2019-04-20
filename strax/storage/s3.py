@@ -183,7 +183,7 @@ class S3Saver(strax.Saver):
             max_concurrency=40,
             num_download_attempts=30)
 
-    def _save_chunk(self, data, chunk_info):
+    def _save_chunk(self, data, chunk_info, executor=None):
         # Keyname
         key_name = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
 
@@ -198,8 +198,7 @@ class S3Saver(strax.Saver):
                                    key_name,
                                    Config=self.config)
 
-        return dict(key_name=key_name,
-                    filesize=filesize)
+        return dict(key_name=key_name, filesize=filesize), None
 
     def _save_chunk_metadata(self, chunk_info):
         self._upload_json(chunk_info,
