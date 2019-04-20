@@ -322,9 +322,6 @@ class StorageBackend:
     these have to be hardcoded (or made part of the key).
     """
 
-    def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
-
     def loader(self, backend_key, n_range=None, executor=None):
         """Iterates over strax data in backend_key
         :param n_range: 2-length arraylike of (start, exclusive end)
@@ -398,28 +395,35 @@ class Saver:
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
 
-    def save_from(self, source: typing.Iterable, rechunk=True):
+    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
         """Iterate over source and save the results under key
         along with metadata
         """
         if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
+        pending = []
         try:
             for chunk_i, s in enumerate(source):
-                self.save(data=s, chunk_i=chunk_i)
+                new_f = self.save(data=s, chunk_i=chunk_i, executor=executor)
+                if new_f is not None:
+                    pending = [f for f in pending + [new_f]
+                               if not f.done()]
+
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
             # One traceback on screen is enough
-            self.close()
+            self.close(wait_for=pending)
             pass
         finally:
             if not self.closed:
-                self.close()
+                self.close(wait_for=pending)
 
-    def save(self, data: np.ndarray, chunk_i: int):
+    def save(self, data: np.ndarray, chunk_i: int, executor=None):
+        """Save a chunk, returning future to wait on or None"""
         if self.closed:
-            raise RuntimeError(f"Attmpt to save to {self.md} saver, which is already closed!")
+            raise RuntimeError(f"Attmpt to save to {self.md} saver, "
+                               f"which is already closed!")
 
         chunk_info = dict(chunk_i=chunk_i,
                           n=len(data),
@@ -429,10 +433,19 @@ class Saver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        chunk_info.update(self._save_chunk(data, chunk_info))
+        bonus_info, future = self._save_chunk(
+            data,
+            chunk_info,
+            executor=None if self.is_forked else executor)
+
+        chunk_info.update(bonus_info)
         self._save_chunk_metadata(chunk_info)
 
-    def close(self, wait_for=None, timeout=300):
+        return future
+
+    def close(self,
+              wait_for: typing.Union[list, tuple] = tuple(),
+              timeout=300):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
 
@@ -442,8 +455,6 @@ class Saver:
                 raise RuntimeError(
                     f"{len(not_done)} futures of {self.md} did not"
                     "complete in time!")
-        else:
-            pass
 
         self.closed = True
 
@@ -459,7 +470,11 @@ class Saver:
     # Abstract methods (to override in child)
     ##
 
-    def _save_chunk(self, data, chunk_info):
+    def _save_chunk(self, data, chunk_info, executor=None):
+        """Save a chunk to file. Return (
+            dict with extra info for metadata,
+            future to wait on or None)
+        """
         raise NotImplementedError
 
     def _save_chunk_metadata(self, chunk_info):

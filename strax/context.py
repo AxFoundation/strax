@@ -1,5 +1,6 @@
 import collections
 import logging
+from functools import partial
 import fnmatch
 import typing as ty
 import warnings
@@ -30,6 +31,8 @@ export, __all__ = strax.exporter()
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
                  help="Allow rechunking of data during writing."),
+    strax.Option(name='allow_shm', default=False,
+                 help="Allow use of /dev/shm for interprocess communication."),
     strax.Option(name='forbid_creation_of', default=tuple(),
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
@@ -451,7 +454,9 @@ class Context:
 
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sf.loader(
+                    # Bit clunky... but allows specifying executor later
+                    sf.find(key, **self._find_options)
+                    loaders[d] = partial(sf.loader,
                         key,
                         n_range=n_range,
                         **self._find_options)

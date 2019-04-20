@@ -2,6 +2,7 @@
 """
 from functools import partial
 import bz2
+import os
 
 import numpy as np
 import blosc
@@ -66,8 +67,12 @@ def save_file(f, data, compressor='zstd'):
     :param compressor: compressor to use
     """
     if isinstance(f, str):
-        with open(f, mode='wb') as f:
-            return _save_file(f, data, compressor)
+        final_fn = f
+        temp_fn = f + '_temp'
+        with open(temp_fn, mode='wb') as f:
+            result = _save_file(f, data, compressor)
+        os.rename(temp_fn, final_fn)
+        return result
     else:
         return _save_file(f, data, compressor)
 

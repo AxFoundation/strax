@@ -309,9 +309,10 @@ class Mailbox:
                     else:
                         res = msg.result()
                         self.log.debug(f"Future {msg_number} was already done")
-                    yield res
                 else:
-                    yield msg
+                    res = msg
+
+                yield res
 
         self.log.debug("Done reading")
 

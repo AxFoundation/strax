@@ -5,6 +5,13 @@ import psutil
 import os
 import signal
 import time
+from concurrent.futures import ProcessPoolExecutor
+try:
+    from npshmex import ProcessPoolExecutor as SHMExecutor
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    pass
+
 
 import strax
 export, __all__ = strax.exporter()
@@ -14,7 +21,7 @@ export, __all__ = strax.exporter()
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
+    loaders: ty.Dict[str, callable]
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
@@ -31,7 +38,7 @@ class ThreadedMailboxProcessor:
 
     def __init__(self,
                  components: ProcessorComponents,
-                 allow_rechunk=True,
+                 allow_rechunk=True, allow_shm=False,
                  max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
@@ -47,8 +54,8 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            self.process_executor = futures.ProcessPoolExecutor(
-                max_workers=max_workers)
+            _proc_ex = SHMExecutor if allow_shm else ProcessPoolExecutor
+            self.process_executor = _proc_ex(max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
@@ -66,7 +73,12 @@ class ThreadedMailboxProcessor:
 
         for d, loader in components.loaders.items():
             assert d not in plugins
-            self.mailboxes[d].add_sender(loader, name=f'load:{d}')
+            # If paralellizing, use threads for loading
+            # the decompressor releases the gil, and we have a lot
+            # of data transfer to do
+            self.mailboxes[d].add_sender(
+                loader(executor=self.thread_executor),
+                name=f'load:{d}')
 
         for d, p in plugins.items():
             executor = None
@@ -94,8 +106,14 @@ class ThreadedMailboxProcessor:
                     rechunk = False
 
                 from functools import partial
+
                 self.mailboxes[d].add_reader(
-                    partial(saver.save_from, rechunk=rechunk),
+                    partial(saver.save_from,
+                            rechunk=rechunk,
+                            # If paralellizing, use threads for saving
+                            # the compressor releases the gil,
+                            # and we have a lot of data transfer to do
+                            executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
     def iter(self):
@@ -107,10 +125,12 @@ class ThreadedMailboxProcessor:
             m.start()
 
         self.log.debug(f"Yielding {target}")
+        traceback = None
+        exc = None
+
         try:
             yield from final_generator
-            traceback = None
-            exc = None
+
         except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():
