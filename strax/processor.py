@@ -5,11 +5,13 @@ import psutil
 import os
 import signal
 import time
+from concurrent.futures import ProcessPoolExecutor
 try:
-    from npshmex import ProcessPoolExecutor
+    from npshmex import ProcessPoolExecutor as SHMExecutor
 except ImportError:
-    # Fall back to default ProcessPoolExecutor
-    from concurrent.futures import ProcessPoolExecutor
+    # This is allowed to fail, it only crashes if allow_shm = True
+    pass
+
 
 import strax
 export, __all__ = strax.exporter()
@@ -36,7 +38,7 @@ class ThreadedMailboxProcessor:
 
     def __init__(self,
                  components: ProcessorComponents,
-                 allow_rechunk=True,
+                 allow_rechunk=True, allow_shm=False,
                  max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
@@ -52,8 +54,8 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            self.process_executor = ProcessPoolExecutor(
-                max_workers=max_workers)
+            _proc_ex = SHMExecutor if allow_shm else ProcessPoolExecutor
+            self.process_executor = _proc_ex(max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
@@ -123,10 +125,12 @@ class ThreadedMailboxProcessor:
             m.start()
 
         self.log.debug(f"Yielding {target}")
+        traceback = None
+        exc = None
+
         try:
             yield from final_generator
-            traceback = None
-            exc = None
+
         except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():

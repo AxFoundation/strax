@@ -31,6 +31,8 @@ export, __all__ = strax.exporter()
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
                  help="Allow rechunking of data during writing."),
+    strax.Option(name='allow_shm', default=False,
+                 help="Allow use of /dev/shm for interprocess communication."),
     strax.Option(name='forbid_creation_of', default=tuple(),
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
