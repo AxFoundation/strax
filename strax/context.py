@@ -1,4 +1,4 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import collections
 import logging
 import fnmatch
@@ -571,7 +571,8 @@ class Context:
             savers=dict(savers),
             targets=targets)
 
-    def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def get_iter(self, run_id: str,
+                 targets, save=tuple(), max_workers=None,
                  time_range=None, selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
@@ -628,28 +629,41 @@ class Context:
                       (x['time'] < time_range[1])]
             yield x
 
-    def make(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def make(self, run_id: ty.Union[str, tuple, list],
+             targets, save=tuple(), max_workers=None,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
-        for _ in self.get_iter(run_id, targets,
+        # Multi-run support
+        run_ids = strax.to_str_tuple(run_id)
+        if len(run_ids) > 1:
+            return multi_run(self, run_ids, targets=targets,
+                             save=save, max_workers=max_workers, **kwargs)
+
+        for _ in self.get_iter(run_ids[0], targets,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
-    def get_array(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def get_array(self, run_id: ty.Union[str, tuple, list],
+                  targets, save=tuple(), max_workers=None,
                   **kwargs) -> np.ndarray:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        results = list(self.get_iter(run_id, targets,
-                                     save=save, max_workers=max_workers,
-                                     **kwargs))
+        run_ids = strax.to_str_tuple(run_id)
+        if len(run_ids) > 1:
+            results = multi_run(self.get_array, run_ids, targets=targets,
+                                save=save, max_workers=max_workers, **kwargs)
+        else:
+            results = list(self.get_iter(run_ids[0], targets,
+                                         save=save, max_workers=max_workers,
+                                         **kwargs))
         if len(results):
             return np.concatenate(results)
-        raise ValueError("Not a single chunk returned?")
+        raise ValueError("No results returned?")
 
-    def get_df(self, run_id: ty.Union[str, tuple],
+    def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
                **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame
@@ -930,3 +944,26 @@ def _tag_match(tag, pattern, pattern_type, ignore_underscore):
     elif pattern_type == 're':
         return bool(re.match(pattern, tag))
     raise NotImplementedError
+
+
+@export
+def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
+    """Execute f(run_id, **kwargs) over multiple runs,
+    then return list of results.
+
+    :param run_ids: list/tuple of runids
+    :param max_workers: number of worker threads/processes to spawn
+
+    Other (kw)args will be passed to f
+    """
+    # Probably we'll want to use dask for this in the future,
+    # to enable cut history tracking and multiprocessing.
+    # For some reason the ProcessPoolExecutor doesn't work??
+    with ThreadPoolExecutor(max_workers=max_workers) as exc:
+        futures = [exc.submit(f, r, *args, **kwargs)
+                   for r in run_ids]
+        for _ in tqdm(as_completed(futures),
+                      desc="Loading %d runs" % len(run_ids)):
+            pass
+        # Return results in order
+        return [f.result() for f in futures]
