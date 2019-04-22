@@ -1,3 +1,4 @@
+import collections
 import contextlib
 from functools import wraps
 import re
@@ -273,3 +274,32 @@ def print_entry(d, n=0, show_data=False):
         if (show_data or key != 'data'):
             print(("{:<%d}: " % max_len).format(key), el[key])
     return
+
+
+@export
+def count_tags(ds):
+    """Return how often each tag occurs in the datasets DataFrame ds"""
+    from collections import Counter
+    from itertools import chain
+    all_tags = chain(*[ts.split(',')
+                       for ts in ds['tags'].values])
+    return Counter(all_tags)
+
+
+@export
+def flatten_dict(d, separator=':', _parent_key=''):
+    """Flatten nested dictionaries into a single dictionary,
+    indicating levels by separator.
+    Don't set _parent_key argument, this is used for recursive calls.
+    Stolen from http://stackoverflow.com/questions/6027558
+    """
+    items = []
+    for k, v in d.items():
+        new_key = _parent_key + separator + k if _parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten_dict(v,
+                                      separator=separator,
+                                      _parent_key=new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)

@@ -278,6 +278,11 @@ class StorageFrontend:
     # Abstract methods (to override in child)
     ##
 
+    def _scan_runs(self, store_fields):
+        """Iterable of run document / metadata dictionaries
+        """
+        yield from tuple()
+
     def _list_available(self, key: DataKey,
                         allow_incomplete, fuzzy_for, fuzzy_for_options):
         """Return list of available runs whose data matches key.

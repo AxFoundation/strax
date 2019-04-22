@@ -5,7 +5,7 @@ import shutil
 import zipfile
 
 import strax
-from .files import RUN_METADATA_FILENAME
+from .files import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 
@@ -54,7 +54,7 @@ class ZipDirectory(strax.StorageFrontend):
     def run_metadata(self, run_id):
         with zipfile.ZipFile(self._zipname(run_id)) as zp:
             try:
-                with zp.open(RUN_METADATA_FILENAME % run_id) as f:
+                with zp.open(RUN_METADATA_PATTERN % run_id) as f:
                     return json.loads(f.read())
             except KeyError:
                 raise strax.RunMetadataNotAvailable
