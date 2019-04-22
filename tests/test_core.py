@@ -62,6 +62,16 @@ def test_core():
         assert bla.dtype == strax.peak_dtype()
 
 
+def test_multirun():
+    for max_workers in [1, 2]:
+        mystrax = strax.Context(storage=[],
+                                register=[Records, Peaks],)
+        bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
+                                max_workers=max_workers)
+        assert len(bla) == recs_per_chunk * n_chunks * 2
+        assert bla.dtype == strax.peak_dtype()
+
+
 def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir),
