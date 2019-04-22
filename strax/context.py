@@ -1,15 +1,18 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import collections
 import logging
-from functools import partial
 import fnmatch
+from functools import partial
+import random
+import re
+import string
 import typing as ty
 import warnings
-import random
-import string
 
+import numexpr
 import numpy as np
 import pandas as pd
-import numexpr
+from tqdm import tqdm
 
 import strax
 export, __all__ = strax.exporter()
@@ -36,8 +39,16 @@ export, __all__ = strax.exporter()
     strax.Option(name='forbid_creation_of', default=tuple(),
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
-                      "descending too far into the dependency graph.")
-)
+                      "descending too far into the dependency graph."),
+    strax.Option(name='store_run_fields', default=tuple(),
+                 help="Tuple of run document fields to store "
+                      "during scan_run."),
+    strax.Option(name='check_available', default=tuple(),
+                 help="Tuple of data types to scan availability for "
+                      "during scan_run."),
+    strax.Option(name='run_mode_field', default='mode',
+                 help="Name of the field in the run doc that describes the"
+                      '"mode" of the run (used in run selection)'))
 @export
 class Context:
     """Context for strax analysis.
@@ -50,6 +61,8 @@ class Context:
     """
     config: dict
     context_config: dict
+
+    runs: ty.Union[pd.DataFrame, type(None)] = None
 
     def __init__(self,
                  storage=None,
@@ -636,7 +649,8 @@ class Context:
             return np.concatenate(results)
         raise ValueError("Not a single chunk returned?")
 
-    def get_df(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def get_df(self, run_id: ty.Union[str, tuple],
+               targets, save=tuple(), max_workers=None,
                **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
@@ -692,26 +706,6 @@ class Context:
         raise strax.DataNotAvailable(f"No run-level metadata available "
                                      f"for {run_id}")
 
-    def list_available(self, target, **kwargs):
-        """Return sorted list of run_id's for which target is available
-        """
-        # TODO duplicated code with with get_iter
-        if len(kwargs):
-            # noinspection PyMethodFirstArgAssignment
-            self = self.new_context(**kwargs)
-
-        # The run_id is ignored in list_available, but we still use it for
-        # passing data type and lineage to the search functions.
-        # We choose 0 as placeholder since as of this writing strax
-        # requires run_ids to be int-able strings...
-        # TODO: this should change soon
-        key = self._key_for('0', target)
-
-        found_runs = []
-        for sf in self.storage:
-            found_runs += sf.list_available(key, **self._find_options)
-        return sorted(list(set(found_runs)))
-
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
         through any of the registered storage frontends.
@@ -735,6 +729,163 @@ class Context:
                 continue
         return False
 
+    def list_available(self, target, **kwargs):
+        """Return sorted list of run_id's for which target is available
+        """
+        # TODO duplicated code with with get_iter
+        if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
+            self = self.new_context(**kwargs)
+
+        # The run_id is ignored in list_available, but we still use it for
+        # passing data type and lineage to the search functions.
+        # We choose 0 as placeholder since as of this writing strax
+        # requires run_ids to be int-able strings...
+        # TODO: this should change soon
+        key = self._key_for('0', target)
+
+        found_runs = []
+        for sf in self.storage:
+            found_runs += sf.list_available(key, **self._find_options)
+        return sorted(list(set(found_runs)))
+
+    def scan_runs(self,
+                  check_available=tuple(),
+                  store_fields=tuple()):
+        """Update and return self.runs with runs currently available
+        in all storage frontends.
+        :param check_available: Check whether these data types are available
+        Availability of xxx is stored as a boolean in the xxx_available
+        column.
+        :param store_fields: Additional fields from run doc to include
+        as rows in the dataframe.
+
+        The context options scan_availability and store_run_fields list
+        data types and run fields, respectively, that will always be scanned.
+        """
+        store_fields = tuple(list(store_fields)
+                             + list(self.context_config['store_run_fields']))
+        check_available = tuple(list(check_available)
+                             + list(self.context_config['check_available']))
+
+        docs = None
+        for sf in self.storage:
+            _temp_docs = []
+            for doc in sf._scan_runs(store_fields=store_fields):
+                # If there is no number, make one from the name
+                if 'number' not in doc and 'name' in doc:
+                    doc['number'] = int(doc['name'])
+
+                # If there is no name, make one from the number
+                doc.setdefault('name', str(doc['number']))
+
+                # Flatten the tags fields, if it exists
+                if 'tags' in doc:
+                    doc['tags'] = ','.join([t['name']
+                                            for t in doc.get('tags', [])])
+                    doc = strax.flatten_dict(doc, separator='__')
+
+                _temp_docs.append(doc)
+
+            new_docs = pd.DataFrame(_temp_docs)
+            if docs is None:
+                docs = new_docs
+            else:
+                # Keep only new runs (not found by earlier frontends)
+                docs = pd.merge(
+                    docs,
+                     new_docs[
+                         ~np.in1d(new_docs['name'], docs['name'])])
+
+        self.runs = pd.DataFrame(docs)
+
+        # Set some fields we need later, in case they are not present
+        for fn in ['tags', 'run_mode_field']:
+            if fn not in self.runs.columns:
+                self.runs[fn] = ''
+
+        for d in tqdm(check_available,
+                      desc='Checking data availability'):
+            self.runs[d + '_available'] |= np.in1d(
+                self.runs.name.values,
+                self.list_available(d))
+
+        return self.runs
+
+    def run_selection(self, run_mode=None,
+                      include_tags=None, exclude_tags=None,
+                      available=tuple(),
+                      pattern_type='fnmatch', ignore_underscore=True):
+        """Return pandas.DataFrame with basic info from runs
+        that match selection criteria.
+        :param run_mode: Pattern to match run modes (reader.ini.name)
+        :param available: str or tuple of strs of data types for which data
+        must be available according to the runs DB.
+
+        :param include_tags: String or list of strings of patterns
+            for required tags
+        :param exclude_tags: String / list of strings of patterns
+            for forbidden tags.
+            Exclusion criteria  have higher priority than inclusion criteria.
+        :param pattern_type: Type of pattern matching to use.
+            Defaults to 'fnmatch', which means you can use
+            unix shell-style wildcards (`?`, `*`).
+            The alternative is 're', which means you can use
+            full python regular expressions.
+        :param ignore_underscore: Ignore the underscore at the start of tags
+            (indicating some degree of officialness or automation).
+
+        Examples:
+         - `run_selection(include_tags='blinded')`
+            select all datasets with a blinded or _blinded tag.
+         - `run_selection(include_tags='*blinded')`
+            ... with blinded or _blinded, unblinded, blablinded, etc.
+         - `run_selection(include_tags=['blinded', 'unblinded'])`
+            ... with blinded OR unblinded, but not blablinded.
+         - `run_selection(include_tags='blinded', exclude_tags=['bad', 'messy'])`
+           select blinded dsatasets that aren't bad or messy
+        """
+        if self.runs is None:
+            self.scan_runs()
+        dsets = self.runs.copy()
+
+        if pattern_type not in ('re', 'fnmatch'):
+            raise ValueError("Pattern type must be 're' or 'fnmatch'")
+
+        if run_mode is not None:
+            modes = dsets[self.context_config['run_mode_field']].values
+            mask = np.zeros(len(modes), dtype=np.bool_)
+            if pattern_type == 'fnmatch':
+                for i, x in enumerate(modes):
+                    mask[i] = fnmatch.fnmatch(x, run_mode)
+            elif pattern_type == 're':
+                for i, x in enumerate(modes):
+                    mask[i] = bool(re.match(run_mode, x))
+            dsets = dsets[mask]
+
+        if include_tags is not None:
+            dsets = dsets[_tags_match(dsets,
+                                      include_tags,
+                                      pattern_type,
+                                      ignore_underscore)]
+
+        if exclude_tags is not None:
+            dsets = dsets[True ^ _tags_match(dsets,
+                                             exclude_tags,
+                                             pattern_type,
+                                             ignore_underscore)]
+
+        have_available = strax.to_str_tuple(available)
+        for d in have_available:
+            if not d + '_available' in dsets.columns:
+                # Get extra availability info from the run db
+                self.runs[d + '_available'] = np.in1d(
+                    self.runs.name.values,
+                    self.list_available(d))
+            dsets = dsets[dsets[d + '_available']]
+
+        return dsets
+
 
 get_docs = """
 :param run_id: run id to get
@@ -753,3 +904,29 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
+
+
+def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
+    result = np.zeros(len(dsets), dtype=np.bool)
+
+    if isinstance(patterns, str):
+        patterns = [patterns]
+
+    for i, tags in enumerate(dsets.tags):
+        result[i] = any([any([_tag_match(tag, pattern,
+                                         pattern_type,
+                                         ignore_underscore)
+                              for tag in tags.split(',')
+                              for pattern in patterns])])
+
+    return result
+
+
+def _tag_match(tag, pattern, pattern_type, ignore_underscore):
+    if ignore_underscore and tag.startswith('_'):
+        tag = tag[1:]
+    if pattern_type == 'fnmatch':
+        return fnmatch.fnmatch(tag, pattern)
+    elif pattern_type == 're':
+        return bool(re.match(pattern, tag))
+    raise NotImplementedError
