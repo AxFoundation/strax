@@ -7,5 +7,5 @@ tqdm==4.31.1
 dill==0.2.9
 psutil==5.6.1
 numexpr==2.6.9
-boto3==1.9.78
+boto3==1.9.134
 npshmex==0.1.2
