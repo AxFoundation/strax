@@ -600,6 +600,7 @@ class Context:
         for x in strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
+                allow_shm=self.context_config['allow_shm'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
