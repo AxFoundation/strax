@@ -956,6 +956,17 @@ def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
 
     Other (kw)args will be passed to f
     """
+    # Try to int all run_ids
+
+    # Get a numpy array of run ids.
+    try:
+        run_id_numpy = np.array([int(x) for x in run_ids],
+                                dtype=np.int32)
+    except ValueError:
+        # If there are string id's among them,
+        # numpy will autocast all the run ids to Unicode fixed-width
+        run_id_numpy = np.array(run_ids)
+
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
@@ -965,5 +976,12 @@ def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
         for _ in tqdm(as_completed(futures),
                       desc="Loading %d runs" % len(run_ids)):
             pass
-        # Return results in order
-        return [f.result() for f in futures]
+
+        result = []
+        for i, f in enumerate(futures):
+            r = f.result()
+            ids = np.array([run_id_numpy[i]] * len(r),
+                           dtype=[('run_id', run_id_numpy.dtype)])
+            r = strax.merge_arrs([ids, r])
+            result.append(r)
+        return result

@@ -68,8 +68,11 @@ def test_multirun():
                                 register=[Records, Peaks],)
         bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
                                 max_workers=max_workers)
-        assert len(bla) == recs_per_chunk * n_chunks * 2
-        assert bla.dtype == strax.peak_dtype()
+        n = recs_per_chunk * n_chunks
+        assert len(bla) == n * 2
+        np.testing.assert_equal(
+            bla['run_id'],
+            np.array([0] * n + [1] * n, dtype=np.int32))
 
 
 def test_filestore():
