@@ -704,7 +704,7 @@ class Context:
     get_metadata = get_meta
 
     def run_metadata(self, run_id, projection=None) -> dict:
-        """Return run-evel metadata for run_id, or raise DataNotAvailable
+        """Return run-level metadata for run_id, or raise DataNotAvailable
         if this is not available
 
         :param run_id: run id to get
@@ -777,10 +777,12 @@ class Context:
         The context options scan_availability and store_run_fields list
         data types and run fields, respectively, that will always be scanned.
         """
-        store_fields = tuple(list(store_fields)
-                             + list(self.context_config['store_run_fields']))
-        check_available = tuple(list(check_available)
-                             + list(self.context_config['check_available']))
+        store_fields = tuple(set(
+            list(store_fields)
+            + list(self.context_config['store_run_fields'])))
+        check_available = tuple(set(
+            list(check_available)
+            + list(self.context_config['check_available'])))
 
         docs = None
         for sf in self.storage:
@@ -899,6 +901,46 @@ class Context:
             dsets = dsets[dsets[d + '_available']]
 
         return dsets
+
+    def define_run(self,
+                   name: str,
+                   data: ty.Union[np.ndarray, pd.DataFrame, dict],
+                   from_run: ty.Union[str, None] = None):
+
+        if isinstance(data, (pd.DataFrame, np.ndarray)):
+            # Array of events / regions of interest
+            start, end = data['time'], strax.endtime(data)
+            if from_run is not None:
+                return self.define_run(
+                    name,
+                    {from_run: np.transpose([start, end])})
+            else:
+                df = pd.DataFrame(dict(starts=start, ends=end,
+                                       run_id=data['run_id']))
+                self.define_run(
+                    name,
+                    {run_id: rs[['start', 'stop']].values.transpose()
+                     for run_id, rs in df.groupby('fromrun')})
+
+        if isinstance(data, (list, tuple)):
+            # list of runids
+            data = strax.to_str_tuple(data)
+            self.define_run(
+                name,
+                {run_id: 'all' for run_id in data})
+
+        if not isinstance(data, dict):
+            raise ValueError("Can't define run from {type(data)}")
+
+        # Dict mapping run_id: array of time ranges or all
+        for sf in self.storage:
+            if not sf.readonly and sf.can_define_runs:
+                sf.define_run(name, data)
+                break
+        else:
+            raise RuntimeError("No storage frontend registered that allows"
+                               " run definition")
+
 
 
 get_docs = """

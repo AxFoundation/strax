@@ -83,6 +83,7 @@ class StorageFrontend:
     For example, a runs database, or a data directory on the file system.
     """
     backends: list
+    can_define_runs = False
 
     def __init__(self,
                  readonly=False,
