@@ -108,6 +108,8 @@ class Plugin:
             data_type=self.provides,
             data_kind=self.data_kind,
             dtype=self.dtype,
+            lineage_hash=strax.DataKey(run_id, self.provides, self.lineage
+                                       ).lineage_hash,
             compressor=self.compressor,
             lineage=self.lineage)
 
