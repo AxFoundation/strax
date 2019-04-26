@@ -404,7 +404,7 @@ class Context:
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None,
-                       ) -> strax.ProcessorComponents:
+                      ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
         """
@@ -573,7 +573,9 @@ class Context:
 
     def get_iter(self, run_id: str,
                  targets, save=tuple(), max_workers=None,
-                 time_range=None, selection=None,
+                 time_range=None, 
+                 seconds_range=None,
+                 selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -589,6 +591,25 @@ class Context:
 
         if isinstance(selection, (list, tuple)):
             selection = ' & '.join(f'({x})' for x in selection)
+            
+        # Convert relative to absolute time range
+        if seconds_range is not None:
+            try:
+                # Use run metadata, if it is available, to get
+                # the run start time (floored to seconds)
+                t0 = self.run_metadata(run_id, 'start')['start']
+                t0 = int(t0.timestamp()) * int(1e9)
+            except Exception:
+                # Get an approx start from the data itself,
+                # then floor it to seconds for consistency
+                if isinstance(targets, (list, tuple)):
+                    t = targets[0]
+                else:
+                    t = targets
+                t0 = self.get_meta(run_id, t)['chunks'][0]['first_time']
+                t0 = int(t0 / int(1e9)) * int(1e9)
+            time_range = (t0 + int(1e9) * seconds_range[0],
+                          t0 + int(1e9) * seconds_range[1])
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
@@ -713,6 +734,8 @@ class Context:
         syntax. May not be supported by frontend.
         """
         for sf in self.storage:
+            if not sf.provide_run_metadata:
+                continue
             try:
                 return sf.run_metadata(run_id, projection=projection)
             except (strax.DataNotAvailable, NotImplementedError):
@@ -780,6 +803,7 @@ class Context:
         """
         store_fields = tuple(set(
             list(store_fields)
+            + [self.context_config['run_mode_field'], 'tags']
             + list(self.context_config['store_run_fields'])))
         check_available = tuple(set(
             list(check_available)
@@ -795,12 +819,14 @@ class Context:
 
                 # If there is no name, make one from the number
                 doc.setdefault('name', str(doc['number']))
+                
+                # Set run mode to empty string if unknown
+                doc.setdefault(self.context_config['run_mode_field'],
+                               '')
 
-                # Flatten the tags fields, if it exists
-                if 'tags' in doc:
-                    doc['tags'] = ','.join([t['name']
-                                            for t in doc.get('tags', [])])
-                    doc = strax.flatten_dict(doc, separator='__')
+                # Flatten the tags field, if it exists
+                doc['tags'] = ','.join([t['name']
+                                        for t in doc.get('tags', [])])
 
                 _temp_docs.append(doc)
 
@@ -814,25 +840,23 @@ class Context:
                      new_docs[
                          ~np.in1d(new_docs['name'], docs['name'])])
 
-        self.runs = pd.DataFrame(docs)
-
-        # Set some fields we need later, in case they are not present
-        for fn in ['tags', 'run_mode_field']:
-            if fn not in self.runs.columns:
-                self.runs[fn] = ''
+        if len(docs):
+            self.runs = pd.DataFrame(docs)
+        else:
+            self.runs = pd.DataFrame([], columns=['name'])
 
         for d in tqdm(check_available,
                       desc='Checking data availability'):
-            self.runs[d + '_available'] |= np.in1d(
+            self.runs[d + '_available'] = np.in1d(
                 self.runs.name.values,
                 self.list_available(d))
 
         return self.runs
 
-    def run_selection(self, run_mode=None,
-                      include_tags=None, exclude_tags=None,
-                      available=tuple(),
-                      pattern_type='fnmatch', ignore_underscore=True):
+    def select_runs(self, run_mode=None,
+                    include_tags=None, exclude_tags=None,
+                    available=tuple(),
+                    pattern_type='fnmatch', ignore_underscore=True):
         """Return pandas.DataFrame with basic info from runs
         that match selection criteria.
         :param run_mode: Pattern to match run modes (reader.ini.name)
@@ -953,6 +977,9 @@ get_docs = """
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
 :param selection: Query string or list of strings with selections to apply.
+:param time_range: (start, stop) range of ns since the unix epoch to load
+:param seconds_range: (start, stop) range of seconds since the start of the
+run to load.
 """
 
 for attr in dir(Context):

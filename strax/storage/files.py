@@ -3,6 +3,8 @@ import json
 import tempfile
 import os
 import os.path as osp
+
+from bson import json_util
 import shutil
 
 import strax
@@ -11,7 +13,7 @@ from .common import StorageFrontend
 export, __all__ = strax.exporter()
 
 
-RUN_METADATA_PATTERN = 'run_%s_metadata.json'
+RUN_METADATA_PATTERN = '%s-metadata.json'
 
 
 @export
@@ -21,15 +23,22 @@ class DataDirectory(StorageFrontend):
 
     Run-level metadata is stored in loose json files in the directory.
     """
+    
+    provide_run_metadata = True
 
-    def __init__(self, path='.', *args, **kwargs):
+    def __init__(self, path='.', *args, deep_scan=True, **kwargs):
         """
         :param path: Path to folder with data subfolders.
+        :param deep_scan: Let scan_runs scan over folders,
+        so even data for which no run-level metadata is available
+        is reported.
+        
         For other arguments, see DataRegistry base class.
         """
         super().__init__(*args, **kwargs)
         self.backends = [strax.FileSytemBackend()]
         self.path = path
+        self.deep_scan = deep_scan
         if not self.readonly and not osp.exists(self.path):
             os.makedirs(self.path)
 
@@ -40,7 +49,8 @@ class DataDirectory(StorageFrontend):
         path = self._run_meta_path(run_id)
         if osp.exists(path):
             with open(path, mode='r') as f:
-                md = json.loads(f.read())
+                md = json.loads(f.read(), 
+                                object_hook=json_util.object_hook)
             if not projection:
                 return md
             # TODO: implement projection for . fields, like mongo
@@ -55,31 +65,32 @@ class DataDirectory(StorageFrontend):
         final_path = self._run_meta_path(run_id)
 
         with open(self._run_meta_path(run_id), mode='w') as f:
-            f.write(json.dumps(metadata))
+            f.write(json.dumps(metadata, default=json_util.default))
 
     def _scan_runs(self, store_fields):
         """Iterable of run document dictionaries.
         These should be directly convertable to a pandas DataFrame.
         """
-        # First yield runs for which we actually have metadata
         found = set()
-        for md_path in glob.glob(
+        
+        # Yield metadata for runs for which we actually have it
+        for md_path in sorted(glob.glob(
                 osp.join(self.path,
-                         RUN_METADATA_PATTERN.replace('%s', '*'))):
-            _, run_id, _ = osp.basename(md_path).split('_')
+                         RUN_METADATA_PATTERN.replace('%s', '*')))):
+            # Parse the run metadata filename pattern. 
+            # (different from the folder pattern)
+            run_id = osp.basename(md_path).split('-')[0]
             found.add(run_id)
             yield self.run_metadata(run_id, projection=store_fields)
 
-        # Then yield runs for which no metadata exists
-        # we'll make "metadata" that consist only of the run name
-        # TODO: won't this take very long in the future?
-        # Maybe we should ensure metadata always exists, so this can be
-        # disabled.
-        for fn in self._subfolders():
-            run_id = self._parse_folder_name(fn)[0]
-            if run_id not in found:
-                found.add(run_id)
-                yield dict(name=run_id)
+        if self.deep_scan:
+            # Yield runs for which no metadata exists
+            # we'll make "metadata" that consist only of the run name
+            for fn in self._subfolders():
+                run_id = self._parse_folder_name(fn)[0]
+                if run_id not in found:
+                    found.add(run_id)
+                    yield dict(name=run_id)
 
     def _list_available(self, key: strax.DataKey,
                         allow_incomplete, fuzzy_for, fuzzy_for_options):
