@@ -84,11 +84,14 @@ class StorageFrontend:
     """
     backends: list
     can_define_runs = False
+    provide_run_metadata = False
 
     def __init__(self,
                  readonly=False,
+                 provide_run_metadata=None,
                  overwrite='if_broken',
-                 take_only=tuple(), exclude=tuple()):
+                 take_only=tuple(), 
+                 exclude=tuple()):
         """
         :param readonly: If True, throws CannotWriteData whenever saving is
         attempted.
@@ -98,6 +101,8 @@ class StorageFrontend:
          - 'always': Always overwrite data. Use with caution!
         :param take_only: Provide/accept only these data types.
         :param exclude: Do NOT provide/accept these data types.
+        :param provide_run_metadata: Whether to provide run-level metadata
+        (run docs). If None, use class-specific default
 
         If take_only and exclude are both omitted, provide all data types.
         If a data type is listed in both, it will not be provided.
@@ -109,6 +114,8 @@ class StorageFrontend:
         self.take_only = strax.to_str_tuple(take_only)
         self.exclude = strax.to_str_tuple(exclude)
         self.overwrite = overwrite
+        if provide_run_metadata is not None:
+            self.provide_run_metadata = provide_run_metadata
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
