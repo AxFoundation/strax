@@ -49,10 +49,9 @@ def cut_baseline(records, n_before=48, n_after=30):
     records.reduction_level[:] = ReductionLevel.BASELINE_CUT
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
-    """Zero record waveforms not within left_extension or right_extension of
-    hits.
+    """Return records with waveforms zerosed if not within
+    left_extension or right_extension of hits.
     These extensions properly account for breaking of pulses into records.
 
     If you pass an incomplete (e.g. cut) set of records, we will not save
@@ -61,38 +60,65 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     """
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
 
-    # For every sample, store if we can cut it or not
-    can_cut = np.ones((len(records), samples_per_record), dtype=np.bool_)
+    # Create a copy of records with blanked data
+    # Even a simple records.copy() is mightily slow in numba,
+    # and assignments to struct arrays seem troublesome.
+    # The obvious solution:
+    #     new_recs = records.copy()
+    #     new_recs['data'] = 0
+    # is quite slow.
+    # Replacing the last = with *= gives a factor 2 speed boost.
+    # But ~40% faster still is this:
+    meta_fields = [x for x in records.dtype.names
+                   if x not in ['data', 'reduction_level']]
+    new_recs = np.zeros(len(records), dtype=records.dtype)
+    new_recs[meta_fields] = records[meta_fields]
+    new_recs['reduction_level'] = ReductionLevel.HITS_ONLY
+
+    _cut_outside_hits(records, hits, new_recs,
+                      left_extension, right_extension)
+
+    return new_recs
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _cut_outside_hits(records, hits, new_recs,
+                      left_extension=2, right_extension=15):
+    if not len(records):
+        return
+    samples_per_record = len(records[0]['data'])
 
     previous_record, next_record = record_links(records)
 
-    for hit_i in range(len(hits)):
-        h = hits[hit_i]
+    for hit_i, h in enumerate(hits):
         rec_i = h['record_i']
 
-        # Keep required samples in current record
+        # Indices in the record to keep. Can be out of bounds.
         start_keep = h['left'] - left_extension
         end_keep = h['right'] + right_extension
-        can_cut[rec_i][max(0, start_keep):
-                       min(end_keep, samples_per_record)] = 0
 
-        # Keep samples in previous/next record if applicable
+        # Keep samples in this record
+        a = max(0, start_keep)
+        b = min(end_keep, samples_per_record)
+        new_recs[rec_i]['data'][a:b] = records[rec_i]['data'][a:b]
+
+        # Keep samples in previous record, if there was one
         if start_keep < 0:
-            prev_r = previous_record[rec_i]
-            if prev_r != NOT_APPLICABLE:
-                can_cut[prev_r][start_keep:] = 0
-        if end_keep > samples_per_record:
-            next_r = next_record[rec_i]
-            if next_r != NOT_APPLICABLE:
-                can_cut[next_r][:end_keep - samples_per_record] = 0
+            prev_ri = previous_record[rec_i]
+            if prev_ri != NOT_APPLICABLE:
+                # Note start_keep is negative, so this keeps the
+                # last few samples of the previous record
+                a = start_keep
+                new_recs[prev_ri]['data'][a:] = \
+                    records[prev_ri]['data'][a:]
 
-    # This is actually quite slow. Perhaps the [:] forces a copy?
-    # Without it, however, numba complains...
-    for i in range(len(can_cut)):
-        records[i]['data'][:] *= ~can_cut[i]
-    records['reduction_level'][:] = ReductionLevel.HITS_ONLY
+        # Same for the next record
+        if end_keep > samples_per_record:
+            next_ri = next_record[rec_i]
+            if next_ri != NOT_APPLICABLE:
+                b = end_keep - samples_per_record
+                new_recs[next_ri]['data'][:b] = records[next_ri]['data'][:b]
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
