@@ -829,21 +829,23 @@ class Context:
                                         for t in doc.get('tags', [])])
 
                 _temp_docs.append(doc)
+                
+            if len(_temp_docs):
+                new_docs = pd.DataFrame(_temp_docs)
+            else:
+                new_docs = pd.DataFrame([], columns=store_fields)
 
-            new_docs = pd.DataFrame(_temp_docs)
             if docs is None:
                 docs = new_docs
             else:
                 # Keep only new runs (not found by earlier frontends)
-                docs = pd.merge(
+                docs = pd.concat([
                     docs,
-                     new_docs[
-                         ~np.in1d(new_docs['name'], docs['name'])])
+                    new_docs[
+                        ~np.in1d(new_docs['name'], docs['name'])]],
+                    sort=False)
 
-        if len(docs):
-            self.runs = pd.DataFrame(docs)
-        else:
-            self.runs = pd.DataFrame([], columns=['name'])
+        self.runs = docs
 
         for d in tqdm(check_available,
                       desc='Checking data availability'):
