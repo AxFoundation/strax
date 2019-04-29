@@ -1,5 +1,6 @@
 import numpy as np
 from hypothesis import given
+from scipy.ndimage import convolve1d
 
 import strax
 from .helpers import single_fake_pulse
@@ -58,3 +59,22 @@ def test_find_hits_randomize(records):
         l_ = results[i][1]
         r_ = results[i + 1][0]
         assert not np.any(w[l_:r_] == 1)
+
+
+def test_filter_records():
+    """Test that filter_records gives the same output
+    as a simple convolution applied to the original pulse
+    (before splitting into records)
+    """
+    wv = np.random.randn(300)
+    ir = np.random.randn(40)
+    wv_after = convolve1d(wv, ir, mode='constant')
+
+    wvs = wv.reshape(3, 100)
+    wvs = strax.filter_records(
+        wvs, ir,
+        prev_r=np.array([strax.NO_RECORD_LINK, 0, 1]),
+        next_r=np.array([1, 2, strax.NO_RECORD_LINK]))
+    wv_after_2 = np.reshape(wvs, -1)
+
+    assert np.abs(wv_after - wv_after_2).sum() < 1e-9
