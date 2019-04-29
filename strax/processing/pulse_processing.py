@@ -3,12 +3,14 @@
 """
 import numpy as np
 import numba
+from scipy.ndimage import convolve1d
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['NO_RECORD_LINK']
 
 # Constant for use in record_links, to indicate there is no prev/next record
-NOT_APPLICABLE = -1
+NO_RECORD_LINK = -1
 
 
 @export
@@ -65,11 +67,11 @@ def record_links(records):
         return
     n_channels = records['channel'].max() + 1
     samples_per_record = len(records[0]['data'])
-    previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
-    next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
+    previous_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
+    next_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
 
     # What was the index of the last record seen in each channel?
-    last_record_seen = np.ones(n_channels, dtype=np.int32) * NOT_APPLICABLE
+    last_record_seen = np.ones(n_channels, dtype=np.int32) * NO_RECORD_LINK
     # What would the start time be of a record that continues that record?
     expected_next_start = np.zeros(n_channels, dtype=np.int64)
 
@@ -89,7 +91,7 @@ def record_links(records):
 
         if r['record_i'] == 0:
             # Record starts a new pulse
-            previous_record[i] = NOT_APPLICABLE
+            previous_record[i] = NO_RECORD_LINK
 
         elif r['time'] == expected_next_start[ch]:
             # Continuing record.
@@ -178,3 +180,35 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
+
+
+@export
+def filter_records(ws, ir, prev_r, next_r):
+    """Convolve filter with impulse response ir over each row of ws
+    :param ws: Waveform matrix, must be float
+    :param ir: Impulse response. Center must be at len(ir)//2,
+    must also probably be even-length.
+    :param prev_r: Previous record map from strax.record_links
+    :param next_r: Next record map from strax.record_links
+    """
+    a = len(ir) // 2
+
+    # Do the convolutions outside numba;
+    # numba supports np.convolve, but this seems to be quite slow
+    result = convolve1d(ws, ir, mode='constant')
+    to_next = convolve1d(ws[:, -(a - 1):], ir, mode='constant', origin=a - 1)
+    to_prev = convolve1d(ws[:, :a], ir, mode='constant', origin=-a)
+
+    # Combine the results in numba; here numba is much faster (~100x?)
+    # than a numpy assignment using boolean array instead of a for loop.
+    _combine_filter_results(result, to_next, to_prev, next_r, prev_r, a)
+    return result
+
+
+@numba.jit(nopython=True, cache=True, nogil=True)
+def _combine_filter_results(result, to_next, to_prev, next_r, prev_r, a):
+    for i in range(len(result)):
+        if next_r[i] != NO_RECORD_LINK:
+            result[next_r[i], :a - 1] += to_next[i]
+        if prev_r[i] != NO_RECORD_LINK:
+            result[prev_r[i], -a:] += to_prev[i]
