@@ -3,7 +3,7 @@ import numpy as np
 import numba
 from enum import IntEnum
 
-from strax.processing.pulse_processing import NOT_APPLICABLE, record_links
+from strax.processing.pulse_processing import NO_RECORD_LINK, record_links
 from strax.processing.peak_building import find_peaks
 from .general import fully_contained_in
 from strax.dtypes import peak_dtype
@@ -106,7 +106,7 @@ def _cut_outside_hits(records, hits, new_recs,
         # Keep samples in previous record, if there was one
         if start_keep < 0:
             prev_ri = previous_record[rec_i]
-            if prev_ri != NOT_APPLICABLE:
+            if prev_ri != NO_RECORD_LINK:
                 # Note start_keep is negative, so this keeps the
                 # last few samples of the previous record
                 a = start_keep
@@ -116,7 +116,7 @@ def _cut_outside_hits(records, hits, new_recs,
         # Same for the next record
         if end_keep > samples_per_record:
             next_ri = next_record[rec_i]
-            if next_ri != NOT_APPLICABLE:
+            if next_ri != NO_RECORD_LINK:
                 b = end_keep - samples_per_record
                 new_recs[next_ri]['data'][:b] = records[next_ri]['data'][:b]
 
