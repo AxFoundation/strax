@@ -144,11 +144,12 @@ def find_hits(records, threshold=15, _result_buffer=None):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+        area = 0
 
-        for i in range(samples_per_record):
+        for i, x in enumerate(r['data']):
             # We can't use enumerate over r['data'], numba gives error
             # TODO: file issue?
-            above_threshold = r['data'][i] > threshold
+            above_threshold = x > threshold
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
             if not in_interval and above_threshold:
@@ -166,7 +167,11 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # Hit ends at the *end* of this sample
                     # (because the record ends)
                     hit_end = i + 1
+                    area += x
                     in_interval = False
+
+                else:
+                    area += x
 
                 if not in_interval:
                     # print('saving hit')
@@ -184,6 +189,8 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     res['dt'] = r['dt']
                     res['channel'] = r['channel']
                     res['record_i'] = record_i
+                    res['area'] = area
+                    area = 0
 
                     # Yield buffer to caller if needed
                     offset += 1
@@ -195,7 +202,6 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
-
 
 def filter_records(r, ir):
     """Apply filter with impulse response ir over the records r.
