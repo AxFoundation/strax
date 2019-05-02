@@ -1,11 +1,12 @@
+from base64 import b32encode
 import contextlib
 from functools import wraps
+import json
 import re
 import sys
 import traceback
 import typing
 from hashlib import sha1
-import pickle
 
 import numpy as np
 import numba
@@ -45,12 +46,6 @@ def inherit_docstring_from(cls):
         fn.__doc__ = getattr(cls, fn.__name__).__doc__
         return fn
     return docstring_inheriting_decorator
-
-
-@export
-def records_needed(pulse_length, samples_per_record):
-    """Return records needed to store pulse_length samples"""
-    return 1 + (pulse_length - 1) // samples_per_record
 
 
 @export
@@ -230,10 +225,12 @@ def hashablize(obj):
 
 
 @export
-def deterministic_hash(thing):
-    """Return a deterministic hash of a container hierarchy using hashablize,
-    pickle and sha1"""
-    return sha1(pickle.dumps(hashablize(thing))).hexdigest()
+def deterministic_hash(thing, length=10):
+    """Return a base32 lowercase string of length determined from hashing
+    a container hierarchy
+    """
+    digest = sha1(json.dumps(hashablize(thing)).encode('ascii')).digest()
+    return b32encode(digest)[:length].decode('ascii').lower()
 
 
 @export
