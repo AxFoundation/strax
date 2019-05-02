@@ -72,6 +72,7 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     # But ~40% faster still is this:
     meta_fields = [x for x in records.dtype.names
                    if x not in ['data', 'reduction_level']]
+
     new_recs = np.zeros(len(records), dtype=records.dtype)
     new_recs[meta_fields] = records[meta_fields]
     new_recs['reduction_level'] = ReductionLevel.HITS_ONLY
@@ -93,12 +94,21 @@ def _cut_outside_hits(records, hits, new_recs,
 
     for hit_i, h in enumerate(hits):
         rec_i = h['record_i']
+        r = records[rec_i]
 
-        # Indices in the record to keep. Can be out of bounds.
+        # Indices to keep, with 0 at the start of this record
         start_keep = h['left'] - left_extension
         end_keep = h['right'] + right_extension
 
-        # Keep samples in this record
+        # Never try to keep samples beyond the pulse
+        start_keep = max(
+            start_keep,
+            - samples_per_record * r['record_i'])
+        end_keep = min(
+            end_keep,
+            r['pulse_length'] - samples_per_record * r['record_i'])
+
+        # Indices of samples to keep in this record
         a = max(0, start_keep)
         b = min(end_keep, samples_per_record)
         new_recs[rec_i]['data'][a:b] = records[rec_i]['data'][a:b]
@@ -109,16 +119,17 @@ def _cut_outside_hits(records, hits, new_recs,
             if prev_ri != NO_RECORD_LINK:
                 # Note start_keep is negative, so this keeps the
                 # last few samples of the previous record
-                a = start_keep
-                new_recs[prev_ri]['data'][a:] = \
-                    records[prev_ri]['data'][a:]
+                a_prev = start_keep
+                new_recs[prev_ri]['data'][a_prev:] = \
+                    records[prev_ri]['data'][a_prev:]
 
         # Same for the next record
         if end_keep > samples_per_record:
             next_ri = next_record[rec_i]
             if next_ri != NO_RECORD_LINK:
-                b = end_keep - samples_per_record
-                new_recs[next_ri]['data'][:b] = records[next_ri]['data'][:b]
+                b_next = end_keep - samples_per_record
+                new_recs[next_ri]['data'][:b_next] = \
+                    records[next_ri]['data'][:b_next]
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)

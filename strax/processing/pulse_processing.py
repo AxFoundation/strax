@@ -24,7 +24,7 @@ def baseline(records, baseline_samples=40):
     baselining them!)
     """
     if not len(records):
-        return
+        return records
     samples_per_record = len(records[0]['data'])
 
     # Array for looking up last baseline seen in channel
@@ -47,6 +47,21 @@ def baseline(records, baseline_samples=40):
                    d.pulse_length - d.record_i * samples_per_record)
         d.data[:last] = int(bl) - d.data[:last]
         d.baseline = bl
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
+def zero_out_of_bounds(records):
+    """"Set waveforms to zero out of pulse bounds
+    """
+    if not len(records):
+        return records
+    samples_per_record = len(records[0]['data'])
+
+    for r in records:
+        end = r['pulse_length'] - r['record_i'] * samples_per_record
+        if end < samples_per_record:
+            r['data'][end:] = 0
 
 
 @export
@@ -182,33 +197,83 @@ def find_hits(records, threshold=15, _result_buffer=None):
     yield offset
 
 
-@export
-def filter_records(ws, ir, prev_r, next_r):
-    """Convolve filter with impulse response ir over each row of ws
+def filter_records(r, ir):
+    """Apply filter with impulse response ir over the records r.
+    Assumes the filter origin is at the impulse response maximum.
+
     :param ws: Waveform matrix, must be float
-    :param ir: Impulse response. Center must be at len(ir)//2,
-    must also probably be even-length.
+    :param ir: Impulse response, must have odd length. Will normalize.
     :param prev_r: Previous record map from strax.record_links
     :param next_r: Next record map from strax.record_links
     """
-    a = len(ir) // 2
+    # Convert waveforms to float and restore baseline
+    baseline_fpart = (r['baseline'] % 1)[:,np.newaxis]
+    ws = r['data'].astype(np.float) + baseline_fpart
+
+    prev_r, next_r = strax.record_links(r)
+    ws_filtered = filter_waveforms(
+        ws,
+        ir / ir.sum(),
+        prev_r, next_r)
+
+    # Restore waveforms as integers
+    r['data'] = ws_filtered.astype(np.int16)
+
+
+
+@export
+def filter_waveforms(ws, ir, prev_r, next_r):
+    """Convolve filter with impulse response ir over each row of ws.
+    Assumes the filter origin is at the impulse response maximum.
+
+    :param ws: Waveform matrix, must be float
+    :param ir: Impulse response, must have odd length.
+    :param prev_r: Previous record map from strax.record_links
+    :param next_r: Next record map from strax.record_links
+    """
+    n = len(ir)
+    a = n//2
+    if n % 2 == 0:
+        raise ValueError("Impulse response must have odd length")
 
     # Do the convolutions outside numba;
     # numba supports np.convolve, but this seems to be quite slow
-    result = convolve1d(ws, ir, mode='constant')
-    to_next = convolve1d(ws[:, -(a - 1):], ir, mode='constant', origin=a - 1)
-    to_prev = convolve1d(ws[:, :a], ir, mode='constant', origin=-a)
+
+    # Main convolution
+    maxi = np.argmax(ir)
+    result = convolve1d(ws,
+                        ir,
+                        origin=maxi - a,
+                        mode='constant')
+
+    # Contribution to next record (if present)
+    have_next = ws[next_r != -1]
+    to_next = convolve1d(have_next[:, -(n - maxi - 1):],
+                         ir,
+                         origin=a,
+                         mode='constant')
+
+    # Contribution to previous record (if present)
+    have_prev = ws[prev_r != -1]
+    to_prev = convolve1d(have_prev[:, :maxi],
+                         ir,
+                         origin=-a,
+                         mode='constant')
 
     # Combine the results in numba; here numba is much faster (~100x?)
     # than a numpy assignment using boolean array instead of a for loop.
-    _combine_filter_results(result, to_next, to_prev, next_r, prev_r, a)
+    _combine_filter_results(result, to_next, to_prev, next_r, prev_r, maxi, n)
     return result
 
 
 @numba.jit(nopython=True, cache=True, nogil=True)
-def _combine_filter_results(result, to_next, to_prev, next_r, prev_r, a):
+def _combine_filter_results(result, to_next, to_prev, next_r, prev_r, maxi, n):
+    seen_that_have_next = 0
+    seen_that_have_prev = 0
     for i in range(len(result)):
         if next_r[i] != NO_RECORD_LINK:
-            result[next_r[i], :a - 1] += to_next[i]
+            result[next_r[i], :n - maxi - 1] += to_next[seen_that_have_next]
+            seen_that_have_next += 1
         if prev_r[i] != NO_RECORD_LINK:
-            result[prev_r[i], -a:] += to_prev[i]
+            result[prev_r[i], -maxi:] += to_prev[seen_that_have_prev]
+            seen_that_have_prev += 1
