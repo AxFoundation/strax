@@ -50,7 +50,7 @@ def cut_baseline(records, n_before=48, n_after=30):
 
 
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
-    """Return records with waveforms zerosed if not within
+    """Return records with waveforms zeroed if not within
     left_extension or right_extension of hits.
     These extensions properly account for breaking of pulses into records.
 
