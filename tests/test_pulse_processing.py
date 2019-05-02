@@ -15,6 +15,9 @@ def _find_hits(r):
     # NB: exclusive right bound, no + 1 here
     np.testing.assert_equal(hits['length'],
                             hits['right'] - hits['left'])
+    for h in hits:
+        q = r[h['record_i']]
+        assert q['data'][h['left']:h['right']].sum() == h['area']
     return list(zip(hits['left'], hits['right']))
 
 
