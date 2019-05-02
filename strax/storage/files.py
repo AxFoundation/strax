@@ -23,7 +23,7 @@ class DataDirectory(StorageFrontend):
 
     Run-level metadata is stored in loose json files in the directory.
     """
-    
+
     provide_run_metadata = True
 
     def __init__(self, path='.', *args, deep_scan=True, **kwargs):
@@ -32,7 +32,7 @@ class DataDirectory(StorageFrontend):
         :param deep_scan: Let scan_runs scan over folders,
         so even data for which no run-level metadata is available
         is reported.
-        
+
         For other arguments, see DataRegistry base class.
         """
         super().__init__(*args, **kwargs)
@@ -49,7 +49,7 @@ class DataDirectory(StorageFrontend):
         path = self._run_meta_path(run_id)
         if osp.exists(path):
             with open(path, mode='r') as f:
-                md = json.loads(f.read(), 
+                md = json.loads(f.read(),
                                 object_hook=json_util.object_hook)
             if not projection:
                 return md
@@ -62,8 +62,6 @@ class DataDirectory(StorageFrontend):
                 f"No file at {path}, cannot find run metadata for {run_id}")
 
     def write_run_metadata(self, run_id, metadata):
-        final_path = self._run_meta_path(run_id)
-
         with open(self._run_meta_path(run_id), mode='w') as f:
             f.write(json.dumps(metadata, default=json_util.default))
 
@@ -72,12 +70,12 @@ class DataDirectory(StorageFrontend):
         These should be directly convertable to a pandas DataFrame.
         """
         found = set()
-        
+
         # Yield metadata for runs for which we actually have it
         for md_path in sorted(glob.glob(
                 osp.join(self.path,
                          RUN_METADATA_PATTERN.replace('%s', '*')))):
-            # Parse the run metadata filename pattern. 
+            # Parse the run metadata filename pattern.
             # (different from the folder pattern)
             run_id = osp.basename(md_path).split('-')[0]
             found.add(run_id)

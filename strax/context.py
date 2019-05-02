@@ -573,7 +573,7 @@ class Context:
 
     def get_iter(self, run_id: str,
                  targets, save=tuple(), max_workers=None,
-                 time_range=None, 
+                 time_range=None,
                  seconds_range=None,
                  selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
@@ -591,7 +591,7 @@ class Context:
 
         if isinstance(selection, (list, tuple)):
             selection = ' & '.join(f'({x})' for x in selection)
-            
+
         # Convert relative to absolute time range
         if seconds_range is not None:
             try:
@@ -803,7 +803,8 @@ class Context:
         """
         store_fields = tuple(set(
             list(store_fields)
-            + [self.context_config['run_mode_field'], 'tags']
+            + [self.context_config['run_mode_field'],
+               'name', 'number', 'tags']
             + list(self.context_config['store_run_fields'])))
         check_available = tuple(set(
             list(check_available)
@@ -814,12 +815,16 @@ class Context:
             _temp_docs = []
             for doc in sf._scan_runs(store_fields=store_fields):
                 # If there is no number, make one from the name
-                if 'number' not in doc and 'name' in doc:
+                if 'number' not in doc:
+                    if 'name' not in doc:
+                        raise ValueError(f"Invalid run doc {doc}, contains "
+                                         f"neither name nor number.")
                     doc['number'] = int(doc['name'])
+
 
                 # If there is no name, make one from the number
                 doc.setdefault('name', str(doc['number']))
-                
+
                 # Set run mode to empty string if unknown
                 doc.setdefault(self.context_config['run_mode_field'],
                                '')
@@ -829,7 +834,7 @@ class Context:
                                         for t in doc.get('tags', [])])
 
                 _temp_docs.append(doc)
-                
+
             if len(_temp_docs):
                 new_docs = pd.DataFrame(_temp_docs)
             else:

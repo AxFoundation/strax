@@ -280,9 +280,9 @@ def test_run_selection():
         assert len(st.scan_runs()) == len(mock_rundb)
         assert st.run_metadata('0') == mock_rundb[0]
 
-        assert len(st.run_selection(run_mode='nice') == 1)
-        assert len(st.run_selection(include_tags='interesting') == 2)
-        assert len(st.run_selection(include_tags='interesting',
-                                    exclude_tags='bad') == 1)
-        assert len(st.run_selection(include_tags='interesting',
-                                    run_mode='nice') == 1)
+        assert len(st.select_runs(run_mode='nice') == 1)
+        assert len(st.select_runs(include_tags='interesting') == 2)
+        assert len(st.select_runs(include_tags='interesting',
+                                 exclude_tags='bad') == 1)
+        assert len(st.select_runs(include_tags='interesting',
+                                  run_mode='nice') == 1)
