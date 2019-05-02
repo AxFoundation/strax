@@ -67,8 +67,17 @@ def zero_out_of_bounds(records):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
+    if not len(records):
+        return
+    samples_per_record = len(records[0]['data'])
     for i, r in enumerate(records):
-        records[i]['area'] = r['data'].sum()
+        n_real_samples = min(
+            samples_per_record,
+            r['pulse_length'] - r['record_i'] * samples_per_record)
+        records[i]['area'] = (
+            r['data'].sum()
+            + int(round(r['baseline'] % 1)) * n_real_samples)
+
 
 
 @export
@@ -189,6 +198,8 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     res['dt'] = r['dt']
                     res['channel'] = r['channel']
                     res['record_i'] = record_i
+                    area += int(round(
+                        res['length'] * (r['baseline'] % 1)))
                     res['area'] = area
                     area = 0
 
@@ -203,6 +214,7 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_end = 0
     yield offset
 
+
 def filter_records(r, ir):
     """Apply filter with impulse response ir over the records r.
     Assumes the filter origin is at the impulse response maximum.
@@ -213,8 +225,7 @@ def filter_records(r, ir):
     :param next_r: Next record map from strax.record_links
     """
     # Convert waveforms to float and restore baseline
-    baseline_fpart = (r['baseline'] % 1)[:,np.newaxis]
-    ws = r['data'].astype(np.float) + baseline_fpart
+    ws = r['data'].astype(np.float) + (r['baseline'] % 1)[:, np.newaxis]
 
     prev_r, next_r = strax.record_links(r)
     ws_filtered = filter_waveforms(
@@ -224,7 +235,6 @@ def filter_records(r, ir):
 
     # Restore waveforms as integers
     r['data'] = ws_filtered.astype(np.int16)
-
 
 
 @export
