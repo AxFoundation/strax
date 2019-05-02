@@ -1,6 +1,3 @@
-"""A very basic test for the strax core.
-Mostly tests if we don't crash immediately..
-"""
 import tempfile
 import shutil
 import os
@@ -65,6 +62,19 @@ def test_core():
         assert bla.dtype == strax.peak_dtype()
 
 
+def test_multirun():
+    for max_workers in [1, 2]:
+        mystrax = strax.Context(storage=[],
+                                register=[Records, Peaks],)
+        bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
+                                max_workers=max_workers)
+        n = recs_per_chunk * n_chunks
+        assert len(bla) == n * 2
+        np.testing.assert_equal(
+            bla['run_id'],
+            np.array([0] * n + [1] * n, dtype=np.int32))
+
+
 def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir),
@@ -77,6 +87,7 @@ def test_filestore():
 
         assert mystrax.is_stored(run_id, 'peaks')
         assert mystrax.list_available('peaks') == [run_id]
+        assert mystrax.scan_runs()['name'].values.tolist() == [run_id]
 
         # We should have two directories
         data_dirs = sorted(glob.glob(osp.join(temp_dir, '*/')))
@@ -249,3 +260,29 @@ def test_random_access():
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+
+
+def test_run_selection():
+    mock_rundb = [
+        dict(name='0', mode='funny', tags=[dict(name='bad')]),
+        dict(name='1', mode='nice', tags=[dict(name='interesting'),
+                                          dict(name='bad')]),
+        dict(name='2', mode='nice', tags=[dict(name='interesting')])]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+
+        # Write mock runs db
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf)
+        assert len(st.scan_runs()) == len(mock_rundb)
+        assert st.run_metadata('0') == mock_rundb[0]
+
+        assert len(st.select_runs(run_mode='nice') == 1)
+        assert len(st.select_runs(include_tags='interesting') == 2)
+        assert len(st.select_runs(include_tags='interesting',
+                                 exclude_tags='bad') == 1)
+        assert len(st.select_runs(include_tags='interesting',
+                                  run_mode='nice') == 1)
