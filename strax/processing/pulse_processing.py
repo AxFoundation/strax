@@ -155,9 +155,11 @@ def find_hits(records, threshold=15, _result_buffer=None):
         hit_start = -1
         area = 0
 
-        for i, x in enumerate(r['data']):
-            # We can't use enumerate over r['data'], numba gives error
+        for i in range(samples_per_record):
+            # We can't use enumerate over r['data'],
+            # numba gives errors if we do.
             # TODO: file issue?
+            x = r['data'][i]
             above_threshold = x > threshold
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
