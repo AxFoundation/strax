@@ -34,6 +34,9 @@ export, __all__ = strax.exporter()
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
                  help="Allow rechunking of data during writing."),
+    strax.Option(name='allow_multiprocess', default=False,
+                 help="Allow multiprocessing."
+                      "If False, will use multithreading only."),
     strax.Option(name='allow_shm', default=False,
                  help="Allow use of /dev/shm for interprocess communication."),
     strax.Option(name='forbid_creation_of', default=tuple(),
@@ -45,10 +48,7 @@ export, __all__ = strax.exporter()
                       "during scan_run."),
     strax.Option(name='check_available', default=tuple(),
                  help="Tuple of data types to scan availability for "
-                      "during scan_run."),
-    strax.Option(name='run_mode_field', default='mode',
-                 help="Name of the field in the run doc that describes the"
-                      '"mode" of the run (used in run selection)'))
+                      "during scan_run."))
 @export
 class Context:
     """Context for strax analysis.
@@ -636,6 +636,7 @@ class Context:
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
+                allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
@@ -802,12 +803,11 @@ class Context:
         data types and run fields, respectively, that will always be scanned.
         """
         store_fields = tuple(set(
-            list(store_fields)
-            + [self.context_config['run_mode_field'],
-               'name', 'number', 'tags']
+            list(strax.to_str_tuple(store_fields))
+            + ['name', 'number', 'tags', 'mode']
             + list(self.context_config['store_run_fields'])))
         check_available = tuple(set(
-            list(check_available)
+            list(strax.to_str_tuple(check_available))
             + list(self.context_config['check_available'])))
 
         docs = None
@@ -821,17 +821,18 @@ class Context:
                                          f"neither name nor number.")
                     doc['number'] = int(doc['name'])
 
-
                 # If there is no name, make one from the number
                 doc.setdefault('name', str(doc['number']))
-
-                # Set run mode to empty string if unknown
-                doc.setdefault(self.context_config['run_mode_field'],
-                               '')
+                
+                doc.setdefault('mode', '')
 
                 # Flatten the tags field, if it exists
                 doc['tags'] = ','.join([t['name']
                                         for t in doc.get('tags', [])])
+                
+                # Flatten the rest of the doc (mainly in case the mode field
+                # is something deeply nested)
+                doc = strax.flatten_dict(doc, separator='.')
 
                 _temp_docs.append(doc)
 
@@ -901,7 +902,7 @@ class Context:
             raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
         if run_mode is not None:
-            modes = dsets[self.context_config['run_mode_field']].values
+            modes = dsets['mode'].values
             mask = np.zeros(len(modes), dtype=np.bool_)
             if pattern_type == 'fnmatch':
                 for i, x in enumerate(modes):
