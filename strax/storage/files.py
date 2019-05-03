@@ -53,7 +53,7 @@ class DataDirectory(StorageFrontend):
                                 object_hook=json_util.object_hook)
             if not projection:
                 return md
-            # TODO: implement projection for . fields, like mongo
+            md = strax.flatten_dict(md, separator='.')
             return {k: v
                     for k, v in md.items()
                     if k in projection}

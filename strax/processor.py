@@ -1,4 +1,4 @@
-from concurrent import futures
+    from concurrent import futures
 import logging
 import typing as ty
 import psutil
@@ -39,6 +39,7 @@ class ThreadedMailboxProcessor:
     def __init__(self,
                  components: ProcessorComponents,
                  allow_rechunk=True, allow_shm=False,
+                 allow_multiprocess=False,
                  max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
@@ -54,10 +55,15 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            _proc_ex = SHMExecutor if allow_shm else ProcessPoolExecutor
-            self.process_executor = _proc_ex(max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
+
+            _proc_ex = futures.ThreadPoolExecutor
+            if allow_multiprocess:
+                _proc_ex = ProcessPoolExecutor
+                if allow_shm:
+                    _proc_ex = SHMExecutor
+            self.process_executor = _proc_ex(max_workers=max_workers)
 
         # Deal with parallel input processes
         # Setting up one of these modifies plugins, so we must gather
@@ -150,7 +156,7 @@ class ThreadedMailboxProcessor:
             if self.thread_executor is not None:
                 self.thread_executor.shutdown(wait=False)
 
-            if self.process_executor is not None:
+            if self.process_executor not in [None, self.thread_executor]:
                 # Unfortunately there is no wait=timeout option, so we have to
                 # roll our own
                 pids = self.process_executor._processes.keys()

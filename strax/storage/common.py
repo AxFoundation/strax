@@ -226,11 +226,11 @@ class StorageFrontend:
             # Get the metadata to check if the data is broken
             meta = self._get_backend(backend_name).get_metadata(backend_key)
             if 'exception' in meta:
-                raise DataCorrupted(
+                raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted due to "
                     f"exception uring writing: {meta['exception']}.")
             if 'writing_ended' not in meta and not allow_incomplete:
-                raise DataCorrupted(
+                raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted. No "
                     f"writing_ended field present!")
 
@@ -269,8 +269,8 @@ class StorageFrontend:
             return True
         if self.overwrite == 'if_broken':
             metadata = self.get_metadata(key)
-            return ('writing_ended' in metadata
-                    and 'exception' not in metadata)
+            return not  ('writing_ended' in metadata
+                         and 'exception' not in metadata)
         return False
 
     def list_available(self, key: DataKey,
