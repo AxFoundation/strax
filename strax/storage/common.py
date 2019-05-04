@@ -226,9 +226,10 @@ class StorageFrontend:
             # Get the metadata to check if the data is broken
             meta = self._get_backend(backend_name).get_metadata(backend_key)
             if 'exception' in meta:
+                exc = meta['exception']
                 raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted due to "
-                    f"exception uring writing: {meta['exception']}.")
+                    f"exception during writing: {exc}.")
             if 'writing_ended' not in meta and not allow_incomplete:
                 raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted. No "
@@ -281,6 +282,23 @@ class StorageFrontend:
             return []
         return self._list_available(
             key, allow_incomplete, fuzzy_for, fuzzy_for_options)
+
+    def find_several(self, keys, **kwargs):
+        """Return list with backend keys or False
+        for several data keys.
+
+        Options are as for find()
+        """
+        # You can override this if the backend has a smarter way
+        # of checking availability (e.g. a single DB query)
+        result = []
+        for key in keys:
+            try:
+                r = self.find(key, **kwargs)
+            except (strax.DataNotAvailable, DataExistsError):
+                r = False
+            result.append(r)
+        return result
 
     ##
     # Abstract methods (to override in child)
