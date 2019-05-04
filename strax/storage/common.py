@@ -90,7 +90,7 @@ class StorageFrontend:
                  readonly=False,
                  provide_run_metadata=None,
                  overwrite='if_broken',
-                 take_only=tuple(), 
+                 take_only=tuple(),
                  exclude=tuple()):
         """
         :param readonly: If True, throws CannotWriteData whenever saving is
@@ -183,7 +183,7 @@ class StorageFrontend:
         {data_type: (plugin_name, version, {config_option: value, ...}, ...}
         :param write: Set to True if writing new data. The data is immediately
         registered, so you must follow up on the write!
-        :param check_broken: If True, raise DataCorrupted if data has not
+        :param check_broken: If True, raise DataNotAvailable if data has not
         been complete written, or writing terminated with an exception.
         """
         message = (
