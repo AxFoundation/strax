@@ -217,6 +217,7 @@ def find_hits(records, threshold=15, _result_buffer=None):
     yield offset
 
 
+@export
 def filter_records(r, ir):
     """Apply filter with impulse response ir over the records r.
     Assumes the filter origin is at the impulse response maximum.

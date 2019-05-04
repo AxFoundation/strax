@@ -778,11 +778,11 @@ class Context:
 
         if self.runs is None:
             self.scan_runs()
-        
+
         keys = set([
             self._key_for(run_id, target)
             for run_id in self.runs['name'].values])
-            
+
         found = set()
         for sf in self.storage:
             remaining = keys - found

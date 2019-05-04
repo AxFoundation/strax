@@ -187,8 +187,12 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         # Do we need to downsample the swv to store it?
         downs_f = int(np.ceil(p_length / sum_wv_samples))
         if downs_f > 1:
-            # New number of samples in the peak
-            new_ns = p['length'] = int(np.ceil(p_length / downs_f))
+            # Compute peak length after downsampling.
+            # We floor rather than ceil here, potentially cutting off
+            # some samples from the right edge of the peak.
+            # If we would ceil, the peak could grow larger and
+            # overlap with a subsequent next peak, crashing strax later.
+            new_ns = p['length'] = int(np.floor(p_length / downs_f))
             p['data'][:new_ns] = \
                 swv_buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
             p['dt'] *= downs_f
