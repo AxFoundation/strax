@@ -776,17 +776,20 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        # The run_id is ignored in list_available, but we still use it for
-        # passing data type and lineage to the search functions.
-        # We choose 0 as placeholder since as of this writing strax
-        # requires run_ids to be int-able strings...
-        # TODO: this should change soon
-        key = self._key_for('0', target)
-
-        found_runs = []
+        if self.runs is None:
+            self.scan_runs()
+        
+        keys = set([
+            self._key_for(run_id, target)
+            for run_id in self.runs['name'].values])
+            
+        found = set()
         for sf in self.storage:
-            found_runs += sf.list_available(key, **self._find_options)
-        return sorted(list(set(found_runs)))
+            remaining = keys - found
+            is_found = sf.find_several(remaining, **self._find_options)
+            found |= set([k for i, k in enumerate(remaining)
+                          if is_found[i]])
+        return list(sorted([x.run_id for x in found]))
 
     def scan_runs(self,
                   check_available=tuple(),
@@ -823,13 +826,13 @@ class Context:
 
                 # If there is no name, make one from the number
                 doc.setdefault('name', str(doc['number']))
-                
+
                 doc.setdefault('mode', '')
 
                 # Flatten the tags field, if it exists
                 doc['tags'] = ','.join([t['name']
                                         for t in doc.get('tags', [])])
-                
+
                 # Flatten the rest of the doc (mainly in case the mode field
                 # is something deeply nested)
                 doc = strax.flatten_dict(doc, separator='.')
