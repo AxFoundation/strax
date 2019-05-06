@@ -10,4 +10,4 @@ numexpr==2.6.9
 boto3==1.9.142
 npshmex==0.1.2
 scipy==1.2.1
-pymongo
+pymongo==3.8.0
