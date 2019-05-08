@@ -143,8 +143,6 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
-            if ch >= n_channels:
-                continue
 
             s = int((p['time'] - r['time']) // dt)
             n_r = r['length']
@@ -202,7 +200,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             p['data'][:p_length] = swv_buffer[:p_length]
 
         # Store the total area and saturation count
-        p['area'] = (p['area_per_channel'][:n_channels]
-                     * adc_to_pe[:n_channels]).sum()
-        p['n_saturated_channels'] = p['saturated_channel'][:n_channels].sum()
+        p['area'] = (p['area_per_channel']
+                     * adc_to_pe).sum()
+        p['n_saturated_channels'] = p['saturated_channel'].sum()
 
