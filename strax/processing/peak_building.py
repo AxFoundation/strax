@@ -143,6 +143,8 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
+            if ch >= n_channels:
+                continue
 
             s = int((p['time'] - r['time']) // dt)
             n_r = r['length']
