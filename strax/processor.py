@@ -182,12 +182,24 @@ class ThreadedMailboxProcessor:
 
             self.log.debug("Closing executors completed")
 
-        # Reraise exception. This is outside the except block
-        # to avoid the 'during handling of this exception, another
-        # exception occurred' stuff from confusing the traceback
-        # which is printed for the user
         if traceback is not None:
+            # Reraise exception. This is outside the except block
+            # to avoid the 'during handling of this exception, another
+            # exception occurred' stuff from confusing the traceback
+            # which is printed for the user
             self.log.debug("Reraising exception")
             raise exc.with_traceback(traceback)
+
+        # Check the savers for any exception that occurred during saving
+        # These are thrown back to the mailbox, but if that has already closed
+        # it doesn't trigger a crash...
+        # TODO: add savers inlined by parallelsourceplugin
+        # TODO: need to look at plugins too if we ever implement true
+        # multi-target mode
+        for k, saver_list in self.components.savers.items():
+            for s in saver_list:
+                if s.got_exception:
+                    self.log.fatal(f"Caught error while saving {k}!")
+                    raise s.got_exception
 
         self.log.debug("Processing finished")

@@ -235,7 +235,10 @@ def test_exception():
             st.get_df(run_id=run_id, targets='peaks')
 
 
-def test_exception_in_saver():
+def test_exception_in_saver(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
                            register=[Records, Peaks])
@@ -247,7 +250,7 @@ def test_exception_in_saver():
         try:
             strax.save_file = kaboom
             with pytest.raises(SomeCrash):
-                st.make(run_id=run_id, targets='peaks')
+                st.make(run_id=run_id, targets='records')
         finally:
             strax.save_file = old_save
 
