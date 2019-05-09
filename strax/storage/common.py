@@ -432,16 +432,12 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
-        import logging
-        log = logging.getLogger('saver_temp')
-        log.debug("Saver started")
         if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
         pending = []
         try:
             for chunk_i, s in enumerate(source):
-                log.debug(f"Saving chunk {chunk_i}")
                 new_f = self.save(data=s, chunk_i=chunk_i, executor=executor)
                 if new_f is not None:
                     pending = [f for f in pending + [new_f]
