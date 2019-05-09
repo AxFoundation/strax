@@ -8,13 +8,9 @@ Note that there is no check to make sure the 16MB document size
 limit is respected!
 """
 
-try:
-    from pymongo import MongoClient
-except ImportError:
-    MongoClient = None
-
 import strax
 import numpy as np
+from pymongo import MongoClient
 from strax import StorageFrontend, StorageBackend, DataKey
 from strax.utils import unpack_dtype
 from bson import json_util
@@ -43,7 +39,7 @@ class MongoBackend(StorageBackend):
         result = np.zeros(len(doc['data']), dtype=dtype)
         for i, d in enumerate(doc['data']):
             for key in np.dtype(dtype).names:
-                result[key][i] = d[key]
+                result[i][key] = d[key]
         return result
 
     def _saver(self, key, metadata):
@@ -76,12 +72,6 @@ class MongoFrontend(StorageFrontend):
             return self.backends[0].__class__.__name__, str(key)
         self.log.debug(f"{key} is NOT in cache.")
         raise strax.DataNotAvailable
-
-    def _read_meta(self, coll_name):
-        doc = self.db[coll_name].find_one({'metadata': True})
-        if doc is not None and 'dtype' in doc:
-            doc['dtype'] = np.dtype(doc['dtype'])
-        return doc
 
 
 @export
