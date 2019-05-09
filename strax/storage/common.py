@@ -421,6 +421,8 @@ class Saver:
     # Do not set it yourself
     is_forked = False
 
+    got_exception = None
+
     def __init__(self, metadata):
         self.md = metadata
         self.md['writing_started'] = time.time()
@@ -430,12 +432,16 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
+        import logging
+        log = logging.getLogger('saver_temp')
+        log.debug("Saver started")
         if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
         pending = []
         try:
             for chunk_i, s in enumerate(source):
+                log.debug(f"Saving chunk {chunk_i}")
                 new_f = self.save(data=s, chunk_i=chunk_i, executor=executor)
                 if new_f is not None:
                     pending = [f for f in pending + [new_f]
@@ -446,6 +452,15 @@ class Saver:
             # One traceback on screen is enough
             self.close(wait_for=pending)
             pass
+
+        except Exception as e:
+            # log exception for the final check
+            self.got_exception = e
+            # Throw the exception back into the mailbox
+            # (hoping that it is still listening...)
+            source.throw(e)
+            raise e
+
         finally:
             if not self.closed:
                 self.close(wait_for=pending)
