@@ -235,6 +235,23 @@ def test_exception():
             st.get_df(run_id=run_id, targets='peaks')
 
 
+def test_exception_in_saver():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+
+        def kaboom(*args, **kwargs):
+            raise SomeCrash
+
+        old_save = strax.save_file
+        try:
+            strax.save_file = kaboom
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id, targets='peaks')
+        finally:
+            strax.save_file = old_save
+
+
 def test_random_access():
     """Test basic random access
     TODO: test random access when time info is not provided directly
