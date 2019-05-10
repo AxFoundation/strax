@@ -142,6 +142,16 @@ class Mailbox:
         for t in self._threads:
             t.start()
 
+    def kill_from_exception(self, e):
+        """Kill the mailbox following a caught exception e"""
+        if isinstance(e, MailboxKilled):
+            # Kill this mailbox too.
+            self.kill(reason=e.args[0])
+            # Do NOT raise! One traceback on the screen is enough.
+        else:
+            self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
+            raise e
+
     def kill(self, upstream=True, reason=None):
         with self._lock:
             self.log.debug(f"Kill received by {self.name}")
@@ -168,14 +178,8 @@ class Mailbox:
         try:
             for x in iterable:
                 self.send(x)
-        except MailboxKilled as e:
-            # The iterable was reading from a mailbox, which has been killed.
-            # Kill this mailbox too.
-            self.kill(reason=e.args[0])
-            # Do NOT raise! One traceback on the screen is enough.
         except Exception as e:
-            self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-            raise
+            self.kill_from_exception(e)
         else:
             self.close()
 
@@ -296,7 +300,7 @@ class Mailbox:
 
             for msg_number, msg in to_yield:
                 if msg is StopIteration:
-                    return
+                    break
                 elif isinstance(msg, Future):
                     if not msg.done():
                         self.log.debug(f"Waiting for future {msg_number}")
@@ -312,7 +316,11 @@ class Mailbox:
                 else:
                     res = msg
 
-                yield res
+                try:
+                    yield res
+                except Exception as e:
+                    # TODO: Should I also handle timeout errors like this?
+                    self.kill_from_exception(e)
 
         self.log.debug("Done reading")
 
