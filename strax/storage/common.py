@@ -295,7 +295,8 @@ class StorageFrontend:
         for key in keys:
             try:
                 r = self.find(key, **kwargs)
-            except (strax.DataNotAvailable, DataExistsError):
+            except (strax.DataNotAvailable, 
+                    strax.DataCorrupted):
                 r = False
             result.append(r)
         return result
