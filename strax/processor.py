@@ -58,12 +58,13 @@ class ThreadedMailboxProcessor:
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
-            _proc_ex = futures.ThreadPoolExecutor
             if allow_multiprocess:
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
                     _proc_ex = SHMExecutor
-            self.process_executor = _proc_ex(max_workers=max_workers)
+                self.process_executor = _proc_ex(max_workers=max_workers)
+            else:
+                self.process_executor = self.thread_executor
 
         # Deal with parallel input processes
         # Setting up one of these modifies plugins, so we must gather
