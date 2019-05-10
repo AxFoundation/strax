@@ -81,11 +81,13 @@ def test_filestore():
                                 register=[Records, Peaks])
 
         assert not mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
         assert mystrax.list_available('peaks') == []
 
         mystrax.make(run_id=run_id, targets='peaks')
 
         assert mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
         assert mystrax.list_available('peaks') == [run_id]
         assert mystrax.scan_runs()['name'].values.tolist() == [run_id]
 
@@ -139,11 +141,13 @@ def test_datadirectory_deleted():
         # Delete directory AFTER context is created
         shutil.rmtree(data_dir)
 
+        mystrax.scan_runs()
         assert not mystrax.is_stored(run_id, 'peaks')
         assert mystrax.list_available('peaks') == []
 
         mystrax.make(run_id=run_id, targets='peaks')
 
+        mystrax.scan_runs()
         assert mystrax.is_stored(run_id, 'peaks')
         assert mystrax.list_available('peaks') == [run_id]
 
@@ -225,8 +229,9 @@ def test_exception():
         for target in ('peaks', 'records'):
             assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
 
-        # Check data cannot be loaded again
-        with pytest.raises(strax.DataCorrupted):
+        # Check corrupted data does not load
+        st.context_config['forbid_creation_of'] = ('peaks',)
+        with pytest.raises(strax.DataNotAvailable):
             st.get_df(run_id=run_id, targets='peaks')
 
 
