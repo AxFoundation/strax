@@ -33,6 +33,11 @@ class InputTimeoutExceeded(Exception):
 
 
 @export
+class PluginGaveWrongOutput(Exception):
+    pass
+
+
+@export
 class Plugin:
     """Plugin containing strax computation
 
@@ -254,6 +259,13 @@ class Plugin:
             for k, v in result.items():
                 r[k] = v
             result = r
+
+        if result.dtype != self.dtype:
+            raise strax.PluginGaveWrongOutput(
+                f"Plugin {self.__class__.__name__} did not deliver "
+                f"the data type it promised.\n"
+                f"Promised: {self.dtype}\n"
+                f"Delivered: {result.dtype}.")
 
         return result
 
