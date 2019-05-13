@@ -1,6 +1,10 @@
 # flake8: noqa
+<<<<<<< HEAD
 __version__ = '0.7.0'
 print('strax is awesome (Joran)')
+=======
+__version__ = '0.7.1'
+>>>>>>> f7004c219b2b4446303b5217ed5120562d59f360
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -12,6 +16,7 @@ from .chunk_arrays import *
 
 from .storage.common import *
 from .storage.files import *
+from .storage.mongo import *
 from .storage.s3 import *
 from .storage.zipfiles import *
 
