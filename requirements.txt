@@ -9,4 +9,4 @@ psutil==5.4.8
 numexpr==2.6.9
 boto3==1.9.78
 scipy
-pymongo
+pymongo==3.8.0
