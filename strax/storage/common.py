@@ -295,7 +295,8 @@ class StorageFrontend:
         for key in keys:
             try:
                 r = self.find(key, **kwargs)
-            except (strax.DataNotAvailable, DataExistsError):
+            except (strax.DataNotAvailable, 
+                    strax.DataCorrupted):
                 r = False
             result.append(r)
         return result
@@ -421,6 +422,8 @@ class Saver:
     # Do not set it yourself
     is_forked = False
 
+    got_exception = None
+
     def __init__(self, metadata):
         self.md = metadata
         self.md['writing_started'] = time.time()
@@ -446,6 +449,15 @@ class Saver:
             # One traceback on screen is enough
             self.close(wait_for=pending)
             pass
+
+        except Exception as e:
+            # log exception for the final check
+            self.got_exception = e
+            # Throw the exception back into the mailbox
+            # (hoping that it is still listening...)
+            source.throw(e)
+            raise e
+
         finally:
             if not self.closed:
                 self.close(wait_for=pending)

@@ -226,8 +226,9 @@ class FileSytemBackend(strax.StorageBackend):
             # (if it's not there, just let it raise FileNotFound
             # with the usual message in the next stage)
             old_md_path = osp.join(dirname, 'metadata.json')
-            if osp.exists(old_md_path):
-                md_path = old_md_path
+            if not osp.exists(old_md_path):
+                raise strax.DataCorrupted(f"Data in {dirname} has no metadata")
+            md_path = old_md_path
 
         with open(md_path, mode='r') as f:
             return json.loads(f.read())
