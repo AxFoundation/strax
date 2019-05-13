@@ -10,7 +10,7 @@ import strax
 
 
 @strax.takes_config(
-    strax.Option('crash', default=False)
+    strax.Option('crash', default=False),
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -34,7 +34,8 @@ class SomeCrash(Exception):
 
 
 @strax.takes_config(
-    strax.Option('some_option', default=0)
+    strax.Option('some_option', default=0),
+    strax.Option('give_wrong_dtype', default=False)
 )
 class Peaks(strax.Plugin):
     provides = 'peaks'
@@ -42,6 +43,8 @@ class Peaks(strax.Plugin):
     dtype = strax.peak_dtype()
 
     def compute(self, records):
+        if self.config['give_wrong_dtype']:
+            return np.zeros(5, [('a', np.int), ('b', np.float)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
         return p
@@ -235,6 +238,26 @@ def test_exception():
             st.get_df(run_id=run_id, targets='peaks')
 
 
+def test_exception_in_saver(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+
+        def kaboom(*args, **kwargs):
+            raise SomeCrash
+
+        old_save = strax.save_file
+        try:
+            strax.save_file = kaboom
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id, targets='records')
+        finally:
+            strax.save_file = old_save
+
+
 def test_random_access():
     """Test basic random access
     TODO: test random access when time info is not provided directly
@@ -291,3 +314,10 @@ def test_run_selection():
                                  exclude_tags='bad') == 1)
         assert len(st.select_runs(include_tags='interesting',
                                   run_mode='nice') == 1)
+
+def test_dtype_mismatch():
+    mystrax = strax.Context(storage=[],
+                            register=[Records, Peaks],
+                            config=dict(give_wrong_dtype=True))
+    with pytest.raises(strax.PluginGaveWrongOutput):
+        mystrax.get_array(run_id=run_id, targets='peaks')
