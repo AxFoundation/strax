@@ -1,6 +1,5 @@
 # flake8: noqa
 __version__ = '0.7.0'
-print('strax is awesome (Joran)')
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
