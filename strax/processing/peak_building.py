@@ -162,13 +162,17 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             r_start = max(0, s)
             r_end = min(n_r, s + n_p)
             assert r_end > r_start
-            
+
             max_in_record = r['data'][r_start:r_end].max()
             p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
 
             # TODO Do we need .astype(np.int32).sum() ??
-            p['area_per_channel'][ch] += r['data'][r_start:r_end].sum()
-            
+            bl_fpart = r['baseline'] % 1
+            p['area_per_channel'][ch] += (
+                r['data'][r_start:r_end].sum()
+                + (int(round(
+                    bl_fpart * (r_end - r_start)))))
+
             # Range of peak that receives record
             p_start = max(0, -s)
             p_end = min(n_p, -s + n_r)
@@ -177,14 +181,18 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
 
             if p_end - p_start > 0:
                 swv_buffer[p_start:p_end] += \
-                    r['data'][r_start:r_end] * adc_to_pe[ch]
+                    (r['data'][r_start:r_end] + bl_fpart) * adc_to_pe[ch]
 
         # Store the sum waveform
         # Do we need to downsample the swv to store it?
         downs_f = int(np.ceil(p_length / sum_wv_samples))
         if downs_f > 1:
-            # New number of samples in the peak
-            new_ns = p['length'] = int(np.ceil(p_length / downs_f))
+            # Compute peak length after downsampling.
+            # We floor rather than ceil here, potentially cutting off
+            # some samples from the right edge of the peak.
+            # If we would ceil, the peak could grow larger and
+            # overlap with a subsequent next peak, crashing strax later.
+            new_ns = p['length'] = int(np.floor(p_length / downs_f))
             p['data'][:new_ns] = \
                 swv_buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
             p['dt'] *= downs_f
@@ -192,6 +200,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             p['data'][:p_length] = swv_buffer[:p_length]
 
         # Store the total area and saturation count
-        p['area'] = (p['area_per_channel'][:n_channels] * adc_to_pe[:n_channels]).sum()
-        p['n_saturated_channels'] = p['saturated_channel'][:n_channels].sum()
-        
+        p['area'] = (p['area_per_channel']
+                     * adc_to_pe).sum()
+        p['n_saturated_channels'] = p['saturated_channel'].sum()
+

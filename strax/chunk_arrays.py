@@ -188,10 +188,14 @@ def same_stop(*sources, field=None, func=None):
 @export
 def sync_iters(chunker, sources):
     """Return dict of iterators over sources (dict name -> iter),
-    synchronized using chunker
+    synchronized using chunker.
+
+    If only one array iter is provided, assume no syncing is needed
     """
     names = list(sources.keys())
     sources = list(sources.values())
+    if len(sources) == 1:
+        return {names[0]: sources[0]}
 
     teed = itertools.tee(chunker(*sources),
                          len(sources))
@@ -213,6 +217,11 @@ def merge_iters(iters):
     """
     if isinstance(iters, dict):
         iters = list(iters.values())
+    iters = list(iters)
+
+    if len(iters) == 1:
+        yield from iters[0]
+
     try:
         while True:
             yield strax.merge_arrs([next(it)

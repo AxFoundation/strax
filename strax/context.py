@@ -1,14 +1,18 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import collections
 import logging
 import fnmatch
+from functools import partial
+import random
+import re
+import string
 import typing as ty
 import warnings
-import random
-import string
 
+import numexpr
 import numpy as np
 import pandas as pd
-import numexpr
+from tqdm import tqdm
 
 import strax
 export, __all__ = strax.exporter()
@@ -30,11 +34,21 @@ export, __all__ = strax.exporter()
                       "storage systems support it"),
     strax.Option(name='allow_rechunk', default=True,
                  help="Allow rechunking of data during writing."),
+    strax.Option(name='allow_multiprocess', default=False,
+                 help="Allow multiprocessing."
+                      "If False, will use multithreading only."),
+    strax.Option(name='allow_shm', default=False,
+                 help="Allow use of /dev/shm for interprocess communication."),
     strax.Option(name='forbid_creation_of', default=tuple(),
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
-                      "descending too far into the dependency graph.")
-)
+                      "descending too far into the dependency graph."),
+    strax.Option(name='store_run_fields', default=tuple(),
+                 help="Tuple of run document fields to store "
+                      "during scan_run."),
+    strax.Option(name='check_available', default=tuple(),
+                 help="Tuple of data types to scan availability for "
+                      "during scan_run."))
 @export
 class Context:
     """Context for strax analysis.
@@ -47,6 +61,8 @@ class Context:
     """
     config: dict
     context_config: dict
+
+    runs: ty.Union[pd.DataFrame, type(None)] = None
 
     def __init__(self,
                  storage=None,
@@ -388,7 +404,7 @@ class Context:
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None,
-                       ) -> strax.ProcessorComponents:
+                      ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
         """
@@ -451,7 +467,9 @@ class Context:
 
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    loaders[d] = sf.loader(
+                    # Bit clunky... but allows specifying executor later
+                    sf.find(key, **self._find_options)
+                    loaders[d] = partial(sf.loader,
                         key,
                         n_range=n_range,
                         **self._find_options)
@@ -553,8 +571,11 @@ class Context:
             savers=dict(savers),
             targets=targets)
 
-    def get_iter(self, run_id: str, targets, save=tuple(), max_workers=None,
-                 time_range=None, selection=None,
+    def get_iter(self, run_id: str,
+                 targets, save=tuple(), max_workers=None,
+                 time_range=None,
+                 seconds_range=None,
+                 selection=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -570,6 +591,25 @@ class Context:
 
         if isinstance(selection, (list, tuple)):
             selection = ' & '.join(f'({x})' for x in selection)
+
+        # Convert relative to absolute time range
+        if seconds_range is not None:
+            try:
+                # Use run metadata, if it is available, to get
+                # the run start time (floored to seconds)
+                t0 = self.run_metadata(run_id, 'start')['start']
+                t0 = int(t0.timestamp()) * int(1e9)
+            except Exception:
+                # Get an approx start from the data itself,
+                # then floor it to seconds for consistency
+                if isinstance(targets, (list, tuple)):
+                    t = targets[0]
+                else:
+                    t = targets
+                t0 = self.get_meta(run_id, t)['chunks'][0]['first_time']
+                t0 = int(t0 / int(1e9)) * int(1e9)
+            time_range = (t0 + int(1e9) * seconds_range[0],
+                          t0 + int(1e9) * seconds_range[1])
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # automatically
@@ -595,6 +635,8 @@ class Context:
         for x in strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
+                allow_shm=self.context_config['allow_shm'],
+                allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
@@ -610,28 +652,42 @@ class Context:
                       (x['time'] < time_range[1])]
             yield x
 
-    def make(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def make(self, run_id: ty.Union[str, tuple, list],
+             targets, save=tuple(), max_workers=None,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
-        for _ in self.get_iter(run_id, targets,
+        # Multi-run support
+        run_ids = strax.to_str_tuple(run_id)
+        if len(run_ids) > 1:
+            return multi_run(self, run_ids, targets=targets,
+                             save=save, max_workers=max_workers, **kwargs)
+
+        for _ in self.get_iter(run_ids[0], targets,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
-    def get_array(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def get_array(self, run_id: ty.Union[str, tuple, list],
+                  targets, save=tuple(), max_workers=None,
                   **kwargs) -> np.ndarray:
         """Compute target for run_id and return as numpy array
         {get_docs}
         """
-        results = list(self.get_iter(run_id, targets,
-                                     save=save, max_workers=max_workers,
-                                     **kwargs))
+        run_ids = strax.to_str_tuple(run_id)
+        if len(run_ids) > 1:
+            results = multi_run(self.get_array, run_ids, targets=targets,
+                                save=save, max_workers=max_workers, **kwargs)
+        else:
+            results = list(self.get_iter(run_ids[0], targets,
+                                         save=save, max_workers=max_workers,
+                                         **kwargs))
         if len(results):
             return np.concatenate(results)
-        raise ValueError("Not a single chunk returned?")
+        raise ValueError("No results returned?")
 
-    def get_df(self, run_id: str, targets, save=tuple(), max_workers=None,
+    def get_df(self, run_id: ty.Union[str, tuple, list],
+               targets, save=tuple(), max_workers=None,
                **kwargs) -> pd.DataFrame:
         """Compute target for run_id and return as pandas DataFrame
         {get_docs}
@@ -671,7 +727,7 @@ class Context:
     get_metadata = get_meta
 
     def run_metadata(self, run_id, projection=None) -> dict:
-        """Return run-evel metadata for run_id, or raise DataNotAvailable
+        """Return run-level metadata for run_id, or raise DataNotAvailable
         if this is not available
 
         :param run_id: run id to get
@@ -679,6 +735,8 @@ class Context:
         syntax. May not be supported by frontend.
         """
         for sf in self.storage:
+            if not sf.provide_run_metadata:
+                continue
             try:
                 return sf.run_metadata(run_id, projection=projection)
             except (strax.DataNotAvailable, NotImplementedError):
@@ -686,26 +744,6 @@ class Context:
                                f"run metadata for {run_id}")
         raise strax.DataNotAvailable(f"No run-level metadata available "
                                      f"for {run_id}")
-
-    def list_available(self, target, **kwargs):
-        """Return sorted list of run_id's for which target is available
-        """
-        # TODO duplicated code with with get_iter
-        if len(kwargs):
-            # noinspection PyMethodFirstArgAssignment
-            self = self.new_context(**kwargs)
-
-        # The run_id is ignored in list_available, but we still use it for
-        # passing data type and lineage to the search functions.
-        # We choose 0 as placeholder since as of this writing strax
-        # requires run_ids to be int-able strings...
-        # TODO: this should change soon
-        key = self._key_for('0', target)
-
-        found_runs = []
-        for sf in self.storage:
-            found_runs += sf.list_available(key, **self._find_options)
-        return sorted(list(set(found_runs)))
 
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
@@ -730,6 +768,216 @@ class Context:
                 continue
         return False
 
+    def list_available(self, target, **kwargs):
+        """Return sorted list of run_id's for which target is available
+        """
+        # TODO duplicated code with with get_iter
+        if len(kwargs):
+            # noinspection PyMethodFirstArgAssignment
+            self = self.new_context(**kwargs)
+
+        if self.runs is None:
+            self.scan_runs()
+
+        keys = set([
+            self._key_for(run_id, target)
+            for run_id in self.runs['name'].values])
+
+        found = set()
+        for sf in self.storage:
+            remaining = keys - found
+            is_found = sf.find_several(remaining, **self._find_options)
+            found |= set([k for i, k in enumerate(remaining)
+                          if is_found[i]])
+        return list(sorted([x.run_id for x in found]))
+
+    def scan_runs(self,
+                  check_available=tuple(),
+                  store_fields=tuple()):
+        """Update and return self.runs with runs currently available
+        in all storage frontends.
+        :param check_available: Check whether these data types are available
+        Availability of xxx is stored as a boolean in the xxx_available
+        column.
+        :param store_fields: Additional fields from run doc to include
+        as rows in the dataframe.
+
+        The context options scan_availability and store_run_fields list
+        data types and run fields, respectively, that will always be scanned.
+        """
+        store_fields = tuple(set(
+            list(strax.to_str_tuple(store_fields))
+            + ['name', 'number', 'tags', 'mode']
+            + list(self.context_config['store_run_fields'])))
+        check_available = tuple(set(
+            list(strax.to_str_tuple(check_available))
+            + list(self.context_config['check_available'])))
+
+        docs = None
+        for sf in self.storage:
+            _temp_docs = []
+            for doc in sf._scan_runs(store_fields=store_fields):
+                # If there is no number, make one from the name
+                if 'number' not in doc:
+                    if 'name' not in doc:
+                        raise ValueError(f"Invalid run doc {doc}, contains "
+                                         f"neither name nor number.")
+                    doc['number'] = int(doc['name'])
+
+                # If there is no name, make one from the number
+                doc.setdefault('name', str(doc['number']))
+
+                doc.setdefault('mode', '')
+
+                # Flatten the tags field, if it exists
+                doc['tags'] = ','.join([t['name']
+                                        for t in doc.get('tags', [])])
+
+                # Flatten the rest of the doc (mainly in case the mode field
+                # is something deeply nested)
+                doc = strax.flatten_dict(doc, separator='.')
+
+                _temp_docs.append(doc)
+
+            if len(_temp_docs):
+                new_docs = pd.DataFrame(_temp_docs)
+            else:
+                new_docs = pd.DataFrame([], columns=store_fields)
+
+            if docs is None:
+                docs = new_docs
+            else:
+                # Keep only new runs (not found by earlier frontends)
+                docs = pd.concat([
+                    docs,
+                    new_docs[
+                        ~np.in1d(new_docs['name'], docs['name'])]],
+                    sort=False)
+
+        self.runs = docs
+
+        for d in tqdm(check_available,
+                      desc='Checking data availability'):
+            self.runs[d + '_available'] = np.in1d(
+                self.runs.name.values,
+                self.list_available(d))
+
+        return self.runs
+
+    def select_runs(self, run_mode=None,
+                    include_tags=None, exclude_tags=None,
+                    available=tuple(),
+                    pattern_type='fnmatch', ignore_underscore=True):
+        """Return pandas.DataFrame with basic info from runs
+        that match selection criteria.
+        :param run_mode: Pattern to match run modes (reader.ini.name)
+        :param available: str or tuple of strs of data types for which data
+        must be available according to the runs DB.
+
+        :param include_tags: String or list of strings of patterns
+            for required tags
+        :param exclude_tags: String / list of strings of patterns
+            for forbidden tags.
+            Exclusion criteria  have higher priority than inclusion criteria.
+        :param pattern_type: Type of pattern matching to use.
+            Defaults to 'fnmatch', which means you can use
+            unix shell-style wildcards (`?`, `*`).
+            The alternative is 're', which means you can use
+            full python regular expressions.
+        :param ignore_underscore: Ignore the underscore at the start of tags
+            (indicating some degree of officialness or automation).
+
+        Examples:
+         - `run_selection(include_tags='blinded')`
+            select all datasets with a blinded or _blinded tag.
+         - `run_selection(include_tags='*blinded')`
+            ... with blinded or _blinded, unblinded, blablinded, etc.
+         - `run_selection(include_tags=['blinded', 'unblinded'])`
+            ... with blinded OR unblinded, but not blablinded.
+         - `run_selection(include_tags='blinded', exclude_tags=['bad', 'messy'])`
+           select blinded dsatasets that aren't bad or messy
+        """
+        if self.runs is None:
+            self.scan_runs()
+        dsets = self.runs.copy()
+
+        if pattern_type not in ('re', 'fnmatch'):
+            raise ValueError("Pattern type must be 're' or 'fnmatch'")
+
+        if run_mode is not None:
+            modes = dsets['mode'].values
+            mask = np.zeros(len(modes), dtype=np.bool_)
+            if pattern_type == 'fnmatch':
+                for i, x in enumerate(modes):
+                    mask[i] = fnmatch.fnmatch(x, run_mode)
+            elif pattern_type == 're':
+                for i, x in enumerate(modes):
+                    mask[i] = bool(re.match(run_mode, x))
+            dsets = dsets[mask]
+
+        if include_tags is not None:
+            dsets = dsets[_tags_match(dsets,
+                                      include_tags,
+                                      pattern_type,
+                                      ignore_underscore)]
+
+        if exclude_tags is not None:
+            dsets = dsets[True ^ _tags_match(dsets,
+                                             exclude_tags,
+                                             pattern_type,
+                                             ignore_underscore)]
+
+        have_available = strax.to_str_tuple(available)
+        for d in have_available:
+            if not d + '_available' in dsets.columns:
+                # Get extra availability info from the run db
+                self.runs[d + '_available'] = np.in1d(
+                    self.runs.name.values,
+                    self.list_available(d))
+            dsets = dsets[dsets[d + '_available']]
+
+        return dsets
+
+    def define_run(self,
+                   name: str,
+                   data: ty.Union[np.ndarray, pd.DataFrame, dict],
+                   from_run: ty.Union[str, None] = None):
+
+        if isinstance(data, (pd.DataFrame, np.ndarray)):
+            # Array of events / regions of interest
+            start, end = data['time'], strax.endtime(data)
+            if from_run is not None:
+                return self.define_run(
+                    name,
+                    {from_run: np.transpose([start, end])})
+            else:
+                df = pd.DataFrame(dict(starts=start, ends=end,
+                                       run_id=data['run_id']))
+                self.define_run(
+                    name,
+                    {run_id: rs[['start', 'stop']].values.transpose()
+                     for run_id, rs in df.groupby('fromrun')})
+
+        if isinstance(data, (list, tuple)):
+            # list of runids
+            data = strax.to_str_tuple(data)
+            self.define_run(
+                name,
+                {run_id: 'all' for run_id in data})
+
+        if not isinstance(data, dict):
+            raise ValueError("Can't define run from {type(data)}")
+
+        # Dict mapping run_id: array of time ranges or all
+        for sf in self.storage:
+            if not sf.readonly and sf.can_define_runs:
+                sf.define_run(name, data)
+                break
+        else:
+            raise RuntimeError("No storage frontend registered that allows"
+                               " run definition")
+
+
 
 get_docs = """
 :param run_id: run id to get
@@ -740,6 +988,9 @@ get_docs = """
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
 :param selection: Query string or list of strings with selections to apply.
+:param time_range: (start, stop) range of ns since the unix epoch to load
+:param seconds_range: (start, stop) range of seconds since the start of the
+run to load.
 """
 
 for attr in dir(Context):
@@ -748,3 +999,70 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
+
+
+def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
+    result = np.zeros(len(dsets), dtype=np.bool)
+
+    if isinstance(patterns, str):
+        patterns = [patterns]
+
+    for i, tags in enumerate(dsets.tags):
+        result[i] = any([any([_tag_match(tag, pattern,
+                                         pattern_type,
+                                         ignore_underscore)
+                              for tag in tags.split(',')
+                              for pattern in patterns])])
+
+    return result
+
+
+def _tag_match(tag, pattern, pattern_type, ignore_underscore):
+    if ignore_underscore and tag.startswith('_'):
+        tag = tag[1:]
+    if pattern_type == 'fnmatch':
+        return fnmatch.fnmatch(tag, pattern)
+    elif pattern_type == 're':
+        return bool(re.match(pattern, tag))
+    raise NotImplementedError
+
+
+@export
+def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
+    """Execute f(run_id, **kwargs) over multiple runs,
+    then return list of results.
+
+    :param run_ids: list/tuple of runids
+    :param max_workers: number of worker threads/processes to spawn
+
+    Other (kw)args will be passed to f
+    """
+    # Try to int all run_ids
+
+    # Get a numpy array of run ids.
+    try:
+        run_id_numpy = np.array([int(x) for x in run_ids],
+                                dtype=np.int32)
+    except ValueError:
+        # If there are string id's among them,
+        # numpy will autocast all the run ids to Unicode fixed-width
+        run_id_numpy = np.array(run_ids)
+
+    # Probably we'll want to use dask for this in the future,
+    # to enable cut history tracking and multiprocessing.
+    # For some reason the ProcessPoolExecutor doesn't work??
+    with ThreadPoolExecutor(max_workers=max_workers) as exc:
+        futures = [exc.submit(f, r, *args, **kwargs)
+                   for r in run_ids]
+        for _ in tqdm(as_completed(futures),
+                      desc="Loading %d runs" % len(run_ids)):
+            pass
+
+        result = []
+        for i, f in enumerate(futures):
+            r = f.result()
+            ids = np.array([run_id_numpy[i]] * len(r),
+                           dtype=[('run_id', run_id_numpy.dtype)])
+            r = strax.merge_arrs([ids, r])
+            result.append(r)
+        return result

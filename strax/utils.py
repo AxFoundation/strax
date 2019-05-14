@@ -1,11 +1,13 @@
+from base64 import b32encode
+import collections
 import contextlib
 from functools import wraps
+import json
 import re
 import sys
 import traceback
 import typing
 from hashlib import sha1
-import pickle
 
 import numpy as np
 import numba
@@ -48,12 +50,6 @@ def inherit_docstring_from(cls):
 
 
 @export
-def records_needed(pulse_length, samples_per_record):
-    """Return records needed to store pulse_length samples"""
-    return 1 + (pulse_length - 1) // samples_per_record
-
-
-@export
 def growing_result(dtype=np.int, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
 
@@ -73,7 +69,7 @@ def growing_result(dtype=np.int, chunk_size=10000):
     """
     def _growing_result(f):
         @wraps(f)
-        def wrapped_f(*args, **kwargs):
+        def accumulate_numba_result(*args, **kwargs):
 
             if '_result_buffer' in kwargs:
                 raise ValueError("_result_buffer argument is internal-only")
@@ -93,9 +89,12 @@ def growing_result(dtype=np.int, chunk_size=10000):
             # If nothing returned, return an empty array of the right dtype
             if not len(saved_buffers):
                 return np.zeros(0, _dtype)
-            return np.concatenate(saved_buffers)
+            if len(saved_buffers) == 1:
+                return saved_buffers[0]
+            else:
+                return np.concatenate(saved_buffers)
 
-        return wrapped_f
+        return accumulate_numba_result
 
     return _growing_result
 
@@ -168,14 +167,27 @@ def camel_to_snake(x):
 @export
 @contextlib.contextmanager
 def profile_threaded(filename):
-    import yappi            # noqa   # yappi is not a dependency
-    if filename is None:
-        yield
-        return
+    import yappi  # noqa   # yappi is not a dependency
+    import gil_load  # noqa   # same
+    yappi.set_clock_type("cpu")
+    try:
+        gil_load.init()
+        gil_load.start(av_sample_interval=0.1,
+                       output_interval=3,
+                       output=sys.stdout)
+        monitoring_gil = True
+    except RuntimeError:
+        monitoring_gil = False
+        pass
 
     yappi.start()
     yield
     yappi.stop()
+
+    if monitoring_gil:
+        gil_load.stop()
+        print("Gil was held %0.1f %% of the time" %
+              (100 * gil_load.get()[0]))
     p = yappi.get_func_stats()
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)
@@ -214,10 +226,12 @@ def hashablize(obj):
 
 
 @export
-def deterministic_hash(thing):
-    """Return a deterministic hash of a container hierarchy using hashablize,
-    pickle and sha1"""
-    return sha1(pickle.dumps(hashablize(thing))).hexdigest()
+def deterministic_hash(thing, length=10):
+    """Return a base32 lowercase string of length determined from hashing
+    a container hierarchy
+    """
+    digest = sha1(json.dumps(hashablize(thing)).encode('ascii')).digest()
+    return b32encode(digest)[:length].decode('ascii').lower()
 
 
 @export
@@ -244,6 +258,8 @@ def formatted_exception():
         return ''
     return traceback.format_exc()
 
+
+@export
 def print_entry(d, n=0, show_data=False):
     """ Print entry number n in human-readable format.
     Default behavior is to skip the entry 'data' since it clutters output.
@@ -255,3 +271,32 @@ def print_entry(d, n=0, show_data=False):
         if (show_data or key != 'data'):
             print(("{:<%d}: " % max_len).format(key), el[key])
     return
+
+
+@export
+def count_tags(ds):
+    """Return how often each tag occurs in the datasets DataFrame ds"""
+    from collections import Counter
+    from itertools import chain
+    all_tags = chain(*[ts.split(',')
+                       for ts in ds['tags'].values])
+    return Counter(all_tags)
+
+
+@export
+def flatten_dict(d, separator=':', _parent_key=''):
+    """Flatten nested dictionaries into a single dictionary,
+    indicating levels by separator.
+    Don't set _parent_key argument, this is used for recursive calls.
+    Stolen from http://stackoverflow.com/questions/6027558
+    """
+    items = []
+    for k, v in d.items():
+        new_key = _parent_key + separator + k if _parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten_dict(v,
+                                      separator=separator,
+                                      _parent_key=new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)

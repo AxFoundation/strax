@@ -1,6 +1,3 @@
-"""A very basic test for the strax core.
-Mostly tests if we don't crash immediately..
-"""
 import tempfile
 import shutil
 import os
@@ -13,7 +10,7 @@ import strax
 
 
 @strax.takes_config(
-    strax.Option('crash', default=False)
+    strax.Option('crash', default=False),
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -37,7 +34,8 @@ class SomeCrash(Exception):
 
 
 @strax.takes_config(
-    strax.Option('some_option', default=0)
+    strax.Option('some_option', default=0),
+    strax.Option('give_wrong_dtype', default=False)
 )
 class Peaks(strax.Plugin):
     provides = 'peaks'
@@ -45,6 +43,8 @@ class Peaks(strax.Plugin):
     dtype = strax.peak_dtype()
 
     def compute(self, records):
+        if self.config['give_wrong_dtype']:
+            return np.zeros(5, [('a', np.int), ('b', np.float)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
         return p
@@ -65,18 +65,34 @@ def test_core():
         assert bla.dtype == strax.peak_dtype()
 
 
+def test_multirun():
+    for max_workers in [1, 2]:
+        mystrax = strax.Context(storage=[],
+                                register=[Records, Peaks],)
+        bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
+                                max_workers=max_workers)
+        n = recs_per_chunk * n_chunks
+        assert len(bla) == n * 2
+        np.testing.assert_equal(
+            bla['run_id'],
+            np.array([0] * n + [1] * n, dtype=np.int32))
+
+
 def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir),
                                 register=[Records, Peaks])
 
         assert not mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
         assert mystrax.list_available('peaks') == []
 
         mystrax.make(run_id=run_id, targets='peaks')
 
         assert mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
         assert mystrax.list_available('peaks') == [run_id]
+        assert mystrax.scan_runs()['name'].values.tolist() == [run_id]
 
         # We should have two directories
         data_dirs = sorted(glob.glob(osp.join(temp_dir, '*/')))
@@ -84,7 +100,10 @@ def test_filestore():
 
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
-        assert sorted(os.listdir(data_dirs[0])) == ['000000', 'metadata.json']
+        prefix = strax.dirname_to_prefix(data_dirs[0])
+        assert sorted(os.listdir(data_dirs[0])) == [
+            f'{prefix}-000000',
+            f'{prefix}-metadata.json']
 
         # Check metadata got written correctly.
         metadata = mystrax.get_meta(run_id, 'peaks')
@@ -94,7 +113,7 @@ def test_filestore():
         assert len(metadata['chunks']) == 1
 
         # Check data gets loaded from cache, not rebuilt
-        md_filename = osp.join(data_dirs[0], 'metadata.json')
+        md_filename = osp.join(data_dirs[0], f'{prefix}-metadata.json')
         mtime_before = osp.getmtime(md_filename)
         df = mystrax.get_array(run_id=run_id, targets='peaks')
         assert len(df) == recs_per_chunk * n_chunks
@@ -125,11 +144,13 @@ def test_datadirectory_deleted():
         # Delete directory AFTER context is created
         shutil.rmtree(data_dir)
 
+        mystrax.scan_runs()
         assert not mystrax.is_stored(run_id, 'peaks')
         assert mystrax.list_available('peaks') == []
 
         mystrax.make(run_id=run_id, targets='peaks')
 
+        mystrax.scan_runs()
         assert mystrax.is_stored(run_id, 'peaks')
         assert mystrax.list_available('peaks') == [run_id]
 
@@ -211,9 +232,30 @@ def test_exception():
         for target in ('peaks', 'records'):
             assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
 
-        # Check data cannot be loaded again
-        with pytest.raises(strax.DataCorrupted):
+        # Check corrupted data does not load
+        st.context_config['forbid_creation_of'] = ('peaks',)
+        with pytest.raises(strax.DataNotAvailable):
             st.get_df(run_id=run_id, targets='peaks')
+
+
+def test_exception_in_saver(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                           register=[Records, Peaks])
+
+        def kaboom(*args, **kwargs):
+            raise SomeCrash
+
+        old_save = strax.save_file
+        try:
+            strax.save_file = kaboom
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id, targets='records')
+        finally:
+            strax.save_file = old_save
 
 
 def test_random_access():
@@ -234,9 +276,10 @@ def test_random_access():
         st.make(run_id=run_id, targets='peaks')
 
         # Second part of hack: corrupt data by removing one chunk
+        dirname = str(st._key_for(run_id, 'peaks'))
         os.remove(os.path.join(temp_dir,
-                               str(st._key_for(run_id, 'peaks')),
-                               '000000'))
+                               dirname,
+                               strax.dirname_to_prefix(dirname) + '-000000'))
 
         with pytest.raises(FileNotFoundError):
             st.get_array(run_id, 'peaks')
@@ -245,3 +288,36 @@ def test_random_access():
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+
+
+def test_run_selection():
+    mock_rundb = [
+        dict(name='0', mode='funny', tags=[dict(name='bad')]),
+        dict(name='1', mode='nice', tags=[dict(name='interesting'),
+                                          dict(name='bad')]),
+        dict(name='2', mode='nice', tags=[dict(name='interesting')])]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+
+        # Write mock runs db
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf)
+        assert len(st.scan_runs()) == len(mock_rundb)
+        assert st.run_metadata('0') == mock_rundb[0]
+
+        assert len(st.select_runs(run_mode='nice') == 1)
+        assert len(st.select_runs(include_tags='interesting') == 2)
+        assert len(st.select_runs(include_tags='interesting',
+                                 exclude_tags='bad') == 1)
+        assert len(st.select_runs(include_tags='interesting',
+                                  run_mode='nice') == 1)
+
+def test_dtype_mismatch():
+    mystrax = strax.Context(storage=[],
+                            register=[Records, Peaks],
+                            config=dict(give_wrong_dtype=True))
+    with pytest.raises(strax.PluginGaveWrongOutput):
+        mystrax.get_array(run_id=run_id, targets='peaks')

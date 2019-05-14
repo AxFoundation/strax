@@ -5,6 +5,13 @@ import psutil
 import os
 import signal
 import time
+from concurrent.futures import ProcessPoolExecutor
+try:
+    from npshmex import ProcessPoolExecutor as SHMExecutor
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    pass
+
 
 import strax
 export, __all__ = strax.exporter()
@@ -14,7 +21,7 @@ export, __all__ = strax.exporter()
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
+    loaders: ty.Dict[str, callable]
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
@@ -31,7 +38,8 @@ class ThreadedMailboxProcessor:
 
     def __init__(self,
                  components: ProcessorComponents,
-                 allow_rechunk=True,
+                 allow_rechunk=True, allow_shm=False,
+                 allow_multiprocess=False,
                  max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
@@ -47,10 +55,16 @@ class ThreadedMailboxProcessor:
             self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            self.process_executor = futures.ProcessPoolExecutor(
-                max_workers=max_workers)
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
+
+            if allow_multiprocess:
+                _proc_ex = ProcessPoolExecutor
+                if allow_shm:
+                    _proc_ex = SHMExecutor
+                self.process_executor = _proc_ex(max_workers=max_workers)
+            else:
+                self.process_executor = self.thread_executor
 
         # Deal with parallel input processes
         # Setting up one of these modifies plugins, so we must gather
@@ -66,7 +80,12 @@ class ThreadedMailboxProcessor:
 
         for d, loader in components.loaders.items():
             assert d not in plugins
-            self.mailboxes[d].add_sender(loader, name=f'load:{d}')
+            # If paralellizing, use threads for loading
+            # the decompressor releases the gil, and we have a lot
+            # of data transfer to do
+            self.mailboxes[d].add_sender(
+                loader(executor=self.thread_executor),
+                name=f'load:{d}')
 
         for d, p in plugins.items():
             executor = None
@@ -94,8 +113,14 @@ class ThreadedMailboxProcessor:
                     rechunk = False
 
                 from functools import partial
+
                 self.mailboxes[d].add_reader(
-                    partial(saver.save_from, rechunk=rechunk),
+                    partial(saver.save_from,
+                            rechunk=rechunk,
+                            # If paralellizing, use threads for saving
+                            # the compressor releases the gil,
+                            # and we have a lot of data transfer to do
+                            executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
     def iter(self):
@@ -107,10 +132,12 @@ class ThreadedMailboxProcessor:
             m.start()
 
         self.log.debug(f"Yielding {target}")
+        traceback = None
+        exc = None
+
         try:
             yield from final_generator
-            traceback = None
-            exc = None
+
         except strax.MailboxKilled as e:
             self.log.debug(f"Target Mailbox ({target}) killed")
             for m in self.mailboxes.values():
@@ -130,7 +157,7 @@ class ThreadedMailboxProcessor:
             if self.thread_executor is not None:
                 self.thread_executor.shutdown(wait=False)
 
-            if self.process_executor is not None:
+            if self.process_executor not in [None, self.thread_executor]:
                 # Unfortunately there is no wait=timeout option, so we have to
                 # roll our own
                 pids = self.process_executor._processes.keys()
@@ -155,12 +182,24 @@ class ThreadedMailboxProcessor:
 
             self.log.debug("Closing executors completed")
 
-        # Reraise exception. This is outside the except block
-        # to avoid the 'during handling of this exception, another
-        # exception occurred' stuff from confusing the traceback
-        # which is printed for the user
         if traceback is not None:
+            # Reraise exception. This is outside the except block
+            # to avoid the 'during handling of this exception, another
+            # exception occurred' stuff from confusing the traceback
+            # which is printed for the user
             self.log.debug("Reraising exception")
             raise exc.with_traceback(traceback)
+
+        # Check the savers for any exception that occurred during saving
+        # These are thrown back to the mailbox, but if that has already closed
+        # it doesn't trigger a crash...
+        # TODO: add savers inlined by parallelsourceplugin
+        # TODO: need to look at plugins too if we ever implement true
+        # multi-target mode
+        for k, saver_list in self.components.savers.items():
+            for s in saver_list:
+                if s.got_exception:
+                    self.log.fatal(f"Caught error while saving {k}!")
+                    raise s.got_exception
 
         self.log.debug("Processing finished")

@@ -94,8 +94,9 @@ def test_exception():
         for target in ('peaks', 'records'):
             assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
 
-        # Check data cannot be loaded again
-        with pytest.raises(strax.DataCorrupted):
+        # Check corrupted data does not load
+        st.context_config['forbid_creation_of'] = ('peaks',)
+        with pytest.raises(strax.DataNotAvailable):
             st.get_df(run_id=run_id, targets='peaks')
 
 

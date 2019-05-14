@@ -50,13 +50,15 @@ def _split_peaks(peaks, min_height, min_ratio, orig_dt, is_split,
             r = new_peaks[offset]
             r['time'] = p['time'] + prev_split_i * p['dt']
             r['channel'] = p['channel']
+            # Set the dt to the original (lowest) dt first;
+            # this may change when the sum waveform of the new peak is computed
             r['dt'] = orig_dt
             r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
 
-            if r['length'] == 0:
+            if r['length'] <= 0:
                 print(p['data'])
                 print(prev_split_i, split_i)
-                raise ValueError("Attempt to create a zero-length peak!")
+                raise ValueError("Attempt to create invalid peak!")
 
             offset += 1
             if offset == len(new_peaks):
@@ -103,4 +105,4 @@ def find_split_points(w, min_height=0, min_ratio=0):
             min_since_max_i = i
 
     if found_one:
-        yield len(w) - 1
+        yield len(w)

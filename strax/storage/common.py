@@ -83,11 +83,15 @@ class StorageFrontend:
     For example, a runs database, or a data directory on the file system.
     """
     backends: list
+    can_define_runs = False
+    provide_run_metadata = False
 
     def __init__(self,
                  readonly=False,
+                 provide_run_metadata=None,
                  overwrite='if_broken',
-                 take_only=tuple(), exclude=tuple()):
+                 take_only=tuple(),
+                 exclude=tuple()):
         """
         :param readonly: If True, throws CannotWriteData whenever saving is
         attempted.
@@ -97,6 +101,8 @@ class StorageFrontend:
          - 'always': Always overwrite data. Use with caution!
         :param take_only: Provide/accept only these data types.
         :param exclude: Do NOT provide/accept these data types.
+        :param provide_run_metadata: Whether to provide run-level metadata
+        (run docs). If None, use class-specific default
 
         If take_only and exclude are both omitted, provide all data types.
         If a data type is listed in both, it will not be provided.
@@ -108,6 +114,8 @@ class StorageFrontend:
         self.take_only = strax.to_str_tuple(take_only)
         self.exclude = strax.to_str_tuple(exclude)
         self.overwrite = overwrite
+        if provide_run_metadata is not None:
+            self.provide_run_metadata = provide_run_metadata
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -175,7 +183,7 @@ class StorageFrontend:
         {data_type: (plugin_name, version, {config_option: value, ...}, ...}
         :param write: Set to True if writing new data. The data is immediately
         registered, so you must follow up on the write!
-        :param check_broken: If True, raise DataCorrupted if data has not
+        :param check_broken: If True, raise DataNotAvailable if data has not
         been complete written, or writing terminated with an exception.
         """
         message = (
@@ -218,11 +226,12 @@ class StorageFrontend:
             # Get the metadata to check if the data is broken
             meta = self._get_backend(backend_name).get_metadata(backend_key)
             if 'exception' in meta:
-                raise DataCorrupted(
+                exc = meta['exception']
+                raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted due to "
-                    f"exception uring writing: {meta['exception']}.")
+                    f"exception during writing: {exc}.")
             if 'writing_ended' not in meta and not allow_incomplete:
-                raise DataCorrupted(
+                raise DataNotAvailable(
                     f"Data in {backend_name} {backend_key} corrupted. No "
                     f"writing_ended field present!")
 
@@ -261,8 +270,8 @@ class StorageFrontend:
             return True
         if self.overwrite == 'if_broken':
             metadata = self.get_metadata(key)
-            return ('writing_ended' in metadata
-                    and 'exception' not in metadata)
+            return not  ('writing_ended' in metadata
+                         and 'exception' not in metadata)
         return False
 
     def list_available(self, key: DataKey,
@@ -274,9 +283,32 @@ class StorageFrontend:
         return self._list_available(
             key, allow_incomplete, fuzzy_for, fuzzy_for_options)
 
+    def find_several(self, keys, **kwargs):
+        """Return list with backend keys or False
+        for several data keys.
+
+        Options are as for find()
+        """
+        # You can override this if the backend has a smarter way
+        # of checking availability (e.g. a single DB query)
+        result = []
+        for key in keys:
+            try:
+                r = self.find(key, **kwargs)
+            except (strax.DataNotAvailable, 
+                    strax.DataCorrupted):
+                r = False
+            result.append(r)
+        return result
+
     ##
     # Abstract methods (to override in child)
     ##
+
+    def _scan_runs(self, store_fields):
+        """Iterable of run document / metadata dictionaries
+        """
+        yield from tuple()
 
     def _list_available(self, key: DataKey,
                         allow_incomplete, fuzzy_for, fuzzy_for_options):
@@ -321,9 +353,6 @@ class StorageBackend:
     piece of data. So don't make __init__ take options like 'path' or 'host',
     these have to be hardcoded (or made part of the key).
     """
-
-    def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, backend_key, n_range=None, executor=None):
         """Iterates over strax data in backend_key
@@ -393,33 +422,51 @@ class Saver:
     # Do not set it yourself
     is_forked = False
 
+    got_exception = None
+
     def __init__(self, metadata):
         self.md = metadata
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
 
-    def save_from(self, source: typing.Iterable, rechunk=True):
+    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
         """Iterate over source and save the results under key
         along with metadata
         """
         if rechunk and self.prefer_rechunk:
             source = strax.fixed_size_chunks(source)
 
+        pending = []
         try:
             for chunk_i, s in enumerate(source):
-                self.save(data=s, chunk_i=chunk_i)
+                new_f = self.save(data=s, chunk_i=chunk_i, executor=executor)
+                if new_f is not None:
+                    pending = [f for f in pending + [new_f]
+                               if not f.done()]
+
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
             # One traceback on screen is enough
-            self.close()
+            self.close(wait_for=pending)
             pass
+
+        except Exception as e:
+            # log exception for the final check
+            self.got_exception = e
+            # Throw the exception back into the mailbox
+            # (hoping that it is still listening...)
+            source.throw(e)
+            raise e
+
         finally:
             if not self.closed:
-                self.close()
+                self.close(wait_for=pending)
 
-    def save(self, data: np.ndarray, chunk_i: int):
+    def save(self, data: np.ndarray, chunk_i: int, executor=None):
+        """Save a chunk, returning future to wait on or None"""
         if self.closed:
-            raise RuntimeError(f"Attmpt to save to {self.md} saver, which is already closed!")
+            raise RuntimeError(f"Attmpt to save to {self.md} saver, "
+                               f"which is already closed!")
 
         chunk_info = dict(chunk_i=chunk_i,
                           n=len(data),
@@ -429,10 +476,19 @@ class Saver:
                 chunk_info[f'{desc}_time'] = int(data[i]['time'])
                 chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
 
-        chunk_info.update(self._save_chunk(data, chunk_info))
+        bonus_info, future = self._save_chunk(
+            data,
+            chunk_info,
+            executor=None if self.is_forked else executor)
+
+        chunk_info.update(bonus_info)
         self._save_chunk_metadata(chunk_info)
 
-    def close(self, wait_for=None, timeout=300):
+        return future
+
+    def close(self,
+              wait_for: typing.Union[list, tuple] = tuple(),
+              timeout=300):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
 
@@ -442,9 +498,7 @@ class Saver:
                 raise RuntimeError(
                     f"{len(not_done)} futures of {self.md} did not"
                     "complete in time!")
-        else:
-            pass
-                    
+
         self.closed = True
 
         exc_info = strax.formatted_exception()
@@ -459,7 +513,11 @@ class Saver:
     # Abstract methods (to override in child)
     ##
 
-    def _save_chunk(self, data, chunk_info):
+    def _save_chunk(self, data, chunk_info, executor=None):
+        """Save a chunk to file. Return (
+            dict with extra info for metadata,
+            future to wait on or None)
+        """
         raise NotImplementedError
 
     def _save_chunk_metadata(self, chunk_info):

@@ -1,7 +1,10 @@
 import glob
 import json
+import tempfile
 import os
 import os.path as osp
+
+from bson import json_util
 import shutil
 
 import strax
@@ -10,7 +13,7 @@ from .common import StorageFrontend
 export, __all__ = strax.exporter()
 
 
-RUN_METADATA_FILENAME = 'run_%s_metadata.json'
+RUN_METADATA_PATTERN = '%s-metadata.json'
 
 
 @export
@@ -20,32 +23,72 @@ class DataDirectory(StorageFrontend):
 
     Run-level metadata is stored in loose json files in the directory.
     """
-    def __init__(self, path='.', *args, **kwargs):
+
+    provide_run_metadata = True
+
+    def __init__(self, path='.', *args, deep_scan=True, **kwargs):
         """
         :param path: Path to folder with data subfolders.
+        :param deep_scan: Let scan_runs scan over folders,
+        so even data for which no run-level metadata is available
+        is reported.
+
         For other arguments, see DataRegistry base class.
         """
         super().__init__(*args, **kwargs)
         self.backends = [strax.FileSytemBackend()]
         self.path = path
+        self.deep_scan = deep_scan
         if not self.readonly and not osp.exists(self.path):
             os.makedirs(self.path)
 
     def _run_meta_path(self, run_id):
-        return osp.join(self.path, RUN_METADATA_FILENAME % run_id)
+        return osp.join(self.path, RUN_METADATA_PATTERN % run_id)
 
     def run_metadata(self, run_id, projection=None):
         path = self._run_meta_path(run_id)
         if osp.exists(path):
             with open(path, mode='r') as f:
-                return json.loads(f.read())
+                md = json.loads(f.read(),
+                                object_hook=json_util.object_hook)
+            if not projection:
+                return md
+            md = strax.flatten_dict(md, separator='.')
+            return {k: v
+                    for k, v in md.items()
+                    if k in projection}
         else:
             raise strax.RunMetadataNotAvailable(
                 f"No file at {path}, cannot find run metadata for {run_id}")
 
     def write_run_metadata(self, run_id, metadata):
         with open(self._run_meta_path(run_id), mode='w') as f:
-            f.write(json.dumps(metadata))
+            f.write(json.dumps(metadata, default=json_util.default))
+
+    def _scan_runs(self, store_fields):
+        """Iterable of run document dictionaries.
+        These should be directly convertable to a pandas DataFrame.
+        """
+        found = set()
+
+        # Yield metadata for runs for which we actually have it
+        for md_path in sorted(glob.glob(
+                osp.join(self.path,
+                         RUN_METADATA_PATTERN.replace('%s', '*')))):
+            # Parse the run metadata filename pattern.
+            # (different from the folder pattern)
+            run_id = osp.basename(md_path).split('-')[0]
+            found.add(run_id)
+            yield self.run_metadata(run_id, projection=store_fields)
+
+        if self.deep_scan:
+            # Yield runs for which no metadata exists
+            # we'll make "metadata" that consist only of the run name
+            for fn in self._subfolders():
+                run_id = self._parse_folder_name(fn)[0]
+                if run_id not in found:
+                    found.add(run_id)
+                    yield dict(name=run_id)
 
     def _list_available(self, key: strax.DataKey,
                         allow_incomplete, fuzzy_for, fuzzy_for_options):
@@ -99,11 +142,25 @@ class DataDirectory(StorageFrontend):
         raise strax.DataNotAvailable
 
     def _subfolders(self):
-        """Loop over subfolders of self.path"""
+        """Loop over subfolders of self.path that match our folder format"""
         if not os.path.exists(self.path):
             return
         for dirname in os.listdir(self.path):
+            try:
+                self._parse_folder_name(dirname)
+            except InvalidFolderNameFormat:
+                continue
             yield osp.join(self.path, dirname)
+
+    def _parse_folder_name(self, fn):
+        """Return (run_id, data_type, hash) if folder name matches
+        DataDirectory convention, raise InvalidFolderNameFormat otherwise
+        """
+        stuff = osp.normpath(fn).split(os.sep)[-1].split('-')
+        if len(stuff) != 3:
+            # This is not a folder with strax data
+            raise InvalidFolderNameFormat(fn)
+        return stuff
 
     def _folder_matches(
             self, fn, key, fuzzy_for, fuzzy_for_options,
@@ -114,11 +171,10 @@ class DataDirectory(StorageFrontend):
         availability
         """
         # Parse the folder name
-        stuff = osp.normpath(fn).split(os.sep)[-1].split('-')
-        if len(stuff) != 3:
-            # This is not a folder with strax data
+        try:
+            _run_id, _data_type, _hash = self._parse_folder_name(fn)
+        except InvalidFolderNameFormat:
             return False
-        _run_id, _data_type, _hash = stuff
 
         # Check exact match
         if _data_type != key.data_type:
@@ -147,6 +203,12 @@ class DataDirectory(StorageFrontend):
 
 
 @export
+def dirname_to_prefix(dirname):
+    """Return filename prefix from dirname"""
+    return os.path.basename(dirname.strip('/')).split("-", maxsplit=1)[1]
+
+
+@export
 class FileSytemBackend(strax.StorageBackend):
     """Store data locally in a directory of binary files.
 
@@ -155,7 +217,20 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
-        with open(osp.join(dirname, 'metadata.json'), mode='r') as f:
+        prefix = dirname_to_prefix(dirname)
+        metadata_json = f'{prefix}-metadata.json'
+        md_path = osp.join(dirname, metadata_json)
+
+        if not osp.exists(md_path):
+            # Try old-format metadata
+            # (if it's not there, just let it raise FileNotFound
+            # with the usual message in the next stage)
+            old_md_path = osp.join(dirname, 'metadata.json')
+            if not osp.exists(old_md_path):
+                raise strax.DataCorrupted(f"Data in {dirname} has no metadata")
+            md_path = old_md_path
+
+        with open(md_path, mode='r') as f:
             return json.loads(f.read())
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
@@ -193,10 +268,13 @@ class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, dirname, metadata,):
+    def __init__(self, dirname, metadata):
         super().__init__(metadata)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
+        self.prefix = dirname_to_prefix(dirname)
+        self.metadata_json = f'{self.prefix}-metadata.json'
+
         if os.path.exists(dirname):
             print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
@@ -207,16 +285,21 @@ class FileSaver(strax.Saver):
         self._flush_metadata()
 
     def _flush_metadata(self):
-        with open(self.tempdirname + '/metadata.json', mode='w') as f:
+        with open(self.tempdirname + '/' + self.metadata_json, mode='w') as f:
             f.write(json.dumps(self.md, **self.json_options))
 
-    def _save_chunk(self, data, chunk_info):
-        filename = '%06d' % chunk_info['chunk_i']
-        filesize = strax.save_file(
-            os.path.join(self.tempdirname, filename),
-            data=data,
-            compressor=self.md['compressor'])
-        return dict(filename=filename, filesize=filesize)
+    def _save_chunk(self, data, chunk_info, executor=None):
+        ichunk = '%06d' % chunk_info['chunk_i']
+        filename = f'{self.prefix}-{ichunk}'
+
+        fn = os.path.join(self.tempdirname, filename)
+        kwargs = dict(data=data, compressor=self.md['compressor'])
+        if executor is None:
+            filesize = strax.save_file(fn, **kwargs)
+            return dict(filename=filename, filesize=filesize), None
+        else:
+            return dict(filename=filename), executor.submit(
+                strax.save_file, fn, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):
         if self.is_forked:
@@ -248,3 +331,7 @@ class FileSaver(strax.Saver):
         self._flush_metadata()
 
         os.rename(self.tempdirname, self.dirname)
+
+
+class InvalidFolderNameFormat(Exception):
+    pass
