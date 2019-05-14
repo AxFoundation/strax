@@ -1,3 +1,19 @@
+0.7.1 / 2019-05-11
+------------------
+- Sum waveform now operates on all channels (#158)
+- MongoDB output (#159)
+- Better exception handling in saver (#160)
+- Force plugins to produce correct dtype (#161) 
+
+0.7.0 / 2019-05-04
+------------------
+- Pulse processing upgrades (filtering etc) (#154)
+- Run selection and run-level metadata handling (#155)
+- Stabilize and shortedn lineage hash (#152)
+- Shared memory transfers, parallel save/load (#150)
+- Ensure unique filenames (#143)
+- Many processing fixes (#134, #129)
+
 0.6.1 / 2019-01-20
 -------------------
 - Many bugfixes from DAQ test (#118)
