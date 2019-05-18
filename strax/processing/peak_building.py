@@ -9,10 +9,11 @@ __all__ = 'find_peaks sum_waveform'.split()
 
 @utils.growing_result(dtype=peak_dtype(), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_peaks(hits, to_pe,
+def find_peaks(hits, adc_to_pe,
                gap_threshold=300,
                left_extension=20, right_extension=150,
-               min_hits=3, min_area=0,
+               min_area=0,
+               min_channels=2,
                max_duration=int(1e9),
                _result_buffer=None, result_dtype=None):
     """Return peaks made from grouping hits together
@@ -21,7 +22,7 @@ def find_peaks(hits, to_pe,
     :param left_extension: Extend peaks by this many ns left
     :param right_extension: Extend peaks by this many ns right
     :param gap_threshold: No hits for this much ns means new peak
-    :param min_hits: Peaks with less than min_hits are not returned
+    :param min_channels: Peaks with less contributing channels are not returned
     :param min_area: Peaks with less than min_area are not returned
     :param max_duration: Peaks are forcefully ended after this many ns
     """
@@ -30,7 +31,7 @@ def find_peaks(hits, to_pe,
     if not len(hits):
         return
     assert hits[0]['dt'] > 0, "Hit does not indicate sampling time"
-    assert min_hits > 0, "min_hits must be >= 1"
+    assert min_channels >= 1, "min_channels must be >= 1"
     assert gap_threshold > left_extension + right_extension, \
         "gap_threshold must be larger than left + right extension"
     assert max_duration / hits[0]['dt'] < np.iinfo(np.int32).max, \
@@ -40,8 +41,9 @@ def find_peaks(hits, to_pe,
     # assert max_duration < np.iinfo(np.int32).max * hits[0]['dt'], \
     #   "Max duration must fit in a 32-bit signed integer"
 
-    area_per_channel = np.zeros(len(buffer[0]['area_per_channel']),
-                                dtype=np.int32)
+    n_channels = len(buffer[0]['area_per_channel'])
+    area_per_channel = np.zeros(n_channels, dtype=np.float32)
+
     in_peak = False
     peak_endtime = 0
 
@@ -66,8 +68,9 @@ def find_peaks(hits, to_pe,
         # Add hit's properties to the current peak candidate
         p['n_hits'] += 1
         peak_endtime = max(peak_endtime, t1)
-        p['area_per_channel'][hit['channel']] += hit['area']
-        p['area'] += hit['area'] * to_pe[hit['channel']]
+        hit_area_pe = hit['area'] * adc_to_pe[hit['channel']]
+        area_per_channel[hit['channel']] += hit_area_pe
+        p['area'] += hit_area_pe
 
         # Look at the next hit to see if THIS hit is the last in a peak.
         # If this is the final hit, it is last by definition.
@@ -77,7 +80,10 @@ def find_peaks(hits, to_pe,
             in_peak = False
 
             # Do not save if tests are not met. Next hit will erase temp info
-            if not (p['n_hits'] >= min_hits and p['area'] >= min_area):
+            if p['area'] < min_area:
+                continue
+            n_channels = (area_per_channel != 0).sum()
+            if n_channels < min_channels:
                 continue
 
             # Compute final quantities
@@ -100,7 +106,7 @@ def find_peaks(hits, to_pe,
 def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
-    
+
     :param n_channels: Number of channels that contribute to the total area
     and n_saturated_channels.
     For further channels we still calculate area_per_channel and saturated_channel.
@@ -122,11 +128,19 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     # Records before this do not need to be considered anymore
     left_r_i = 0
 
+    n_channels = len(peaks[0]['area_per_channel'])
+    area_per_channel = np.zeros(n_channels, dtype=np.float32)
+
     for peak_i, p in enumerate(peaks):
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
+
+        # Clear area and area per channel
+        # (in case find_peaks already populated them)
+        area_per_channel *= 0
+        p['area'] = 0
 
         # Find first record that contributes to this peak
         for left_r_i in range(left_r_i, len(records)):
@@ -144,44 +158,45 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             r = records[right_r_i]
             ch = r['channel']
 
-            s = int((p['time'] - r['time']) // dt)
+            shift = (p['time'] - r['time']) // dt
             n_r = r['length']
             n_p = p_length
 
-            if s <= -n_p:
+            if shift <= -n_p:
                 # Record is completely to the right of the peak;
                 # we've seen all overlapping records
                 break
 
-            if n_r <= s:
-                # Only the zero-padded part of the record coincidentally
-                # overlaps with the peak, so this is not part of it
+            if n_r <= shift:
+                # The (real) data in this record does not actually overlap
+                # with the peak
+                # (although a previous, longer record did overlap)
                 continue
 
             # Range of record that contributes to peak
-            r_start = max(0, s)
-            r_end = min(n_r, s + n_p)
+            r_start = max(0, shift)
+            r_end = min(n_r, shift + n_p)
             assert r_end > r_start
+
+            # Range of peak that receives record
+            p_start = max(0, -shift)
+            p_end = min(n_p, -shift + n_r)
+
+            assert p_end - p_start == r_end - r_start, "Ouch, off-by-one error"
 
             max_in_record = r['data'][r_start:r_end].max()
             p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
 
-            # TODO Do we need .astype(np.int32).sum() ??
             bl_fpart = r['baseline'] % 1
-            p['area_per_channel'][ch] += (
-                r['data'][r_start:r_end].sum()
-                + (int(round(
-                    bl_fpart * (r_end - r_start)))))
+            # TODO: check numba does casting correctly here!
+            pe_waveform = adc_to_pe[ch] * (
+                    r['data'][r_start:r_end] + bl_fpart)
 
-            # Range of peak that receives record
-            p_start = max(0, -s)
-            p_end = min(n_p, -s + n_r)
+            swv_buffer[p_start:p_end] += pe_waveform
 
-            assert p_end - p_start == r_end - r_start, "Ouch, off-by-one error"
-
-            if p_end - p_start > 0:
-                swv_buffer[p_start:p_end] += \
-                    (r['data'][r_start:r_end] + bl_fpart) * adc_to_pe[ch]
+            area_pe = pe_waveform.sum()
+            area_per_channel[ch] += area_pe
+            p['area'] += area_pe
 
         # Store the sum waveform
         # Do we need to downsample the swv to store it?
@@ -199,8 +214,6 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         else:
             p['data'][:p_length] = swv_buffer[:p_length]
 
-        # Store the total area and saturation count
-        p['area'] = (p['area_per_channel']
-                     * adc_to_pe).sum()
+        # Store the saturation count and area per channel
         p['n_saturated_channels'] = p['saturated_channel'].sum()
-
+        p['area_per_channel'][:] = area_per_channel
