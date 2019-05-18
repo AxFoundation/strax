@@ -68,7 +68,7 @@ class Mailbox:
     """
 
     DEFAULT_TIMEOUT = 300
-    DEFAULT_MAX_MESSAGES = 20
+    DEFAULT_MAX_MESSAGES = 2
 
     def __init__(self,
                  name='mailbox',
