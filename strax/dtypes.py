@@ -79,13 +79,13 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Integral across channels in photoelectrons',
             'area'), np.float32),
         # Area per channel in ADC * samples
-        (('Integral per channel in ADX x samples (not PE!)',
-            'area_per_channel'), np.int32, n_channels),
+        (('Integral per channel in PE',
+            'area_per_channel'), np.float32, n_channels),
         # Number of hits from which this peak was constructed
         # (zero if peak was split afterwards)
         (("Number of hits from which peak was constructed "
           "(currently zero if peak is split afterwards)",
-            'n_hits'), np.int16),
+            'n_hits'), np.int32),
         # Waveform data in PE/sample
         (('Waveform data in PE/sample (not PE/ns!)',
             'data'), np.float32, n_sum_wv_samples),
