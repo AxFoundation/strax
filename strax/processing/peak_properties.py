@@ -69,10 +69,13 @@ def compute_widths(peaks):
     # Which area fractions do we need times for?
     desired_fr = np.concatenate([0.5 - desired_widths / 2,
                                  0.5 + desired_widths / 2])
-    desired_fr = np.sort(np.unique(desired_fr))
+
+    # We lose the 50% fraction with this operation, let's add it back
+    desired_fr = np.sort(np.unique(np.append(desired_fr, [0.5])))
 
     fr_times = index_of_fraction(peaks, desired_fr)
     fr_times *= peaks['dt'].reshape(-1, 1)
 
     i = len(desired_fr) // 2
-    peaks['width'][:, 1:] = fr_times[:, i:] - fr_times[:, ::-1][:, i:]
+    peaks['width'] = fr_times[:, i:] - fr_times[:, ::-1][:, i:]
+    peaks['area_decile_from_midpoint'] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
