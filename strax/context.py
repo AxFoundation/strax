@@ -894,7 +894,8 @@ class Context:
             ... with blinded or _blinded, unblinded, blablinded, etc.
          - `run_selection(include_tags=['blinded', 'unblinded'])`
             ... with blinded OR unblinded, but not blablinded.
-         - `run_selection(include_tags='blinded', exclude_tags=['bad', 'messy'])`
+         - `run_selection(include_tags='blinded',
+                          exclude_tags=['bad', 'messy'])`
            select blinded dsatasets that aren't bad or messy
         """
         if self.runs is None:

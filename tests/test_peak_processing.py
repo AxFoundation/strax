@@ -10,13 +10,14 @@ import strax
 @given(fake_hits,
        st.one_of(st.just(1), st.just(3)),
        st.one_of(st.just(0), st.just(3)))
-def test_find_peaks(hits, min_hits, min_area):
+def test_find_peaks(hits, min_channels, min_area):
+    hits['area'] = 1
     gap_threshold = 10
     peaks = strax.find_peaks(hits,
-                             to_pe=np.ones(1),
+                             adc_to_pe=np.ones(1),
                              right_extension=0, left_extension=0,
                              gap_threshold=gap_threshold,
-                             min_hits=min_hits,
+                             min_channels=min_channels,
                              min_area=min_area)
     # Check sanity
     assert np.all(peaks['length'] > 0)
@@ -25,11 +26,11 @@ def test_find_peaks(hits, min_hits, min_area):
     # Check if requirements satisfied
     if min_area != 0:
         assert np.all(peaks['area'] >= min_area)
-    if min_hits != 1:
-        assert np.all(peaks['n_hits'] >= min_hits)
+    if min_channels != 1:
+        assert np.all(peaks['n_hits'] >= min_channels)
 
     # Without requirements, all hits must occur in a peak
-    if min_area == 0 and min_hits == 1:
+    if min_area == 0 and min_channels == 1:
         assert np.sum(peaks['n_hits']) == len(hits)
         assert np.all(strax.fully_contained_in(hits, peaks) > -1)
 

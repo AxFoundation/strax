@@ -152,7 +152,8 @@ class DataDirectory(StorageFrontend):
                 continue
             yield osp.join(self.path, dirname)
 
-    def _parse_folder_name(self, fn):
+    @staticmethod
+    def _parse_folder_name(fn):
         """Return (run_id, data_type, hash) if folder name matches
         DataDirectory convention, raise InvalidFolderNameFormat otherwise
         """
@@ -333,5 +334,6 @@ class FileSaver(strax.Saver):
         os.rename(self.tempdirname, self.dirname)
 
 
+@export
 class InvalidFolderNameFormat(Exception):
     pass
