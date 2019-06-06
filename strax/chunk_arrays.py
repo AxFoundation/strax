@@ -15,17 +15,21 @@ class ChunkPacer:
         self.source = source
         self.buffer = []
         self.buffer_items = 0
-        self.exhausted = False
-        
+        self._source_exhausted = False
+
         if self.dtype is None:
             # Peek at one item to figure out the dtype
             self.dtype = self.peek().dtype
+
+    @property
+    def exhausted(self):
+        return self._source_exhausted and self.buffer_items == 0
 
     def _fetch_another(self):
         try:
             x = next(self.source)
         except StopIteration:
-            self.exhausted = True
+            self._source_exhausted = True
             raise StopIteration
         self.buffer.append(x)
         self.buffer_items += len(x)
@@ -43,8 +47,8 @@ class ChunkPacer:
 
     def _take_from_buffer(self, n):
         self._squash_buffer()
-        if self.buffer_items == 0 and self.exhausted:
-            raise StopIteration
+        if self.buffer_items == 0:
+            return np.empty(0, dtype=self.dtype)
         b = self.buffer[0]
 
         n = min(n, len(b))
@@ -56,6 +60,8 @@ class ChunkPacer:
     def get_n(self, n: int):
         """Return array of the next n elements produced by source,
         or (if this is less) as many as the source can still produce.
+        
+        raises 
         """
         try:
             while self.buffer_items < n:
@@ -109,11 +115,8 @@ class ChunkPacer:
 def fixed_length_chunks(source, n=10):
     """Yield arrays of maximum length n"""
     p = ChunkPacer(source)
-    try:
-        while True:
-            yield p.get_n(n)
-    except StopIteration:
-        return
+    while not p.exhausted:
+        yield p.get_n(n)
 
 
 @export
@@ -121,11 +124,8 @@ def fixed_size_chunks(source, n_bytes=int(1e8), dtype=None):
     """Yield arrays of maximum size n_bytes"""
     p = ChunkPacer(source, dtype=dtype)
     n = int(n_bytes / p.itemsize)
-    try:
-        while True:
-            yield p.get_n(n)
-    except StopIteration:
-        return
+    while not p.exhausted:
+        yield p.get_n(n)
 
 
 @export
@@ -135,11 +135,8 @@ def alternating_size_chunks(source, *sizes):
     p = ChunkPacer(source)
     ns = np.floor(np.array(sizes) / p.itemsize).astype(np.int)
     i = 0
-    while True:
-        try:
-            yield p.get_n(ns[i])
-        except StopIteration:
-            return
+    while not p.exhausted:
+        yield p.get_n(ns[i])
         i = (i + 1) % len(sizes)
 
 
@@ -150,12 +147,9 @@ def alternating_duration_chunks(source, *durations):
     p = ChunkPacer(source)
     t = p.peek()[0]['time']
     i = 0
-    while True:
-        try:
-            t += durations[i]
-            yield p.get_until(t, func=strax.endtime)
-        except StopIteration:
-            return
+    while not p.exhausted:
+        t += durations[i]
+        yield p.get_until(t, func=strax.endtime)
         i = (i + 1) % len(durations)
 
 
@@ -181,7 +175,10 @@ def same_stop(*sources, field=None, func=None):
 
     for x in pacemaker:
         if not len(x):
+            yield tuple([x] + [np.empty(0, dtype=s.dtype)
+                               for s in others])
             continue
+
         threshold = x[-1]
         if field is not None:
             threshold = threshold[field]
