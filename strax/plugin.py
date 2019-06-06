@@ -204,6 +204,7 @@ class Plugin:
             # Online input support
             while not self.is_ready(chunk_i):
                 if self.source_finished():
+                    print("Source finished!")
                     # Source is finished, there is no next chunk: break out
                     return
 

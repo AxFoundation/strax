@@ -15,9 +15,18 @@ class ChunkPacer:
         self.source = source
         self.buffer = []
         self.buffer_items = 0
+        self.exhausted = False
+        
+        if self.dtype is None:
+            # Peek at one item to figure out the dtype
+            self.dtype = self.peek().dtype
 
     def _fetch_another(self):
-        x = next(self.source)
+        try:
+            x = next(self.source)
+        except StopIteration:
+            self.exhausted = True
+            raise StopIteration
         self.buffer.append(x)
         self.buffer_items += len(x)
 
@@ -34,7 +43,7 @@ class ChunkPacer:
 
     def _take_from_buffer(self, n):
         self._squash_buffer()
-        if self.buffer_items == 0:
+        if self.buffer_items == 0 and self.exhausted:
             raise StopIteration
         b = self.buffer[0]
 
@@ -93,9 +102,6 @@ class ChunkPacer:
 
     @property
     def itemsize(self):
-        if self.dtype is None:
-            # Peek at one item to figure out the dtype and size
-            self.dtype = self.peek().dtype
         return np.zeros(1, dtype=self.dtype).nbytes
 
 
