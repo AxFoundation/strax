@@ -68,7 +68,7 @@ class Mailbox:
     """
 
     DEFAULT_TIMEOUT = 300
-    DEFAULT_MAX_MESSAGES = 20
+    DEFAULT_MAX_MESSAGES = 2
 
     def __init__(self,
                  name='mailbox',
@@ -146,9 +146,11 @@ class Mailbox:
         """Kill the mailbox following a caught exception e"""
         if isinstance(e, MailboxKilled):
             # Kill this mailbox too.
+            self.log.debug("Propagating MailboxKilled exception")
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         else:
+            self.log.error("Killing mailbox due to exception {e}!")
             self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
             raise e
 
@@ -181,6 +183,7 @@ class Mailbox:
         except Exception as e:
             self.kill_from_exception(e)
         else:
+            self.log.debug("Producing iterable exhausted, regular stop")
             self.close()
 
     def send(self, msg, msg_number: typing.Union[int, None] = None):
@@ -242,6 +245,7 @@ class Mailbox:
             self._read_condition.notify_all()
 
     def close(self):
+        self.log.debug(f"Closing; sending StopIteration")
         with self._lock:
             self.send(StopIteration)
             self.closed = True
@@ -285,9 +289,9 @@ class Mailbox:
                     next_number += 1
 
                 if len(to_yield) > 1:
-                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}")
+                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}  in subscriber {subscriber_i}")
                 else:
-                    self.log.debug(f"Read {to_yield[0][0]}")
+                    self.log.debug(f"Read {to_yield[0][0]} in subscriber {subscriber_i}")
 
                 self._subscribers_have_read[subscriber_i] = next_number - 1
 

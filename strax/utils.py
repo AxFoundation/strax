@@ -260,17 +260,27 @@ def formatted_exception():
 
 
 @export
-def print_entry(d, n=0, show_data=False):
-    """ Print entry number n in human-readable format.
-    Default behavior is to skip the entry 'data' since it clutters output.
+def print_record(x, skip_array=True):
+    """Print record(s) d in human-readable format
+    :param skip_array: Omit printing array fields
     """
+    if len(x.shape):
+        for q in x:
+            print_record(q)
+
     # Check what number of spaces required for nice alignment
-    max_len = np.max([len(key) for key in d.dtype.names])
-    el = d[n]
-    for key in d.dtype.names:
-        if (show_data or key != 'data'):
-            print(("{:<%d}: " % max_len).format(key), el[key])
-    return
+    max_len = np.max([len(key) for key in x.dtype.names])
+    for key in x.dtype.names:
+        try:
+            len(x[key])
+        except TypeError:
+            # Not an array field
+            pass
+        else:
+            if skip_array:
+                continue
+
+        print(("{:<%d}: " % max_len).format(key), x[key])
 
 
 @export

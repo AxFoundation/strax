@@ -1,9 +1,16 @@
+
+0.7.2 / 2019-06-06
+------------------
+- Area per channel in PE (#187)
+- Update pinned dependencies, notably numba to 0.44.0 (#186)
+- Fixes to empty chunk handling and chunk_arrays
+
 0.7.1 / 2019-05-11
 ------------------
 - Sum waveform now operates on all channels (#158)
 - MongoDB output (#159)
 - Better exception handling in saver (#160)
-- Force plugins to produce correct dtype (#161) 
+- Force plugins to produce correct dtype (#161)
 
 0.7.0 / 2019-05-04
 ------------------
