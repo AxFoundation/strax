@@ -20,6 +20,14 @@ strax.storage.files module
     :undoc-members:
     :show-inheritance:
 
+strax.storage.mongo module
+--------------------------
+
+.. automodule:: strax.storage.mongo
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 strax.storage.s3 module
 -----------------------
 
