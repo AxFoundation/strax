@@ -150,7 +150,7 @@ class Mailbox:
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         else:
-            self.log.error("Killing mailbox due to exception {e}!")
+            self.log.error(f"Killing mailbox due to exception {e}!")
             self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
             raise e
 

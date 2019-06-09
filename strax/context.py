@@ -133,13 +133,13 @@ class Context:
             kwargs = strax.combine_configs(self.context_config,
                                            kwargs,
                                            mode='update')
-            register = list(self._plugin_class_registry.values()) + register
 
-        return Context(storage=storage,
-                       config=config,
-                       register=register,
-                       register_all=register_all,
-                       **kwargs)
+        new_c = Context(storage=storage, config=config, **kwargs)
+        if not replace:
+            new_c._plugin_class_registry = self._plugin_class_registry.copy()
+        new_c.register_all(register_all)
+        new_c.register(register)
+        return new_c
 
     def set_config(self, config=None, mode='update'):
         """Set new configuration options
@@ -189,18 +189,20 @@ class Context:
 
     def register(self, plugin_class, provides=None):
         """Register plugin_class as provider for data types in provides.
-        :param plugin_class: class inheriting from StraxPlugin
-        :param provides: list of data types which this plugin provides.
+        :param plugin_class: class inheriting from strax.Plugin.
+        You can also pass a sequence of plugins to register, but then
+        you must omit the provides argument.
+        :param provides: list of alternative names for the data types
+        this plugin provides.
 
-        Plugins always register for the data type specified in the .provide
-        class attribute. If such is not available, we will construct one from
+        Plugins always register for the data types specified in the .provides
+        class attribute. If this is not specified, we will construct one from
         the class name (CamelCase -> snake_case)
 
         Returns plugin_class (so this can be used as a decorator)
         """
         if isinstance(plugin_class, (tuple, list)) and provides is None:
             # shortcut for multiple registration
-            # TODO: document
             for x in plugin_class:
                 self.register(x)
             return
@@ -208,15 +210,27 @@ class Context:
         if not hasattr(plugin_class, 'provides'):
             # No output name specified: construct one from the class name
             snake_name = strax.camel_to_snake(plugin_class.__name__)
-            plugin_class.provides = snake_name
+            plugin_class.provides = (snake_name,)
 
-        if provides is not None:
-            provides += [plugin_class.provides]
-        else:
-            provides = [plugin_class.provides]
+        # Ensure plugin_class.provides is a tuple
+        if isinstance(plugin_class.provides, str):
+            plugin_class.provides = tuple([plugin_class.provides])
 
-        for p in provides:
-            self._plugin_class_registry[p] = plugin_class
+        for p in plugin_class.provides:
+            self._plugin_class_registry[p] = (plugin_class, p)
+
+        # Handle aliases for data types
+        if provides is None:
+            return plugin_class
+        provides = strax.to_str_tuple(provides)
+        if len(provides) != len(plugin_class.provides):
+            raise ValueError(
+                f"Attempt to register {plugin_class.__name__} for "
+                f"{len(provides)} data types, but plugin produces "
+                f"{len(plugin_class.provides)} outputs!")
+
+        for alias, orig_name in zip(provides, plugin_class.provides):
+            self._plugin_class_registry[alias] = (plugin_class, orig_name)
 
         return plugin_class
 
@@ -324,7 +338,7 @@ class Context:
         # (helps spot typos)
         all_opts = set().union(*[
             pc.takes_config.keys()
-            for pc in self._plugin_class_registry.values()])
+            for pc, _ in self._plugin_class_registry.values()])
         for k in self.config:
             if k not in all_opts:
                 warnings.warn(f"Option {k} not taken by any registered plugin")
@@ -338,7 +352,7 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            plugins[d] = p = self._plugin_class_registry[d]()
+            plugins[d] = p = self._plugin_class_registry[d][0]()
             p.run_id = run_id
 
             # The plugin may not get all the required options here
@@ -361,7 +375,7 @@ class Context:
                 else:
                     # No dependencies: assume provided data kind and
                     # data type are synonymous
-                    p.data_kind = p.provides
+                    p.data_kind = p.provides[0]
 
             if not hasattr(p, 'dtype'):
                 p.dtype = p.infer_dtype()

@@ -47,7 +47,7 @@ class Plugin:
     __version__ = '0.0.0'
     data_kind: str
     depends_on: tuple
-    provides: str
+    provides: tuple
 
     compressor = 'blosc'
 
@@ -302,6 +302,10 @@ class ParallelSourcePlugin(Plugin):
         # List of ouputs to send
         self.outputs_to_send = set()
 
+        if len(self.provides) > 1:
+            raise NotImplementedError(
+                "ParallelSourcePlugin doesn't support multiple outputs yet")
+
     def setup_mailboxes(self, components, mailboxes, executor):
         """Setup this plugin inside a ThreadedMailboxProcessor
         This will gather as much plugins/savers as possible as "subsidiaries"
@@ -311,14 +315,14 @@ class ParallelSourcePlugin(Plugin):
         plugins = components.plugins
         savers = components.savers
 
-        del plugins[self.provides]
+        del plugins[self.provides[0]]
 
         # Gather all plugins that do not rechunk and which branch out as a
         # simple tree from the input plugin.
         # We'll run these all together in one process.
         while True:
             for d, p in plugins.items():
-                i_have = [self.provides] + list(self.sub_plugins.keys())
+                i_have = [self.provides[0]] + list(self.sub_plugins.keys())
                 if (len(p.depends_on) == 1
                         and p.depends_on[0] in i_have
                         and p.parallel):
@@ -335,10 +339,10 @@ class ParallelSourcePlugin(Plugin):
         self.outputs_to_send.update(set(components.targets))
         for d, p in plugins.items():
             self.outputs_to_send.update(set(p.depends_on))
-        self.outputs_to_send &= self.sub_plugins.keys() | {self.provides}
+        self.outputs_to_send &= self.sub_plugins.keys() | {self.provides[0]}
 
         # If the savers do not require rechunking, run them in this way also
-        for d in list(self.sub_plugins.keys()) + [self.provides]:
+        for d in list(self.sub_plugins.keys()) + [self.provides[0]]:
             if d in savers:
 
                 # Get the plugin... awkward...
@@ -346,7 +350,7 @@ class ParallelSourcePlugin(Plugin):
                     p = self.sub_plugins[d]
                 elif d in plugins:
                     p = plugins[d]
-                elif d == self.provides:
+                elif d == self.provides[0]:
                     p = self
                 else:
                     raise RuntimeError
@@ -365,7 +369,7 @@ class ParallelSourcePlugin(Plugin):
         # maybe self.provides is requested by someone,
         # in which case that mailbox needs to exist as usual
         # (see also #94)
-        mailbox_name = self.provides + '_parallelsource'
+        mailbox_name = self.provides[0] + '_parallelsource'
         mailboxes[mailbox_name].add_sender(self.iter(
             iters={}, executor=executor))
         mailboxes[mailbox_name].add_reader(partial(self.send_outputs,
@@ -407,7 +411,7 @@ class ParallelSourcePlugin(Plugin):
         result = super().do_compute(*args, chunk_i=chunk_i, **kwargs)
         # Fortunately everybody else is in a different process...
         self._output = {}
-        self._grok(d=self.provides, x=result, chunk_i=chunk_i)
+        self._grok(d=self.provides[0], x=result, chunk_i=chunk_i)
         for d in self.outputs_to_send:
             assert d in self._output, f"Output {d} missing!"
         return self._output
