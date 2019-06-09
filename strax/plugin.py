@@ -80,13 +80,20 @@ class Plugin:
             raise ValueError('depends_on not provided for '
                              f'{self.__class__.__name__}')
 
+        self.depends_on = strax.to_str_tuple(self.depends_on)
+
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(
             inspect.signature(self.compute).parameters.keys())
         if 'chunk_i' in compute_pars:
             self.compute_takes_chunk_i = True
             del compute_pars[compute_pars.index('chunk_i')]
+        print(self, compute_pars, self.compute_takes_chunk_i)
         self.compute_pars = compute_pars
+
+    @property
+    def multi_output(self):
+        return len(self.provides) > 1
 
     def setup(self):
         """Hook if plugin wants to do something on initialization
@@ -106,15 +113,27 @@ class Plugin:
         """
         return self.__version__
 
-    def metadata(self, run_id):
+    def _dtype_for(self, data_type):
+        if self.multi_output:
+            return self.dtype[data_type]
+        return self.dtype
+
+    def _data_kind_for(self, data_type):
+        if self.multi_output:
+            return self.data_kind[data_type]
+        return self.data_kind
+
+    def metadata(self, run_id, data_type, alias):
         """Metadata to save along with produced data"""
+        if not data_type in self.provides:
+            raise RuntimeError(f"{data_type} not in {self.provides}?")
         return dict(
             run_id=run_id,
-            data_type=self.provides,
-            data_kind=self.data_kind,
-            dtype=self.dtype,
-            lineage_hash=strax.DataKey(run_id, self.provides, self.lineage
-                                       ).lineage_hash,
+            data_type=alias,
+            data_kind=self._data_kind_for(data_type),
+            dtype=self._dtype_for(data_type),
+            lineage_hash=strax.DataKey(
+                run_id, alias, self.lineage).lineage_hash,
             compressor=self.compressor,
             lineage=self.lineage)
 
@@ -134,7 +153,7 @@ class Plugin:
         deps_by_kind = dict()
         key_deps = []
         for d in self.depends_on:
-            k = self.deps[d].data_kind
+            k = self.deps[d]._data_kind_for(d)
             deps_by_kind.setdefault(k, [])
 
             # If this has time information, put it first in the list
@@ -239,6 +258,17 @@ class Plugin:
     def cleanup(self, wait_for):
         pass
 
+    def _check_dtype(self, x, d=None):
+        if d is None:
+            assert not self.multi_output
+            d = self.provides[0]
+        if x.dtype != self._dtype_for(d):
+            raise strax.PluginGaveWrongOutput(
+                f"Plugin {self.__class__.__name__} did not deliver "
+                f"data type {d} as promised.\n"
+                f"Promised: {self._dtype_for(d)}\n"
+                f"Delivered: {x.dtype}.")
+
     def do_compute(self, chunk_i=None, **kwargs):
         """Wrapper for the user-defined compute method
 
@@ -250,23 +280,23 @@ class Plugin:
         else:
             result = self.compute(**kwargs)
 
-        if isinstance(result, dict):
-            if not len(result):
-                # TODO: alt way of getting length?
-                raise RuntimeError("if returning dict, must have a key")
-            some_key = list(result.keys())[0]
-            n = len(result[some_key])
-            r = np.zeros(n, dtype=self.dtype)
-            for k, v in result.items():
-                r[k] = v
-            result = r
+        if self.multi_output:
+            if not isinstance(result, dict):
+                raise ValueError(
+                    f"{self.__class__.__name__} is multi-output and should "
+                    "provide a dict output {dtypename: array}")
+            r2 = dict()
+            for d in self.provides:
+                if d not in result:
+                    raise ValueError(f"Data type {d} missing from output of "
+                                     f"{p.__class__.__name__}!")
+                r2[d] = strax.dict_to_rec(result[d], self._dtype_for(d))
+                self._check_dtype(r2[d], d)
+            result = r2
 
-        if result.dtype != self.dtype:
-            raise strax.PluginGaveWrongOutput(
-                f"Plugin {self.__class__.__name__} did not deliver "
-                f"the data type it promised.\n"
-                f"Promised: {self.dtype}\n"
-                f"Delivered: {result.dtype}.")
+        else:
+            result = strax.dict_to_rec(result, dtype=self.dtype)
+            self._check_dtype(result)
 
         return result
 
