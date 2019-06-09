@@ -93,6 +93,7 @@ class Context:
         self.storage = [strax.DataDirectory(s) if isinstance(s, str) else s
                         for s in storage]
 
+        # Dict mapping dtype alias -> (plugin class, orig dtype name)
         self._plugin_class_registry = dict()
 
         self.set_config(config, mode='replace')
@@ -102,6 +103,13 @@ class Context:
             self.register_all(register_all)
         if register is not None:
             self.register(register)
+
+    @property
+    def _dtype_aliases(self):
+        """Return dict with {alias: orig_name} for dtypes"""
+        return {
+            alias: orig_name
+            for alias, (p, orig_name) in self._plugin_class_registry.items()}
 
     def new_context(self,
                     storage=tuple(),
@@ -331,8 +339,10 @@ class Context:
     def _get_plugins(self,
                      targets: ty.Tuple[str],
                      run_id: str) -> ty.Dict[str, strax.Plugin]:
-        """Return dictionary of plugins necessary to compute targets
+        """Return dictionary of plugin instances necessary to compute targets
         from scratch.
+        For a plugin that produces multiple outputs, we make only a single
+        instance, which is referenced under multiple keys in the output dict.
         """
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
@@ -352,7 +362,10 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            plugins[d] = p = self._plugin_class_registry[d][0]()
+            p = self._plugin_class_registry[d][0]()
+            for d in p.provides:
+                plugins[d] = p
+
             p.run_id = run_id
 
             # The plugin may not get all the required options here
@@ -368,7 +381,7 @@ class Context:
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
-            if not hasattr(p, 'data_kind'):
+            if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
                     # Assume data kind is the same as the first dependency
                     p.data_kind = p.deps[p.depends_on[0]].data_kind
@@ -380,32 +393,30 @@ class Context:
             if not hasattr(p, 'dtype'):
                 p.dtype = p.infer_dtype()
 
-            if not isinstance(p, np.dtype):
-                dtype = []
-                for x in p.dtype:
-                    if len(x) == 3:
-                        if isinstance(x[0], tuple):
-                            # Numpy syntax for array field
-                            dtype.append(x)
-                        else:
-                            # Lazy syntax for normal field
-                            field_name, field_type, comment = x
-                            dtype.append(((comment, field_name), field_type))
-                    elif len(x) == 2:
-                        # (field_name, type)
-                        dtype.append(x)
-                    elif len(x) == 1:
-                        # Omitted type: assume float
-                        dtype.append((x, np.float))
-                    else:
-                        raise ValueError(f"Invalid field specification {x}")
-                p.dtype = np.dtype(dtype)
+            if p.multi_output:
+                if (not hasattr(p, 'data_kind')
+                        or not isinstance(p.data_kind, dict)):
+                    raise ValueError(
+                        f"{p.__class__.__name__} has multiple outputs and "
+                        "must declare its data kind as a dict: "
+                        "{dtypename: data kind}.")
+                if not isinstance(p.dtype, dict):
+                    raise ValueError(
+                        f"{p.__class__.__name__} has multiple outputs, so its "
+                        "dtype must be specified as a dict: {output: dtype}.")
+                p.dtype = {k: strax.to_numpy_dtype(dt)
+                           for k, dt in p.dtype.items()}
+            else:
+                p.dtype = strax.to_numpy_dtype(p.dtype)
+
             return p
 
         plugins = collections.defaultdict(get_plugin)
         for t in targets:
-            # This works without the LHS too, but your IDE might not get it :-)
-            plugins[t] = get_plugin(t)
+            p = get_plugin(t)
+            # This assignment is actually unnecessary due to defaultdict,
+            # but just for clarity:
+            plugins[t] = p
 
         return plugins
 
@@ -464,7 +475,7 @@ class Context:
             n_range = n_start[_inds[0]], n_end[_inds[1]]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
-        # have to do computation.(their instances will stick around
+        # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
         savers = collections.defaultdict(list)
@@ -477,22 +488,27 @@ class Context:
                 return
             seen.add(d)
             p = plugins[d]
-            key = strax.DataKey(run_id, d, p.lineage)
 
+            # Can we load this data, or must we compute it?
+            key = strax.DataKey(run_id, d, p.lineage)
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    # Bit clunky... but allows specifying executor later
+                    # Partial is clunky... but allows specifying executor later
+                    # Since it doesn't run until later, we must do a find now
+                    # that we can still handle DataNotAvailable
                     sf.find(key, **self._find_options)
                     loaders[d] = partial(sf.loader,
-                        key,
-                        n_range=n_range,
-                        **self._find_options)
-                    # Found it! No need to make it
-                    del plugins[d]
-                    break
+                                         key,
+                                         n_range=n_range,
+                                         **self._find_options)
                 except strax.DataNotAvailable:
                     continue
+                else:
+                    # Found it! No need to make it or look in other frontends
+                    del plugins[d]
+                    break
             else:
+                # Data not found anywhere. We will be computing it.
                 if time_range is not None:
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
@@ -504,34 +520,15 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                # Not in any cache. We will be computing it.
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
 
-            # Should we save this data?
-            if time_range is not None:
-                # No, since we're not even getting the whole data.
-                # Without this check, saving could be attempted if the
-                # storage converter mode is enabled.
-                self.log.warning(f"Not saving {d} while "
-                                 f"selecting a time range in the run")
+            # Should we save this data? If not, return.
+            if (d not in to_compute
+                    and not self.context_config['storage_converter']):
                 return
-            if any([len(v) > 0
-                    for k, v in self._find_options.items()
-                    if 'fuzzy' in k]):
-                # In fuzzy matching mode, we cannot (yet) derive the lineage
-                # of any data we are creating. To avoid create false
-                # data entries, we currently do not save at all.
-                self.log.warning(f"Not saving {d} while fuzzy matching is "
-                                 f"turned on.")
-                return
-            if self.context_config['allow_incomplete']:
-                self.log.warning(f"Not saving {d} while loading incomplete "
-                                 f"data is allowed.")
-                return
-
-            elif p.save_when == strax.SaveWhen.NEVER:
+            if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
                 return
@@ -544,26 +541,67 @@ class Context:
             else:
                 assert p.save_when == strax.SaveWhen.ALWAYS
 
-            for sf in self.storage:
-                if sf.readonly:
+            # Warn about conditions that preclude saving, but the user
+            # might not expect.
+            if time_range is not None:
+                # We're not even getting the whole data.
+                # Without this check, saving could be attempted if the
+                # storage converter mode is enabled.
+                self.log.warning(f"Not saving {d} while "
+                                 f"selecting a time range in the run")
+                return
+            if any([len(v) > 0
+                    for k, v in self._find_options.items()
+                    if 'fuzzy' in k]):
+                # In fuzzy matching mode, we cannot (yet) derive the
+                # lineage of any data we are creating. To avoid creating
+                # false data entries, we currently do not save at all.
+                self.log.warning(f"Not saving {d} while fuzzy matching is"
+                                 f" turned on.")
+                return
+            if self.context_config['allow_incomplete']:
+                self.log.warning(f"Not saving {d} while loading incomplete"
+                                 f" data is allowed.")
+                return
+
+            # Save the target and any other outputs of the plugin.
+            # Note this will save duplicate copies of the data
+            # if aliases are used for registration!
+            for d_to_save in set([d] + list(p.provides)):
+                if d_to_save in savers:
+                    # This multi-output plugin was scanned before
+                    assert p.multi_output
                     continue
-                if d not in to_compute:
-                    if not self.context_config['storage_converter']:
+
+                key = strax.DataKey(run_id, d_to_save, p.lineage)
+
+                for sf in self.storage:
+                    if sf.readonly:
                         continue
+                    if d not in to_compute:
+                        # Usually, skip data that's already stored
+                        if not self.context_config['storage_converter']:
+                            continue
+                        # ... but not instorage converter mode
+                        try:
+                            sf.find(key,
+                                    **self._find_options)
+                            # Already have this data in this backend
+                            continue
+                        except strax.DataNotAvailable:
+                            # Don't have it, so let's convert it!
+                            pass
                     try:
-                        sf.find(key,
-                                **self._find_options)
-                        # Already have this data in this backend
-                        continue
+                        savers[d].append(sf.saver(
+                            key,
+                            metadata=p.metadata(
+                                run_id,
+                                d_to_save,
+                                self._dtype_aliases.get(d_to_save,
+                                                        d_to_save))))
                     except strax.DataNotAvailable:
-                        # Don't have it, so let's convert it!
+                        # This frontend cannot save. Too bad.
                         pass
-                try:
-                    savers[d].append(sf.saver(key,
-                                              metadata=p.metadata(run_id)))
-                except strax.DataNotAvailable:
-                    # This frontend cannot save. Too bad.
-                    pass
 
         for d in targets:
             check_cache(d)

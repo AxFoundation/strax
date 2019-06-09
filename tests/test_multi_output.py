@@ -15,8 +15,8 @@ class EvenOddSplit(strax.Plugin):
         rec_count='rec_count')
 
     dtype = dict(
-        even_records = Records.dtype,
-        odd_records=Records.dtype,
+        even_recs = Records.dtype,
+        odd_recs=Records.dtype,
         rec_count = [
             ('time', np.int64, 'Time of first record in chunk'),
             ('endtime', np.int64, 'Endtime of last record in chunk'),
@@ -25,8 +25,8 @@ class EvenOddSplit(strax.Plugin):
 
     def compute(self, records):
         mask = records['time'] % 2 == 0
-        return dict(even_records=records[mask],
-                    odd_records=records[~mask],
+        return dict(even_recs=records[mask],
+                    odd_recs=records[~mask],
                     rec_count=dict(n_records=[len(records)]))
 
 
@@ -49,8 +49,8 @@ def test_multi_output():
         assert not mystrax.is_stored(run_id, 'rec_count')
 
         # Can create
-        mystrax.make(run_id=run_id, targets='funny_peaks')
-        assert mystrax.is_stored(run_id, 'funny_peaks')
+        mystrax.make(run_id=run_id, targets='peaks')
+        assert mystrax.is_stored(run_id, 'peaks')
         assert mystrax.is_stored(run_id, 'even_recs')
 
         # Unnecessary things also got stored
@@ -68,6 +68,6 @@ def test_multi_output():
         assert len(r_even) == n_chunks * recs_per_chunk / 2
         assert len(r_even) == len(r_odd)
 
-        funny_ps = mystrax.get_array(run_id, 'funny_peaks')
+        funny_ps = mystrax.get_array(run_id, 'peaks')
         assert np.all(funny_ps['time'] % 2 == 0)
         assert len(funny_ps) == n_chunks * recs_per_chunk / 2
