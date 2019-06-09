@@ -10,9 +10,9 @@ class EvenOddSplit(strax.Plugin):
     provides = ('even_recs', 'odd_recs', 'rec_count')
 
     data_kind = dict(
-        even_recs='chunk_info',
+        even_recs='even_recs',
         odd_recs='odd_recs',
-        rec_count='rec_count')
+        rec_count='chunk_bonus_data')
 
     dtype = dict(
         even_recs = Records.dtype,
@@ -59,10 +59,10 @@ def test_multi_output():
 
         rec_count = mystrax.get_array(run_id, 'rec_count')
         assert len(rec_count) == n_chunks
-        np.testing.assert_array_equal(rec_count, recs_per_chunk)
+        np.testing.assert_array_equal(rec_count['n_records'], recs_per_chunk)
 
         r_even = mystrax.get_array(run_id, 'even_recs')
-        r_odd = mystrax.get_array(run_id, 'even_recs')
+        r_odd = mystrax.get_array(run_id, 'odd_recs')
         assert np.all(r_even['time'] % 2 == 0)
         assert np.all(r_odd['time'] % 2 == 1)
         assert len(r_even) == n_chunks * recs_per_chunk / 2

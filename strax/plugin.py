@@ -123,17 +123,17 @@ class Plugin:
             return self.data_kind[data_type]
         return self.data_kind
 
-    def metadata(self, run_id, data_type, alias):
+    def metadata(self, run_id, data_type):
         """Metadata to save along with produced data"""
         if not data_type in self.provides:
             raise RuntimeError(f"{data_type} not in {self.provides}?")
         return dict(
             run_id=run_id,
-            data_type=alias,
+            data_type=data_type,
             data_kind=self._data_kind_for(data_type),
             dtype=self._dtype_for(data_type),
             lineage_hash=strax.DataKey(
-                run_id, alias, self.lineage).lineage_hash,
+                run_id, data_type, self.lineage).lineage_hash,
             compressor=self.compressor,
             lineage=self.lineage)
 

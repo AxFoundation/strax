@@ -1,4 +1,5 @@
 from concurrent import futures
+from functools import partial
 import logging
 import typing as ty
 import psutil
@@ -87,18 +88,38 @@ class ThreadedMailboxProcessor:
                 loader(executor=self.thread_executor),
                 name=f'load:{d}')
 
+        multi_output_seen = []
         for d, p in plugins.items():
+            if p in multi_output_seen:
+                continue
+
             executor = None
             if p.parallel == 'process':
                 executor = self.process_executor
             elif p.parallel:
                 executor = self.thread_executor
+            sender = p.iter(
+                iters={d: self.mailboxes[d].subscribe()
+                       for d in p.depends_on},
+                executor=executor)
 
-            self.mailboxes[d].add_sender(p.iter(
-                    iters={d: self.mailboxes[d].subscribe()
-                           for d in p.depends_on},
-                    executor=executor),
-                name=f'build:{d}')
+            if p.multi_output:
+                multi_output_seen.append(p)
+
+                # Create temp mailbox that reveives multi-output dicts
+                # and sends them forth to other mailboxes
+                mname = p.__class__.__name__ + '_divide_outputs'
+                self.mailboxes[mname].add_sender(sender, name=f'build:{d}')
+                # Make sure mailboxees exist
+                for d in p.provides:
+                    self.mailboxes[d]
+                self.mailboxes[mname].add_reader(
+                    partial(strax.divide_outputs,
+                            mailboxes=self.mailboxes,
+                            outputs=p.provides))
+
+            else:
+                self.mailboxes[d].add_sender(sender, name=f'build:{d}')
 
         for d, savers in savers.items():
             for s_i, saver in enumerate(savers):
@@ -111,8 +132,6 @@ class ThreadedMailboxProcessor:
                     rechunk = False
                 if not allow_rechunk:
                     rechunk = False
-
-                from functools import partial
 
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,

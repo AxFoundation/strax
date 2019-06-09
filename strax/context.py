@@ -93,7 +93,6 @@ class Context:
         self.storage = [strax.DataDirectory(s) if isinstance(s, str) else s
                         for s in storage]
 
-        # Dict mapping dtype alias -> (plugin class, orig dtype name)
         self._plugin_class_registry = dict()
 
         self.set_config(config, mode='replace')
@@ -103,13 +102,6 @@ class Context:
             self.register_all(register_all)
         if register is not None:
             self.register(register)
-
-    @property
-    def _dtype_aliases(self):
-        """Return dict with {alias: orig_name} for dtypes"""
-        return {
-            alias: orig_name
-            for alias, (p, orig_name) in self._plugin_class_registry.items()}
 
     def new_context(self,
                     storage=tuple(),
@@ -195,21 +187,18 @@ class Context:
             if k not in self.takes_config:
                 warnings.warn(f"Invalid context option {k}; will do nothing.")
 
-    def register(self, plugin_class, provides=None):
+    def register(self, plugin_class):
         """Register plugin_class as provider for data types in provides.
         :param plugin_class: class inheriting from strax.Plugin.
         You can also pass a sequence of plugins to register, but then
         you must omit the provides argument.
-        :param provides: list of alternative names for the data types
-        this plugin provides.
 
-        Plugins always register for the data types specified in the .provides
-        class attribute. If this is not specified, we will construct one from
-        the class name (CamelCase -> snake_case)
+        If a plugin class omits the .provides attribute, we will construct
+        one from its class name (CamelCase -> snake_case)
 
         Returns plugin_class (so this can be used as a decorator)
         """
-        if isinstance(plugin_class, (tuple, list)) and provides is None:
+        if isinstance(plugin_class, (tuple, list)):
             # shortcut for multiple registration
             for x in plugin_class:
                 self.register(x)
@@ -225,20 +214,7 @@ class Context:
             plugin_class.provides = tuple([plugin_class.provides])
 
         for p in plugin_class.provides:
-            self._plugin_class_registry[p] = (plugin_class, p)
-
-        # Handle aliases for data types
-        if provides is None:
-            return plugin_class
-        provides = strax.to_str_tuple(provides)
-        if len(provides) != len(plugin_class.provides):
-            raise ValueError(
-                f"Attempt to register {plugin_class.__name__} for "
-                f"{len(provides)} data types, but plugin produces "
-                f"{len(plugin_class.provides)} outputs!")
-
-        for alias, orig_name in zip(provides, plugin_class.provides):
-            self._plugin_class_registry[alias] = (plugin_class, orig_name)
+            self._plugin_class_registry[p] = plugin_class
 
         return plugin_class
 
@@ -348,7 +324,7 @@ class Context:
         # (helps spot typos)
         all_opts = set().union(*[
             pc.takes_config.keys()
-            for pc, _ in self._plugin_class_registry.values()])
+            for pc in self._plugin_class_registry.values()])
         for k in self.config:
             if k not in all_opts:
                 warnings.warn(f"Option {k} not taken by any registered plugin")
@@ -362,7 +338,7 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            p = self._plugin_class_registry[d][0]()
+            p = self._plugin_class_registry[d]()
             for d in p.provides:
                 plugins[d] = p
 
@@ -490,6 +466,7 @@ class Context:
             p = plugins[d]
 
             # Can we load this data, or must we compute it?
+            loading_this_data = False
             key = strax.DataKey(run_id, d, p.lineage)
             for sb_i, sf in enumerate(self.storage):
                 try:
@@ -505,6 +482,7 @@ class Context:
                     continue
                 else:
                     # Found it! No need to make it or look in other frontends
+                    loading_this_data = True
                     del plugins[d]
                     break
             else:
@@ -525,7 +503,7 @@ class Context:
                     check_cache(dep_d)
 
             # Should we save this data? If not, return.
-            if (d not in to_compute
+            if (loading_this_data
                     and not self.context_config['storage_converter']):
                 return
             if p.save_when == strax.SaveWhen.NEVER:
@@ -565,11 +543,10 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            # Note this will save duplicate copies of the data
-            # if aliases are used for registration!
             for d_to_save in set([d] + list(p.provides)):
-                if d_to_save in savers:
+                if d_to_save in savers and len(savers[d_to_save]):
                     # This multi-output plugin was scanned before
+                    # let's not create doubled savers
                     assert p.multi_output
                     continue
 
@@ -578,27 +555,26 @@ class Context:
                 for sf in self.storage:
                     if sf.readonly:
                         continue
-                    if d not in to_compute:
-                        # Usually, skip data that's already stored
+                    if loading_this_data:
+                        # Usually, we don't save if we're loading
                         if not self.context_config['storage_converter']:
                             continue
-                        # ... but not instorage converter mode
+                        # ... but in storage converter mode we do:
                         try:
                             sf.find(key,
                                     **self._find_options)
                             # Already have this data in this backend
                             continue
                         except strax.DataNotAvailable:
-                            # Don't have it, so let's convert it!
+                            # Don't have it, so let's save it!
                             pass
+                    # If we get here, we must try to save
                     try:
-                        savers[d].append(sf.saver(
+                        savers[d_to_save].append(sf.saver(
                             key,
                             metadata=p.metadata(
                                 run_id,
-                                d_to_save,
-                                self._dtype_aliases.get(d_to_save,
-                                                        d_to_save))))
+                                d_to_save)))
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass

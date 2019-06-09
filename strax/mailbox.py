@@ -139,6 +139,9 @@ class Mailbox:
             return self._read(subscriber_i=subscriber_i)
 
     def start(self):
+        if not self._n_subscribers:
+            raise ValueError(f"Attempt to start mailbox {self.name} "
+                             f"without subscribers")
         for t in self._threads:
             t.start()
 
@@ -356,3 +359,31 @@ class Mailbox:
     @property
     def _lowest_msg_number(self):
         return self._mailbox[0][0]
+
+
+@export
+def divide_outputs(source, mailboxes, outputs=None):
+    """This code is a 'mail sorter' which gets dicts of arrays from source
+    and sends the right array to the right mailbox.
+    """
+    if outputs is None:
+        outputs = mailboxes.keys()
+    mbs_to_kill = [mailboxes[d] for d in outputs]
+    # TODO: this code duplicates exception handling and cleanup
+    # from Mailbox.send_from! Can we avoid that somehow?
+    try:
+        for result in source:
+            for d, x in result.items():
+                mailboxes[d].send(x)
+    except MailboxKilled as e:
+        for m in mbs_to_kill:
+            m.kill(reason=e.args[0])
+        # This is a propagated exception from another thread
+        # no need to re-raise it
+    except Exception as e:
+        for m in mbs_to_kill:
+            m.kill(reason=(e.__class__, e, sys.exc_info()[2]))
+        raise
+    else:
+        for m in mbs_to_kill:
+            m.close()
