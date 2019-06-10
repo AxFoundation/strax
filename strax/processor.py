@@ -106,7 +106,7 @@ class ThreadedMailboxProcessor:
             if p.multi_output:
                 multi_output_seen.append(p)
 
-                # Create temp mailbox that reveives multi-output dicts
+                # Create temp mailbox that receives multi-output dicts
                 # and sends them forth to other mailboxes
                 mname = p.__class__.__name__ + '_divide_outputs'
                 self.mailboxes[mname].add_sender(sender, name=f'build:{d}')
