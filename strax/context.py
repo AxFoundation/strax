@@ -669,8 +669,6 @@ class Context:
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
-            if not len(x):
-                print("Got zero-length chunk!")
             if not isinstance(x, np.ndarray):
                 raise ValueError(f"Got type {type(x)} rather than numpy array "
                                  "from the processor!")
