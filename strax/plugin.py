@@ -553,50 +553,46 @@ class ParallelSourcePlugin(Plugin):
         return self.sub_plugins[self.start_from].is_ready(chunk_i)
 
     def do_compute(self, chunk_i=None, **kwargs):
-        try:
-            results = kwargs
+        results = kwargs
 
-            # Run the different plugin computations
-            while True:
-                for output_name, p in self.sub_plugins.items():
-                    if output_name in results:
-                        continue
-                    # Sorting deps since otherwise input field order depends on
-                    # order in which computation happened, which might be bad?
-                    deps = sorted(p.depends_on)
-                    if any([d not in results for d in deps]):
-                        continue
-                    compute_kwargs = dict(chunk_i=chunk_i)
-                    for kind, d_of_kind in p.dependencies_by_kind().items():
-                        compute_kwargs[kind] = strax.merge_arrs(
-                            [results[d] for d in d_of_kind])
-                    results[output_name] = p.do_compute(**compute_kwargs)
-                    # Rescan plugins to see if we can compute anything more
-                    break
-                else:
-                    # Nothing further to compute
-                    break
-            for d in self.provides:
-                assert d in results, f"Output {d} missing!"
+        # Run the different plugin computations
+        while True:
+            for output_name, p in self.sub_plugins.items():
+                if output_name in results:
+                    continue
+                # Sorting deps since otherwise input field order depends on
+                # order in which computation happened, which might be bad?
+                deps = sorted(p.depends_on)
+                if any([d not in results for d in deps]):
+                    continue
+                compute_kwargs = dict(chunk_i=chunk_i)
+                for kind, d_of_kind in p.dependencies_by_kind().items():
+                    compute_kwargs[kind] = strax.merge_arrs(
+                        [results[d] for d in d_of_kind])
+                results[output_name] = p.do_compute(**compute_kwargs)
+                # Rescan plugins to see if we can compute anything more
+                break
+            else:
+                # Nothing further to compute
+                break
+        for d in self.provides:
+            assert d in results, f"Output {d} missing!"
 
-            # Save anything we can through the inlined savers
-            for d, savers in self.sub_savers:
-                for s in savers:
-                    s.save(data=results[d], chunk_i=chunk_i)
+        # Save anything we can through the inlined savers
+        for d, savers in self.sub_savers:
+            for s in savers:
+                s.save(data=results[d], chunk_i=chunk_i)
 
-            # Remove results we do not need to send
-            for d in list(results.keys()):
-                if d not in self.provides:
-                    del results[d]
+        # Remove results we do not need to send
+        for d in list(results.keys()):
+            if d not in self.provides:
+                del results[d]
 
-            if not self.multi_output:
-                results = results[self.provides[0]]
+        if not self.multi_output:
+            results = results[self.provides[0]]
 
-            return self._fix_output(results)
+        return self._fix_output(results)
 
-        except Exception:
-            print(f"Exception in ParallelSourceplugin, printing since it doesn't get propagated for some reason: {strax.formatted_exception()}")
-            raise
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
