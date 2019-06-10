@@ -13,6 +13,7 @@ except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     pass
 
+import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
@@ -47,8 +48,6 @@ class ThreadedMailboxProcessor:
         self.mailboxes = MailboxDict()
 
         self.log.debug("Processor components are: " + str(components))
-        plugins = components.plugins
-        savers = components.savers
 
         if max_workers in [None, 1]:
             # Disable the executors: work in one process.
@@ -59,28 +58,29 @@ class ThreadedMailboxProcessor:
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
-            if allow_multiprocess:
+            mp_plugins = {d: p for d, p in components.plugins.items()
+                          if p.parallel == 'process'}
+            if (allow_multiprocess and len(mp_plugins)):
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
                     _proc_ex = SHMExecutor
                 self.process_executor = _proc_ex(max_workers=max_workers)
+
+                # Combine as many plugins /savers as possible in one process
+                # TODO: more intelligent start determination, multiple starts
+                start_from = list(mp_plugins.keys())[
+                    int(np.argmin([len(p.depends_on)
+                                   for p in mp_plugins.values()]))]
+                components = strax.ParallelSourcePlugin.inline_plugins(
+                    components, start_from)
+                self.components = components
+                self.log.debug("Altered components for multiprocessing: "
+                               + str(components))
             else:
                 self.process_executor = self.thread_executor
 
-        # Deal with parallel input processes
-        # Setting up one of these modifies plugins, so we must gather
-        # them all first.
-        par_inputs = [p for p in plugins.values()
-                      if issubclass(p.__class__, strax.ParallelSourcePlugin)]
-        for p in par_inputs:
-            components = p.setup_mailboxes(components,
-                                           self.mailboxes,
-                                           self.process_executor)
-
-        self.log.debug("After optimization: " + str(components))
-
         for d, loader in components.loaders.items():
-            assert d not in plugins
+            assert d not in components.plugins
             # If paralellizing, use threads for loading
             # the decompressor releases the gil, and we have a lot
             # of data transfer to do
@@ -89,7 +89,7 @@ class ThreadedMailboxProcessor:
                 name=f'load:{d}')
 
         multi_output_seen = []
-        for d, p in plugins.items():
+        for d, p in components.plugins.items():
             if p in multi_output_seen:
                 continue
 
@@ -98,10 +98,6 @@ class ThreadedMailboxProcessor:
                 executor = self.process_executor
             elif p.parallel:
                 executor = self.thread_executor
-            sender = p.iter(
-                iters={d: self.mailboxes[d].subscribe()
-                       for d in p.depends_on},
-                executor=executor)
 
             if p.multi_output:
                 multi_output_seen.append(p)
@@ -109,22 +105,32 @@ class ThreadedMailboxProcessor:
                 # Create temp mailbox that receives multi-output dicts
                 # and sends them forth to other mailboxes
                 mname = p.__class__.__name__ + '_divide_outputs'
-                self.mailboxes[mname].add_sender(sender, name=f'build:{d}')
-                # Make sure mailboxees exist
+                self.mailboxes[mname].add_sender(
+                    p.iter(
+                        iters={dep: self.mailboxes[dep].subscribe()
+                               for dep in p.depends_on},
+                        executor=executor),
+                    name=f'divide_outputs:{d}')
+
                 for d in p.provides:
-                    self.mailboxes[d]
+                    self.mailboxes[d]   # creates mailbox d if doesn't exist
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             mailboxes=self.mailboxes,
                             outputs=p.provides))
 
             else:
-                self.mailboxes[d].add_sender(sender, name=f'build:{d}')
+                self.mailboxes[d].add_sender(
+                    p.iter(
+                        iters={dep: self.mailboxes[dep].subscribe()
+                               for dep in p.depends_on},
+                        executor=executor),
+                    name=f'build:{d}')
 
-        for d, savers in savers.items():
+        for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
-                if d in plugins:
-                    rechunk = plugins[d].rechunk_on_save
+                if d in components.plugins:
+                    rechunk = components.plugins[d].rechunk_on_save
                 else:
                     # This is storage conversion mode
                     # TODO: Don't know how to get this info, for now,

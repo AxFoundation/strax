@@ -1,8 +1,4 @@
-import tempfile
-import numpy as np
-import strax
-
-from .test_core import Records, run_id, recs_per_chunk, n_chunks
+from .helpers import *
 
 
 class EvenOddSplit(strax.Plugin):

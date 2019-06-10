@@ -640,32 +640,40 @@ class Context:
                           t0 + int(1e9) * seconds_range[1])
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
-        # automatically
+        # to merge the results automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind for d in targets)) == 1:
-                temp_name = ''.join(random.choices(
-                    string.ascii_lowercase, k=10))
-                temp_merge = type(temp_name,
-                                  (strax.MergeOnlyPlugin,),
-                                  dict(depends_on=tuple(targets)))
-                self.register(temp_merge)
-                targets = temp_name
-                # TODO: auto-unregister? Better to have a temp register
-                # override option in get_components
-                # Or just always create new context, not only if new options
-                # are given
+                temp_name = ('_temp_'
+                             + ''.join(
+                            random.choices(string.ascii_lowercase, k=10)))
+                p = type(temp_name,
+                         (strax.MergeOnlyPlugin,),
+                         dict(depends_on=tuple(targets)))
+                self.register(p)
+                targets = (temp_name,)
             else:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id, targets=targets, save=save,
                                          time_range=time_range)
+
+        # Cleanup the temp plugins
+        for k in list(self._plugin_class_registry.keys()):
+            if k.startswith('_temp'):
+                del self._plugin_class_registry[k]
+
         for x in strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
+            if not len(x):
+                print("Got zero-length chunk!")
+            if not isinstance(x, np.ndarray):
+                raise ValueError(f"Got type {type(x)} rather than numpy array "
+                                 "from the processor!")
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
                     fn: x[fn]

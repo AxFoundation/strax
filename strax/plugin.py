@@ -7,7 +7,6 @@ from enum import IntEnum
 import itertools
 import logging
 from functools import partial
-import sys
 import typing
 import time
 import inspect
@@ -88,7 +87,7 @@ class Plugin:
         if 'chunk_i' in compute_pars:
             self.compute_takes_chunk_i = True
             del compute_pars[compute_pars.index('chunk_i')]
-        print(self, compute_pars, self.compute_takes_chunk_i)
+
         self.compute_pars = compute_pars
 
     @property
@@ -277,7 +276,9 @@ class Plugin:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
             result = self.compute(**kwargs)
+        return self._fix_output(result)
 
+    def _fix_output(self, result):
         if self.multi_output:
             if not isinstance(result, dict):
                 raise ValueError(
@@ -290,12 +291,10 @@ class Plugin:
                                      f"{p.__class__.__name__}!")
                 r2[d] = strax.dict_to_rec(result[d], self._dtype_for(d))
                 self._check_dtype(r2[d], d)
-            result = r2
+            return r2
 
-        else:
-            result = strax.dict_to_rec(result, dtype=self.dtype)
-            self._check_dtype(result)
-
+        result = strax.dict_to_rec(result, dtype=self.dtype)
+        self._check_dtype(result)
         return result
 
     def compute(self, **kwargs):
@@ -305,165 +304,6 @@ class Plugin:
 ##
 # Special plugins
 ##
-
-@export
-class ParallelSourcePlugin(Plugin):
-    """An input plugin that reads chunks in parallel in different processes.
-
-    We will try to run dependencies in the same process, to evade
-    data transfer (pickling and memory copy) penalties.
-
-    Child must implement source_finished and is_ready.
-    """
-    parallel = 'process'
-
-    sub_plugins: typing.Dict[str, Plugin]
-    sub_savers: typing.Dict[str, typing.List[strax.Saver]]
-    outputs_to_send: typing.Set[str]
-
-    def __init__(self):
-        super().__init__()
-        # Subsidiary plugins and savers.
-        # Dictionary provides -> plugin/saver
-        self.sub_plugins = {}
-        self.sub_savers = {}
-        # List of ouputs to send
-        self.outputs_to_send = set()
-
-        if len(self.provides) > 1:
-            raise NotImplementedError(
-                "ParallelSourcePlugin doesn't support multiple outputs yet")
-
-    def setup_mailboxes(self, components, mailboxes, executor):
-        """Setup this plugin inside a ThreadedMailboxProcessor
-        This will gather as much plugins/savers as possible as "subsidiaries"
-        which can run in the same processes as the input.
-        :return: ProcessorComponents, altered by setup process.
-        """
-        plugins = components.plugins
-        savers = components.savers
-
-        del plugins[self.provides[0]]
-
-        # Gather all plugins that do not rechunk and which branch out as a
-        # simple tree from the input plugin.
-        # We'll run these all together in one process.
-        while True:
-            # Scan for plugins we can inline
-            for d, p in plugins.items():
-                i_have = [self.provides[0]] + list(self.sub_plugins.keys())
-                if (len(p.depends_on) == 1
-                        and p.depends_on[0] in i_have
-                        and p.parallel):
-                    self.sub_plugins[d] = p
-
-                    # Found one: remove it and rescan
-                    del plugins[d]
-                    break
-            else:
-                # No more found: done
-                break
-
-        # Which data types should we output?
-        # Anything that's requested by a plugin we did not inline,
-        # and the final target (whether inlined or not)
-        self.outputs_to_send.update(set(components.targets))
-        for d, p in plugins.items():
-            self.outputs_to_send.update(set(p.depends_on))
-        self.outputs_to_send &= self.sub_plugins.keys() | {self.provides[0]}
-
-        # If the savers do not require rechunking, run them in this way also
-        for d in list(self.sub_plugins.keys()) + [self.provides[0]]:
-            if d in savers:
-
-                # Get the plugin... awkward...
-                if d in self.sub_plugins:
-                    p = self.sub_plugins[d]
-                elif d in plugins:
-                    p = plugins[d]
-                elif d == self.provides[0]:
-                    p = self
-                else:
-                    raise RuntimeError
-
-                if p.rechunk_on_save:
-                    self.outputs_to_send.add(d)
-                else:
-                    self.sub_savers[d] = savers[d]
-                    for x in self.sub_savers[d]:
-                        x.is_forked = True
-                    del savers[d]
-
-        # We need a new mailbox to collect temporary outputs in
-        # These will be dictionaries of stuff to send
-        # It can't be named after self.provides,
-        # maybe self.provides is requested by someone,
-        # in which case that mailbox needs to exist as usual
-        # (see also #94)
-        mailbox_name = self.provides[0] + '_parallelsource'
-        mailboxes[mailbox_name].add_sender(self.iter(
-            iters={}, executor=executor))
-        mailboxes[mailbox_name].add_reader(partial(self.send_outputs,
-                                                   mailboxes=mailboxes))
-        return components
-
-    def send_outputs(self, source, mailboxes):
-        """This code is a 'mail sorter' which gets dicts of arrays from source
-        and sends the right array to the right mailbox.
-        """
-        # TODO: this code duplicates exception handling and cleanup
-        # from Mailbox.send_from! Can we avoid that somehow?
-        mbs_to_kill = [mailboxes[d] for d in self.outputs_to_send]
-        try:
-            for result in source:
-                for d, x in result.items():
-                    mailboxes[d].send(x)
-        except strax.MailboxKilled as e:
-            for m in mbs_to_kill:
-                m.kill(reason=e.args[0])
-            # This is a propagated exception from another thread
-            # no need to re-raise it
-        except Exception as e:
-            for m in mbs_to_kill:
-                m.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-            raise
-        else:
-            for m in mbs_to_kill:
-                m.close()
-
-    def cleanup(self, wait_for):
-        print(f"{self.__class__.__name__} exhausted. "
-              f"Waiting for {len(wait_for)} pending futures.")
-        for savers in self.sub_savers.values():
-            for s in savers:
-                s.close(wait_for=wait_for)
-
-    def do_compute(self, *args, chunk_i=None, **kwargs):
-        result = super().do_compute(*args, chunk_i=chunk_i, **kwargs)
-        # Fortunately everybody else is in a different process...
-        self._output = {}
-        self._grok(d=self.provides[0], x=result, chunk_i=chunk_i)
-        for d in self.outputs_to_send:
-            assert d in self._output, f"Output {d} missing!"
-        return self._output
-
-    def _grok(self, d, x, chunk_i):
-        """Launch any computations depending on result d:x (data type:array)"""
-        for other_d, p in self.sub_plugins.items():
-            if p.depends_on[0] == d:
-                kind = list(p.dependencies_by_kind().keys())[0]
-                self._grok(other_d,
-                           p.do_compute(**{'chunk_i': chunk_i,
-                                           kind: x}),
-                           chunk_i=chunk_i)
-
-        if d in self.sub_savers:
-            for s in self.sub_savers[d]:
-                s.save(data=x, chunk_i=chunk_i)
-
-        if d in self.outputs_to_send:
-            self._output[d] = x
-
 
 @export
 class OverlapWindowPlugin(Plugin):
@@ -586,6 +426,13 @@ class LoopPlugin(Plugin):
         raise NotImplementedError
 
 
+##
+# "Plugins" for internal use
+# These do not actually do computations, but do other tasks
+# for which posing as a plugin is helpful.
+# Do not subclass unless you know what you are doing..
+##
+
 @export
 class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
@@ -604,3 +451,156 @@ class MergeOnlyPlugin(Plugin):
 
     def compute(self, **kwargs):
         return kwargs[list(kwargs.keys())[0]]
+
+
+@export
+class ParallelSourcePlugin(Plugin):
+    """An plugin that inlines the computation of other plugins and saving
+    of their results.
+
+    This evades data transfer (pickling and/or memory copy) penalties.
+    """
+    parallel = 'process'
+
+    @classmethod
+    def inline_plugins(cls, components, start_from):
+        plugins = components.plugins.copy()
+
+        sub_plugins = {start_from: plugins[start_from]}
+        del plugins[start_from]
+
+        # Gather all plugins that do not rechunk and which branch out as a
+        # simple tree from the input plugin.
+        # We'll run these all together in one process.
+        while True:
+            # Scan for plugins we can inline
+            for d, p in plugins.items():
+                # TODO: multi-dep support, should be easy
+                if (len(p.depends_on) == 1
+                        and p.depends_on[0] in sub_plugins
+                        and p.parallel):
+                    sub_plugins[d] = p
+
+                    # Found one: remove it and rescan
+                    del plugins[d]
+                    break
+            else:
+                # No more plugins we can inline
+                break
+
+        if len(sub_plugins) == 1:
+            # Just one plugin to inline: don't bother
+            return components
+
+        # Which data types should we output? Three cases follow.
+        outputs_to_send = set()
+
+        # Case 1. Requested as a final target
+        for p in sub_plugins.values():
+            outputs_to_send.update(set(components.targets)
+                                   .intersection(set(p.provides)))
+        # Case 2. Requested by a plugin we did not inline
+        for d, p in plugins.items():
+            outputs_to_send.update(set(p.depends_on))
+        outputs_to_send &= sub_plugins.keys()
+
+        # Inline savers that do not require rechunking
+        savers = components.savers
+        sub_savers = dict()
+        for d, p in sub_plugins.items():
+            if d not in savers:
+                continue
+            if p.rechunk_on_save:
+                # Case 3. has a saver we can't inline (this is checked later)
+                outputs_to_send.add(d)
+                continue
+            for s_i, s in enumerate(savers[d]):
+                if not s.allow_fork:
+                    outputs_to_send.add(d)
+                    continue
+                if d not in sub_savers:
+                    sub_savers[d] = []
+                s.is_forked = True
+                sub_savers[d].append(s)
+                del savers[s_i]
+            if not len(savers[d]):
+                del savers[d]
+
+        p = cls(depends_on=sub_plugins[start_from].depends_on)
+        p.sub_plugins = sub_plugins
+        p.provides = tuple(outputs_to_send)
+        p.sub_savers = sub_savers
+        p.start_from = start_from
+        if p.multi_output:
+            p.dtype = {d: p.sub_plugins[d].dtype
+                       for d in outputs_to_send}
+        else:
+            p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
+        for d in p.provides:
+            plugins[d] = p
+
+        return strax.ProcessorComponents(
+            plugins, components.loaders, savers, components.targets)
+
+    def __init__(self, depends_on):
+        self.depends_on = depends_on
+        super().__init__()
+
+    def source_finished(self):
+        return self.sub_plugins[self.start_from].source_finished()
+
+    def is_ready(self, chunk_i):
+        return self.sub_plugins[self.start_from].is_ready(chunk_i)
+
+    def do_compute(self, chunk_i=None, **kwargs):
+        try:
+            results = kwargs
+
+            # Run the different plugin computations
+            while True:
+                for output_name, p in self.sub_plugins.items():
+                    if output_name in results:
+                        continue
+                    # Sorting deps since otherwise input field order depends on
+                    # order in which computation happened, which might be bad?
+                    deps = sorted(p.depends_on)
+                    if any([d not in results for d in deps]):
+                        continue
+                    compute_kwargs = dict(chunk_i=chunk_i)
+                    for kind, d_of_kind in p.dependencies_by_kind().items():
+                        compute_kwargs[kind] = strax.merge_arrs(
+                            [results[d] for d in d_of_kind])
+                    results[output_name] = p.do_compute(**compute_kwargs)
+                    # Rescan plugins to see if we can compute anything more
+                    break
+                else:
+                    # Nothing further to compute
+                    break
+            for d in self.provides:
+                assert d in results, f"Output {d} missing!"
+
+            # Save anything we can through the inlined savers
+            for d, savers in self.sub_savers:
+                for s in savers:
+                    s.save(data=results[d], chunk_i=chunk_i)
+
+            # Remove results we do not need to send
+            for d in list(results.keys()):
+                if d not in self.provides:
+                    del results[d]
+
+            if not self.multi_output:
+                results = results[self.provides[0]]
+
+            return self._fix_output(results)
+
+        except Exception:
+            print(f"Exception in ParallelSourceplugin, printing since it doesn't get propagated for some reason: {strax.formatted_exception()}")
+            raise
+
+    def cleanup(self, wait_for):
+        print(f"{self.__class__.__name__} exhausted. "
+              f"Waiting for {len(wait_for)} pending futures.")
+        for savers in self.sub_savers.values():
+            for s in savers:
+                s.close(wait_for=wait_for)
