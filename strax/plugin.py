@@ -259,9 +259,18 @@ class Plugin:
         if d is None:
             assert not self.multi_output
             d = self.provides[0]
-        if x.dtype != self._dtype_for(d):
+        expect = self._dtype_for(d)
+        pname = self.__class__.__name__
+        if not isinstance(x, np.ndarray):
             raise strax.PluginGaveWrongOutput(
-                f"Plugin {self.__class__.__name__} did not deliver "
+                f"Plugin {pname} did not deliver "
+                f"data type {d} as promised.\n"
+                f"Delivered a {type(x)}")
+        if not isinstance(expect, np.dtype):
+            raise ValueError(f"Plugin {pname} expects {expect} as dtype??")
+        if x.dtype != expect:
+            raise strax.PluginGaveWrongOutput(
+                f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
                 f"Promised: {self._dtype_for(d)}\n"
                 f"Delivered: {x.dtype}.")
@@ -474,22 +483,21 @@ class ParallelSourcePlugin(Plugin):
         # We'll run these all together in one process.
         while True:
             # Scan for plugins we can inline
-            for d, p in plugins.items():
-                # TODO: multi-dep support, should be easy
-                if (len(p.depends_on) == 1
-                        and p.depends_on[0] in sub_plugins
-                        and p.parallel):
-                    sub_plugins[d] = p
-
-                    # Found one: remove it and rescan
-                    del plugins[d]
+            for p in plugins.values():
+                if (p.parallel
+                        and all([d in sub_plugins for d in p.depends_on])):
+                    for d in p.provides:
+                        sub_plugins[d] = p
+                        if d in plugins:
+                            del plugins[d]
+                    # Rescan
                     break
             else:
                 # No more plugins we can inline
                 break
 
-        if len(sub_plugins) == 1:
-            # Just one plugin to inline: don't bother
+        if len(set(list(sub_plugins.values()))) == 1:
+            # Just one plugin to inline: no use
             return components
 
         # Which data types should we output? Three cases follow.
@@ -532,7 +540,7 @@ class ParallelSourcePlugin(Plugin):
         p.sub_savers = sub_savers
         p.start_from = start_from
         if p.multi_output:
-            p.dtype = {d: p.sub_plugins[d].dtype
+            p.dtype = {d: p.sub_plugins[d]._dtype_for(d)
                        for d in outputs_to_send}
         else:
             p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
@@ -566,12 +574,22 @@ class ParallelSourcePlugin(Plugin):
                 if any([d not in results for d in deps]):
                     continue
                 compute_kwargs = dict(chunk_i=chunk_i)
+
                 for kind, d_of_kind in p.dependencies_by_kind().items():
                     compute_kwargs[kind] = strax.merge_arrs(
                         [results[d] for d in d_of_kind])
-                results[output_name] = p.do_compute(**compute_kwargs)
+
+                # Store compute result(s)
+                r = p.do_compute(**compute_kwargs)
+                if p.multi_output:
+                    for d in r:
+                        results[d] = r[d]
+                else:
+                    results[output_name] = r
+
                 # Rescan plugins to see if we can compute anything more
                 break
+
             else:
                 # Nothing further to compute
                 break
