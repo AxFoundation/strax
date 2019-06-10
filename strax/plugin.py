@@ -214,8 +214,6 @@ class Plugin:
         self.cleanup(wait_for=pending)
 
     def _inner_iter(self, iters, pending, executor):
-        deps_by_kind = self.dependencies_by_kind()
-
         last_input_received = time.time()
 
         for chunk_i in itertools.count():
@@ -241,7 +239,7 @@ class Plugin:
             # Actually fetch the input from the iterators
             try:
                 compute_kwargs = {k: next(iters[k])
-                                  for k in deps_by_kind}
+                                  for k in iters}
             except StopIteration:
                 return
 
@@ -351,6 +349,7 @@ class ParallelSourcePlugin(Plugin):
         # simple tree from the input plugin.
         # We'll run these all together in one process.
         while True:
+            # Scan for plugins we can inline
             for d, p in plugins.items():
                 i_have = [self.provides[0]] + list(self.sub_plugins.keys())
                 if (len(p.depends_on) == 1
@@ -358,9 +357,11 @@ class ParallelSourcePlugin(Plugin):
                         and p.parallel):
                     self.sub_plugins[d] = p
 
+                    # Found one: remove it and rescan
                     del plugins[d]
                     break
             else:
+                # No more found: done
                 break
 
         # Which data types should we output?
