@@ -163,14 +163,20 @@ class ThreadedMailboxProcessor:
         try:
             yield from final_generator
 
-        except strax.MailboxKilled as e:
-            self.log.debug(f"Target Mailbox ({target}) killed")
+        except Exception as e:
+            self.log.debug(f"Target Mailbox ({target}) killed, exception {e}")
             for m in self.mailboxes.values():
                 if m != target:
                     self.log.debug(f"Killing {m}")
-                    m.kill(upstream=True,
-                           reason=e.args[0])
-            _, exc, traceback = e.args[0]
+                    if isinstance(e, strax.MailboxKilled):
+                        reason, exc, traceback = e.args[0]
+                    else:
+                        reason = ("Exception in main processing thread")
+                    m.kill(upstream=True,reason=reason)
+            if traceback is None:
+                raise
+            # If we get here, it's a mailboxkilled exception.
+            # We will reraise it in just a moment...
 
         finally:
             self.log.debug("Closing threads")
