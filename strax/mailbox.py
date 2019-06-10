@@ -366,6 +366,7 @@ def divide_outputs(source, mailboxes, outputs=None):
     """This code is a 'mail sorter' which gets dicts of arrays from source
     and sends the right array to the right mailbox.
     """
+    # raise ZeroDivisionError   # TODO: check this is handled properly
     if outputs is None:
         outputs = mailboxes.keys()
     mbs_to_kill = [mailboxes[d] for d in outputs]

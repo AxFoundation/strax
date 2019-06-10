@@ -140,10 +140,17 @@ def merged_dtype(dtypes):
 @export
 def merge_arrs(arrs):
     """Merge structured arrays of equal length.
-
     On field name collisions, data from later arrays is kept.
+
+    If you pass one array, it is returned without copying.
+    TODO: hmm... inconsistent
+
+    Much faster than the similar function in numpy.lib.recfunctions.
     """
-    # Much faster than the similar function in numpy.lib.recfunctions
+    if not len(arrs):
+        raise RuntimeError("Cannot merge 0 arrays")
+    if len(arrs) == 1:
+        return arrs[0]
 
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):

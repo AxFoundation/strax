@@ -416,7 +416,8 @@ class Saver:
     Do NOT add unpickleable things as attributes (such as loggers)!
     """
     closed = False
-    prefer_rechunk = True   # If False, do not rechunk even if plugin allows it
+    allow_rechunk = True   # If False, do not rechunk even if plugin allows it
+    allow_fork = True   # If False, cannot be inlined / forked
 
     # This is set if the saver is operating in multiple processes at once
     # Do not set it yourself
@@ -433,7 +434,7 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
-        if rechunk and self.prefer_rechunk:
+        if rechunk and self.allow_rechunk:
             source = strax.fixed_size_chunks(source)
 
         pending = []
