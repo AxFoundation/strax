@@ -18,7 +18,7 @@ Saver and loaders are currently not parallelized at all, except for savers that 
 ParallelSourcePlugin
 ---------------------
 
-Low-level plugins deal with a massive data flow, so parallelizing their computations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the global interpreter lock becomes binding due to pure-python overhead. We thus need a third parallelization mode: the ``ParallelSourcePlugin``. This is how the ``DAQReader`` plugin is implemented.
+Low-level plugins deal with a massive data flow, so parallelizing theircomputations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the global interpreter lock becomes binding due to pure-python overhead. We thus need a third parallelization mode: the ``ParallelSourcePlugin``. This is how the ``DAQReader`` plugin is implemented.
 
 Computations of chunks from a ``ParallelSourcePlugin`` will be outsourced to a process pool, just like ``parallel='process'``. However, during setup, it will also gather as many of its dependencies and their savers as 'subsidiaries'. Their computations are then "inlined", that is, happen immedately after the main computation in the same process.
 
