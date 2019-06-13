@@ -5,6 +5,7 @@ import typing as ty
 import psutil
 import os
 import signal
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 try:
@@ -169,13 +170,13 @@ class ThreadedMailboxProcessor:
                 if m != target:
                     self.log.debug(f"Killing {m}")
                     if isinstance(e, strax.MailboxKilled):
-                        reason, exc, traceback = e.args[0]
+                        _, exc, traceback = reason = e.args[0]
                     else:
-                        reason = ("Exception in main processing thread")
-                    m.kill(upstream=True,reason=reason)
-            if traceback is None:
-                raise
-            # If we get here, it's a mailboxkilled exception.
+                        exc = e
+                        reason = (e.__class__, e, sys.exc_info()[2])
+                        traceback = reason[2]
+
+                    m.kill(upstream=True, reason=reason)
             # We will reraise it in just a moment...
 
         finally:

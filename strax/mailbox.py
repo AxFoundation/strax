@@ -145,7 +145,7 @@ class Mailbox:
         for t in self._threads:
             t.start()
 
-    def kill_from_exception(self, e):
+    def kill_from_exception(self, e, reraise=True):
         """Kill the mailbox following a caught exception e"""
         if isinstance(e, MailboxKilled):
             # Kill this mailbox too.
@@ -153,9 +153,10 @@ class Mailbox:
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         else:
-            self.log.error(f"Killing mailbox due to exception {e}!")
+            self.log.debug(f"Killing mailbox due to exception {e}!")
             self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-            raise e
+            if reraise:
+                raise e
 
     def kill(self, upstream=True, reason=None):
         with self._lock:
@@ -376,15 +377,11 @@ def divide_outputs(source, mailboxes, outputs=None):
         for result in source:
             for d, x in result.items():
                 mailboxes[d].send(x)
-    except MailboxKilled as e:
-        for m in mbs_to_kill:
-            m.kill(reason=e.args[0])
-        # This is a propagated exception from another thread
-        # no need to re-raise it
     except Exception as e:
         for m in mbs_to_kill:
-            m.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-        raise
+            m.kill_from_exception(e, reraise=False)
+        if not isinstance(e, MailboxKilled):
+            raise
     else:
         for m in mbs_to_kill:
             m.close()
