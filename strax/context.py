@@ -199,7 +199,7 @@ class Context:
         Returns plugin_class (so this can be used as a decorator)
         """
         if isinstance(plugin_class, (tuple, list)):
-            # shortcut for multiple registration
+            # Shortcut for multiple registration
             for x in plugin_class:
                 self.register(x)
             return
@@ -245,7 +245,14 @@ class Context:
             it = [['Context', self]]
         else:
             it = self._get_plugins((data_type,), run_id).items()
+        seen = []
         for d, p in it:
+            # Track plugins we already saw, so options from
+            # multi-output plugins don't come up several times
+            if p in seen:
+                continue
+            seen.append(p)
+
             for opt in p.takes_config.values():
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
@@ -258,7 +265,7 @@ class Context:
                     option=opt.name,
                     default=default,
                     current=c.get(opt.name, strax.OMITTED),
-                    applies_to=d,
+                    applies_to=(p.provides if d != 'Context' else d),
                     help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
@@ -271,9 +278,12 @@ class Context:
         return self._get_plugins((data_type,), run_id)[data_type].lineage
 
     def register_all(self, module):
-        """Register all plugins defined in module"""
+        """Register all plugins defined in module.
+
+        Can pass a list/tuple of modules to register all in each.
+        """
         if isinstance(module, (tuple, list)):
-            # Secret shortcut for multiple registration
+            # Shortcut for multiple registration
             for x in module:
                 self.register_all(x)
             return
