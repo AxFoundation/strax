@@ -70,7 +70,7 @@ class Plugin:
     run_id: str
     run_i: int
     config: typing.Dict
-    deps: typing.List       # Dictionary of dependency plugin instances
+    deps: typing.Dict       # Dictionary of dependency plugin instances
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
     takes_config = dict()           # Config options
 
@@ -102,7 +102,9 @@ class Plugin:
     def infer_dtype(self):
         """Return dtype of computed data;
         used only if no dtype attribute defined"""
-        raise NotImplementedError
+        # Don't raise NotImplementedError, IDE will complain you're not
+        # implementing all abstract methods...
+        raise RuntimeError("No infer dtype method defined")
 
     def version(self, run_id=None):
         """Return version number applicable to the run_id.
@@ -112,7 +114,7 @@ class Plugin:
         """
         return self.__version__
 
-    def _dtype_for(self, data_type):
+    def dtype_for(self, data_type):
         if self.multi_output:
             return self.dtype[data_type]
         return self.dtype
@@ -130,7 +132,7 @@ class Plugin:
             run_id=run_id,
             data_type=data_type,
             data_kind=self._data_kind_for(data_type),
-            dtype=self._dtype_for(data_type),
+            dtype=self.dtype_for(data_type),
             lineage_hash=strax.DataKey(
                 run_id, data_type, self.lineage).lineage_hash,
             compressor=self.compressor,
@@ -182,7 +184,8 @@ class Plugin:
         """Return whether all chunks the plugin wants to read have been written.
         Only called for online input plugins.
         """
-        raise NotImplementedError
+        # Don't raise NotImplementedError, IDE complains
+        raise RuntimeError("source_finished called on a regular plugin")
 
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
@@ -259,7 +262,7 @@ class Plugin:
         if d is None:
             assert not self.multi_output
             d = self.provides[0]
-        expect = self._dtype_for(d)
+        expect = self.dtype_for(d)
         pname = self.__class__.__name__
         if not isinstance(x, np.ndarray):
             raise strax.PluginGaveWrongOutput(
@@ -272,7 +275,7 @@ class Plugin:
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
-                f"Promised: {self._dtype_for(d)}\n"
+                f"Promised: {self.dtype_for(d)}\n"
                 f"Delivered: {x.dtype}.")
 
     def do_compute(self, chunk_i=None, **kwargs):
@@ -298,7 +301,7 @@ class Plugin:
                 if d not in result:
                     raise ValueError(f"Data type {d} missing from output of "
                                      f"{p.__class__.__name__}!")
-                r2[d] = strax.dict_to_rec(result[d], self._dtype_for(d))
+                r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
                 self._check_dtype(r2[d], d)
             return r2
 
@@ -540,7 +543,7 @@ class ParallelSourcePlugin(Plugin):
         p.sub_savers = sub_savers
         p.start_from = start_from
         if p.multi_output:
-            p.dtype = {d: p.sub_plugins[d]._dtype_for(d)
+            p.dtype = {d: p.sub_plugins[d].dtype_for(d)
                        for d in outputs_to_send}
         else:
             p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
