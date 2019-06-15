@@ -1,12 +1,13 @@
 import numpy as np
 import numba
 
+import strax
 from strax import utils
 from strax.dtypes import peak_dtype, DIGITAL_SUM_WAVEFORM_CHANNEL
+export, __all__ = strax.exporter()
 
-__all__ = 'find_peaks sum_waveform'.split()
 
-
+@export
 @utils.growing_result(dtype=peak_dtype(), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_peaks(hits, adc_to_pe,
@@ -14,7 +15,6 @@ def find_peaks(hits, adc_to_pe,
                left_extension=20, right_extension=150,
                min_area=0,
                min_channels=2,
-               max_duration=int(1e9),
                _result_buffer=None, result_dtype=None):
     """Return peaks made from grouping hits together
     Assumes all hits have the same dt
@@ -24,7 +24,6 @@ def find_peaks(hits, adc_to_pe,
     :param gap_threshold: No hits for this much ns means new peak
     :param min_channels: Peaks with less contributing channels are not returned
     :param min_area: Peaks with less than min_area are not returned
-    :param max_duration: Peaks are forcefully ended after this many ns
     """
     buffer = _result_buffer
     offset = 0
@@ -34,8 +33,6 @@ def find_peaks(hits, adc_to_pe,
     assert min_channels >= 1, "min_channels must be >= 1"
     assert gap_threshold > left_extension + right_extension, \
         "gap_threshold must be larger than left + right extension"
-    assert max_duration / hits[0]['dt'] < np.iinfo(np.int32).max, \
-        "Max duration must fit in a 32-bit signed integer"
     # If you write it like below, you get integer wraparound errors
     # TODO :-( File numba issue?
     # assert max_duration < np.iinfo(np.int32).max * hits[0]['dt'], \
@@ -102,6 +99,7 @@ def find_peaks(hits, adc_to_pe,
     yield offset
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     """Compute sum waveforms for all peaks in peaks
@@ -217,3 +215,31 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         # Store the saturation count and area per channel
         p['n_saturated_channels'] = p['saturated_channel'].sum()
         p['area_per_channel'][:] = area_per_channel
+
+@export
+def find_peak_groups(peaks, gap_threshold,
+                     left_extension=0, right_extension=0):
+    """Return boundaries of groups of peaks separated by gap_threshold,
+    extended left and right.
+
+    :param peaks: Peaks to group
+    :param gap_threshold: Minimum gap between peaks
+    :param left_extension: Extend groups by this many ns left
+    :param right_extension: " " right
+    :return: time, endtime arrays of group boundaries
+    """
+    # Mock up a "hits" array so we can just use the existing peakfinder
+    # It doesn't work on raw peaks, since they might have different dts
+    # TODO: is there no cleaner way?
+    fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
+    fake_hits['dt'] = 1
+    fake_hits['area'] = 1
+    fake_hits['time'] = peaks['time']
+    # TODO: could this cause int overrun nonsense anywhere?
+    fake_hits['length'] = strax.endtime(peaks) - peaks['time']
+    fake_peaks = strax.find_peaks(
+        fake_hits, adc_to_pe=np.ones(1),
+        gap_threshold=gap_threshold,
+        left_extension=left_extension, right_extension=right_extension,
+        min_channels=1, min_area=0)
+    return fake_peaks['time'], strax.endtime(fake_peaks)
