@@ -133,13 +133,13 @@ class Context:
             kwargs = strax.combine_configs(self.context_config,
                                            kwargs,
                                            mode='update')
-            register = list(self._plugin_class_registry.values()) + register
 
-        return Context(storage=storage,
-                       config=config,
-                       register=register,
-                       register_all=register_all,
-                       **kwargs)
+        new_c = Context(storage=storage, config=config, **kwargs)
+        if not replace:
+            new_c._plugin_class_registry = self._plugin_class_registry.copy()
+        new_c.register_all(register_all)
+        new_c.register(register)
+        return new_c
 
     def set_config(self, config=None, mode='update'):
         """Set new configuration options
@@ -187,20 +187,19 @@ class Context:
             if k not in self.takes_config:
                 warnings.warn(f"Invalid context option {k}; will do nothing.")
 
-    def register(self, plugin_class, provides=None):
+    def register(self, plugin_class):
         """Register plugin_class as provider for data types in provides.
-        :param plugin_class: class inheriting from StraxPlugin
-        :param provides: list of data types which this plugin provides.
+        :param plugin_class: class inheriting from strax.Plugin.
+        You can also pass a sequence of plugins to register, but then
+        you must omit the provides argument.
 
-        Plugins always register for the data type specified in the .provide
-        class attribute. If such is not available, we will construct one from
-        the class name (CamelCase -> snake_case)
+        If a plugin class omits the .provides attribute, we will construct
+        one from its class name (CamelCase -> snake_case)
 
         Returns plugin_class (so this can be used as a decorator)
         """
-        if isinstance(plugin_class, (tuple, list)) and provides is None:
-            # shortcut for multiple registration
-            # TODO: document
+        if isinstance(plugin_class, (tuple, list)):
+            # Shortcut for multiple registration
             for x in plugin_class:
                 self.register(x)
             return
@@ -208,14 +207,13 @@ class Context:
         if not hasattr(plugin_class, 'provides'):
             # No output name specified: construct one from the class name
             snake_name = strax.camel_to_snake(plugin_class.__name__)
-            plugin_class.provides = snake_name
+            plugin_class.provides = (snake_name,)
 
-        if provides is not None:
-            provides += [plugin_class.provides]
-        else:
-            provides = [plugin_class.provides]
+        # Ensure plugin_class.provides is a tuple
+        if isinstance(plugin_class.provides, str):
+            plugin_class.provides = tuple([plugin_class.provides])
 
-        for p in provides:
+        for p in plugin_class.provides:
             self._plugin_class_registry[p] = plugin_class
 
         return plugin_class
@@ -247,7 +245,14 @@ class Context:
             it = [['Context', self]]
         else:
             it = self._get_plugins((data_type,), run_id).items()
+        seen = []
         for d, p in it:
+            # Track plugins we already saw, so options from
+            # multi-output plugins don't come up several times
+            if p in seen:
+                continue
+            seen.append(p)
+
             for opt in p.takes_config.values():
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
@@ -260,7 +265,7 @@ class Context:
                     option=opt.name,
                     default=default,
                     current=c.get(opt.name, strax.OMITTED),
-                    applies_to=d,
+                    applies_to=(p.provides if d != 'Context' else d),
                     help=opt.help))
         if len(r):
             return pd.DataFrame(r, columns=r[0].keys())
@@ -273,9 +278,12 @@ class Context:
         return self._get_plugins((data_type,), run_id)[data_type].lineage
 
     def register_all(self, module):
-        """Register all plugins defined in module"""
+        """Register all plugins defined in module.
+
+        Can pass a list/tuple of modules to register all in each.
+        """
         if isinstance(module, (tuple, list)):
-            # Secret shortcut for multiple registration
+            # Shortcut for multiple registration
             for x in module:
                 self.register_all(x)
             return
@@ -317,8 +325,10 @@ class Context:
     def _get_plugins(self,
                      targets: ty.Tuple[str],
                      run_id: str) -> ty.Dict[str, strax.Plugin]:
-        """Return dictionary of plugins necessary to compute targets
+        """Return dictionary of plugin instances necessary to compute targets
         from scratch.
+        For a plugin that produces multiple outputs, we make only a single
+        instance, which is referenced under multiple keys in the output dict.
         """
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
@@ -338,7 +348,10 @@ class Context:
             if d not in self._plugin_class_registry:
                 raise KeyError(f"No plugin class registered that provides {d}")
 
-            plugins[d] = p = self._plugin_class_registry[d]()
+            p = self._plugin_class_registry[d]()
+            for d in p.provides:
+                plugins[d] = p
+
             p.run_id = run_id
 
             # The plugin may not get all the required options here
@@ -354,44 +367,42 @@ class Context:
             for d in p.depends_on:
                 p.lineage.update(p.deps[d].lineage)
 
-            if not hasattr(p, 'data_kind'):
+            if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
                     # Assume data kind is the same as the first dependency
                     p.data_kind = p.deps[p.depends_on[0]].data_kind
                 else:
                     # No dependencies: assume provided data kind and
                     # data type are synonymous
-                    p.data_kind = p.provides
+                    p.data_kind = p.provides[0]
 
             if not hasattr(p, 'dtype'):
                 p.dtype = p.infer_dtype()
 
-            if not isinstance(p, np.dtype):
-                dtype = []
-                for x in p.dtype:
-                    if len(x) == 3:
-                        if isinstance(x[0], tuple):
-                            # Numpy syntax for array field
-                            dtype.append(x)
-                        else:
-                            # Lazy syntax for normal field
-                            field_name, field_type, comment = x
-                            dtype.append(((comment, field_name), field_type))
-                    elif len(x) == 2:
-                        # (field_name, type)
-                        dtype.append(x)
-                    elif len(x) == 1:
-                        # Omitted type: assume float
-                        dtype.append((x, np.float))
-                    else:
-                        raise ValueError(f"Invalid field specification {x}")
-                p.dtype = np.dtype(dtype)
+            if p.multi_output:
+                if (not hasattr(p, 'data_kind')
+                        or not isinstance(p.data_kind, dict)):
+                    raise ValueError(
+                        f"{p.__class__.__name__} has multiple outputs and "
+                        "must declare its data kind as a dict: "
+                        "{dtypename: data kind}.")
+                if not isinstance(p.dtype, dict):
+                    raise ValueError(
+                        f"{p.__class__.__name__} has multiple outputs, so its "
+                        "dtype must be specified as a dict: {output: dtype}.")
+                p.dtype = {k: strax.to_numpy_dtype(dt)
+                           for k, dt in p.dtype.items()}
+            else:
+                p.dtype = strax.to_numpy_dtype(p.dtype)
+
             return p
 
         plugins = collections.defaultdict(get_plugin)
         for t in targets:
-            # This works without the LHS too, but your IDE might not get it :-)
-            plugins[t] = get_plugin(t)
+            p = get_plugin(t)
+            # This assignment is actually unnecessary due to defaultdict,
+            # but just for clarity:
+            plugins[t] = p
 
         return plugins
 
@@ -450,7 +461,7 @@ class Context:
             n_range = n_start[_inds[0]], n_end[_inds[1]]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
-        # have to do computation.(their instances will stick around
+        # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
         savers = collections.defaultdict(list)
@@ -463,22 +474,29 @@ class Context:
                 return
             seen.add(d)
             p = plugins[d]
-            key = strax.DataKey(run_id, d, p.lineage)
 
+            # Can we load this data, or must we compute it?
+            loading_this_data = False
+            key = strax.DataKey(run_id, d, p.lineage)
             for sb_i, sf in enumerate(self.storage):
                 try:
-                    # Bit clunky... but allows specifying executor later
+                    # Partial is clunky... but allows specifying executor later
+                    # Since it doesn't run until later, we must do a find now
+                    # that we can still handle DataNotAvailable
                     sf.find(key, **self._find_options)
                     loaders[d] = partial(sf.loader,
-                        key,
-                        n_range=n_range,
-                        **self._find_options)
-                    # Found it! No need to make it
-                    del plugins[d]
-                    break
+                                         key,
+                                         n_range=n_range,
+                                         **self._find_options)
                 except strax.DataNotAvailable:
                     continue
+                else:
+                    # Found it! No need to make it or look in other frontends
+                    loading_this_data = True
+                    del plugins[d]
+                    break
             else:
+                # Data not found anywhere. We will be computing it.
                 if time_range is not None:
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
@@ -490,34 +508,15 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                # Not in any cache. We will be computing it.
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
 
-            # Should we save this data?
-            if time_range is not None:
-                # No, since we're not even getting the whole data.
-                # Without this check, saving could be attempted if the
-                # storage converter mode is enabled.
-                self.log.warning(f"Not saving {d} while "
-                                 f"selecting a time range in the run")
+            # Should we save this data? If not, return.
+            if (loading_this_data
+                    and not self.context_config['storage_converter']):
                 return
-            if any([len(v) > 0
-                    for k, v in self._find_options.items()
-                    if 'fuzzy' in k]):
-                # In fuzzy matching mode, we cannot (yet) derive the lineage
-                # of any data we are creating. To avoid create false
-                # data entries, we currently do not save at all.
-                self.log.warning(f"Not saving {d} while fuzzy matching is "
-                                 f"turned on.")
-                return
-            if self.context_config['allow_incomplete']:
-                self.log.warning(f"Not saving {d} while loading incomplete "
-                                 f"data is allowed.")
-                return
-
-            elif p.save_when == strax.SaveWhen.NEVER:
+            if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
                     raise ValueError("Plugin forbids saving of {d}")
                 return
@@ -530,26 +529,65 @@ class Context:
             else:
                 assert p.save_when == strax.SaveWhen.ALWAYS
 
-            for sf in self.storage:
-                if sf.readonly:
+            # Warn about conditions that preclude saving, but the user
+            # might not expect.
+            if time_range is not None:
+                # We're not even getting the whole data.
+                # Without this check, saving could be attempted if the
+                # storage converter mode is enabled.
+                self.log.warning(f"Not saving {d} while "
+                                 f"selecting a time range in the run")
+                return
+            if any([len(v) > 0
+                    for k, v in self._find_options.items()
+                    if 'fuzzy' in k]):
+                # In fuzzy matching mode, we cannot (yet) derive the
+                # lineage of any data we are creating. To avoid creating
+                # false data entries, we currently do not save at all.
+                self.log.warning(f"Not saving {d} while fuzzy matching is"
+                                 f" turned on.")
+                return
+            if self.context_config['allow_incomplete']:
+                self.log.warning(f"Not saving {d} while loading incomplete"
+                                 f" data is allowed.")
+                return
+
+            # Save the target and any other outputs of the plugin.
+            for d_to_save in set([d] + list(p.provides)):
+                if d_to_save in savers and len(savers[d_to_save]):
+                    # This multi-output plugin was scanned before
+                    # let's not create doubled savers
+                    assert p.multi_output
                     continue
-                if d not in to_compute:
-                    if not self.context_config['storage_converter']:
+
+                key = strax.DataKey(run_id, d_to_save, p.lineage)
+
+                for sf in self.storage:
+                    if sf.readonly:
                         continue
+                    if loading_this_data:
+                        # Usually, we don't save if we're loading
+                        if not self.context_config['storage_converter']:
+                            continue
+                        # ... but in storage converter mode we do:
+                        try:
+                            sf.find(key,
+                                    **self._find_options)
+                            # Already have this data in this backend
+                            continue
+                        except strax.DataNotAvailable:
+                            # Don't have it, so let's save it!
+                            pass
+                    # If we get here, we must try to save
                     try:
-                        sf.find(key,
-                                **self._find_options)
-                        # Already have this data in this backend
-                        continue
+                        savers[d_to_save].append(sf.saver(
+                            key,
+                            metadata=p.metadata(
+                                run_id,
+                                d_to_save)))
                     except strax.DataNotAvailable:
-                        # Don't have it, so let's convert it!
+                        # This frontend cannot save. Too bad.
                         pass
-                try:
-                    savers[d].append(sf.saver(key,
-                                              metadata=p.metadata(run_id)))
-                except strax.DataNotAvailable:
-                    # This frontend cannot save. Too bad.
-                    pass
 
         for d in targets:
             check_cache(d)
@@ -612,32 +650,38 @@ class Context:
                           t0 + int(1e9) * seconds_range[1])
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
-        # automatically
+        # to merge the results automatically
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind for d in targets)) == 1:
-                temp_name = ''.join(random.choices(
-                    string.ascii_lowercase, k=10))
-                temp_merge = type(temp_name,
-                                  (strax.MergeOnlyPlugin,),
-                                  dict(depends_on=tuple(targets)))
-                self.register(temp_merge)
-                targets = temp_name
-                # TODO: auto-unregister? Better to have a temp register
-                # override option in get_components
-                # Or just always create new context, not only if new options
-                # are given
+                temp_name = ('_temp_'
+                             + ''.join(
+                            random.choices(string.ascii_lowercase, k=10)))
+                p = type(temp_name,
+                         (strax.MergeOnlyPlugin,),
+                         dict(depends_on=tuple(targets)))
+                self.register(p)
+                targets = (temp_name,)
             else:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id, targets=targets, save=save,
                                          time_range=time_range)
+
+        # Cleanup the temp plugins
+        for k in list(self._plugin_class_registry.keys()):
+            if k.startswith('_temp'):
+                del self._plugin_class_registry[k]
+
         for x in strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk']).iter():
+            if not isinstance(x, np.ndarray):
+                raise ValueError(f"Got type {type(x)} rather than numpy array "
+                                 "from the processor!")
             if selection is not None:
                 mask = numexpr.evaluate(selection, local_dict={
                     fn: x[fn]

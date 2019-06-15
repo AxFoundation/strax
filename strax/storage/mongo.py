@@ -76,7 +76,7 @@ class MongoFrontend(StorageFrontend):
 
 @export
 class MongoSaver(strax.Saver):
-    prefer_rechunk = False
+    allow_rechunk = False
 
     def __init__(self, key, metadata, col):
         super().__init__(metadata)
