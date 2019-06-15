@@ -308,6 +308,14 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
+    def get_single_plugin(self, run_id, data_name):
+        """Return a single fully initialized plugin that produces
+        data_name for run_id. For use in custom processing."""
+        plugin = self._get_plugins((data_name,), run_id)[data_name]
+        self._set_plugin_config(plugin, run_id, tolerant=False)
+        plugin.setup()
+        return plugin
+
     def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
@@ -748,7 +756,7 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
-    def _key_for(self, run_id, target):
+    def key_for(self, run_id, target):
         p = self._get_plugins((target,), run_id)[target]
         return strax.DataKey(run_id, target, p.lineage)
 
@@ -759,7 +767,7 @@ class Context:
         :param run_id: run id to get
         :param target: data type to get
         """
-        key = self._key_for(run_id, target)
+        key = self.key_for(run_id, target)
         for sf in self.storage:
             try:
                 return sf.get_metadata(key, **self._find_options)
@@ -803,7 +811,7 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        key = self._key_for(run_id, target)
+        key = self.key_for(run_id, target)
         for sf in self.storage:
             try:
                 sf.find(key, **self._find_options)
@@ -824,7 +832,7 @@ class Context:
             self.scan_runs()
 
         keys = set([
-            self._key_for(run_id, target)
+            self.key_for(run_id, target)
             for run_id in self.runs['name'].values])
 
         found = set()
