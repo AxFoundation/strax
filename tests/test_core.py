@@ -158,7 +158,7 @@ def test_storage_converter():
             store_1, store_2 = st.storage
 
             # Data is now in store 1, but not store 2
-            key = st._key_for(run_id, 'peaks')
+            key = st.key_for(run_id, 'peaks')
             store_1.find(key)
             with pytest.raises(strax.DataNotAvailable):
                 store_2.find(key)
@@ -235,7 +235,7 @@ def test_random_access():
         st.make(run_id=run_id, targets='peaks')
 
         # Second part of hack: corrupt data by removing one chunk
-        dirname = str(st._key_for(run_id, 'peaks'))
+        dirname = str(st.key_for(run_id, 'peaks'))
         os.remove(os.path.join(temp_dir,
                                dirname,
                                strax.dirname_to_prefix(dirname) + '-000000'))
@@ -280,3 +280,12 @@ def test_dtype_mismatch():
                             config=dict(give_wrong_dtype=True))
     with pytest.raises(strax.PluginGaveWrongOutput):
         mystrax.get_array(run_id=run_id, targets='peaks')
+
+
+def test_get_single_plugin():
+    mystrax = strax.Context(storage=[],
+                            register=[Records, Peaks])
+    p = mystrax.get_single_plugin('0', 'peaks')
+    assert isinstance(p, Peaks)
+    assert len(p.config)
+    assert p.config['some_option'] == 0
