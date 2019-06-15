@@ -10,6 +10,7 @@ import typing
 from hashlib import sha1
 
 import numpy as np
+import pandas as pd
 import numba
 import dill
 
@@ -209,6 +210,10 @@ def to_str_tuple(x) -> typing.Tuple[str]:
         return tuple(x)
     elif isinstance(x, tuple):
         return x
+    elif isinstance(x, pd.Series):
+        return tuple(x.values.tolist())
+    elif isinstance(x, np.ndarray):
+        return tuple(x.tolist())
     raise TypeError(f"Expected string or tuple of strings, got {type(x)}")
 
 
