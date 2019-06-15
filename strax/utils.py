@@ -140,10 +140,17 @@ def merged_dtype(dtypes):
 @export
 def merge_arrs(arrs):
     """Merge structured arrays of equal length.
-
     On field name collisions, data from later arrays is kept.
+
+    If you pass one array, it is returned without copying.
+    TODO: hmm... inconsistent
+
+    Much faster than the similar function in numpy.lib.recfunctions.
     """
-    # Much faster than the similar function in numpy.lib.recfunctions
+    if not len(arrs):
+        raise RuntimeError("Cannot merge 0 arrays")
+    if len(arrs) == 1:
+        return arrs[0]
 
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):
@@ -310,3 +317,54 @@ def flatten_dict(d, separator=':', _parent_key=''):
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+@export
+def to_numpy_dtype(field_spec):
+    if isinstance(field_spec, np.dtype):
+        return field_spec
+
+    dtype = []
+    for x in field_spec:
+        if len(x) == 3:
+            if isinstance(x[0], tuple):
+                # Numpy syntax for array field
+                dtype.append(x)
+            else:
+                # Lazy syntax for normal field
+                field_name, field_type, comment = x
+                dtype.append(((comment, field_name), field_type))
+        elif len(x) == 2:
+            # (field_name, type)
+            dtype.append(x)
+        elif len(x) == 1:
+            # Omitted type: assume float
+            dtype.append((x, np.float))
+        else:
+            raise ValueError(f"Invalid field specification {x}")
+    return np.dtype(dtype)
+
+
+@export
+def dict_to_rec(x, dtype=None):
+    """Convert dictionary {field_name: array} to record array
+    Optionally, provide dtype
+    """
+    if isinstance(x, np.ndarray):
+        return x
+
+    if dtype is None:
+        if not len(x):
+            raise ValueError("Cannot infer dtype from empty dict")
+        dtype = to_numpy_dtype([(k, v.dtype)
+                                for k, v in x])
+
+    if not len(x):
+        return np.empty(0, dtype=dtype)
+
+    some_key = list(x.keys())[0]
+    n = len(x[some_key])
+    r = np.zeros(n, dtype=dtype)
+    for k, v in x.items():
+        r[k] = v
+    return r

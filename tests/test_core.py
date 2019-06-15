@@ -1,68 +1,21 @@
-import tempfile
+from .helpers import *
+
 import shutil
 import os
 import os.path as osp
 import glob
 
-import pytest
-import numpy as np
-import strax
-
-
-@strax.takes_config(
-    strax.Option('crash', default=False),
-)
-class Records(strax.Plugin):
-    provides = 'records'
-    depends_on = tuple()
-    dtype = strax.record_dtype()
-
-    def iter(self, *args, **kwargs):
-        if self.config['crash']:
-            raise SomeCrash("CRASH!!!!")
-        for t in range(n_chunks):
-            r = np.zeros(recs_per_chunk, self.dtype)
-            r['time'] = t
-            r['length'] = 1
-            r['dt'] = 1
-            r['channel'] = np.arange(len(r))
-            yield r
-
-
-class SomeCrash(Exception):
-    pass
-
-
-@strax.takes_config(
-    strax.Option('some_option', default=0),
-    strax.Option('give_wrong_dtype', default=False)
-)
-class Peaks(strax.Plugin):
-    provides = 'peaks'
-    depends_on = ('records',)
-    dtype = strax.peak_dtype()
-
-    def compute(self, records):
-        if self.config['give_wrong_dtype']:
-            return np.zeros(5, [('a', np.int), ('b', np.float)])
-        p = np.zeros(len(records), self.dtype)
-        p['time'] = records['time']
-        return p
-
-
-recs_per_chunk = 10
-n_chunks = 10
-run_id = '0'
-
 
 def test_core():
-    for max_workers in [1, 2]:
-        mystrax = strax.Context(storage=[],
-                                register=[Records, Peaks],)
-        bla = mystrax.get_array(run_id=run_id, targets='peaks',
-                                max_workers=max_workers)
-        assert len(bla) == recs_per_chunk * n_chunks
-        assert bla.dtype == strax.peak_dtype()
+    for allow_multiprocess in (False, True):
+        for max_workers in [1, 2]:
+            mystrax = strax.Context(storage=[],
+                                    register=[Records, Peaks],
+                                    allow_multiprocess=allow_multiprocess)
+            bla = mystrax.get_array(run_id=run_id, targets='peaks',
+                                    max_workers=max_workers)
+            assert len(bla) == recs_per_chunk * n_chunks
+            assert bla.dtype == strax.peak_dtype()
 
 
 def test_multirun():
@@ -218,24 +171,30 @@ def test_storage_converter():
 
 
 def test_exception():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks],
-                           config=dict(crash=True))
+    for allow_multiprocess, max_workers in zip((False, True), (1, 2)):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                               register=[Records, Peaks],
+                               allow_multiprocess=allow_multiprocess,
+                               config=dict(crash=True))
 
-        # Check correct exception is thrown
-        with pytest.raises(SomeCrash):
-            st.make(run_id=run_id, targets='peaks')
+            # Check correct exception is thrown
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id,
+                        targets='peaks',
+                        max_workers=max_workers)
 
-        # Check exception is recorded in metadata
-        # in both its original data type and dependents
-        for target in ('peaks', 'records'):
-            assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
+            # Check exception is recorded in metadata
+            # in both its original data type and dependents
+            for target in ('peaks', 'records'):
+                assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
 
-        # Check corrupted data does not load
-        st.context_config['forbid_creation_of'] = ('peaks',)
-        with pytest.raises(strax.DataNotAvailable):
-            st.get_df(run_id=run_id, targets='peaks')
+            # Check corrupted data does not load
+            st.context_config['forbid_creation_of'] = ('peaks',)
+            with pytest.raises(strax.DataNotAvailable):
+                st.get_df(run_id=run_id,
+                          targets='peaks',
+                          max_workers=max_workers)
 
 
 def test_exception_in_saver(caplog):
