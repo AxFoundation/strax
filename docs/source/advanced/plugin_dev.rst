@@ -1,6 +1,18 @@
 Plugin development
 ===================
 
+Special time fields
+-----------------------
+The ``time``, ``endtime``, ``dt`` and ``length`` fields have special meaning for strax.
+
+It is useful for most plugins to output a ``time`` and ``endtime`` field, indicating the
+start and (exclusive) end time of the entitities you are producing.
+If you do not do this, your plugin cannot be loaded for part of a run (e.g. with ``seconds_range``).
+
+Both ``time`` and ``endtime`` should be 64-bit integer timestamps in nanoseconds since the unix epoch. Instead of ``endtime``, you can provide ``dt`` (an integer time resolution in ns) and ``length`` (integer); strax will then compute the endtime as ``dt * length``. Lower-level datatypes commonly use this.
+
+Usually, you simply pass these time-related fields through from one of your dependencies (e.g. ``events`` or ``peak_basics``). You should only modify them if you are changing data kind. If your plugin does defines a new data kind, you set the values yourself, depending on the thing you are making (events, peaks, etc).
+
 
 
 Multiple outputs
