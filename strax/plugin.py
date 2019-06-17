@@ -119,7 +119,7 @@ class Plugin:
             return self.dtype[data_type]
         return self.dtype
 
-    def _data_kind_for(self, data_type):
+    def data_kind_for(self, data_type):
         if self.multi_output:
             return self.data_kind[data_type]
         return self.data_kind
@@ -131,7 +131,7 @@ class Plugin:
         return dict(
             run_id=run_id,
             data_type=data_type,
-            data_kind=self._data_kind_for(data_type),
+            data_kind=self.data_kind_for(data_type),
             dtype=self.dtype_for(data_type),
             lineage_hash=strax.DataKey(
                 run_id, data_type, self.lineage).lineage_hash,
@@ -154,7 +154,7 @@ class Plugin:
         deps_by_kind = dict()
         key_deps = []
         for d in self.depends_on:
-            k = self.deps[d]._data_kind_for(d)
+            k = self.deps[d].data_kind_for(d)
             deps_by_kind.setdefault(k, [])
 
             # If this has time information, put it first in the list
