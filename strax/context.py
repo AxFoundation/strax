@@ -300,7 +300,7 @@ class Context:
         p = self._get_plugins((data_name,), run_id='0')[data_name]
         display_headers = ['Field name', 'Data type', 'Comment']
         result = []
-        for name, dtype in strax.utils.unpack_dtype(p.dtype):
+        for name, dtype in strax.utils.unpack_dtype(p.dtype_for(data_name)):
             if isinstance(name, tuple):
                 title, name = name
             else:
