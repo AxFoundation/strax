@@ -227,7 +227,7 @@ class Context:
                 cache.update(self._get_plugins((d,), run_id='0'))
             p = cache[d]
 
-            for field_name in p.dtype.names:
+            for field_name in p.dtype_for(d).fields:
                 if fnmatch.fnmatch(field_name, pattern):
                     print(f"{field_name} is part of {d} "
                           f"(provided by {p.__class__.__name__})")
