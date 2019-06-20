@@ -916,13 +916,14 @@ class Context:
 
         return self.runs
 
-    def select_runs(self, run_mode=None,
+    def select_runs(self, run_mode=None, run_id=None, 
                     include_tags=None, exclude_tags=None,
                     available=tuple(),
                     pattern_type='fnmatch', ignore_underscore=True):
         """Return pandas.DataFrame with basic info from runs
         that match selection criteria.
         :param run_mode: Pattern to match run modes (reader.ini.name)
+        :param run_id: Pattern to match a run_id or run_ids
         :param available: str or tuple of strs of data types for which data
         must be available according to the runs DB.
 
