@@ -958,28 +958,25 @@ class Context:
         if pattern_type not in ('re', 'fnmatch'):
             raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
-        if run_id is not None:
-            run_ids = dsets['run_id'].values
-            mask = np.zeros(len(run_ids), dtype=np.bool_)
+        
+        # get the data set for either run_ids only or given mode only or for both
+        for field_name, requested_value in (('run_id', run_id), ('mode', run_mode)):
+            
+            if requested_value is None:
+                continue
+            
+            values = dsets[field_name].values
+            mask = np.zeros(len(values), dtype=np.bool_)
+            
             if pattern_type == 'fnmatch':
-                for i, x in enumerate(modes):
-                    mask[i] = fnmatch.fnmatch(x, run_id)
+                for i, x in enumerate(values):
+                    mask[i] = fnmatch.fnmatch(x, requested_value)
             elif pattern_type == 're':
-                for i, x in enumerate(run_ids):
-                    mask[i] = bool(re.match(run_id, x))
+                for i, x in enumerate(values):
+                    mask[i] = bool(re.match(requested_value, x))
                     
             dsets = dsets[mask]
-
-        if run_mode is not None:
-            modes = dsets['mode'].values
-            mask = np.zeros(len(modes), dtype=np.bool_)
-            if pattern_type == 'fnmatch':
-                for i, x in enumerate(modes):
-                    mask[i] = fnmatch.fnmatch(x, run_mode)
-            elif pattern_type == 're':
-                for i, x in enumerate(modes):
-                    mask[i] = bool(re.match(run_mode, x))
-            dsets = dsets[mask]
+        
 
         if include_tags is not None:
             dsets = dsets[_tags_match(dsets,
