@@ -957,6 +957,18 @@ class Context:
         if pattern_type not in ('re', 'fnmatch'):
             raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
+        if run_id is not None:
+            run_ids = dsets['run_id'].values
+            mask = np.zeros(len(run_ids), dtype=np.bool_)
+            if pattern_type == 'fnmatch':
+                for i, x in enumerate(modes):
+                    mask[i] = fnmatch.fnmatch(x, run_id)
+            elif pattern_type == 're':
+                for i, x in enumerate(run_ids):
+                    mask[i] = bool(re.match(run_id, x))
+                    
+            dsets = dsets[mask]
+
         if run_mode is not None:
             modes = dsets['mode'].values
             mask = np.zeros(len(modes), dtype=np.bool_)
