@@ -838,7 +838,7 @@ class Context:
         found = set()
         for sf in self.storage:
             remaining = keys - found
-            is_found = sf.find_several(remaining, **self._find_options)
+            is_found = sf.find_several(list(remaining), **self._find_options)
             found |= set([k for i, k in enumerate(remaining)
                           if is_found[i]])
         return list(sorted([x.run_id for x in found]))
