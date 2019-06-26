@@ -1,8 +1,5 @@
 import itertools
-import numpy as np
-import pytest
-from . import helpers   # Mocks numba    # noqa
-import strax
+from .helpers import *
 
 
 @pytest.fixture

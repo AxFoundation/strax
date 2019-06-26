@@ -3,15 +3,12 @@ import numpy as np
 import numba
 from enum import IntEnum
 
+import strax
 from strax.processing.pulse_processing import NO_RECORD_LINK, record_links
-from strax.processing.peak_building import find_peaks
-from .general import fully_contained_in
-from strax.dtypes import peak_dtype
-
-__all__ = 'ReductionLevel cut_baseline cut_outside_hits ' \
-          'replace_with_spike exclude_tails'.split()
+export, __all__ = strax.exporter()
 
 
+@export
 class ReductionLevel(IntEnum):
     """Identifies what type of data reduction has been used on a record
     """
@@ -27,6 +24,7 @@ class ReductionLevel(IntEnum):
     METADATA_ONLY = 4
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def cut_baseline(records, n_before=48, n_after=30):
     """"Replace first n_before and last n_after samples of pulses by 0
@@ -49,6 +47,7 @@ def cut_baseline(records, n_before=48, n_after=30):
     records.reduction_level[:] = ReductionLevel.BASELINE_CUT
 
 
+@export
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     """Return records with waveforms zeroed if not within
     left_extension or right_extension of hits.
@@ -132,6 +131,7 @@ def _cut_outside_hits(records, hits, new_recs,
                     records[next_ri]['data'][:b_next]
 
 
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def replace_with_spike(records, also_for_multirecord_pulses=False):
     """Replaces the waveform in each record with a spike of the same integral
@@ -154,25 +154,3 @@ def replace_with_spike(records, also_for_multirecord_pulses=False):
         d.data[center] = integral
 
     records.reduction_level[:] = ReductionLevel.WAVEFORM_REPLACED
-
-
-# Cannot jit this guy, find_peaks is not a jitted function
-def exclude_tails(records, to_pe,
-                  min_area=int(2e5),
-                  peak_duration=int(1e4),
-                  tail_duration=int(1e7),
-                  gap_threshold=300):
-    """Return records that do not lie fully in tail after a big peak"""
-    # Find peaks using the records as "hits". This is rough, but good enough.
-    if not len(records):
-        return records
-    cut = find_peaks(records, to_pe,
-                     gap_threshold=gap_threshold,
-                     min_area=min_area,
-                     result_dtype=peak_dtype(records['channel'].max() + 1),
-                     max_duration=peak_duration)
-    # Transform these 'peaks' to ranges to cut.
-    # We want to cut tails after peaks, not the peaks themselves.
-    cut['time'] += peak_duration        # Don't cut the actual peak
-    cut['length'] = tail_duration / cut['dt']
-    return records[fully_contained_in(records, cut) == -1]

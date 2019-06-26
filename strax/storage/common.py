@@ -274,15 +274,6 @@ class StorageFrontend:
                          and 'exception' not in metadata)
         return False
 
-    def list_available(self, key: DataKey,
-                       allow_incomplete, fuzzy_for, fuzzy_for_options):
-        """Return list of run_ids for which available data matches key.
-        The run_id field of key is ignored."""
-        if not self._we_take(key.data_type):
-            return []
-        return self._list_available(
-            key, allow_incomplete, fuzzy_for, fuzzy_for_options)
-
     def find_several(self, keys, **kwargs):
         """Return list with backend keys or False
         for several data keys.
@@ -295,7 +286,7 @@ class StorageFrontend:
         for key in keys:
             try:
                 r = self.find(key, **kwargs)
-            except (strax.DataNotAvailable, 
+            except (strax.DataNotAvailable,
                     strax.DataCorrupted):
                 r = False
             result.append(r)
@@ -309,12 +300,6 @@ class StorageFrontend:
         """Iterable of run document / metadata dictionaries
         """
         yield from tuple()
-
-    def _list_available(self, key: DataKey,
-                        allow_incomplete, fuzzy_for, fuzzy_for_options):
-        """Return list of available runs whose data matches key.
-        The run_id field of key is ignored."""
-        raise NotImplementedError
 
     def _find(self, key: DataKey,
               write, allow_incomplete, fuzzy_for, fuzzy_for_options):
@@ -416,7 +401,8 @@ class Saver:
     Do NOT add unpickleable things as attributes (such as loggers)!
     """
     closed = False
-    prefer_rechunk = True   # If False, do not rechunk even if plugin allows it
+    allow_rechunk = True   # If False, do not rechunk even if plugin allows it
+    allow_fork = True   # If False, cannot be inlined / forked
 
     # This is set if the saver is operating in multiple processes at once
     # Do not set it yourself
@@ -433,7 +419,7 @@ class Saver:
         """Iterate over source and save the results under key
         along with metadata
         """
-        if rechunk and self.prefer_rechunk:
+        if rechunk and self.allow_rechunk:
             source = strax.fixed_size_chunks(source)
 
         pending = []
