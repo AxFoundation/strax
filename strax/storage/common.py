@@ -274,15 +274,6 @@ class StorageFrontend:
                          and 'exception' not in metadata)
         return False
 
-    def list_available(self, key: DataKey,
-                       allow_incomplete, fuzzy_for, fuzzy_for_options):
-        """Return list of run_ids for which available data matches key.
-        The run_id field of key is ignored."""
-        if not self._we_take(key.data_type):
-            return []
-        return self._list_available(
-            key, allow_incomplete, fuzzy_for, fuzzy_for_options)
-
     def find_several(self, keys, **kwargs):
         """Return list with backend keys or False
         for several data keys.
@@ -309,12 +300,6 @@ class StorageFrontend:
         """Iterable of run document / metadata dictionaries
         """
         yield from tuple()
-
-    def _list_available(self, key: DataKey,
-                        allow_incomplete, fuzzy_for, fuzzy_for_options):
-        """Return list of available runs whose data matches key.
-        The run_id field of key is ignored."""
-        raise NotImplementedError
 
     def _find(self, key: DataKey,
               write, allow_incomplete, fuzzy_for, fuzzy_for_options):
