@@ -1,3 +1,12 @@
+import tempfile     # noqa
+from itertools import accumulate
+from functools import partial
+
+import numpy as np
+from boltons import iterutils
+from hypothesis import strategies
+import pytest     # noqa
+
 ##
 # Hack to disable numba.jit
 # For the mini-examples run during testing numba actually causes a massive
@@ -5,14 +14,6 @@
 # respond "slightly" less nice (giving you junk data or segfaulting)
 # Once in a while you should test without this...
 ##
-from itertools import accumulate
-from functools import partial
-
-import numpy as np
-from boltons import iterutils
-from hypothesis import strategies as st
-
-
 def mock_numba():
     from unittest.mock import MagicMock
 
@@ -42,9 +43,9 @@ def sorted_bounds(disjoint=False,
         # Since we accumulate later:
         max_value /= max_len
 
-    s = st.lists(st.integers(min_value=0,
-                             max_value=max_value),
-                 min_size=0, max_size=20)
+    s = strategies.lists(strategies.integers(min_value=0,
+                                             max_value=max_value),
+                         min_size=0, max_size=20)
     if disjoint:
         s = s.map(accumulate).map(list)
 
@@ -141,3 +142,59 @@ single_fake_pulse = sorted_bounds(max_value=50)\
     .map(partial(bounds_to_records, single=True))
 
 several_fake_records = sorted_bounds(max_value=50).map(bounds_to_records)
+
+
+##
+# Basic test plugins
+##
+@strax.takes_config(
+    strax.Option('crash', default=False),
+)
+class Records(strax.Plugin):
+    provides = 'records'
+    parallel = 'process'
+    depends_on = tuple()
+    dtype = strax.record_dtype()
+
+    def source_finished(self):
+        return True
+
+    def is_ready(self, chunk_i):
+        return chunk_i < n_chunks
+
+    def compute(self, chunk_i):
+        if self.config['crash']:
+            raise SomeCrash("CRASH!!!!")
+        r = np.zeros(recs_per_chunk, self.dtype)
+        r['time'] = chunk_i
+        r['length'] = 1
+        r['dt'] = 1
+        r['channel'] = np.arange(len(r))
+        return r
+
+
+class SomeCrash(Exception):
+    pass
+
+
+@strax.takes_config(
+    strax.Option('some_option', default=0),
+    strax.Option('give_wrong_dtype', default=False)
+)
+class Peaks(strax.Plugin):
+    provides = 'peaks'
+    depends_on = ('records',)
+    dtype = strax.peak_dtype()
+    parallel = True
+
+    def compute(self, records):
+        if self.config['give_wrong_dtype']:
+            return np.zeros(5, [('a', np.int), ('b', np.float)])
+        p = np.zeros(len(records), self.dtype)
+        p['time'] = records['time']
+        return p
+
+
+recs_per_chunk = 10
+n_chunks = 10
+run_id = '0'

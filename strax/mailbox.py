@@ -139,10 +139,13 @@ class Mailbox:
             return self._read(subscriber_i=subscriber_i)
 
     def start(self):
+        if not self._n_subscribers:
+            raise ValueError(f"Attempt to start mailbox {self.name} "
+                             f"without subscribers")
         for t in self._threads:
             t.start()
 
-    def kill_from_exception(self, e):
+    def kill_from_exception(self, e, reraise=True):
         """Kill the mailbox following a caught exception e"""
         if isinstance(e, MailboxKilled):
             # Kill this mailbox too.
@@ -150,9 +153,10 @@ class Mailbox:
             self.kill(reason=e.args[0])
             # Do NOT raise! One traceback on the screen is enough.
         else:
-            self.log.error("Killing mailbox due to exception {e}!")
+            self.log.debug(f"Killing mailbox due to exception {e}!")
             self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-            raise e
+            if reraise:
+                raise e
 
     def kill(self, upstream=True, reason=None):
         with self._lock:
@@ -356,3 +360,28 @@ class Mailbox:
     @property
     def _lowest_msg_number(self):
         return self._mailbox[0][0]
+
+
+@export
+def divide_outputs(source, mailboxes, outputs=None):
+    """This code is a 'mail sorter' which gets dicts of arrays from source
+    and sends the right array to the right mailbox.
+    """
+    # raise ZeroDivisionError   # TODO: check this is handled properly
+    if outputs is None:
+        outputs = mailboxes.keys()
+    mbs_to_kill = [mailboxes[d] for d in outputs]
+    # TODO: this code duplicates exception handling and cleanup
+    # from Mailbox.send_from! Can we avoid that somehow?
+    try:
+        for result in source:
+            for d, x in result.items():
+                mailboxes[d].send(x)
+    except Exception as e:
+        for m in mbs_to_kill:
+            m.kill_from_exception(e, reraise=False)
+        if not isinstance(e, MailboxKilled):
+            raise
+    else:
+        for m in mbs_to_kill:
+            m.close()

@@ -90,23 +90,6 @@ class DataDirectory(StorageFrontend):
                     found.add(run_id)
                     yield dict(name=run_id)
 
-    def _list_available(self, key: strax.DataKey,
-                        allow_incomplete, fuzzy_for, fuzzy_for_options):
-        if allow_incomplete:
-            raise NotImplementedError(
-                "allow_incomplete not yet supported with list_available "
-                "for DataDirectory")
-
-        found_runs = []
-        for fn in self._subfolders():
-            run_id = self._folder_matches(
-                fn, key, fuzzy_for, fuzzy_for_options,
-                ignore_name=True)
-            if run_id:
-                found_runs.append(run_id)
-
-        return found_runs
-
     def _find(self, key, write,
               allow_incomplete, fuzzy_for, fuzzy_for_options):
         dirname = osp.join(self.path, str(key))
