@@ -12,6 +12,7 @@ try:
     from npshmex import ProcessPoolExecutor as SHMExecutor
 except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
+    SHMExecutor = None
     pass
 
 import numpy as np
@@ -64,6 +65,10 @@ class ThreadedMailboxProcessor:
             if (allow_multiprocess and len(mp_plugins)):
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
+                    if SHMExecutor is None:
+                        raise RuntimeError(
+                            "You must install npshmex to enable shm"
+                            " transfer of numpy arrays.")
                     _proc_ex = SHMExecutor
                 self.process_executor = _proc_ex(max_workers=max_workers)
 
@@ -73,7 +78,7 @@ class ThreadedMailboxProcessor:
                     int(np.argmin([len(p.depends_on)
                                    for p in mp_plugins.values()]))]
                 components = strax.ParallelSourcePlugin.inline_plugins(
-                    components, start_from)
+                    components, start_from, log=self.log)
                 self.components = components
                 self.log.debug("Altered components for multiprocessing: "
                                + str(components))
