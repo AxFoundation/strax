@@ -475,7 +475,7 @@ class ParallelSourcePlugin(Plugin):
     parallel = 'process'
 
     @classmethod
-    def inline_plugins(cls, components, start_from):
+    def inline_plugins(cls, components, start_from, log):
         plugins = components.plugins.copy()
 
         sub_plugins = {start_from: plugins[start_from]}
@@ -501,6 +501,7 @@ class ParallelSourcePlugin(Plugin):
 
         if len(set(list(sub_plugins.values()))) == 1:
             # Just one plugin to inline: no use
+            log.debug("Just one plugin to inline: skipping")
             return components
 
         # Which data types should we output? Three cases follow.
@@ -549,6 +550,10 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
         for d in p.provides:
             plugins[d] = p
+        p.deps = {d: plugins[d] for d in p.depends_on}
+
+        log.debug(f"Inlined plugins: {p.sub_plugins}."
+                  f"Inlined savers: {p.sub_savers}")
 
         return strax.ProcessorComponents(
             plugins, components.loaders, savers, components.targets)
