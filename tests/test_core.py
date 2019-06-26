@@ -267,12 +267,16 @@ def test_run_selection():
         assert len(st.scan_runs()) == len(mock_rundb)
         assert st.run_metadata('0') == mock_rundb[0]
 
-        assert len(st.select_runs(run_mode='nice') == 1)
-        assert len(st.select_runs(include_tags='interesting') == 2)
+        assert len(st.select_runs(run_mode='nice')) == 2
+        assert len(st.select_runs(include_tags='interesting')) == 2
         assert len(st.select_runs(include_tags='interesting',
-                                 exclude_tags='bad') == 1)
+                                  exclude_tags='bad')) == 1
         assert len(st.select_runs(include_tags='interesting',
-                                  run_mode='nice') == 1)
+                                  run_mode='nice')) == 2
+
+        assert len(st.select_runs(run_id='0')) == 1
+        assert len(st.select_runs(run_id='*',
+                                  exclude_tags='bad')) == 1
 
 def test_dtype_mismatch():
     mystrax = strax.Context(storage=[],

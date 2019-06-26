@@ -916,7 +916,7 @@ class Context:
 
         return self.runs
 
-    def select_runs(self, run_mode=None, run_id=None, 
+    def select_runs(self, run_mode=None, run_id=None,
                     include_tags=None, exclude_tags=None,
                     available=tuple(),
                     pattern_type='fnmatch', ignore_underscore=True):
@@ -958,25 +958,26 @@ class Context:
         if pattern_type not in ('re', 'fnmatch'):
             raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
-        
-        # get the data set for either run_ids only or given mode only or for both
-        for field_name, requested_value in (('run_id', run_id), ('mode', run_mode)):
-            
+        # Filter datasets by run mode and/or name
+        for field_name, requested_value in (
+                ('name', run_id),
+                ('mode', run_mode)):
+
             if requested_value is None:
                 continue
-            
+
             values = dsets[field_name].values
             mask = np.zeros(len(values), dtype=np.bool_)
-            
+
             if pattern_type == 'fnmatch':
                 for i, x in enumerate(values):
                     mask[i] = fnmatch.fnmatch(x, requested_value)
             elif pattern_type == 're':
                 for i, x in enumerate(values):
                     mask[i] = bool(re.match(requested_value, x))
-                    
+
             dsets = dsets[mask]
-        
+
 
         if include_tags is not None:
             dsets = dsets[_tags_match(dsets,
