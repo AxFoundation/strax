@@ -916,13 +916,14 @@ class Context:
 
         return self.runs
 
-    def select_runs(self, run_mode=None,
+    def select_runs(self, run_mode=None, run_id=None, 
                     include_tags=None, exclude_tags=None,
                     available=tuple(),
                     pattern_type='fnmatch', ignore_underscore=True):
         """Return pandas.DataFrame with basic info from runs
         that match selection criteria.
         :param run_mode: Pattern to match run modes (reader.ini.name)
+        :param run_id: Pattern to match a run_id or run_ids
         :param available: str or tuple of strs of data types for which data
         must be available according to the runs DB.
 
@@ -957,16 +958,25 @@ class Context:
         if pattern_type not in ('re', 'fnmatch'):
             raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
-        if run_mode is not None:
-            modes = dsets['mode'].values
-            mask = np.zeros(len(modes), dtype=np.bool_)
+        
+        # get the data set for either run_ids only or given mode only or for both
+        for field_name, requested_value in (('run_id', run_id), ('mode', run_mode)):
+            
+            if requested_value is None:
+                continue
+            
+            values = dsets[field_name].values
+            mask = np.zeros(len(values), dtype=np.bool_)
+            
             if pattern_type == 'fnmatch':
-                for i, x in enumerate(modes):
-                    mask[i] = fnmatch.fnmatch(x, run_mode)
+                for i, x in enumerate(values):
+                    mask[i] = fnmatch.fnmatch(x, requested_value)
             elif pattern_type == 're':
-                for i, x in enumerate(modes):
-                    mask[i] = bool(re.match(run_mode, x))
+                for i, x in enumerate(values):
+                    mask[i] = bool(re.match(requested_value, x))
+                    
             dsets = dsets[mask]
+        
 
         if include_tags is not None:
             dsets = dsets[_tags_match(dsets,
