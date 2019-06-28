@@ -21,6 +21,10 @@ from .mailbox import *
 from .processor import *
 from .context import *
 
+# Just run this file, it will add new methods to Context
+from . import run_selection
+del run_selection
+
 from .io import *
 
 from strax.processing.data_reduction import *
