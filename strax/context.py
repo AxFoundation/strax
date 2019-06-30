@@ -431,15 +431,16 @@ class Context:
         n_range = None
         if time_range is not None:
             # Ensure we have one data kind
-            if len(set([plugins[t].data_kind for t in targets])) > 1:
+            if len(set([plugins[t].data_kind_for(t) for t in targets])) > 1:
                 raise NotImplementedError(
                     "Time range selection not implemented "
                     "for multiple data kinds.")
 
             # Which plugin provides time information? We need it to map to
             # row indices.
-            for p in targets:
-                if 'time' in plugins[p].dtype.names:
+            for d in targets:
+                if 'time' in plugins[d].dtype_for(d).names:
+                    d_with_time = d
                     break
             else:
                 raise RuntimeError(f"No time info in targets, should have been"
@@ -448,11 +449,29 @@ class Context:
             # Find a range of row numbers that contains the time range
             # It's a bit too large: to
             # Get the n <-> time mapping in needed chunks
-            if not self.is_stored(run_id, p):
-                raise strax.DataNotAvailable(f"Time range selection needs time"
-                                             f" info from {p}, but this data"
-                                             f" is not yet available")
-            meta = self.get_meta(run_id, p)
+            if d_with_time.startswith('_temp'):
+                # This is a merge-only data type, which is never stored.
+                # Get the time info from one of its dependencies
+                deps_to_check = plugins[d_with_time].depends_on
+                for d in deps_to_check:
+                    if (d in plugins
+                            and 'time' in plugins[d].dtype_for(d).names):
+                        d_with_time = d
+                        break
+                else:
+                    raise RuntimeError(
+                        "Cannot use time range selection "
+                        f"since none of the dependencies {deps_to_check} "
+                        "of the MergeOnlyPlugin provide time information")
+
+                d_with_time = plugins[d_with_time].depends_on[0]
+
+            if not self.is_stored(run_id, d_with_time):
+                raise strax.DataNotAvailable(
+                    "Time range selection needs time info from "
+                    f"{d_with_time}, but this data is not yet available")
+
+            meta = self.get_meta(run_id, d_with_time)
             times = np.array([c['first_time'] for c in meta['chunks']])
             # Reconstruct row numbers from row counts, which are in metadata
             # n_end is last row + 1 in a chunk. n_start is the first.
@@ -501,7 +520,7 @@ class Context:
                     break
             else:
                 # Data not found anywhere. We will be computing it.
-                if time_range is not None:
+                if time_range is not None and not d.startswith('_temp'):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
@@ -604,20 +623,61 @@ class Context:
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
         # Also run any user-defined setup
-        for p in plugins.values():
-            self._set_plugin_config(p, run_id, tolerant=False)
-            p.setup()
+        for d in plugins.values():
+            self._set_plugin_config(d, run_id, tolerant=False)
+            d.setup()
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
             targets=targets)
 
+    def estimate_run_start(self, run_id, targets):
+        """Return run start time in ns since epoch.
+
+        This fetches from run metadata, and if this fails, it
+        estimates it using data metadata from targets.
+        """
+        try:
+            # Use run metadata, if it is available, to get
+            # the run start time (floored to seconds)
+            t0 = self.run_metadata(run_id, 'start')['start']
+            t0 = int(t0.timestamp()) * int(1e9)
+        except strax.RunMetadataNotAvailable:
+            if targets is None:
+                raise
+            # Get an approx start from the data itself,
+            # then floor it to seconds for consistency
+            t = strax.to_str_tuple(targets)[0]
+            # Get an approx start from the data itself,
+            # then floor it to seconds for consistency
+            t0 = self.get_meta(run_id, t)['chunks'][0]['first_time']
+            t0 = (int(t0) // int(1e9)) * int(1e9)
+        return t0
+
+    def to_absolute_time_range(self, run_id, targets, time_range=None,
+                               seconds_range=None, time_within=None):
+        if ((time_range is None)
+                + (seconds_range is None)
+                + (time_within is None)
+                < 2):
+            raise RuntimeError("Pass no more than one one of"
+                               " time_range, seconds_range, ot time_within")
+        if seconds_range is not None:
+            t0 = self.estimate_run_start(run_id, targets)
+            time_range = (t0 + int(1e9 * seconds_range[0]),
+                          t0 + int(1e9 * seconds_range[1]))
+        if time_within is not None:
+            time_range = (time_within['time'], strax.endtime(time_within))
+        return time_range
+
     def get_iter(self, run_id: str,
                  targets, save=tuple(), max_workers=None,
                  time_range=None,
                  seconds_range=None,
-                 selection=None,
+                 time_within=None,
+                 time_selection='fully_contained',
+                 selection_str=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -631,27 +691,14 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        if isinstance(selection, (list, tuple)):
-            selection = ' & '.join(f'({x})' for x in selection)
+        if isinstance(selection_str, (list, tuple)):
+            selection_str = ' & '.join(f'({x})' for x in selection_str)
 
-        # Convert relative to absolute time range
-        if seconds_range is not None:
-            try:
-                # Use run metadata, if it is available, to get
-                # the run start time (floored to seconds)
-                t0 = self.run_metadata(run_id, 'start')['start']
-                t0 = int(t0.timestamp()) * int(1e9)
-            except Exception:
-                # Get an approx start from the data itself,
-                # then floor it to seconds for consistency
-                if isinstance(targets, (list, tuple)):
-                    t = targets[0]
-                else:
-                    t = targets
-                t0 = self.get_meta(run_id, t)['chunks'][0]['first_time']
-                t0 = int(t0 / int(1e9)) * int(1e9)
-            time_range = (t0 + int(1e9) * seconds_range[0],
-                          t0 + int(1e9) * seconds_range[1])
+        # Convert alternate time arguments to absolute range
+        time_range = self.to_absolute_time_range(
+            run_id=run_id, targets=targets,
+            time_range=time_range, seconds_range=seconds_range,
+            time_within=time_within)
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically
@@ -686,19 +733,45 @@ class Context:
             if not isinstance(x, np.ndarray):
                 raise ValueError(f"Got type {type(x)} rather than numpy array "
                                  "from the processor!")
-            if selection is not None:
-                mask = numexpr.evaluate(selection, local_dict={
-                    fn: x[fn]
-                    for fn in x.dtype.names})
-                x = x[mask]
-            if time_range:
-                if 'time' not in x.dtype.names:
-                    raise NotImplementedError(
-                        "Time range selection requires time information, "
-                        "but none of the required plugins provides it.")
-                x = x[(time_range[0] <= x['time']) &
-                      (x['time'] < time_range[1])]
+            x = self.apply_selection(x, selection_str,
+                                     time_range, time_selection)
             yield x
+
+    def apply_selection(self, x, selection_str=None,
+                        time_range=None,
+                        time_selection='fully_contained'):
+        """Return x after applying selections
+
+        :param selection_str: Query string or sequence of strings to apply.
+        :param time_range: (start, stop) range to load, in ns since the epoch
+        :param time_selection: Kind of time selectoin to apply:
+        - fully_contained: (default) select things fully contained in the range
+        - touching: select things that (partially) overlap with the range
+        - skip: Do not select a time range, even if other arguments say so
+        """
+        # Apply the time selections
+        if time_range is None or time_selection == 'skip':
+            pass
+        elif 'time' not in x.dtype.names:
+            raise NotImplementedError(
+                "Time range selection requires time information, "
+                "but none of the required plugins provides it.")
+        elif time_selection == 'fully_contained':
+            return x[(time_range[0] <= x['time']) &
+                     (strax.endtime(x) < time_range[1])]
+        elif time_selection == 'touching':
+            return x[(strax.endtime(x) > x['time']) &
+                     (x['time'] < time_range[1])]
+        else:
+            raise ValueError(f"Unknown time_selection {time_selection}")
+
+        if selection_str:
+            mask = numexpr.evaluate(selection_str, local_dict={
+                fn: x[fn]
+                for fn in x.dtype.names})
+            x = x[mask]
+
+        return x
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
@@ -824,6 +897,18 @@ class Context:
         setattr(cls, f.__name__, f)
 
 
+select_docs = """
+:param selection_str: Query string or sequence of strings to apply.
+:param time_range: (start, stop) range to load, in ns since the epoch
+:param seconds_range: (start, stop) range of seconds since
+the start of the run to load.
+:param time_within: row of strax data (e.g. event) to use as time range
+:param time_selection: Kind of time selectoin to apply:
+- fully_contained: (default) select things fully contained in the range
+- touching: select things that (partially) overlap with the range
+- skip: Do not select a time range, even if other arguments say so
+"""
+
 get_docs = """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
@@ -832,11 +917,8 @@ get_docs = """
     Many plugins save automatically anyway.
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
-:param selection: Query string or list of strings with selections to apply.
-:param time_range: (start, stop) range of ns since the unix epoch to load
-:param seconds_range: (start, stop) range of seconds since the start of the
-run to load.
-"""
+""" + select_docs
+
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)
