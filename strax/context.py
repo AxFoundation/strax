@@ -1,10 +1,8 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import collections
 import logging
 import fnmatch
 from functools import partial
 import random
-import re
 import string
 import typing as ty
 import warnings
@@ -12,11 +10,9 @@ import warnings
 import numexpr
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 
 import strax
 export, __all__ = strax.exporter()
-
 
 @strax.takes_config(
     strax.Option(name='storage_converter', default=False,
@@ -713,8 +709,9 @@ class Context:
         # Multi-run support
         run_ids = strax.to_str_tuple(run_id)
         if len(run_ids) > 1:
-            return multi_run(self, run_ids, targets=targets,
-                             save=save, max_workers=max_workers, **kwargs)
+            return strax.multi_run(
+                self.make, run_ids, targets=targets,
+                save=save, max_workers=max_workers, **kwargs)
 
         for _ in self.get_iter(run_ids[0], targets,
                                save=save, max_workers=max_workers, **kwargs):
@@ -728,8 +725,9 @@ class Context:
         """
         run_ids = strax.to_str_tuple(run_id)
         if len(run_ids) > 1:
-            results = multi_run(self.get_array, run_ids, targets=targets,
-                                save=save, max_workers=max_workers, **kwargs)
+            results = strax.multi_run(
+                self.get_array, run_ids, targets=targets,
+                save=save, max_workers=max_workers, **kwargs)
         else:
             results = list(self.get_iter(run_ids[0], targets,
                                          save=save, max_workers=max_workers,
