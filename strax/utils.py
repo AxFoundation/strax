@@ -362,8 +362,8 @@ def dict_to_rec(x, dtype=None):
     if dtype is None:
         if not len(x):
             raise ValueError("Cannot infer dtype from empty dict")
-        dtype = to_numpy_dtype([(k, v.dtype)
-                                for k, v in x])
+        dtype = to_numpy_dtype([(k, np.asarray(v).dtype)
+                                for k, v in x.items()])
 
     if not len(x):
         return np.empty(0, dtype=dtype)
