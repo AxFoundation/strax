@@ -1,3 +1,7 @@
+0.7.5 / 2019-07-06
+------------------
+- Time selection refactor and context extensibility (#195)
+
 0.7.4 / 2019-06-26
 -------------------
 - Fix availability checks (#194)
