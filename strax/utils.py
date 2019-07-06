@@ -1,19 +1,20 @@
 from base64 import b32encode
 import collections
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 from functools import wraps
 import json
 import re
 import sys
 import traceback
-import typing
+import typing as ty
 from hashlib import sha1
 
-import numpy as np
-import pandas as pd
-import numba
 import dill
-
+import numba
+import numpy as np
+from tqdm import tqdm
+import pandas as pd
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -203,7 +204,7 @@ def profile_threaded(filename):
 
 
 @export
-def to_str_tuple(x) -> typing.Tuple[str]:
+def to_str_tuple(x) -> ty.Tuple[str]:
     if isinstance(x, str):
         return x,
     elif isinstance(x, list):
@@ -361,8 +362,8 @@ def dict_to_rec(x, dtype=None):
     if dtype is None:
         if not len(x):
             raise ValueError("Cannot infer dtype from empty dict")
-        dtype = to_numpy_dtype([(k, v.dtype)
-                                for k, v in x])
+        dtype = to_numpy_dtype([(k, np.asarray(v).dtype)
+                                for k, v in x.items()])
 
     if not len(x):
         return np.empty(0, dtype=dtype)
@@ -373,3 +374,90 @@ def dict_to_rec(x, dtype=None):
     for k, v in x.items():
         r[k] = v
     return r
+
+
+@export
+def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
+    """Execute f(run_id, **kwargs) over multiple runs,
+    then return list of results.
+
+    :param run_ids: list/tuple of runids
+    :param max_workers: number of worker threads/processes to spawn
+
+    Other (kw)args will be passed to f
+    """
+    # Try to int all run_ids
+
+    # Get a numpy array of run ids.
+    try:
+        run_id_numpy = np.array([int(x) for x in run_ids],
+                                dtype=np.int32)
+    except ValueError:
+        # If there are string id's among them,
+        # numpy will autocast all the run ids to Unicode fixed-width
+        run_id_numpy = np.array(run_ids)
+
+    # Probably we'll want to use dask for this in the future,
+    # to enable cut history tracking and multiprocessing.
+    # For some reason the ProcessPoolExecutor doesn't work??
+    with ThreadPoolExecutor(max_workers=max_workers) as exc:
+        futures = [exc.submit(f, r, *args, **kwargs)
+                   for r in run_ids]
+        for _ in tqdm(as_completed(futures),
+                      desc="Loading %d runs" % len(run_ids)):
+            pass
+
+        result = []
+        for i, f in enumerate(futures):
+            r = f.result()
+            ids = np.array([run_id_numpy[i]] * len(r),
+                           dtype=[('run_id', run_id_numpy.dtype)])
+            r = merge_arrs([ids, r])
+            result.append(r)
+        return result
+
+
+@export
+def group_by_kind(dtypes, plugins=None, context=None,
+                  require_time=None) -> ty.Dict[str, ty.List]:
+    """Return dtypes grouped by data kind
+    i.e. {kind1: [d, d, ...], kind2: [d, d, ...], ...}
+    :param plugins: plugins providing the dtypes.
+    :param context: context to get plugins from if not given.
+    :param require_time: If True, one data type of each kind
+    must provide time information. It will be put first in the list.
+
+    If require_time is None (default), we will require time only if there
+    is more than one data kind in dtypes.
+    """
+    if plugins is None:
+        if context is None:
+            raise RuntimeError("group_by_kind requires plugins or context")
+        plugins = context._get_plugins(targets=dtypes, run_id='0')
+
+    if require_time is None:
+        require_time = len(group_by_kind(
+            dtypes, plugins=plugins, context=context, require_time=False)) > 1
+
+    deps_by_kind = dict()
+    key_deps = []
+    for d in dtypes:
+        p = plugins[d]
+        k = p.data_kind_for(d)
+        deps_by_kind.setdefault(k, [])
+
+        # If this has time information, put it first in the list
+        if (require_time
+                and 'time' in p.dtype_for(d).names):
+            key_deps.append(d)
+            deps_by_kind[k].insert(0, d)
+        else:
+            deps_by_kind[k].append(d)
+
+    if require_time:
+        for k, d in deps_by_kind.items():
+            if not d[0] in key_deps:
+                raise ValueError(f"No dependency of data kind {k} "
+                                 "has time information!")
+
+    return deps_by_kind

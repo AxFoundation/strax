@@ -38,9 +38,10 @@ def first_index_not_below(arr, t):
 @export
 def endtime(x):
     """Return endtime of intervals x"""
-    if 'endtime' in x.dtype.names:
+    try:
         return x['endtime']
-    return x['time'] + x['length'] * x['dt']
+    except (KeyError, ValueError, IndexError):
+        return x['time'] + x['length'] * x['dt']
 
 
 @export
