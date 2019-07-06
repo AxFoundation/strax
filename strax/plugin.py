@@ -139,40 +139,43 @@ class Plugin:
             lineage=self.lineage)
 
     def dependencies_by_kind(self, require_time=None):
-        """Return dependencies grouped by data kind
-        i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
-        :param require_time: If True, one dependency of each kind
-        must provide time information. It will be put first in the list.
-
-        If require_time is omitted, we will require time only if there is
-        more than one data kind in the dependencies.
-        """
-        if require_time is None:
-            require_time = \
-                len(self.dependencies_by_kind(require_time=False)) > 1
-
-        deps_by_kind = dict()
-        key_deps = []
-        for d in self.depends_on:
-            k = self.deps[d].data_kind_for(d)
-            deps_by_kind.setdefault(k, [])
-
-            # If this has time information, put it first in the list
-            if (require_time
-                    and 'time' in self.deps[d].dtype.names):
-                key_deps.append(d)
-                deps_by_kind[k].insert(0, d)
-            else:
-                deps_by_kind[k].append(d)
-
-        if require_time:
-            for k, d in deps_by_kind.items():
-                if not d[0] in key_deps:
-                    raise ValueError(f"For {self.__class__.__name__}, no "
-                                     f"dependency of data kind {k} "
-                                     "has time information!")
-
-        return deps_by_kind
+        return strax.group_by_kind(
+            self.depends_on,
+            plugins=self.deps,
+            require_time=require_time)
+        # """Return dependencies grouped by data kind
+        # i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
+        # :param require_time: If True, one dependency of each kind
+        # must provide time information. It will be put first in the list.
+        #
+        # If require_time is omitted, we will require time only if there is
+        # more than one data kind in the dependencies.
+        # """
+        # if require_time is None:
+        #     require_time = \
+        #         len(self.dependencies_by_kind(require_time=False)) > 1
+        #
+        # deps_by_kind = dict()
+        # key_deps = []
+        # for d in self.depends_on:
+        #     k = self.deps[d].data_kind_for(d)
+        #     deps_by_kind.setdefault(k, [])
+        #
+        #     # If this has time information, put it first in the list
+        #     if (require_time
+        #             and 'time' in self.deps[d].dtype.names):
+        #         key_deps.append(d)
+        #         deps_by_kind[k].insert(0, d)
+        #     else:
+        #         deps_by_kind[k].append(d)
+        #
+        # if require_time:
+        #     for k, d in deps_by_kind.items():
+        #         if not d[0] in key_deps:
+        #             raise ValueError(f"For {self.__class__.__name__}, no "
+        #                              f"dependency of data kind {k} "
+        #                              "has time information!")
+        #return deps_by_kind
 
     def is_ready(self, chunk_i):
         """Return whether the chunk chunk_i is ready for reading.
