@@ -1,3 +1,13 @@
+0.7.5 / 2019-07-06
+------------------
+- Time selection refactor and context extensibility (#195)
+
+0.7.4 / 2019-06-26
+-------------------
+- Fix availability checks (#194)
+- Allow selection of runs by name (#192)
+- Fix some context methods for multi-output plugins
+
 0.7.3 / 2019-06-17
 -------------------
 - Multiple outputs per plugin (#190)
