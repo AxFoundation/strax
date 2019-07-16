@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '0.7.3'
+__version__ = '0.7.5'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -20,6 +20,10 @@ from .plugin import *
 from .mailbox import *
 from .processor import *
 from .context import *
+
+# Just run this file, it will add new methods to Context
+from . import run_selection
+del run_selection
 
 from .io import *
 
