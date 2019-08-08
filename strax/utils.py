@@ -177,15 +177,15 @@ def camel_to_snake(x):
 @contextlib.contextmanager
 def profile_threaded(filename):
     import yappi  # noqa   # yappi is not a dependency
-    import gil_load  # noqa   # same
     yappi.set_clock_type("cpu")
     try:
+        import gil_load  # noqa   # same
         gil_load.init()
         gil_load.start(av_sample_interval=0.1,
                        output_interval=3,
                        output=sys.stdout)
         monitoring_gil = True
-    except RuntimeError:
+    except (RuntimeError, ImportError):
         monitoring_gil = False
         pass
 
