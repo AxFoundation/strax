@@ -830,6 +830,7 @@ class Context:
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
+             _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
@@ -841,7 +842,7 @@ class Context:
                 self.make, run_ids, targets=targets,
                 save=save, max_workers=max_workers, **kwargs)
 
-        if self.is_stored(run_id, targets):
+        if _skip_if_built and self.is_stored(run_id, targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets,
