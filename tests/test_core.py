@@ -163,7 +163,7 @@ def test_storage_converter():
             with pytest.raises(strax.DataNotAvailable):
                 store_2.find(key)
 
-            st.make(run_id, 'peaks')
+            st.make(run_id, 'peaks', _skip_if_built=False)
 
             # Data is now in both stores
             store_1.find(key)
