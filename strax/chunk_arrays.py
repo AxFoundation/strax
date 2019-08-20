@@ -31,6 +31,7 @@ class ChunkPacer:
         except StopIteration:
             self._source_exhausted = True
             raise StopIteration
+        assert isinstance(x, np.ndarray), f"Got {type(x)} instead of ndarray"
         self.buffer.append(x)
         self.buffer_items += len(x)
 
@@ -60,8 +61,6 @@ class ChunkPacer:
     def get_n(self, n: int):
         """Return array of the next n elements produced by source,
         or (if this is less) as many as the source can still produce.
-        
-        raises 
         """
         try:
             while self.buffer_items < n:
@@ -103,7 +102,8 @@ class ChunkPacer:
 
     def peek(self, n=1):
         x = self.get_n(n)
-        self._put_back_at_start(x)
+        if len(x):
+            self._put_back_at_start(x)
         return x
 
     @property
