@@ -293,3 +293,26 @@ def test_get_single_plugin():
     assert isinstance(p, Peaks)
     assert len(p.config)
     assert p.config['some_option'] == 0
+
+
+def test_superrun():
+    # TODO: duplicated init with test_run_selection
+    mock_rundb = [
+        dict(name='0', start=0, end=int(1e9)),
+        dict(name='1', start=int(2e9), end=int(3e9))
+    ]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf)
+        st.define_run('super', ['0', '1'])
+
+        md = st.run_metadata('_super')
+        print(md)
+        assert md['start'] == 0
+        assert md['end'] == int(3e9)
+        assert md['livetime'] == int(2e9)
+        assert md['sub_run_spec'] == {'0': 'all', '1': 'all'}

@@ -24,6 +24,7 @@ class DataDirectory(StorageFrontend):
     Run-level metadata is stored in loose json files in the directory.
     """
 
+    can_define_runs = True
     provide_run_metadata = True
 
     def __init__(self, path='.', *args, deep_scan=True, **kwargs):
