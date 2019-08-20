@@ -416,6 +416,47 @@ class Context:
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
+    def _get_partial_loader_for(self, key, n_range=None):
+        for sb_i, sf in enumerate(self.storage):
+            try:
+                # Partial is clunky... but allows specifying executor later
+                # Since it doesn't run until later, we must do a find now
+                # that we can still handle DataNotAvailable
+                sf.find(key, **self._find_options)
+                return partial(sf.loader,
+                               key,
+                               n_range=n_range,
+                               **self._find_options)
+            except strax.DataNotAvailable:
+                continue
+        return False
+
+    def _time_range_to_n_range(self, run_id: str, time_range: ty.Tuple[int], d_with_time: str):
+        """Return range of chunk numbers that include time_range
+        :param run_id: Run name
+        :param time_range: (start, stop) ns since unix epoch
+        :param d_with_time: Name of data type
+        """
+        # Find a range of row numbers that contains the time range
+        # It's a bit too large: to
+        # Get the n <-> time mapping in needed chunks
+        if not self.is_stored(run_id, d_with_time):
+            raise strax.DataNotAvailable(
+                "Time range selection needs time info from "
+                f"{d_with_time}, but this data is not yet available")
+
+        meta = self.get_meta(run_id, d_with_time)
+        times = np.array([c['first_time'] for c in meta['chunks']])
+        # Reconstruct row numbers from row counts, which are in metadata
+        # n_end is last row + 1 in a chunk. n_start is the first.
+        n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
+        n_start = n_end - n_end[0]
+        _inds = np.searchsorted(times, time_range) - 1
+        # Clip to prevent out-of-range times causing
+        # negative or nonexistent indices
+        _inds = np.clip(_inds, 0, len(n_end) - 1)
+        return n_start[_inds[0]], n_end[_inds[1]]
+
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None,
@@ -445,10 +486,6 @@ class Context:
             else:
                 raise RuntimeError(f"No time info in targets, should have been"
                                    f" caught earlier??")
-
-            # Find a range of row numbers that contains the time range
-            # It's a bit too large: to
-            # Get the n <-> time mapping in needed chunks
             if d_with_time.startswith('_temp'):
                 # This is a merge-only data type, which is never stored.
                 # Get the time info from one of its dependencies
@@ -465,23 +502,8 @@ class Context:
                         "of the MergeOnlyPlugin provide time information")
 
                 d_with_time = plugins[d_with_time].depends_on[0]
-
-            if not self.is_stored(run_id, d_with_time):
-                raise strax.DataNotAvailable(
-                    "Time range selection needs time info from "
-                    f"{d_with_time}, but this data is not yet available")
-
-            meta = self.get_meta(run_id, d_with_time)
-            times = np.array([c['first_time'] for c in meta['chunks']])
-            # Reconstruct row numbers from row counts, which are in metadata
-            # n_end is last row + 1 in a chunk. n_start is the first.
-            n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
-            n_start = n_end - n_end[0]
-            _inds = np.searchsorted(times, time_range) - 1
-            # Clip to prevent out-of-range times causing
-            # negative or nonexistent indices
-            _inds = np.clip(_inds, 0, len(n_end) - 1)
-            n_range = n_start[_inds[0]], n_end[_inds[1]]
+            n_range = self._time_range_to_n_range(
+                run_id, time_range, d_with_time)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -498,26 +520,47 @@ class Context:
             seen.add(d)
             p = plugins[d]
 
-            # Can we load this data, or must we compute it?
+            # Can we load this data?
             loading_this_data = False
             key = strax.DataKey(run_id, d, p.lineage)
-            for sb_i, sf in enumerate(self.storage):
-                try:
-                    # Partial is clunky... but allows specifying executor later
-                    # Since it doesn't run until later, we must do a find now
-                    # that we can still handle DataNotAvailable
-                    sf.find(key, **self._find_options)
-                    loaders[d] = partial(sf.loader,
-                                         key,
-                                         n_range=n_range,
-                                         **self._find_options)
-                except strax.DataNotAvailable:
-                    continue
-                else:
-                    # Found it! No need to make it or look in other frontends
-                    loading_this_data = True
-                    del plugins[d]
-                    break
+            ldr = self._get_partial_loader_for(key, n_range=n_range)
+            if not ldr and run_id.startswith('_'):
+                if time_range is not None:
+                    raise NotImplementedError("time range loading not yet "
+                                              "supported for superruns")
+
+                print(f"Checking/building {d} for superrun {run_id}")
+                sub_run_spec = self.run_metadata(run_id, 'sub_runs')
+                self.make(list(sub_run_spec.keys()), d)
+
+                ldrs = []
+                for subrun in sub_run_spec:
+                    key = strax.DataKey(
+                        subrun,
+                        d,
+                        self._get_plugins(d, subrun)[d].lineage)
+                    if sub_run_spec[subrun] == 'all':
+                        sub_n_range = None
+                    else:
+                        sub_n_range = self._time_range_to_n_range(
+                            subrun, sub_run_spec[subrun], d_with_time)
+                    ldr = self._get_partial_loader_for(key, n_range=sub_n_range)
+                    if not ldr:
+                        raise RuntimeError(
+                            f"Could not load {d} for subrun {subrun} "
+                            f"even though we made it??")
+                    ldrs.append(ldr)
+
+                def concat_loader(*args, **kwargs):
+                    for x in ldrs:
+                        yield from x(*args, **kwargs)
+                ldr = concat_loader(ldrs)
+
+            if ldr:
+                # Found it! No need to make it or look in other frontends
+                loading_this_data = True
+                loaders[d] = ldr
+                del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
                 if time_range is not None and not d.startswith('_temp'):
@@ -657,6 +700,16 @@ class Context:
 
     def to_absolute_time_range(self, run_id, targets, time_range=None,
                                seconds_range=None, time_within=None):
+        """Return (start, stop) time in ns since unix epoch corresponding
+        to time range.
+
+        :param time_range: (start, stop) time in ns since unix epoch.
+        Will be returned without modification
+        :param targets: data types. Used only if run metadata is unavailable,
+        so run start time has to be estimated from data.
+        :param seconds_range: (start, stop) seconds since start of run
+        :param time_within: row of strax data (e.g. event)
+        """
         if ((time_range is None)
                 + (seconds_range is None)
                 + (time_within is None)
@@ -690,9 +743,6 @@ class Context:
         if len(kwargs):
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
-
-        if isinstance(selection_str, (list, tuple)):
-            selection_str = ' & '.join(f'({x})' for x in selection_str)
 
         # Convert alternate time arguments to absolute range
         time_range = self.to_absolute_time_range(
@@ -742,6 +792,7 @@ class Context:
                         time_selection='fully_contained'):
         """Return x after applying selections
 
+        :param x: Numpy structured array
         :param selection_str: Query string or sequence of strings to apply.
         :param time_range: (start, stop) range to load, in ns since the epoch
         :param time_selection: Kind of time selectoin to apply:
@@ -766,6 +817,10 @@ class Context:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
         if selection_str:
+
+            if isinstance(selection_str, (list, tuple)):
+                selection_str = ' & '.join(f'({x})' for x in selection_str)
+
             mask = numexpr.evaluate(selection_str, local_dict={
                 fn: x[fn]
                 for fn in x.dtype.names})
@@ -785,6 +840,9 @@ class Context:
             return strax.multi_run(
                 self.make, run_ids, targets=targets,
                 save=save, max_workers=max_workers, **kwargs)
+
+        if self.is_stored(run_id, targets):
+            return
 
         for _ in self.get_iter(run_ids[0], targets,
                                save=save, max_workers=max_workers, **kwargs):
