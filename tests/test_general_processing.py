@@ -1,4 +1,5 @@
 from hypothesis import given, example
+from hypothesis.strategies import integers
 from .helpers import sorted_intervals, disjoint_sorted_intervals
 from .helpers import several_fake_records
 
@@ -86,3 +87,33 @@ def test_from_break(records):
         if len(left) and len(right):
             assert left[-1]['time'] <= right[0]['time'] - window
         assert not has_break(right)
+
+
+@given(integers(0, 100), integers(0, 100), integers(0, 100), integers(0, 100))
+def test_overlap_indices(a1, n_a, b1, n_b):
+    a2 = a1 + n_a
+    b2 = b1 + n_b
+
+    (a_start, a_end), (b_start, b_end) = strax.overlap_indices(a1, n_a, b1, n_b)
+    assert a_end - a_start == b_end - b_start, "Overlap must be equal length"
+    assert a_end >= a_start, "Overlap must be nonnegative"
+
+    if n_a == 0 or n_b == 0:
+        assert a_start == a_end == b_start == b_end == 0
+        return
+
+    a_filled = np.arange(a1, a2)
+    b_filled = np.arange(b1, b2)
+    true_overlap = np.intersect1d(a_filled, b_filled)
+    if not len(true_overlap):
+        assert a_start == a_end == b_start == b_end == 0
+        return
+
+    true_a_inds = np.searchsorted(a_filled, true_overlap)
+    true_b_inds = np.searchsorted(b_filled, true_overlap)
+
+    found = (a_start, a_end), (b_start, b_end)
+    expected = (
+        (true_a_inds[0], true_a_inds[-1] + 1),
+        (true_b_inds[0], true_b_inds[-1] + 1))
+    assert found == expected
