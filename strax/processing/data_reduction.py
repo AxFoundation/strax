@@ -43,8 +43,7 @@ def cut_baseline(records, n_before=48, n_after=30):
         clear_from = max(0, clear_from)
         if clear_from < samples_per_record:
             d.data[clear_from:] = 0
-
-    records.reduction_level[:] = ReductionLevel.BASELINE_CUT
+        d['reduction_level'] = ReductionLevel.BASELINE_CUT
 
 
 @export
