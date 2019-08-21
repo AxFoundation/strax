@@ -57,7 +57,7 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     into records that you did pass.
     """
     if not len(records):
-        return
+        return records
 
     # Create a copy of records with blanked data
     # Even a simple records.copy() is mightily slow in numba,
@@ -98,17 +98,9 @@ def _cut_outside_hits(records, hits, new_recs,
         start_keep = h['left'] - left_extension
         end_keep = h['right'] + right_extension
 
-        # Never try to keep samples beyond the pulse
-        start_keep = max(
-            start_keep,
-            - samples_per_record * r['record_i'])
-        end_keep = min(
-            end_keep,
-            r['pulse_length'] - samples_per_record * r['record_i'])
-
         # Indices of samples to keep in this record
-        a = max(0, start_keep)
-        b = min(end_keep, samples_per_record)
+        (a, b), _ = strax.overlap_indices(0, r['length'],
+                                          start_keep, end_keep - start_keep)
         new_recs[rec_i]['data'][a:b] = records[rec_i]['data'][a:b]
 
         # Keep samples in previous record, if there was one
@@ -121,7 +113,7 @@ def _cut_outside_hits(records, hits, new_recs,
                 new_recs[prev_ri]['data'][a_prev:] = \
                     records[prev_ri]['data'][a_prev:]
 
-        # Same for the next record
+        # Same for the next record, if there is one
         if end_keep > samples_per_record:
             next_ri = next_record[rec_i]
             if next_ri != NO_RECORD_LINK:

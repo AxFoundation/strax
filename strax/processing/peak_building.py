@@ -109,7 +109,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     and n_saturated_channels.
     For further channels we still calculate area_per_channel and saturated_channel.
 
-    Assumes all peaks and pulses have the same dt
+    Assumes all peaks AND pulses have the same dt!
     """
     if not len(records):
         return
@@ -155,6 +155,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
+            assert p['dt'] == r['dt'], "Records and peaks must have same dt"
 
             shift = (p['time'] - r['time']) // dt
             n_r = r['length']
@@ -171,16 +172,9 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
                 # (although a previous, longer record did overlap)
                 continue
 
-            # Range of record that contributes to peak
-            r_start = max(0, shift)
-            r_end = min(n_r, shift + n_p)
-            assert r_end > r_start
-
-            # Range of peak that receives record
-            p_start = max(0, -shift)
-            p_end = min(n_p, -shift + n_r)
-
-            assert p_end - p_start == r_end - r_start, "Ouch, off-by-one error"
+            (r_start, r_end), (p_start, p_end) = strax.overlap_indices(
+                r['time'] // dt, n_r,
+                p['time'] // dt, n_p)
 
             max_in_record = r['data'][r_start:r_end].max()
             p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
