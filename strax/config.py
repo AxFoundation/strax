@@ -94,8 +94,13 @@ class Option:
         """Return default value for the option"""
         if run_id is None:
             run_id = 0          # TODO: think if this makes sense
+
         if isinstance(run_id, str):
-            run_id = int(run_id.replace('_', ''))
+            is_superrun = run_id.startswith('_')
+            if not is_superrun:
+                run_id = int(run_id.replace('_', ''))
+        else:
+            is_superrun = False
 
         if self.default is not OMITTED:
             return self.default
@@ -103,7 +108,15 @@ class Option:
             return self.default_factory()
         if self.default_by_run is not OMITTED:
             if callable(self.default_by_run):
-                return self.default_by_run(run_id)
+                raise RuntimeError(
+                    "Using functions to specify per-run defaults is no longer"
+                    "supported: specify a (first_run, option) list, or "
+                    "a URL of a file to process in the plugin")
+
+            if is_superrun:
+                return '<SUBRUN-DEPENDENT:%s>' % strax.deterministic_hash(
+                    self.default_by_run)
+
             use_value = OMITTED
             for i, (start_run, value) in enumerate(self.default_by_run):
                 if start_run > run_id:
