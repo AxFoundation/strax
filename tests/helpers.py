@@ -159,6 +159,7 @@ several_fake_records_one_channel = sorted_bounds(
 ##
 @strax.takes_config(
     strax.Option('crash', default=False),
+    strax.Option('secret_time_offset', default=0, track=False)
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -176,7 +177,7 @@ class Records(strax.Plugin):
         if self.config['crash']:
             raise SomeCrash("CRASH!!!!")
         r = np.zeros(recs_per_chunk, self.dtype)
-        r['time'] = chunk_i
+        r['time'] = chunk_i + self.config['secret_time_offset']
         r['length'] = 1
         r['dt'] = 1
         r['channel'] = np.arange(len(r))
@@ -188,9 +189,9 @@ class SomeCrash(Exception):
 
 
 @strax.takes_config(
-    strax.Option('some_option', default=0),
-    strax.Option('give_wrong_dtype', default=False)
-)
+    strax.Option('base_area', default=0),
+    strax.Option('give_wrong_dtype', default=False),
+    strax.Option('bonus_area', default_by_run=[(0, 0), (1, 1)]))
 class Peaks(strax.Plugin):
     provides = 'peaks'
     depends_on = ('records',)
@@ -202,8 +203,8 @@ class Peaks(strax.Plugin):
             return np.zeros(5, [('a', np.int), ('b', np.float)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
+        p['area'] = self.config['base_area'] + self.config['bonus_area']
         return p
-
 
 recs_per_chunk = 10
 n_chunks = 10
