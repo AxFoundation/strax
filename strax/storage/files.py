@@ -52,12 +52,7 @@ class DataDirectory(StorageFrontend):
             with open(path, mode='r') as f:
                 md = json.loads(f.read(),
                                 object_hook=json_util.object_hook)
-            if not projection:
-                return md
-            md = strax.flatten_dict(md, separator='.')
-            return {k: v
-                    for k, v in md.items()
-                    if k in projection}
+            return md
         else:
             raise strax.RunMetadataNotAvailable(
                 f"No file at {path}, cannot find run metadata for {run_id}")
