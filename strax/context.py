@@ -837,9 +837,12 @@ class Context:
         """
         # Multi-run support
         run_ids = strax.to_str_tuple(run_id)
+        if len(run_ids) == 0:
+            raise ValueError("Cannot build empty list of runs")
         if len(run_ids) > 1:
             return strax.multi_run(
-                self.make, run_ids, targets=targets,
+                self.get_array, run_ids, targets=targets,
+                throw_away_result=True,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
