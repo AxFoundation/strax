@@ -209,6 +209,10 @@ def define_run(self: strax.Context,
             return self.define_run(
                 name,
                 {from_run: np.transpose([start, end])})
+        elif not 'run_id' in data:
+            raise ValueError(
+                "Must provide from_run or data with a run_id column "
+                "to define a superrun")
         else:
             df = pd.DataFrame(dict(starts=start, ends=end,
                                    run_id=data['run_id']))
