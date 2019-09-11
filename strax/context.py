@@ -467,6 +467,13 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
+        # Although targets is a tuple, we only support one target at the moment
+        # TODO: just make it a string!
+        assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
+        if len(targets[0]) == 1:
+            raise ValueError(
+                f"Plugin names must be more than one letter, not {targets[0]}")
+
         plugins = self._get_plugins(targets, run_id)
 
         n_range = None
@@ -529,22 +536,23 @@ class Context:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
 
-                print(f"Checking/building {d} for superrun {run_id}")
-                sub_run_spec = self.run_metadata(run_id, 'sub_runs')
+                sub_run_spec = self.run_metadata(
+                    run_id, 'sub_run_spec')['sub_run_spec']
                 self.make(list(sub_run_spec.keys()), d)
 
                 ldrs = []
                 for subrun in sub_run_spec:
-                    key = strax.DataKey(
+                    sub_key = strax.DataKey(
                         subrun,
                         d,
-                        self._get_plugins(d, subrun)[d].lineage)
+                        self._get_plugins((d,), subrun)[d].lineage)
                     if sub_run_spec[subrun] == 'all':
                         sub_n_range = None
                     else:
                         sub_n_range = self._time_range_to_n_range(
                             subrun, sub_run_spec[subrun], d_with_time)
-                    ldr = self._get_partial_loader_for(key, n_range=sub_n_range)
+                    ldr = self._get_partial_loader_for(
+                        sub_key, n_range=sub_n_range)
                     if not ldr:
                         raise RuntimeError(
                             f"Could not load {d} for subrun {subrun} "
@@ -554,7 +562,7 @@ class Context:
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
-                ldr = concat_loader(ldrs)
+                ldr = lambda *args, **kwargs : concat_loader(*args, **kwargs)
 
             if ldr:
                 # Found it! No need to make it or look in other frontends
