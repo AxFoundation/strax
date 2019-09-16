@@ -36,8 +36,8 @@ import strax    # noqa
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff
 # wrapping around to the integer boundary. Hence max_value is limited.
 def sorted_bounds(disjoint=False,
-                  max_value=10000,
-                  max_len=100,
+                  max_value=50,
+                  max_len=10,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
@@ -95,7 +95,7 @@ fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
 ##
 
 
-def bounds_to_records(bs, single=False):
+def bounds_to_records(bs, single=False, single_channel=False):
     """Return strax records corresponding to a list of 2-tuples
     of boundaries.
 
@@ -106,6 +106,9 @@ def bounds_to_records(bs, single=False):
     whose data is 1 inside the given bounds and zero outside.
     TODO: length etc. is not properly set in the single=True mode!
     TODO: this probably needs tests itself...
+
+    :param single_channel: if True, instead create all pulses in channel 0
+    You should only feed in disjoint bounds when using this.
     """
     if not len(bs):
         n_samples = 0
@@ -126,22 +129,29 @@ def bounds_to_records(bs, single=False):
             recs[i]['length'] = pad + length
             recs[i]['data'][pad:pad+length] = 1
             assert recs[i]['data'].sum() == length
-            recs[i]['channel'] = i
-        assert len(np.unique(recs['channel'])) == len(bs)
+            recs[i]['channel'] = 0 if single_channel else i
+        if not single_channel:
+            assert len(np.unique(recs['channel'])) == len(bs)
     else:
-        # Make a single pulse with 1 inside the bounds, 0 outside
+        # Make a single record with 1 inside the bounds, 0 outside
         recs = np.zeros(1, dtype=strax.record_dtype(n_samples))
         for l, r in bs:
             recs[0]['data'][l:r] = 1
+        recs[0]['time'] = 0
+        recs[0]['length'] = n_samples
 
     recs['dt'] = 1
     return recs
 
 
-single_fake_pulse = sorted_bounds(max_value=50)\
+single_fake_pulse = sorted_bounds()\
     .map(partial(bounds_to_records, single=True))
 
-several_fake_records = sorted_bounds(max_value=50).map(bounds_to_records)
+several_fake_records = sorted_bounds().map(bounds_to_records)
+
+several_fake_records_one_channel = sorted_bounds(
+    disjoint=True).map(
+        partial(bounds_to_records, single_channel=True))
 
 
 ##
@@ -149,6 +159,7 @@ several_fake_records = sorted_bounds(max_value=50).map(bounds_to_records)
 ##
 @strax.takes_config(
     strax.Option('crash', default=False),
+    strax.Option('secret_time_offset', default=0, track=False)
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -166,7 +177,7 @@ class Records(strax.Plugin):
         if self.config['crash']:
             raise SomeCrash("CRASH!!!!")
         r = np.zeros(recs_per_chunk, self.dtype)
-        r['time'] = chunk_i
+        r['time'] = chunk_i + self.config['secret_time_offset']
         r['length'] = 1
         r['dt'] = 1
         r['channel'] = np.arange(len(r))
@@ -178,9 +189,9 @@ class SomeCrash(Exception):
 
 
 @strax.takes_config(
-    strax.Option('some_option', default=0),
-    strax.Option('give_wrong_dtype', default=False)
-)
+    strax.Option('base_area', default=0),
+    strax.Option('give_wrong_dtype', default=False),
+    strax.Option('bonus_area', default_by_run=[(0, 0), (1, 1)]))
 class Peaks(strax.Plugin):
     provides = 'peaks'
     depends_on = ('records',)
@@ -192,8 +203,8 @@ class Peaks(strax.Plugin):
             return np.zeros(5, [('a', np.int), ('b', np.float)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
+        p['area'] = self.config['base_area'] + self.config['bonus_area']
         return p
-
 
 recs_per_chunk = 10
 n_chunks = 10
