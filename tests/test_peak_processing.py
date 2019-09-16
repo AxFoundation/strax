@@ -57,7 +57,7 @@ def test_sum_waveform(records, peak_left, peak_length):
     p = peaks[0]
     p['time'] = peak_left
     p['length'] = peak_length
-    p['dt'] = 0
+    p['dt'] = 1
 
     strax.sum_waveform(peaks, records, np.ones(n_ch))
 

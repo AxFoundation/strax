@@ -159,3 +159,35 @@ def split_by_containment(things, containers):
         things_split.insert(c_i, things[:0])
 
     return things_split
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
+def overlap_indices(a1, n_a, b1, n_b):
+    """Given interval [a1, a1 + n_a), and [b1, b1 + n_b) of integers,
+    return indices [a_start, a_end), [b_start, b_end) of overlapping region.
+    """
+    if n_a < 0 or n_b < 0:
+        raise ValueError("Negative interval length passed to overlap test")
+
+    if n_a == 0 or n_b == 0:
+        return (0, 0), (0, 0)
+
+    # a: p, b: r
+    s = a1 - b1
+
+    if s <= -n_a:
+        # B is completely right of a
+        return (0, 0), (0, 0)
+
+    # Range in b that overlaps with a
+    b_start = max(0, s)
+    b_end = min(n_b, s + n_a)
+    if b_start >= b_end:
+        return (0, 0), (0, 0)
+
+    # Range of a that overlaps with b
+    a_start = max(0, -s)
+    a_end = min(n_a, -s + n_b)
+
+    return (a_start, a_end), (b_start, b_end)

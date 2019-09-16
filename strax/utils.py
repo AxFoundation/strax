@@ -377,12 +377,15 @@ def dict_to_rec(x, dtype=None):
 
 
 @export
-def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
+def multi_run(f, run_ids, *args, max_workers=None,
+              throw_away_result=False,
+              **kwargs):
     """Execute f(run_id, **kwargs) over multiple runs,
     then return list of results.
 
     :param run_ids: list/tuple of runids
     :param max_workers: number of worker threads/processes to spawn
+    :param throw_away_result: instead of collecting result, return None.
 
     Other (kw)args will be passed to f
     """
@@ -410,10 +413,15 @@ def multi_run(f, run_ids, *args, max_workers=None, **kwargs):
         result = []
         for i, f in enumerate(futures):
             r = f.result()
+            if throw_away_result:
+                continue
             ids = np.array([run_id_numpy[i]] * len(r),
                            dtype=[('run_id', run_id_numpy.dtype)])
             r = merge_arrs([ids, r])
             result.append(r)
+
+        if throw_away_result:
+            return None
         return result
 
 

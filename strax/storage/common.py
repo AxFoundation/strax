@@ -292,6 +292,11 @@ class StorageFrontend:
             result.append(r)
         return result
 
+    def define_run(self, name, sub_run_spec, **metadata):
+        self.write_run_metadata(name, dict(
+            sub_run_spec=sub_run_spec,
+            **metadata))
+
     ##
     # Abstract methods (to override in child)
     ##
