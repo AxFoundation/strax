@@ -154,6 +154,21 @@ class ThreadedMailboxProcessor:
                             executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
 
+        # For multi-output plugins, an output may be neither saved nor
+        # required, and thus has to be discarded.
+        # This should happen rarely in production (when you actually
+        # care about the data, you will be saving it)
+        def discarder(source):
+            for _ in source:
+                pass
+
+        for p in multi_output_seen:
+            for d in p.provides:
+                if d in components.targets or self.mailboxes[d]._n_subscribers:
+                    continue
+                self.mailboxes[d].add_reader(
+                    discarder, name=f'discard_{d}')
+
     def iter(self):
         target = self.components.targets[0]
         final_generator = self.mailboxes[target].subscribe()

@@ -1,3 +1,11 @@
+
+0.8.0 / 2019-09-16
+------------------
+- Superruns (#207)
+- Pulse processing fixes (#207)
+- LZ4 compression (#207)
+- Fixes for edge cases (#201)
+
 0.7.5 / 2019-07-06
 ------------------
 - Time selection refactor and context extensibility (#195)

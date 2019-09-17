@@ -7,6 +7,7 @@ import os
 import numpy as np
 import blosc
 import zstd
+import lz4.frame as lz4
 
 import strax
 export, __all__ = strax.exporter()
@@ -24,6 +25,7 @@ COMPRESSORS = dict(
     blosc=dict(
         compress=partial(blosc.compress, shuffle=False),
         decompress=blosc.decompress),
+    lz4=dict(compress=lz4.compress, decompress=lz4.decompress)
 )
 
 
