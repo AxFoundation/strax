@@ -198,7 +198,7 @@ def select_runs(self, run_mode=None, run_id=None,
 
 
 @strax.Context.add_method
-def define_run(self,
+def define_run(self: strax.Context,
                name: str,
                data: ty.Union[np.ndarray, pd.DataFrame, dict],
                from_run: ty.Union[str, None] = None):
@@ -209,10 +209,14 @@ def define_run(self,
             return self.define_run(
                 name,
                 {from_run: np.transpose([start, end])})
+        elif not 'run_id' in data:
+            raise ValueError(
+                "Must provide from_run or data with a run_id column "
+                "to define a superrun")
         else:
             df = pd.DataFrame(dict(starts=start, ends=end,
                                    run_id=data['run_id']))
-            self.define_run(
+            return self.define_run(
                 name,
                 {run_id: rs[['start', 'stop']].values.transpose()
                  for run_id, rs in df.groupby('fromrun')})
@@ -220,17 +224,29 @@ def define_run(self,
     if isinstance(data, (list, tuple)):
         # list of runids
         data = strax.to_str_tuple(data)
-        self.define_run(
+        return self.define_run(
             name,
             {run_id: 'all' for run_id in data})
 
     if not isinstance(data, dict):
-        raise ValueError("Can't define run from {type(data)}")
+        raise ValueError(f"Can't define run from {type(data)}")
+
+    # Find start and end time of the new run = earliest start time of other runs
+    run_md = dict(start=float('inf'), end=0, livetime=0)
+    for _subrunid in data:
+        doc = self.run_metadata(_subrunid, ['start', 'end'])
+        run_md['start'] = min(run_md['start'], doc['start'])
+        run_md['end'] = max(run_md['end'], doc['end'])
+        run_md['livetime'] += doc['end'] - doc['start']
+
+    # Superrun names must start with an underscore
+    if not name.startswith('_'):
+        name = '_' + name
 
     # Dict mapping run_id: array of time ranges or all
     for sf in self.storage:
         if not sf.readonly and sf.can_define_runs:
-            sf.define_run(name, data)
+            sf.define_run(name, sub_run_spec=data, **run_md)
             break
     else:
         raise RuntimeError("No storage frontend registered that allows"

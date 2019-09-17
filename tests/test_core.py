@@ -116,7 +116,7 @@ def test_fuzzy_matching():
         st.make(run_id=run_id, targets='peaks')
 
         # Changing option causes data not to match
-        st.set_config(dict(some_option=1))
+        st.set_config(dict(base_area=1))
         assert not st.is_stored(run_id, 'peaks')
         assert st.list_available('peaks') == []
 
@@ -130,7 +130,7 @@ def test_fuzzy_matching():
         st2.get_array(run_id, 'peaks')
 
         # Fuzzy for options also works
-        st3 = st.new_context(fuzzy_for_options=('some_option',))
+        st3 = st.new_context(fuzzy_for_options=('base_area',))
         assert st3.is_stored(run_id, 'peaks')
 
     # No saving occurs at all while fuzzy matching
@@ -163,7 +163,7 @@ def test_storage_converter():
             with pytest.raises(strax.DataNotAvailable):
                 store_2.find(key)
 
-            st.make(run_id, 'peaks')
+            st.make(run_id, 'peaks', _skip_if_built=False)
 
             # Data is now in both stores
             store_1.find(key)
@@ -292,4 +292,50 @@ def test_get_single_plugin():
     p = mystrax.get_single_plugin('0', 'peaks')
     assert isinstance(p, Peaks)
     assert len(p.config)
-    assert p.config['some_option'] == 0
+    assert p.config['base_area'] == 0
+
+
+def test_superrun():
+    # TODO: duplicated init with test_run_selection
+    mock_rundb = [
+        dict(name='0', start=0, end=int(1e9)),
+        dict(name='1', start=int(2e9), end=int(3e9))
+    ]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Test run definition
+        sf = strax.DataDirectory(path=temp_dir)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf, register=[Records, Peaks])
+        st.define_run('super', ['0', '1'])
+
+        md = st.run_metadata('_super')
+        assert md['start'] == 0
+        assert md['end'] == int(3e9)
+        assert md['livetime'] == int(2e9)
+        assert md['sub_run_spec'] == {'0': 'all', '1': 'all'}
+
+        # Test superrun loading
+        r1 = st.get_array('0', 'records')
+        r2 = st.get_array('1', 'records', config=dict(secret_time_offset=int(1e9)))
+        rs = st.get_array('_super', 'records')
+        np.testing.assert_array_equal(rs, np.concatenate([r1, r2]))
+
+        # Test that superrun loading triggers subrun processing
+        ps = st.get_array('_super', 'peaks')
+        p1 = st.get_array('0', 'peaks')
+        p2 = st.get_array('1', 'peaks')
+        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
+        np.testing.assert_array_equal(p2['area'], np.ones(len(p2)))
+        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
+
+        # Test superrun processing can override run-dependent options
+        st.set_config(config=dict(bonus_area=0))
+        ps = st.get_array('_super', 'peaks')
+        p1 = st.get_array('0', 'peaks')
+        p2 = st.get_array('1', 'peaks')
+        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
+        np.testing.assert_array_equal(p2['area'], np.zeros(len(p2)))
+        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))

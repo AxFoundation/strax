@@ -31,6 +31,7 @@ You might also find these presentations useful:
     :caption: Advanced usage
 
     advanced/overview
+    advanced/superrun
     advanced/plugin_dev
 
 .. toctree::
