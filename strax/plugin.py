@@ -119,6 +119,12 @@ class Plugin:
             return self.dtype[data_type]
         return self.dtype
 
+    def empty_result(self):
+        if self.multi_output:
+            return {d: np.empty(0, self.dtype_for(d))
+                    for d in self.provides}
+        return np.empty(0, self.dtype)
+
     def data_kind_for(self, data_type):
         if self.multi_output:
             return self.data_kind[data_type]
@@ -359,8 +365,18 @@ class OverlapWindowPlugin(Plugin):
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
-        end = max([strax.endtime(x[-1])
-                   for x in kwargs.values()])
+
+        # Determine (a lower bound on) the data's last endtime
+        ends = [strax.endtime(x[-1])
+                for x in kwargs.values()
+                if len(x)]
+        if not len(ends):
+            # Chunk is completely empty, we cannot estimate the data's end.
+            # Do not discard or send anything until a chunk with data arrives.
+            # (or the last chunk, see iter)
+            return self.empty_result()
+        end = max(ends)
+
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
         # TODO: why do tests not fail is I set cache_inputs_beyond to
