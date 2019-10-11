@@ -185,7 +185,7 @@ class DataDirectory(StorageFrontend):
 @export
 def dirname_to_prefix(dirname):
     """Return filename prefix from dirname"""
-    return os.path.basename(dirname.strip('/')).split("-", maxsplit=1)[1]
+    return os.path.basename(dirname.strip('/').rstrip('\\')).split("-", maxsplit=1)[1]
 
 
 @export
