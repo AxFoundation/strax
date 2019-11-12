@@ -51,6 +51,11 @@ class ThreadedMailboxProcessor:
 
         self.log.debug("Processor components are: " + str(components))
 
+        if allow_multiprocess and os.name == 'nt':
+            print("You're on Windows! "
+                  "Multiprocessing disabled, here be dragons.")
+            allow_multiprocess = False
+
         if max_workers in [None, 1]:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
