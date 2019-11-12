@@ -1,7 +1,7 @@
-from .helpers import fake_hits, several_fake_records
+from strax.testutils import fake_hits, several_fake_records
 
 import numpy as np
-from hypothesis import given
+from hypothesis import given, settings
 import hypothesis.strategies as st
 
 import strax
@@ -10,6 +10,7 @@ import strax
 @given(fake_hits,
        st.one_of(st.just(1), st.just(3)),
        st.one_of(st.just(0), st.just(3)))
+@settings(deadline=None)
 def test_find_peaks(hits, min_channels, min_area):
     hits['area'] = 1
     gap_threshold = 10
@@ -46,6 +47,7 @@ def test_find_peaks(hits, min_channels, min_area):
     # TODO: add more tests, preferably test against a second algorithm
 
 
+@settings(deadline=None)
 @given(several_fake_records,
        st.integers(min_value=0, max_value=100),
        st.integers(min_value=1, max_value=100)

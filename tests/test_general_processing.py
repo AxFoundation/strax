@@ -1,7 +1,7 @@
 from hypothesis import given, example
 from hypothesis.strategies import integers
-from .helpers import sorted_intervals, disjoint_sorted_intervals
-from .helpers import several_fake_records
+from strax.testutils import sorted_intervals, disjoint_sorted_intervals
+from strax.testutils import several_fake_records
 
 import numpy as np
 import strax

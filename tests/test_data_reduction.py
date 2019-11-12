@@ -1,9 +1,10 @@
-from hypothesis import given
+from hypothesis import given, settings
 
-from .helpers import *
+from strax.testutils import *
 
 
 # TODO: test with multiple fake pulses and dt != 1
+@settings(deadline=None)
 @given(single_fake_pulse)
 def test_cut_outside_hits(records):
     hits = strax.find_hits(records, threshold=0)
