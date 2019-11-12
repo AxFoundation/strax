@@ -32,7 +32,7 @@ def test_overlap_plugin(input_peaks, split_i):
     chunked.
     """
     chunks = np.split(input_peaks, [split_i])
-    chunks = [c for c in chunks if len(c)]
+    chunks = [c for c in chunks]
 
     class Peaks(strax.Plugin):
         depends_on = tuple()
