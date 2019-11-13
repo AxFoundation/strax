@@ -1,4 +1,4 @@
-from . import helpers   # Mocks numba    # noqa
+from strax import testutils
 
 import numpy as np
 
@@ -7,7 +7,7 @@ from hypothesis import given, strategies, example
 import strax
 
 
-@given(helpers.disjoint_sorted_intervals.filter(lambda x: len(x) > 0),
+@given(testutils.disjoint_sorted_intervals.filter(lambda x: len(x) > 0),
        strategies.integers(min_value=0, max_value=3))
 # Examples that trigger issue #49
 @example(
