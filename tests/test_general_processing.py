@@ -92,6 +92,7 @@ def test_from_break(records):
         assert not has_break(right)
 
 
+@settings(deadline=None)
 @given(integers(0, 100), integers(0, 100), integers(0, 100), integers(0, 100))
 def test_overlap_indices(a1, n_a, b1, n_b):
     a2 = a1 + n_a
