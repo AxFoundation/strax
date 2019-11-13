@@ -1,36 +1,16 @@
-import tempfile     # noqa
+"""Utilities to help write strax tests.
+
+Not needed during strax operation, so this file is not imported in __init__.py
+"""
+
 from itertools import accumulate
 from functools import partial
 
 import numpy as np
 from boltons import iterutils
 from hypothesis import strategies
-import pytest     # noqa
 
-##
-# Hack to disable numba.jit
-# For the mini-examples run during testing numba actually causes a massive
-# performance drop. Moreover, if you make a buffer overrun bug, jitted fs
-# respond "slightly" less nice (giving you junk data or segfaulting)
-# Once in a while you should test without this...
-##
-def mock_numba():
-    from unittest.mock import MagicMock
-
-    class FakeNumba:
-
-        def jit(self, *args, **kwargs):
-            return lambda x: x
-
-    FakeNumba.caching = MagicMock()
-
-    import sys                                # noqa
-    sys.modules['numba'] = FakeNumba()
-
-
-# Mock numba before importing strax
-mock_numba()
-import strax    # noqa
+import strax
 
 
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff

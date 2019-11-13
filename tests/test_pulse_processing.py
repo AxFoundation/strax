@@ -1,7 +1,7 @@
-from .helpers import single_fake_pulse
+from strax.testutils import single_fake_pulse
 
 import numpy as np
-from hypothesis import given
+from hypothesis import given, settings
 from scipy.ndimage import convolve1d
 
 import strax
@@ -46,6 +46,8 @@ def test_find_hits():
         assert results == should_find_intervals
 
 
+
+@settings(deadline=None)
 @given(single_fake_pulse)
 def test_find_hits_randomize(records):
     """Tests the hitfinder with whatever hypothesis can throw at it

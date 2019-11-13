@@ -1,13 +1,14 @@
-from hypothesis import given, example
+from hypothesis import given, example, settings
 from hypothesis.strategies import integers
-from .helpers import sorted_intervals, disjoint_sorted_intervals
-from .helpers import several_fake_records
+from strax.testutils import sorted_intervals, disjoint_sorted_intervals
+from strax.testutils import several_fake_records
 
 import numpy as np
 import strax
 
 
 @given(sorted_intervals, disjoint_sorted_intervals)
+@settings(deadline=None)
 # Tricky example: uncontained interval precedes contained interval
 # (this did not produce an issue, but good to show this is handled)
 @example(things=np.array([(0, 1, 0, 1),
@@ -33,6 +34,7 @@ def test_fully_contained_in(things, containers):
             assert _is_contained(thing, containers[result[i]])
 
 
+@settings(deadline=None)
 @given(sorted_intervals, disjoint_sorted_intervals)
 # Specific example to trigger issue #37
 @example(
@@ -62,6 +64,7 @@ def _is_contained(_thing, _container):
            <= _container['time'] + _container['length']
 
 
+@settings(deadline=None)
 @given(several_fake_records)
 def test_from_break(records):
     window = 5

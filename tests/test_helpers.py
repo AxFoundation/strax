@@ -1,20 +1,20 @@
-from . import helpers
+from strax import testutils
 from hypothesis import given
 import strax
 
 
-@given(helpers.sorted_bounds())
+@given(testutils.sorted_bounds())
 def test_sorted_bounds(bs):
     assert is_sorted(bs)
 
 
-@given(helpers.sorted_bounds(disjoint=True))
+@given(testutils.sorted_bounds(disjoint=True))
 def test_disjoint_bounds(bs):
     assert is_sorted(bs)
     assert is_disjoint(bs)
 
 
-@given(helpers.disjoint_sorted_intervals)
+@given(testutils.disjoint_sorted_intervals)
 def test_dsi(intvs):
     bs = list(zip(intvs['time'].tolist(), strax.endtime(intvs).tolist()))
     assert is_sorted(bs)
