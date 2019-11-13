@@ -34,6 +34,7 @@ def test_fully_contained_in(things, containers):
             assert _is_contained(thing, containers[result[i]])
 
 
+@settings(deadline=None)
 @given(sorted_intervals, disjoint_sorted_intervals)
 # Specific example to trigger issue #37
 @example(
