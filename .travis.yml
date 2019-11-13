@@ -29,12 +29,17 @@ deploy:
 # The build matrix over all possible setups
 matrix:
     include:
-        - env: PYTHON=3.8 DEPLOY_ME=true
+        - env: PYTHON=3.7 DEPLOY_ME=true
         - env: PYTHON=3.6
         - os: osx
-          env: PYTHON=3.8
-        - env: PYTHON=3.8
+          env: PYTHON=3.7
+        - env: PYTHON=3.7
           dist: trusty
+        - env: PYTHON=3.8
+
+jobs:
+    allow_failures:
+        - env: PYTHON=3.8
 
 # Setup miniconda
 before_install:
