@@ -30,11 +30,15 @@ deploy:
 matrix:
     include:
         - env: PYTHON=3.7 DEPLOY_ME=true
+        - env: PYTHON=3.7 NUMBA_DISABLE_JIT=true
         - env: PYTHON=3.6
         - os: osx
           env: PYTHON=3.7
-        - env: PYTHON=3.7
-          dist: trusty
+        - env: PYTHON=3.8
+
+jobs:
+    allow_failures:
+        - env: PYTHON=3.8
 
 # Setup miniconda
 before_install:
@@ -63,5 +67,6 @@ script:
   - coverage run --source=strax setup.py test
 
 # Upload code coverage information
+# Only do this if not jitting, otherwise we miss those tests.
 after_success:
-  - coveralls
+  - if [ $NUMBA_DISABLE_JIT ]; then coveralls; fi
