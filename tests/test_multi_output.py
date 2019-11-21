@@ -1,4 +1,6 @@
-from .helpers import *
+import tempfile
+
+from strax.testutils import *
 
 
 class EvenOddSplit(strax.Plugin):

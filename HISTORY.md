@@ -1,4 +1,9 @@
 
+0.8.1 / 2019-11-13
+------------------
+- Protect OverlapWindowPlugin against empty chunks (#212)
+- Make test helpers accessible, test with numba on (#219)
+
 0.8.0 / 2019-09-16
 ------------------
 - Superruns (#207)
