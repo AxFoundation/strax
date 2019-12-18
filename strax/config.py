@@ -81,10 +81,10 @@ class Option:
         self.track = track
         self.help = help
 
-        if self.default_by_run is not OMITTED:
-            warnings.warn(f"The {self.name} option uses default_by_run,"
-                          f" which will soon stop working!",
-                          DeprecationWarning)
+        # if self.default_by_run is not OMITTED:
+        #     warnings.warn(f"The {self.name} option uses default_by_run,"
+        #                   f" which will soon stop working!",
+        #                   DeprecationWarning)
 
         type = builtins.type
         if sum([self.default is not OMITTED,
