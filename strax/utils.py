@@ -310,16 +310,18 @@ def count_tags(ds):
 
 
 @export
-def flatten_dict(d, separator=':', _parent_key=''):
+def flatten_dict(d, separator=':', _parent_key='', keep=tuple()):
     """Flatten nested dictionaries into a single dictionary,
     indicating levels by separator.
     Don't set _parent_key argument, this is used for recursive calls.
     Stolen from http://stackoverflow.com/questions/6027558
+    :param keep: key or list of keys whose values should not be flattened. 
     """
+    keep = to_str_tuple(keep)
     items = []
     for k, v in d.items():
         new_key = _parent_key + separator + k if _parent_key else k
-        if isinstance(v, collections.MutableMapping):
+        if isinstance(v, collections.MutableMapping) and not k in keep:
             items.extend(flatten_dict(v,
                                       separator=separator,
                                       _parent_key=new_key).items())

@@ -54,11 +54,11 @@ class DataDirectory(StorageFrontend):
         with open(path, mode='r') as f:
             md = json.loads(f.read(),
                             object_hook=json_util.object_hook)
-        md = strax.flatten_dict(md, separator='.')
+        md = strax.flatten_dict(md, separator='.', keep='sub_run_spec')
         if projection is not None:
-            md =  {k: v
-                   for k, v in md.items()
-                   if k in projection}
+            md = {k: v
+                  for k, v in md.items()
+                  if k in projection}
         return md
 
 

@@ -52,7 +52,7 @@ def scan_runs(self,
     """
     store_fields = tuple(set(
         list(strax.to_str_tuple(store_fields))
-        + ['name', 'number', 'tags', 'mode']
+        + ['name', 'number', 'tags', 'mode', 'sub_run_spec']
         + list(self.context_config['store_run_fields'])))
     check_available = tuple(set(
         list(strax.to_str_tuple(check_available))
@@ -80,7 +80,7 @@ def scan_runs(self,
 
             # Flatten the rest of the doc (mainly in case the mode field
             # is something deeply nested)
-            doc = strax.flatten_dict(doc, separator='.')
+            doc = strax.flatten_dict(doc, separator='.', keep='sub_run_spec')
 
             _temp_docs.append(doc)
 
