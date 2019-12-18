@@ -8,6 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 import strax
+export, __all__ = strax.exporter()
 
 
 @strax.Context.add_method
@@ -52,7 +53,8 @@ def scan_runs(self,
     """
     store_fields = tuple(set(
         list(strax.to_str_tuple(store_fields))
-        + ['name', 'number', 'tags', 'mode', 'sub_run_spec']
+        + ['name', 'number', 'tags', 'mode', 'sub_run_spec',
+           strax.RUN_DEFAULTS_KEY]
         + list(self.context_config['store_run_fields'])))
     check_available = tuple(set(
         list(strax.to_str_tuple(check_available))
@@ -74,13 +76,11 @@ def scan_runs(self,
 
             doc.setdefault('mode', '')
 
-            # Flatten the tags field, if it exists
+            # Convert tags list to a ,separated string
             doc['tags'] = ','.join([t['name']
-                                    for t in doc.get('tags', [])])
+                                   for t in doc.get('tags', [])])
 
-            # Flatten the rest of the doc (mainly in case the mode field
-            # is something deeply nested)
-            doc = strax.flatten_dict(doc, separator='.', keep='sub_run_spec')
+            doc = flatten_run_metadata(doc)
 
             _temp_docs.append(doc)
 
@@ -277,3 +277,13 @@ def _tag_match(tag, pattern, pattern_type, ignore_underscore):
     elif pattern_type == 're':
         return bool(re.match(pattern, tag))
     raise NotImplementedError
+
+
+@export
+def flatten_run_metadata(md):
+    # Flatten the tags field. Note this sets it to an empty string
+    # if it does not exist.
+    return strax.flatten_dict(
+        md,
+        separator='.',
+        keep=[strax.RUN_DEFAULTS_KEY, 'sub_run_spec', 'tags'])

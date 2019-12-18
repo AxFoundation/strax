@@ -13,6 +13,10 @@ import pandas as pd
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['RUN_DEFAULTS_KEY']
+
+RUN_DEFAULTS_KEY = 'strax_defaults'
+
 
 @strax.takes_config(
     strax.Option(name='storage_converter', default=False,
@@ -59,6 +63,7 @@ class Context:
     context_config: dict
 
     runs: ty.Union[pd.DataFrame, type(None)] = None
+    _run_defaults_cache: dict = None
 
     def __init__(self,
                  storage=None,
@@ -90,6 +95,7 @@ class Context:
                         for s in storage]
 
         self._plugin_class_registry = dict()
+        self._run_defaults_cache = dict()
 
         self.set_config(config, mode='replace')
         self.set_context_config(kwargs, mode='replace')
@@ -171,7 +177,7 @@ class Context:
             mode=mode)
 
         for opt in self.takes_config.values():
-            opt.validate(new_config, set_defaults=True)
+            opt.validate(new_config)
 
         for k in new_config:
             if k not in self.takes_config:
@@ -253,7 +259,7 @@ class Context:
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
-                    default = opt.get_default(run_id)
+                    default = opt.get_default(self.run_defaults(run_id))
                 except strax.InvalidConfiguration:
                     default = strax.OMITTED
                 c = self.context_config if data_type is None else self.config
@@ -319,7 +325,9 @@ class Context:
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config, run_id)
+                opt.validate(config,
+                             run_id=run_id,
+                             run_defaults=self.run_defaults(run_id))
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -464,6 +472,7 @@ class Context:
         """Return components for setting up a processor
         {get_docs}
         """
+
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
@@ -774,7 +783,9 @@ class Context:
             else:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
-        components = self.get_components(run_id, targets=targets, save=save,
+        components = self.get_components(run_id,
+                                         targets=targets,
+                                         save=save,
                                          time_range=time_range)
 
         # Cleanup the temp plugins
@@ -927,6 +938,12 @@ class Context:
         :param projection: Selection of fields to get, following MongoDB
         syntax. May not be supported by frontend.
         """
+        if self.runs is not None and projection in self.runs.columns:
+            # We already scanned for runs and just need one field. Maybe we
+            # have it already?
+            where = np.where(self.runs['name'].values == run_id)[0]
+            if len(where):
+                return {projection: self.runs.iloc[where[0]]['projection']}
         for sf in self.storage:
             if not sf.provide_run_metadata:
                 continue
@@ -935,8 +952,25 @@ class Context:
             except (strax.DataNotAvailable, NotImplementedError):
                 self.log.debug(f"Frontend {sf} does not have "
                                f"run metadata for {run_id}")
-        raise strax.DataNotAvailable(f"No run-level metadata available "
-                                     f"for {run_id}")
+        raise strax.RunMetadataNotAvailable(f"No run-level metadata available "
+                                            f"for {run_id}")
+
+    def run_defaults(self, run_id):
+        """Get configuration defaults from the run metadata (if these exist)
+
+        This will only call the rundb once while the context is in existence;
+        further calls to this will return a cached value.
+        """
+        if run_id in self._run_defaults_cache:
+            return self._run_defaults_cache[run_id]
+        try:
+            defs = self.run_metadata(
+                run_id,
+                projection=RUN_DEFAULTS_KEY).get(RUN_DEFAULTS_KEY, dict())
+        except strax.RunMetadataNotAvailable:
+            defs = dict()
+        self._run_defaults_cache[run_id] = defs
+        return defs
 
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id

@@ -1,5 +1,6 @@
 import builtins
 import typing as ty
+import warnings
 
 import strax
 export, __all__ = strax.exporter()
@@ -80,6 +81,11 @@ class Option:
         self.track = track
         self.help = help
 
+        if self.default_by_run is not OMITTED:
+            warnings.warn(f"The {self.name} option uses default_by_run,"
+                          f" which will soon stop working!",
+                          DeprecationWarning)
+
         type = builtins.type
         if sum([self.default is not OMITTED,
                 self.default_factory is not OMITTED,
@@ -90,23 +96,28 @@ class Option:
         if type is OMITTED and default is not OMITTED:
             self.type = type(default)
 
-    def get_default(self, run_id=None):
+    def get_default(self, run_id, run_defaults: dict = None):
         """Return default value for the option"""
-        if run_id is None:
-            run_id = 0          # TODO: think if this makes sense
-
-        if isinstance(run_id, str):
-            is_superrun = run_id.startswith('_')
-            if not is_superrun:
-                run_id = int(run_id.replace('_', ''))
-        else:
-            is_superrun = False
-
+        if run_defaults is not None and self.name in run_defaults:
+            return run_defaults[self.name]
         if self.default is not OMITTED:
             return self.default
         if self.default_factory is not OMITTED:
             return self.default_factory()
+
         if self.default_by_run is not OMITTED:
+            # TODO: This legacy code for handling default_per_run will soon
+            # be removed!
+            if run_id is None:
+                run_id = 0  # TODO: think if this makes sense
+
+            if isinstance(run_id, str):
+                is_superrun = run_id.startswith('_')
+                if not is_superrun:
+                    run_id = int(run_id.replace('_', ''))
+            else:
+                is_superrun = False
+
             if callable(self.default_by_run):
                 raise RuntimeError(
                     "Using functions to specify per-run defaults is no longer"
@@ -128,10 +139,13 @@ class Option:
                     "lowest run id {start_run} for which the default "
                     "of the option {self.name} is known.")
             return use_value
+
         raise InvalidConfiguration(f"Missing option {self.name} "
                                    f"required by {self.taken_by}")
 
-    def validate(self, config, run_id=None, set_defaults=True):
+    def validate(self, config,
+                 run_id=None,   # TODO: will soon be removed
+                 run_defaults=None, set_defaults=True):
         """Checks if the option is in config and sets defaults if needed.
         """
         if self.name in config:
@@ -142,7 +156,7 @@ class Option:
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
-            config[self.name] = self.get_default(run_id)
+            config[self.name] = self.get_default(run_id, run_defaults)
 
 
 @export
