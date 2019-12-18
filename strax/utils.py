@@ -156,7 +156,10 @@ def merge_arrs(arrs):
 
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):
-        raise ValueError("Arrays must all have the same length")
+        print([(len(x), x.dtype) for x in arrs])
+        raise ValueError(
+            "Arrays to merge must have the same length, got lengths "
+            ', '.join([str(len(x)) for x in arrs]))
 
     result = np.zeros(n, dtype=merged_dtype([x.dtype for x in arrs]))
     for arr in arrs:
