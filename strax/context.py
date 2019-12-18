@@ -816,11 +816,11 @@ class Context:
                 "Time range selection requires time information, "
                 "but none of the required plugins provides it.")
         elif time_selection == 'fully_contained':
-            return x[(time_range[0] <= x['time']) &
-                     (strax.endtime(x) < time_range[1])]
+            x = x[(time_range[0] <= x['time']) &
+                  (strax.endtime(x) < time_range[1])]
         elif time_selection == 'touching':
-            return x[(strax.endtime(x) > x['time']) &
-                     (x['time'] < time_range[1])]
+            x =  x[(strax.endtime(x) > x['time']) &
+                   (x['time'] < time_range[1])]
         else:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
