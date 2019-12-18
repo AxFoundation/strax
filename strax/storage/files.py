@@ -48,14 +48,19 @@ class DataDirectory(StorageFrontend):
 
     def run_metadata(self, run_id, projection=None):
         path = self._run_meta_path(run_id)
-        if osp.exists(path):
-            with open(path, mode='r') as f:
-                md = json.loads(f.read(),
-                                object_hook=json_util.object_hook)
-            return md
-        else:
+        if not osp.exists(path):
             raise strax.RunMetadataNotAvailable(
                 f"No file at {path}, cannot find run metadata for {run_id}")
+        with open(path, mode='r') as f:
+            md = json.loads(f.read(),
+                            object_hook=json_util.object_hook)
+        md = strax.flatten_dict(md, separator='.')
+        if projection is not None:
+            md =  {k: v
+                   for k, v in md.items()
+                   if k in projection}
+        return md
+
 
     def write_run_metadata(self, run_id, metadata):
         with open(self._run_meta_path(run_id), mode='w') as f:
