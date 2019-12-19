@@ -37,7 +37,7 @@ def list_available(self, target, **kwargs):
 
 
 @strax.Context.add_method
-def scan_runs(self,
+def scan_runs(self: strax.Context,
               check_available=tuple(),
               store_fields=tuple()):
     """Update and return self.runs with runs currently available
@@ -53,7 +53,7 @@ def scan_runs(self,
     """
     store_fields = tuple(set(
         list(strax.to_str_tuple(store_fields))
-        + ['name', 'number', 'tags', 'mode', 'sub_run_spec',
+        + ['name', 'number', 'tags', 'mode',
            strax.RUN_DEFAULTS_KEY]
         + list(self.context_config['store_run_fields'])))
     check_available = tuple(set(
@@ -79,6 +79,12 @@ def scan_runs(self,
             # Convert tags list to a ,separated string
             doc['tags'] = ','.join([t['name']
                                    for t in doc.get('tags', [])])
+
+            # Put the strax defaults stuff into a different cache
+            if strax.RUN_DEFAULTS_KEY in doc:
+                self._run_defaults_cache[doc['name']] = \
+                    doc[strax.RUN_DEFAULTS_KEY]
+                del doc[strax.RUN_DEFAULTS_KEY]
 
             doc = flatten_run_metadata(doc)
 

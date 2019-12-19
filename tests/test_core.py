@@ -271,10 +271,6 @@ def test_run_selection():
         assert st.run_metadata('0') == mock_rundb[0]
         assert st.run_metadata('0', projection='name') == {'name': '0'}
 
-        # Test caching of single-field projections
-        st.scan_runs()
-        assert st.run_metadata('0', projection='name') == {'name': '0'}
-
         assert len(st.select_runs(run_mode='nice')) == 2
         assert len(st.select_runs(include_tags='interesting')) == 2
         assert len(st.select_runs(include_tags='interesting',

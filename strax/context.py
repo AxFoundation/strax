@@ -938,13 +938,6 @@ class Context:
         :param projection: Selection of fields to get, following MongoDB
         syntax. May not be supported by frontend.
         """
-        if self.runs is not None and projection in self.runs.columns:
-            # We already scanned for runs and just need one field. Maybe we
-            # have it already?
-            where = np.where(self.runs['name'].values == run_id)[0]
-            if len(where):
-                return {projection: self.runs.iloc[where[0]][projection]}
-
         for sf in self.storage:
             if not sf.provide_run_metadata:
                 continue
