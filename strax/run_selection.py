@@ -80,6 +80,14 @@ def scan_runs(self: strax.Context,
             doc['tags'] = ','.join([t['name']
                                    for t in doc.get('tags', [])])
 
+            # Set a default livetime if we have start and stop
+            if ('start' in store_fields
+                    and 'end' in store_fields
+                    and 'livetime' in store_fields
+                    and 'start' in doc
+                    and 'end' in doc):
+                doc.setdefault('livetime', doc['end'] - doc['start'])
+
             # Put the strax defaults stuff into a different cache
             if strax.RUN_DEFAULTS_KEY in doc:
                 self._run_defaults_cache[doc['name']] = \
