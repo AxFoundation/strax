@@ -1,4 +1,10 @@
 
+0.8.2 / 2019-12-19
+------------------
+- Specify defaults via run doc (#223)
+- Fix hypothesis test deadline issue during build (5bf2ad7)
+- Fix: use selection_str also when selecting time range (87faeab)
+
 0.8.1 / 2019-11-13
 ------------------
 - Protect OverlapWindowPlugin against empty chunks (#212)
