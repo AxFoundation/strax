@@ -943,7 +943,8 @@ class Context:
             # have it already?
             where = np.where(self.runs['name'].values == run_id)[0]
             if len(where):
-                return {projection: self.runs.iloc[where[0]]['projection']}
+                return {projection: self.runs.iloc[where[0]][projection]}
+
         for sf in self.storage:
             if not sf.provide_run_metadata:
                 continue
