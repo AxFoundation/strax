@@ -54,13 +54,12 @@ class DataDirectory(StorageFrontend):
         with open(path, mode='r') as f:
             md = json.loads(f.read(),
                             object_hook=json_util.object_hook)
-        md = strax.flatten_dict(md, separator='.', keep='sub_run_spec')
+        md = strax.flatten_run_metadata(md)
         if projection is not None:
             md = {k: v
                   for k, v in md.items()
                   if k in projection}
         return md
-
 
     def write_run_metadata(self, run_id, metadata):
         with open(self._run_meta_path(run_id), mode='w') as f:
