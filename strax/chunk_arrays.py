@@ -173,19 +173,35 @@ def same_stop(*sources, field=None, func=None):
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
-    for x in pacemaker:
-        if not len(x):
-            yield tuple([x] + [np.empty(0, dtype=s.dtype)
-                               for s in others])
-            continue
+    def get_result(pacemaker_chunk, is_last):
+        if is_last:
+            # Final chunk: get ALL remaining data from others
+            other_data = [s.get_until(float('inf')) for s in others]
 
-        threshold = x[-1]
-        if field is not None:
-            threshold = threshold[field]
-        if func is not None:
-            threshold = func(threshold)
-        yield tuple([x] + [s.get_until(threshold, func=func)
-                           for s in others])
+        elif not len(pacemaker_chunk):
+            # Empty chunk: cannot get any data from others.
+            # TODO: should we not just skip this?
+            other_data = [np.empty(0, dtype=s.dtype) for s in others]
+
+        else:
+            threshold = pacemaker_chunk[-1]
+            if field is not None:
+                threshold = threshold[field]
+            if func is not None:
+                threshold = func(threshold)
+            other_data = [s.get_until(threshold, func=func)
+                          for s in others]
+
+        return tuple([pacemaker_chunk] + other_data)
+
+    # The last chunk takes special handling, but does not announce
+    # itself. Hence we must always buffer one pacemaker chunk.
+    buffer = None
+    for next_chunk in pacemaker:
+        if buffer is not None:
+            yield get_result(buffer, is_last=False)
+        buffer = next_chunk
+    yield get_result(buffer, is_last=True)
 
 
 @export
