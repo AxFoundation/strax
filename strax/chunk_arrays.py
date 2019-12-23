@@ -86,7 +86,7 @@ class ChunkPacer:
 
         try:
             while (not len(self.buffer[-1])
-                    or not func(self.buffer[-1][-1]) > threshold):
+                   or not func(self.buffer[-1][-1]) > threshold):
                 self._fetch_another()
         except StopIteration:
             pass
@@ -176,7 +176,8 @@ def same_stop(*sources, field=None, func=None):
     def get_result(pacemaker_chunk, is_last):
         if is_last:
             # Final chunk: get ALL remaining data from others
-            other_data = [s.get_until(float('inf')) for s in others]
+            other_data = [s.get_until(float('inf'), func=func)
+                          for s in others]
 
         elif not len(pacemaker_chunk):
             # Empty chunk: cannot get any data from others.
