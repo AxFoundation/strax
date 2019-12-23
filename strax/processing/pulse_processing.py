@@ -88,7 +88,9 @@ def record_links(records):
     """
     # TODO: needs tests
     if not len(records):
-        return
+        return (
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK,
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK)
     n_channels = records['channel'].max() + 1
     samples_per_record = len(records[0]['data'])
     previous_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
@@ -233,6 +235,8 @@ def filter_records(r, ir):
     :param prev_r: Previous record map from strax.record_links
     :param next_r: Next record map from strax.record_links
     """
+    if not len(r):
+        return r
     ws = _waveforms_to_float(r['data'], r['baseline'])
 
     prev_r, next_r = strax.record_links(r)
