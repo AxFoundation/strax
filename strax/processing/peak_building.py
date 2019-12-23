@@ -101,6 +101,25 @@ def find_peaks(hits, adc_to_pe,
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
+def downsample(p, buffer, samples):
+    downs_f = int(np.ceil(p['length'] / samples))
+    if downs_f > 1:
+        # Compute peak length after downsampling.
+        # We floor rather than ceil here, potentially cutting off
+        # some samples from the right edge of the peak.
+        # If we would ceil, the peak could grow larger and
+        # overlap with a subsequent next peak, crashing strax later.
+        new_ns = p['length'] = int(np.floor(p['length'] / downs_f))
+        p['data'][:new_ns] = \
+            buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
+        p['dt'] *= downs_f
+    else:
+        p['data'][:p['length']] = buffer[:p['length']]
+    return p
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
@@ -192,19 +211,7 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
 
         # Store the sum waveform
         # Do we need to downsample the swv to store it?
-        downs_f = int(np.ceil(p_length / sum_wv_samples))
-        if downs_f > 1:
-            # Compute peak length after downsampling.
-            # We floor rather than ceil here, potentially cutting off
-            # some samples from the right edge of the peak.
-            # If we would ceil, the peak could grow larger and
-            # overlap with a subsequent next peak, crashing strax later.
-            new_ns = p['length'] = int(np.floor(p_length / downs_f))
-            p['data'][:new_ns] = \
-                swv_buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
-            p['dt'] *= downs_f
-        else:
-            p['data'][:p_length] = swv_buffer[:p_length]
+        p = downsample(p, swv_buffer, sum_wv_samples)
 
         # Store the saturation count and area per channel
         p['n_saturated_channels'] = p['saturated_channel'].sum()
