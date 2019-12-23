@@ -123,8 +123,6 @@ class ThreadedMailboxProcessor:
                         executor=executor),
                     name=f'divide_outputs:{d}')
 
-                for d in p.provides:
-                    self.mailboxes[d]   # creates mailbox d if doesn't exist
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             mailboxes=self.mailboxes,
@@ -173,6 +171,14 @@ class ThreadedMailboxProcessor:
                     continue
                 self.mailboxes[d].add_reader(
                     discarder, name=f'discard_{d}')
+
+        # Set to preferred number of maximum messages
+        # TODO: may not work if plugins are inlined
+        for d, m in self.mailboxes.items():
+            if d in components.plugins:
+                max_m = components.plugins[d].max_messages
+                if max_m is not None:
+                    m.max_messages = max_m
 
     def iter(self):
         target = self.components.targets[0]
