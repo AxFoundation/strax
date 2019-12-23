@@ -1,4 +1,12 @@
 
+
+0.8.3 / 2019-12-23
+------------------
+- Fix for skipping data near end of run during multi-kind merge
+- Add tight coincidence field to peaks dtype
+- Pulse filtering optimization
+- `max_messages` configurable per plugin, defaults to 4
+
 0.8.2 / 2019-12-19
 ------------------
 - Specify defaults via run doc (#223)
