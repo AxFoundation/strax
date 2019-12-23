@@ -259,7 +259,7 @@ class Context:
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
-                    default = opt.get_default(self.run_defaults(run_id))
+                    default = opt.get_default(run_id, self.run_defaults(run_id))
                 except strax.InvalidConfiguration:
                     default = strax.OMITTED
                 c = self.context_config if data_type is None else self.config
