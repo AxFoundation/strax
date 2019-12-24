@@ -101,7 +101,39 @@ def find_peaks(hits, adc_to_pe,
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
+def store_downsampled_waveform(p, wv_buffer):
+    """Downsample the waveform in buffer and store it in p['data']
+
+    :param p: Row of a strax peak array, or compatible type.
+    Note that p['dt'] is adjusted to match the downsampling.
+    :param wv_buffer: numpy array containing sum waveform during the peak
+    at the input peak's sampling resolution p['dt'].
+
+    The number of samples to take from wv_buffer, and thus the downsampling
+    factor, is determined from p['dt'] and p['length'].
+
+    When downsampling results in a fractional number of samples, the peak is
+    shortened rather than extended. This causes data loss, but it is
+    necessary to prevent overlaps between peaks.
+    """
+    n_samples = len(p['data'])
+    downsample_factor = int(np.ceil(p['length'] / n_samples))
+    if downsample_factor > 1:
+        # Compute peak length after downsampling.
+        # Do not ceil: see docstring!
+        p['length'] = int(np.floor(p['length'] / downsample_factor))
+        p['data'][:p['length']] = \
+            wv_buffer[:p['length'] * downsample_factor] \
+                .reshape(-1, downsample_factor) \
+                .sum(axis=1)
+        p['dt'] *= downsample_factor
+    else:
+        p['data'][:p['length']] = wv_buffer[:p['length']]
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
+def sum_waveform(peaks, records, adc_to_pe):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
@@ -116,7 +148,6 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
     if not len(peaks):
         return
     dt = records[0]['dt']
-    sum_wv_samples = len(peaks[0]['data'])
 
     # Big buffer to hold even largest sum waveforms
     # Need a little more even for downsampling..
@@ -190,23 +221,8 @@ def sum_waveform(peaks, records, adc_to_pe, n_channels=248):
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
 
-        # Store the sum waveform
-        # Do we need to downsample the swv to store it?
-        downs_f = int(np.ceil(p_length / sum_wv_samples))
-        if downs_f > 1:
-            # Compute peak length after downsampling.
-            # We floor rather than ceil here, potentially cutting off
-            # some samples from the right edge of the peak.
-            # If we would ceil, the peak could grow larger and
-            # overlap with a subsequent next peak, crashing strax later.
-            new_ns = p['length'] = int(np.floor(p_length / downs_f))
-            p['data'][:new_ns] = \
-                swv_buffer[:new_ns * downs_f].reshape(-1, downs_f).sum(axis=1)
-            p['dt'] *= downs_f
-        else:
-            p['data'][:p_length] = swv_buffer[:p_length]
+        store_downsampled_waveform(p, swv_buffer)
 
-        # Store the saturation count and area per channel
         p['n_saturated_channels'] = p['saturated_channel'].sum()
         p['area_per_channel'][:] = area_per_channel
 
