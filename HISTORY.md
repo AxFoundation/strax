@@ -1,4 +1,8 @@
-
+0.8.4 / 2019-12-24
+------------------
+- Export downsampling function (#224)
+- Fix show_config
+- Fix pulse_processing for empty chunks
 
 0.8.3 / 2019-12-23
 ------------------
