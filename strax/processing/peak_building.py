@@ -137,10 +137,6 @@ def sum_waveform(peaks, records, adc_to_pe):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
-    :param n_channels: Number of channels that contribute to the total area
-    and n_saturated_channels.
-    For further channels we still calculate area_per_channel and saturated_channel.
-
     Assumes all peaks AND pulses have the same dt!
     """
     if not len(records):
