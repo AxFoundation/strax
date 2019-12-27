@@ -242,6 +242,9 @@ def weighted_var_online(waveform):
     mean = sum_weights = s = 0
     result = np.zeros(len(waveform))
     for i, w in enumerate(waveform):
+        # Negative weights can lead to odd results, so clip waveform
+        w = max(0, w)
+
         sum_weights += w
         if sum_weights == 0:
             continue
