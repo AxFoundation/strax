@@ -12,8 +12,10 @@ import numpy as np
 import numba
 import strax
 
-__all__ = 'split_peaks '.split()
+export, __all__ = strax.exporter()
 
+
+@export
 def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
                 min_height=25, min_ratio=4,
                 threshold=0.4, min_area=40,
@@ -213,15 +215,16 @@ def _split_peaks_nb(peaks, orig_dt, is_split,
 
 @numba.njit(nogil=True, cache=True)
 def find_split_points_nb(w, threshold=0.4, _dummy=0.):
-    gofs = _gof_array(w)
+    gofs = natural_breaks_gof(w)
     i = np.argmax(gofs)
     if gofs[i] > threshold:
         yield i
         yield len(w) - 1
 
 
+@export
 @numba.njit(nogil=True, cache=True)
-def _gof_array(w):
+def natural_breaks_gof(w):
     """Return natural breaks goodness of split/fit for the waveform w
     a sharp peak gives ~0, two widely separate peaks ~1.
     """
