@@ -444,6 +444,9 @@ class Context:
         :param run_id: Run name
         :param time_range: (start, stop) ns since unix epoch
         :param d_with_time: Name of data type
+
+        With 'includes', we here mean that includes at least one piece of data
+        that intersects the time range.
         """
         # Find a range of row numbers that contains the time range
         # It's a bit too large: to
@@ -463,7 +466,7 @@ class Context:
         for i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
             n_range = [chunk_info['n_from'], chunk_info['n_to']]
             for j, t in enumerate(time_range):
-                if prev_endtime <= t <= chunk_info['last_endtime']:
+                if prev_endtime < t <= chunk_info['last_endtime']:
                     result[j] = n_range[j]
             prev_endtime = chunk_info['last_endtime']
 
@@ -822,9 +825,13 @@ class Context:
         :param selection_str: Query string or sequence of strings to apply.
         :param time_range: (start, stop) range to load, in ns since the epoch
         :param time_selection: Kind of time selectoin to apply:
-        - fully_contained: (default) select things fully contained in the range
-        - touching: select things that (partially) overlap with the range
         - skip: Do not select a time range, even if other arguments say so
+        - touching: select things that (partially) overlap with the range
+        - fully_contained: (default) select things fully contained in the range
+
+        The right bound is, as always in strax, considered exclusive.
+        Thus, data that ends (exclusively) exactly at the right edge of a
+        fully_contained selection is returned.
         """
         # Apply the time selections
         if time_range is None or time_selection == 'skip':
@@ -835,10 +842,10 @@ class Context:
                 "but none of the required plugins provides it.")
         elif time_selection == 'fully_contained':
             x = x[(time_range[0] <= x['time']) &
-                  (strax.endtime(x) < time_range[1])]
+                  (strax.endtime(x) <= time_range[1])]
         elif time_selection == 'touching':
-            x =  x[(strax.endtime(x) > x['time']) &
-                   (x['time'] < time_range[1])]
+            x = x[(strax.endtime(x) > x['time']) &
+                  (x['time'] < time_range[1])]
         else:
             raise ValueError(f"Unknown time_selection {time_selection}")
 

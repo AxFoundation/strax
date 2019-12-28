@@ -158,8 +158,7 @@ class Records(strax.Plugin):
             raise SomeCrash("CRASH!!!!")
         r = np.zeros(recs_per_chunk, self.dtype)
         r['time'] = chunk_i + self.config['secret_time_offset']
-        r['length'] = 1
-        r['dt'] = 1
+        r['length'] = r['dt'] = 1
         r['channel'] = np.arange(len(r))
         return r
 
@@ -183,6 +182,7 @@ class Peaks(strax.Plugin):
             return np.zeros(5, [('a', np.int), ('b', np.float)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
+        p['length'] = p['dt'] = 1
         p['area'] = self.config['base_area'] + self.config['bonus_area']
         return p
 
