@@ -498,3 +498,16 @@ def group_by_kind(dtypes, plugins=None, context=None,
                                  "has time information!")
 
     return deps_by_kind
+
+
+@export
+def iter_chunk_meta(md):
+    """Iterate over chunk info from metadata md
+     adding n_from and n_to fields"""
+    _n_to = _n_from = 0
+    for c in md['chunks']:
+        _n_from = _n_to
+        _n_to = _n_from + c['n']
+        c['n_from'] = _n_from
+        c['n_to'] = _n_to
+        yield c

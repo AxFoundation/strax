@@ -454,16 +454,22 @@ class Context:
                 f"{d_with_time}, but this data is not yet available")
 
         meta = self.get_meta(run_id, d_with_time)
-        times = np.array([c['first_time'] for c in meta['chunks']])
-        # Reconstruct row numbers from row counts, which are in metadata
-        # n_end is last row + 1 in a chunk. n_start is the first.
-        n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
-        n_start = n_end - n_end[0]
-        _inds = np.searchsorted(times, time_range) - 1
-        # Clip to prevent out-of-range times causing
-        # negative or nonexistent indices
-        _inds = np.clip(_inds, 0, len(n_end) - 1)
-        return n_start[_inds[0]], n_end[_inds[1]]
+        if not len(meta['chunks']):
+            raise ValueError("Data has no chunks??")
+
+        result = [0, -1]
+        chunk_info = dict()  # Otherwise pycharm complains later
+        prev_endtime = 0
+        for i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
+            n_range = [chunk_info['n_from'], chunk_info['n_to']]
+            for j, t in enumerate(time_range):
+                if prev_endtime <= t <= chunk_info['last_endtime']:
+                    result[j] = n_range[j]
+            prev_endtime = chunk_info['last_endtime']
+
+        if result[1] == -1:
+            result[1] = chunk_info['n_to']
+        return result
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
@@ -517,7 +523,8 @@ class Context:
                         f"since none of the dependencies {deps_to_check} "
                         "of the MergeOnlyPlugin provide time information")
 
-                d_with_time = plugins[d_with_time].depends_on[0]
+                d_with_time = plugins[d_with_time].provides[0]
+
             n_range = self._time_range_to_n_range(
                 run_id, time_range, d_with_time)
 
@@ -774,7 +781,7 @@ class Context:
             if len(set(plugins[d].data_kind for d in targets)) == 1:
                 temp_name = ('_temp_'
                              + ''.join(
-                            random.choices(string.ascii_lowercase, k=10)))
+                               random.choices(string.ascii_lowercase, k=10)))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
