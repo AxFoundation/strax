@@ -844,7 +844,7 @@ class Context:
             x = x[(time_range[0] <= x['time']) &
                   (strax.endtime(x) <= time_range[1])]
         elif time_selection == 'touching':
-            x = x[(strax.endtime(x) > x['time']) &
+            x = x[(strax.endtime(x) > time_range[0]) &
                   (x['time'] < time_range[1])]
         else:
             raise ValueError(f"Unknown time_selection {time_selection}")
