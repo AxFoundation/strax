@@ -6,8 +6,6 @@ likely a mirrored but in the other algorithm.
 
 (if you fix the duplication, you will be rewarded generously in the afterlife.)
 """
-
-
 import numpy as np
 import numba
 import strax
@@ -40,6 +38,7 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
         natural_breaks: takes options threshold and min_area
             Split peaks according to Jenks natural breaks algorithm,
             until all fragments have GOF < threshold, or < area.
+            If threshold is a string, will be evaled with area = peak areas
     """
     if not len(records) or not len(peaks):
         return peaks
@@ -51,20 +50,25 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
         # so we can't use many of python's cool tricks to avoid duplication
         # (there surely is a way, but I'm too lazy to find one right now)
         if algorithm == 'natural_breaks':
+            if isinstance(threshold, str):
+                thresholds = eval(threshold, dict(np=np, peaks=peaks))
+            else:
+                thresholds = np.ones(len(peaks), dtype=np.float32) * threshold
+
             new_peaks = _split_peaks_nb(
                 peaks,
                 orig_dt=records[0]['dt'],
                 is_split=is_split,
-                threshold=float(threshold),
-                min_area=float(min_area),
+                thresholds=thresholds,
+                min_area=min_area,
                 result_dtype=peaks.dtype)
         else:
             new_peaks = _split_peaks(
                 peaks,
                 orig_dt=records[0]['dt'],
                 is_split=is_split,
-                min_height=float(min_height),
-                min_ratio=float(min_ratio),
+                min_height=min_height,
+                min_ratio=min_ratio,
                 result_dtype=peaks.dtype)
 
         if is_split.sum() == 0:
@@ -172,7 +176,7 @@ def find_split_points(w, min_height=0, min_ratio=0):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _split_peaks_nb(peaks, orig_dt, is_split,
                     # For natural breaks
-                    threshold, min_area,
+                    thresholds, min_area,
                     _result_buffer=None, result_dtype=None):
     # TODO NEEDS TESTS!
     # TODO any way to avoid the code duplication that is compatible with numba?
@@ -188,7 +192,7 @@ def _split_peaks_nb(peaks, orig_dt, is_split,
 
         for split_i in find_split_points_nb(
                 w,
-                threshold=threshold):
+                threshold=thresholds[p_i]):
             is_split[p_i] = True
             r = new_peaks[offset]
             r['time'] = p['time'] + prev_split_i * p['dt']
@@ -228,16 +232,18 @@ def natural_breaks_gof(w):
     """Return natural breaks goodness of split/fit for the waveform w
     a sharp peak gives ~0, two widely separate peaks ~1.
     """
-    left = weighted_var_online(w)
-    right = weighted_var_online(w[::-1])[::-1]
+    left = intraclass_variance(w)
+    right = intraclass_variance(w[::-1])[::-1]
     gof = 1 - (left + right) / left[-1]
+    # Adjust to prevent splits at high density points
+    gof *= 1 - w / w.max()
     return gof
 
 
 @numba.njit(nogil=True, cache=True)
-def weighted_var_online(waveform):
-    """Return left-to-right result of an online weighted variance computation
-    on the waveform.
+def intraclass_variance(waveform):
+    """Return left-to-right result of an online
+    sum-intra-class variance computation on the waveform.
     """
     mean = sum_weights = s = 0
     result = np.zeros(len(waveform))
@@ -252,6 +258,6 @@ def weighted_var_online(waveform):
         mean_old = mean
         mean = mean_old + (w / sum_weights) * (i - mean_old)
         s += w * (i - mean_old) * (i - mean)
-        result[i] = s / sum_weights
+        result[i] = s
 
     return result
