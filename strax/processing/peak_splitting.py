@@ -22,6 +22,8 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', **kwargs):
 
 
 class PeakSplitter:
+    # Handling these arguments is a bit annoying, as numba does not accept
+    # **kwargs
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe,
@@ -30,9 +32,16 @@ class PeakSplitter:
             return peaks
 
         # Build the *args tuple for self.find_split_points from kwargs
-        args_options = tuple([
+        args_options = [
             kwargs[k] if k in kwargs else default
-            for k, default in self.find_split_args_defaults])
+            for k, default in self.find_split_args_defaults]
+
+        # The 'threshold' option needs some preprocessing... unfortunately
+        threshold_opt_i = threshold_spec = None
+        for i, (k, _) in enumerate(self.find_split_args_defaults):
+            if k == 'threshold':
+                threshold_opt_i = i
+                threshold_spec = args_options[i]
 
         # Check for spurious options
         argnames = [k for k, _ in self.find_split_args_defaults]
@@ -43,9 +52,13 @@ class PeakSplitter:
         while do_iterations > 0:
             is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-            # Support for both algorithms is a bit awkward since we rely on numba,
-            # so we can't use many of python's cool tricks to avoid duplication
-            # (there surely is a way, but I'm too lazy to find one right now)
+            if threshold_opt_i is not None:
+                log_areas = np.log10(np.nan_to_num(peaks['area']).clip(0.1, None))
+                thresholds = np.interp(
+                    log_areas,
+                    *np.transpose(threshold_spec))
+                args_options[threshold_opt_i] = thresholds
+
             new_peaks = self.split_peaks(
                 # Numba doesn't like self as argument, but it's ok with functions...
                 split_finder=self.find_split_points,
@@ -53,7 +66,7 @@ class PeakSplitter:
                 is_split=is_split,
                 orig_dt=records[0]['dt'],
                 min_area=min_area,
-                args_options=args_options,
+                args_options=tuple(args_options),
                 result_dtype=peaks.dtype)
 
             if is_split.sum() == 0:
@@ -83,7 +96,7 @@ class PeakSplitter:
             prev_split_i = 0
             w = p['data'][:p['length']]
 
-            for split_i in split_finder(w, p['dt'], *args_options):
+            for split_i in split_finder(w, p['dt'], p_i, *args_options):
                 is_split[p_i] = True
                 r = new_peaks[offset]
                 r['time'] = p['time'] + prev_split_i * p['dt']
@@ -128,7 +141,7 @@ class LocalMinimumSplitter(PeakSplitter):
 
     @staticmethod
     @numba.jit(nopython=True, nogil=True, cache=True)
-    def find_split_points(w, dt, min_height, min_ratio):
+    def find_split_points(w, dt, peak_i, min_height, min_ratio):
         """"Yield indices of prominent local minima in w
         If there was at least one index, yields len(w)-1 at the end
         """
@@ -183,20 +196,20 @@ class NaturalBreaksSplitter(PeakSplitter):
        close as we can get to it given the peaks sampling) on either side.
     """
     find_split_args_defaults = (
-        ('threshold', 0.4),
+        ('threshold', None),  # will be a numpy array of len(peaks)
         ('normalize', False),
         ('split_low', False),
         ('filter_wing_width', 0))
 
     @staticmethod
     @numba.njit(nogil=True, cache=True)
-    def find_split_points(w, dt, threshold, normalize, split_low, filter_wing_width):
+    def find_split_points(w, dt, peak_i, threshold, normalize, split_low, filter_wing_width):
         gofs = natural_breaks_gof(w, dt,
                                   normalize=normalize,
                                   split_low=split_low,
                                   filter_wing_width=filter_wing_width)
         i = np.argmax(gofs)
-        if gofs[i] > threshold:
+        if gofs[i] > threshold[peak_i]:
             yield i
             yield len(w) - 1
 
