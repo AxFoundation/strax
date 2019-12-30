@@ -25,6 +25,16 @@ class ChunkPacer:
     def exhausted(self):
         return self._source_exhausted and self.buffer_items == 0
 
+    def check_is_exhausted(self):
+        """Check thoroughly if we are exhausted, by trying to
+        fetch a new chunk.
+        """
+        try:
+            self._fetch_another()
+        except StopIteration:
+            pass
+        return self.exhausted
+
     def _fetch_another(self):
         try:
             x = next(self.source)
@@ -154,14 +164,21 @@ def alternating_duration_chunks(source, *durations):
 
 
 @export
-def same_length(*sources):
+def same_length(*sources, same_length=True):
     """Yield tuples of arrays of the same number of items
+
+    :param same_length: Crash if the sources do not produce
+    items of the same length
     """
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
     for x in pacemaker:
         yield tuple([x] + [s.get_n(len(x)) for s in others])
+
+    if same_length:
+        for s in others:
+            assert s.check_is_exhausted(), f"{s.buffer_items} items left!"
 
 
 @export
