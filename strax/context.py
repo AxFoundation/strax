@@ -987,6 +987,10 @@ class Context:
         Note that even if False is returned, the data type may still be made
         with a trivial computation.
         """
+        if isinstance(target, (tuple, list)):
+            return all([self.is_stored(run_id, t, **kwargs)
+                        for t in target])
+
         # If any new options given, replace the current context
         # with a temporary one
         # TODO duplicated code with with get_iter
