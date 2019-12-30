@@ -229,13 +229,13 @@ def test_random_access():
         Peaks.rechunk_on_save = False
 
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks, PeakClassification])
 
         with pytest.raises(strax.DataNotAvailable):
             # Time range selection requires data already available
             st.get_df(run_id, 'peaks', time_range=(3, 5))
 
-        st.make(run_id=run_id, targets='peaks')
+        st.make(run_id=run_id, targets=('peaks', 'peak_classification'))
 
         # Second part of hack: corrupt data by removing one chunk
         dirname = str(st.key_for(run_id, 'peaks'))
@@ -250,6 +250,14 @@ def test_random_access():
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+
+        # Try again with unaligned chunks
+        df = st.get_array(run_id, ['peaks', 'peak_classification'],
+                          time_range=(3, 5))
+        assert len(df) == 2 * recs_per_chunk
+        assert df['time'].min() == 3
+        assert df['time'].max() == 4
+
 
 
 def test_run_selection():

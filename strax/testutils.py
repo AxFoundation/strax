@@ -173,6 +173,7 @@ class SomeCrash(Exception):
     strax.Option('bonus_area', default_by_run=[(0, 0), (1, 1)]))
 class Peaks(strax.Plugin):
     provides = 'peaks'
+    data_kind = 'peaks'
     depends_on = ('records',)
     dtype = strax.peak_dtype()
     parallel = True
@@ -185,6 +186,20 @@ class Peaks(strax.Plugin):
         p['length'] = p['dt'] = 1
         p['area'] = self.config['base_area'] + self.config['bonus_area']
         return p
+
+
+# Another peak-kind plugin, to test time_range selection
+# with unaligned chunks
+class PeakClassification(strax.Plugin):
+    provides = 'peak_classification'
+    data_kind = 'peaks'
+    depends_on = ('peaks',)
+    dtype = [('type', np.int8, 'Classification of the peak.'),]
+    rechunk_on_save = True
+
+    def compute(self, peaks):
+        return dict(type=np.zeros(len(peaks)))
+
 
 recs_per_chunk = 10
 n_chunks = 10
