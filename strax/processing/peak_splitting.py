@@ -7,9 +7,11 @@ export, __all__ = strax.exporter()
 
 @export
 def split_peaks(peaks, records, to_pe, algorithm='local_minimum', **kwargs):
-    """Return peaks split according to algorithm, with sum waveforms built.
+    """Return peaks split according to algorithm, with waveforms summed
+    and widths computed.
 
-    :param peaks: Original peaks. Sum waveform must have been built.
+    :param peaks: Original peaks. Sum waveform must have been built
+    and properties must have been computed (if you use them)
     :param records: Records from which peaks were built
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
@@ -21,27 +23,30 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', **kwargs):
     return splitter(peaks, records, to_pe, **kwargs)
 
 
+NO_MORE_SPLITS = -9999999
+
+
 class PeakSplitter:
-    # Handling these arguments is a bit annoying, as numba does not accept
-    # **kwargs
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe,
                  do_iterations=1, min_area=0, **kwargs):
-        if not len(records) or not len(peaks):
+        if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
         # Build the *args tuple for self.find_split_points from kwargs
-        args_options = [
-            kwargs[k] if k in kwargs else default
-            for k, default in self.find_split_args_defaults]
-
-        # The 'threshold' option needs some preprocessing... unfortunately
-        threshold_opt_i = threshold_spec = None
-        for i, (k, _) in enumerate(self.find_split_args_defaults):
+        # since numba doesn't support **kwargs
+        args_options = []
+        for i, (k, value) in enumerate(self.find_split_args_defaults):
+            if k in kwargs:
+                value = kwargs[k]
             if k == 'threshold':
-                threshold_opt_i = i
-                threshold_spec = args_options[i]
+                # The 'threshold' option is a user-specified function
+                # of peak properties
+                # TODO: Security? What's that?
+                value = eval(value, dict(np=np, peaks=peaks))
+            args_options.append(value)
+        args_options = tuple(args_options)
 
         # Check for spurious options
         argnames = [k for k, _ in self.find_split_args_defaults]
@@ -49,33 +54,28 @@ class PeakSplitter:
             if k not in argnames:
                 raise TypeError(f"Unknown argument {k} for {self.__class__}")
 
-        while do_iterations > 0:
-            is_split = np.zeros(len(peaks), dtype=np.bool_)
+        is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-            if threshold_opt_i is not None:
-                log_areas = np.log10(np.nan_to_num(peaks['area']).clip(0.1, None))
-                thresholds = np.interp(
-                    log_areas,
-                    *np.transpose(threshold_spec))
-                args_options[threshold_opt_i] = thresholds
+        new_peaks = self.split_peaks(
+            # Numba doesn't like self as argument, but it's ok with functions...
+            split_finder=self.find_split_points,
+            peaks=peaks,
+            is_split=is_split,
+            orig_dt=records[0]['dt'],
+            min_area=min_area,
+            args_options=tuple(args_options),
+            result_dtype=peaks.dtype)
 
-            new_peaks = self.split_peaks(
-                # Numba doesn't like self as argument, but it's ok with functions...
-                split_finder=self.find_split_points,
-                peaks=peaks,
-                is_split=is_split,
-                orig_dt=records[0]['dt'],
-                min_area=min_area,
-                args_options=tuple(args_options),
-                result_dtype=peaks.dtype)
-
-            if is_split.sum() == 0:
-                # Nothing was split -- end early
-                break
-
+        if is_split.sum() != 0:
+            # Found new peaks: compute basic properties
             strax.sum_waveform(new_peaks, records, to_pe)
+            strax.compute_widths(new_peaks)
+
+            # ... and recurse (if needed)
+            self(new_peaks, records, to_pe,
+                 do_iterations=do_iterations - 1,
+                 min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split], new_peaks]))
-            do_iterations -= 1
 
         return peaks
 
@@ -96,7 +96,11 @@ class PeakSplitter:
             prev_split_i = 0
             w = p['data'][:p['length']]
 
-            for split_i in split_finder(w, p['dt'], p_i, *args_options):
+            for (split_i, bonus_output) in split_finder(w, p['dt'], p_i, *args_options):
+                if split_i == NO_MORE_SPLITS:
+                    p['max_goodness_of_split'] = bonus_output
+                    continue    # ... but the iteration will end anyway afterwards
+
                 is_split[p_i] = True
                 r = new_peaks[offset]
                 r['time'] = p['time'] + prev_split_i * p['dt']
@@ -105,6 +109,8 @@ class PeakSplitter:
                 # this may change when the sum waveform of the new peak is computed
                 r['dt'] = orig_dt
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+
+                r['max_gap'] = -1    # Too lazy to compute this
 
                 if r['length'] <= 0:
                     print(p['data'])
@@ -142,7 +148,7 @@ class LocalMinimumSplitter(PeakSplitter):
     @staticmethod
     @numba.jit(nopython=True, nogil=True, cache=True)
     def find_split_points(w, dt, peak_i, min_height, min_ratio):
-        """"Yield indices of prominent local minima in w
+        """"Yields indices of prominent local minima in w
         If there was at least one index, yields len(w)-1 at the end
         """
         found_one = False
@@ -160,7 +166,7 @@ class LocalMinimumSplitter(PeakSplitter):
                                       min_since_max * min_ratio):
                 # Significant local minimum: tell caller,
                 # reset both max and min finder
-                yield min_since_max_i
+                yield min_since_max_i, 0.
                 found_one = True
                 last_max = x
                 min_since_max = 99999999999999.9
@@ -175,7 +181,8 @@ class LocalMinimumSplitter(PeakSplitter):
                 min_since_max_i = i
 
         if found_one:
-            yield len(w)
+            yield len(w), 0.
+        yield NO_MORE_SPLITS, 0.
 
 
 class NaturalBreaksSplitter(PeakSplitter):
@@ -208,10 +215,11 @@ class NaturalBreaksSplitter(PeakSplitter):
                                   normalize=normalize,
                                   split_low=split_low,
                                   filter_wing_width=filter_wing_width)
-        i = np.argmax(gofs)
-        if gofs[i] > threshold[peak_i]:
-            yield i
-            yield len(w) - 1
+        max_i = np.argmax(gofs)
+        if gofs[max_i] > threshold[peak_i]:
+            yield max_i, 0.
+            yield len(w) - 1, 0.
+        yield NO_MORE_SPLITS, gofs[max_i]
 
 
 @export
