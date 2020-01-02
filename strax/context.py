@@ -714,7 +714,7 @@ class Context:
             t0 = self.run_metadata(run_id, 'start')['start']
             t0 = int(t0.timestamp()) * int(1e9)
         except strax.RunMetadataNotAvailable:
-            if targets is None or not len(targets):
+            if not targets:
                 warnings.warn(
                     "Could not estimate run start time from "
                     "run metadata: assuming it is 0",

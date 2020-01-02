@@ -225,8 +225,7 @@ def natural_breaks_gof(w, dt, normalize=False, split_low=False, filter_wing_widt
     gof = 1 - (left + right) / left[-1]
     if split_low:
         # Adjust to prevent splits at high density points
-        filter_width = filter_wing_width
-        filter_n = filter_width // dt - 1
+        filter_n = filter_wing_width // dt - 1
         if filter_n > 0:
             filtered_w = symmetric_moving_average(w, filter_n)
         else:
