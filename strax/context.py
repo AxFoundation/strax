@@ -714,8 +714,12 @@ class Context:
             t0 = self.run_metadata(run_id, 'start')['start']
             t0 = int(t0.timestamp()) * int(1e9)
         except strax.RunMetadataNotAvailable:
-            if targets is None:
-                raise
+            if targets is None or not len(targets):
+                warnings.warn(
+                    "Could not estimate run start time from "
+                    "run metadata: assuming it is 0",
+                    UserWarning)
+                return 0
             # Get an approx start from the data itself,
             # then floor it to seconds for consistency
             t = strax.to_str_tuple(targets)[0]
