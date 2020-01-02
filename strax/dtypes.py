@@ -76,27 +76,31 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
     return interval_dtype + [
-        (('Integral across channels in photoelectrons',
-            'area'), np.float32),
+        (('Integral across channels [PE]',
+          'area'), np.float32),
         # Area per channel in ADC * samples
-        (('Integral per channel in PE',
-            'area_per_channel'), np.float32, n_channels),
+        (('Integral per channel [PE]',
+          'area_per_channel'), np.float32, n_channels),
         # Number of hits from which this peak was constructed
         # (zero if peak was split afterwards)
         (("Number of hits from which peak was constructed "
           "(currently zero if peak is split afterwards)",
-            'n_hits'), np.int32),
+          'n_hits'), np.int32),
         # Waveform data in PE/sample
         (('Waveform data in PE/sample (not PE/ns!)',
-            'data'), np.float32, n_sum_wv_samples),
-        (('Peak widths in ns: range of central area fraction',
-            'width'), np.float32, n_widths),
-        (('Peak widths in ns: area from midpoint',
-            'area_decile_from_midpoint'), np.float32, n_widths),
-        (('Check if channel is saturated',
-            'saturated_channel'), np.int16, n_channels),
+          'data'), np.float32, n_sum_wv_samples),
+        (('Peak widths in range of central area fraction [ns]',
+          'width'), np.float32, n_widths),
+        (('Peak widths: time between nth and 5th area decile [ns]',
+          'area_decile_from_midpoint'), np.float32, n_widths),
+        (('Does the channel reach ADC saturation?',
+          'saturated_channel'), np.int16, n_channels),
         (('Total number of saturated channels',
-            'n_saturated_channels'), np.int16),
-        (('Hits within tight range of mean',
-          'tight_coincidence'), np.int16)
+          'n_saturated_channels'), np.int16),
+        (('Number of hits within tight range of mean',
+          'tight_coincidence'), np.int32),
+        (('Largest gap between hits inside peak [ns]',
+          'max_gap'), np.int32),
+        (('Maximum interior goodness of split',
+          'max_goodness_of_split'), np.float32),
     ]
