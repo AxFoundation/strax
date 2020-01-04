@@ -25,6 +25,16 @@ class ChunkPacer:
     def exhausted(self):
         return self._source_exhausted and self.buffer_items == 0
 
+    def check_is_exhausted(self):
+        """Check thoroughly if we are exhausted, by trying to
+        fetch a new chunk.
+        """
+        try:
+            self._fetch_another()
+        except StopIteration:
+            pass
+        return self.exhausted
+
     def _fetch_another(self):
         try:
             x = next(self.source)
@@ -86,7 +96,7 @@ class ChunkPacer:
 
         try:
             while (not len(self.buffer[-1])
-                    or not func(self.buffer[-1][-1]) > threshold):
+                   or not func(self.buffer[-1][-1]) > threshold):
                 self._fetch_another()
         except StopIteration:
             pass
@@ -154,14 +164,21 @@ def alternating_duration_chunks(source, *durations):
 
 
 @export
-def same_length(*sources):
+def same_length(*sources, same_length=True):
     """Yield tuples of arrays of the same number of items
+
+    :param same_length: Crash if the sources do not produce
+    items of the same length
     """
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
     for x in pacemaker:
         yield tuple([x] + [s.get_n(len(x)) for s in others])
+
+    if same_length:
+        for s in others:
+            assert s.check_is_exhausted(), f"{s.buffer_items} items left!"
 
 
 @export
@@ -173,19 +190,36 @@ def same_stop(*sources, field=None, func=None):
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
-    for x in pacemaker:
-        if not len(x):
-            yield tuple([x] + [np.empty(0, dtype=s.dtype)
-                               for s in others])
-            continue
+    def get_result(pacemaker_chunk, is_last):
+        if is_last:
+            # Final chunk: get ALL remaining data from others
+            other_data = [s.get_until(float('inf'), func=func)
+                          for s in others]
 
-        threshold = x[-1]
-        if field is not None:
-            threshold = threshold[field]
-        if func is not None:
-            threshold = func(threshold)
-        yield tuple([x] + [s.get_until(threshold, func=func)
-                           for s in others])
+        elif not len(pacemaker_chunk):
+            # Empty chunk: cannot get any data from others.
+            # TODO: should we not just skip this?
+            other_data = [np.empty(0, dtype=s.dtype) for s in others]
+
+        else:
+            threshold = pacemaker_chunk[-1]
+            if field is not None:
+                threshold = threshold[field]
+            if func is not None:
+                threshold = func(threshold)
+            other_data = [s.get_until(threshold, func=func)
+                          for s in others]
+
+        return tuple([pacemaker_chunk] + other_data)
+
+    # The last chunk takes special handling, but does not announce
+    # itself. Hence we must always buffer one pacemaker chunk.
+    buffer = None
+    for next_chunk in pacemaker:
+        if buffer is not None:
+            yield get_result(buffer, is_last=False)
+        buffer = next_chunk
+    yield get_result(buffer, is_last=True)
 
 
 @export

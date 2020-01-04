@@ -8,6 +8,7 @@ import pytest
 
 from strax.testutils import *
 
+
 def test_core():
     for allow_multiprocess in (False, True):
         for max_workers in [1, 2]:
@@ -228,13 +229,13 @@ def test_random_access():
         Peaks.rechunk_on_save = False
 
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks, PeakClassification])
 
         with pytest.raises(strax.DataNotAvailable):
             # Time range selection requires data already available
             st.get_df(run_id, 'peaks', time_range=(3, 5))
 
-        st.make(run_id=run_id, targets='peaks')
+        st.make(run_id=run_id, targets=('peaks', 'peak_classification'))
 
         # Second part of hack: corrupt data by removing one chunk
         dirname = str(st.key_for(run_id, 'peaks'))
@@ -249,6 +250,14 @@ def test_random_access():
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+
+        # Try again with unaligned chunks
+        df = st.get_array(run_id, ['peaks', 'peak_classification'],
+                          time_range=(3, 5))
+        assert len(df) == 2 * recs_per_chunk
+        assert df['time'].min() == 3
+        assert df['time'].max() == 4
+
 
 
 def test_run_selection():
@@ -268,6 +277,7 @@ def test_run_selection():
         st = strax.Context(storage=sf)
         assert len(st.scan_runs()) == len(mock_rundb)
         assert st.run_metadata('0') == mock_rundb[0]
+        assert st.run_metadata('0', projection='name') == {'name': '0'}
 
         assert len(st.select_runs(run_mode='nice')) == 2
         assert len(st.select_runs(include_tags='interesting')) == 2
@@ -279,6 +289,25 @@ def test_run_selection():
         assert len(st.select_runs(run_id='0')) == 1
         assert len(st.select_runs(run_id='*',
                                   exclude_tags='bad')) == 1
+
+
+def test_run_defaults():
+    mock_rundb = [{'name': '0', strax.RUN_DEFAULTS_KEY: dict(base_area=43)}]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+        st = strax.Context(storage=sf, register=[Records, Peaks])
+
+        # The run defaults get used
+        peaks = st.get_array('0', 'peaks')
+        assert np.all(peaks['area'] == 43)
+
+        # ... but the user can still override them
+        peaks = st.get_array('0', 'peaks', config=dict(base_area=44))
+        assert np.all(peaks['area'] == 44)
+
 
 def test_dtype_mismatch():
     mystrax = strax.Context(storage=[],

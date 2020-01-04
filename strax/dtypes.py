@@ -97,4 +97,6 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
             'saturated_channel'), np.int16, n_channels),
         (('Total number of saturated channels',
             'n_saturated_channels'), np.int16),
+        (('Hits within tight range of mean',
+          'tight_coincidence'), np.int16)
     ]

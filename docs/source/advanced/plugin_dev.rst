@@ -41,4 +41,5 @@ You can specify defaults in several ways:
 - ``default``: Use the given value as default.
 - ``default_factory``: Call the given function (with no arguments) to produce a default. Use for mutable values such as lists.
 - ``default_per_run``: Specify a list of 2-tuples: ``(start_run, default)``. Here start_run is a numerized run name (e.g 170118_1327; note the underscore is valid in integers since python 3.6) and ``default`` the option that applies from that run onwards.
+- The ``strax_defaults`` dictionary in the run metadata. This overrides any defaults specified in the plugin code, but take care -- if you change a value here, there will be no record anywhere of what value was used previously, so you cannot reproduce your results anymore!
 
