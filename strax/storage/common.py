@@ -357,19 +357,26 @@ class StorageBackend:
         dtype = literal_eval(metadata['dtype'])
         compressor = metadata['compressor']
 
-        first_row_in_chunk = np.array([c['n']
-                                       for c in metadata['chunks']]).cumsum()
-        first_row_in_chunk -= first_row_in_chunk[0]
+        for i, ci in enumerate(strax.iter_chunk_meta(metadata)):
 
-        for i, chunk_info in enumerate(metadata['chunks']):
-            if (n_range
-                    and not n_range[0] <= first_row_in_chunk[i] < n_range[1]):
-                continue
-            kwargs = dict(chunk_info=chunk_info,
+            # If we have a row number constraint, obey it.
+            in_range_mask = None
+            if n_range:
+                if ci['n_to'] <= n_range[0] or n_range[1] <= ci['n_from']:
+                    # Chunk does not cover any part of range
+                    continue
+                n_index = np.arange(ci['n_from'], ci['n_to'])
+                in_range_mask = (n_range[0] <= n_index) & (n_index < n_range[1])
+
+            kwargs = dict(chunk_info=ci,
                           dtype=dtype,
                           compressor=compressor)
-            if executor is None:
-                yield self._read_chunk(backend_key, **kwargs)
+            if executor is None or n_range:
+                result = self._read_chunk(backend_key, **kwargs)
+                if n_range:
+                    yield result[in_range_mask]
+                else:
+                    yield result
             else:
                 yield executor.submit(self._read_chunk, backend_key, **kwargs)
 

@@ -66,6 +66,9 @@ class Plugin:
     #   'thread' (or just True): use threadpool.
     parallel = False              # For the computation itself
 
+    # Maximum number of output messages
+    max_messages = None   # use default
+
     # These are set on plugin initialization, which is done in the core
     run_id: str
     run_i: int

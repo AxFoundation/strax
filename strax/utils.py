@@ -156,7 +156,10 @@ def merge_arrs(arrs):
 
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):
-        raise ValueError("Arrays must all have the same length")
+        print([(len(x), x.dtype) for x in arrs])
+        raise ValueError(
+            "Arrays to merge must have the same length, got lengths "
+            ', '.join([str(len(x)) for x in arrs]))
 
     result = np.zeros(n, dtype=merged_dtype([x.dtype for x in arrs]))
     for arr in arrs:
@@ -239,11 +242,35 @@ def hashablize(obj):
 
 
 @export
+class NumpyJSONEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types
+    Edited from mpl3d: mpld3/_display.py
+    """
+
+    def default(self, obj):
+        try:
+            iterable = iter(obj)
+        except TypeError:
+            pass
+        else:
+            return [self.default(item) for item in iterable]
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
+@export
 def deterministic_hash(thing, length=10):
     """Return a base32 lowercase string of length determined from hashing
     a container hierarchy
     """
-    digest = sha1(json.dumps(hashablize(thing)).encode('ascii')).digest()
+    hashable = hashablize(thing)
+    jsonned = json.dumps(hashable, cls=NumpyJSONEncoder)
+    digest = sha1(jsonned.encode('ascii')).digest()
     return b32encode(digest)[:length].decode('ascii').lower()
 
 
@@ -307,16 +334,18 @@ def count_tags(ds):
 
 
 @export
-def flatten_dict(d, separator=':', _parent_key=''):
+def flatten_dict(d, separator=':', _parent_key='', keep=tuple()):
     """Flatten nested dictionaries into a single dictionary,
     indicating levels by separator.
     Don't set _parent_key argument, this is used for recursive calls.
     Stolen from http://stackoverflow.com/questions/6027558
+    :param keep: key or list of keys whose values should not be flattened. 
     """
+    keep = to_str_tuple(keep)
     items = []
     for k, v in d.items():
         new_key = _parent_key + separator + k if _parent_key else k
-        if isinstance(v, collections.MutableMapping):
+        if isinstance(v, collections.MutableMapping) and not k in keep:
             items.extend(flatten_dict(v,
                                       separator=separator,
                                       _parent_key=new_key).items())
@@ -469,3 +498,16 @@ def group_by_kind(dtypes, plugins=None, context=None,
                                  "has time information!")
 
     return deps_by_kind
+
+
+@export
+def iter_chunk_meta(md):
+    """Iterate over chunk info from metadata md
+     adding n_from and n_to fields"""
+    _n_to = _n_from = 0
+    for c in md['chunks']:
+        _n_from = _n_to
+        _n_to = _n_from + c['n']
+        c['n_from'] = _n_from
+        c['n_to'] = _n_to
+        yield c

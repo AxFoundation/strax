@@ -13,6 +13,10 @@ import pandas as pd
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['RUN_DEFAULTS_KEY']
+
+RUN_DEFAULTS_KEY = 'strax_defaults'
+
 
 @strax.takes_config(
     strax.Option(name='storage_converter', default=False,
@@ -59,6 +63,7 @@ class Context:
     context_config: dict
 
     runs: ty.Union[pd.DataFrame, type(None)] = None
+    _run_defaults_cache: dict = None
 
     def __init__(self,
                  storage=None,
@@ -90,6 +95,7 @@ class Context:
                         for s in storage]
 
         self._plugin_class_registry = dict()
+        self._run_defaults_cache = dict()
 
         self.set_config(config, mode='replace')
         self.set_context_config(kwargs, mode='replace')
@@ -171,7 +177,7 @@ class Context:
             mode=mode)
 
         for opt in self.takes_config.values():
-            opt.validate(new_config, set_defaults=True)
+            opt.validate(new_config)
 
         for k in new_config:
             if k not in self.takes_config:
@@ -253,7 +259,7 @@ class Context:
                 if not fnmatch.fnmatch(opt.name, pattern):
                     continue
                 try:
-                    default = opt.get_default(run_id)
+                    default = opt.get_default(run_id, self.run_defaults(run_id))
                 except strax.InvalidConfiguration:
                     default = strax.OMITTED
                 c = self.context_config if data_type is None else self.config
@@ -319,7 +325,9 @@ class Context:
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config, run_id)
+                opt.validate(config,
+                             run_id=run_id,
+                             run_defaults=self.run_defaults(run_id))
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -436,6 +444,9 @@ class Context:
         :param run_id: Run name
         :param time_range: (start, stop) ns since unix epoch
         :param d_with_time: Name of data type
+
+        With 'includes', we here mean that includes at least one piece of data
+        that intersects the time range.
         """
         # Find a range of row numbers that contains the time range
         # It's a bit too large: to
@@ -446,16 +457,22 @@ class Context:
                 f"{d_with_time}, but this data is not yet available")
 
         meta = self.get_meta(run_id, d_with_time)
-        times = np.array([c['first_time'] for c in meta['chunks']])
-        # Reconstruct row numbers from row counts, which are in metadata
-        # n_end is last row + 1 in a chunk. n_start is the first.
-        n_end = np.array([c['n'] for c in meta['chunks']]).cumsum()
-        n_start = n_end - n_end[0]
-        _inds = np.searchsorted(times, time_range) - 1
-        # Clip to prevent out-of-range times causing
-        # negative or nonexistent indices
-        _inds = np.clip(_inds, 0, len(n_end) - 1)
-        return n_start[_inds[0]], n_end[_inds[1]]
+        if not len(meta['chunks']):
+            raise ValueError("Data has no chunks??")
+
+        result = [0, -1]
+        chunk_info = dict()  # Otherwise pycharm complains later
+        prev_endtime = 0
+        for i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
+            n_range = [chunk_info['n_from'], chunk_info['n_to']]
+            for j, t in enumerate(time_range):
+                if prev_endtime < t <= chunk_info['last_endtime']:
+                    result[j] = n_range[j]
+            prev_endtime = chunk_info['last_endtime']
+
+        if result[1] == -1:
+            result[1] = chunk_info['n_to']
+        return result
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
@@ -464,6 +481,7 @@ class Context:
         """Return components for setting up a processor
         {get_docs}
         """
+
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
@@ -508,7 +526,8 @@ class Context:
                         f"since none of the dependencies {deps_to_check} "
                         "of the MergeOnlyPlugin provide time information")
 
-                d_with_time = plugins[d_with_time].depends_on[0]
+                d_with_time = plugins[d_with_time].provides[0]
+
             n_range = self._time_range_to_n_range(
                 run_id, time_range, d_with_time)
 
@@ -765,7 +784,7 @@ class Context:
             if len(set(plugins[d].data_kind for d in targets)) == 1:
                 temp_name = ('_temp_'
                              + ''.join(
-                            random.choices(string.ascii_lowercase, k=10)))
+                               random.choices(string.ascii_lowercase, k=10)))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
@@ -774,7 +793,9 @@ class Context:
             else:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
-        components = self.get_components(run_id, targets=targets, save=save,
+        components = self.get_components(run_id,
+                                         targets=targets,
+                                         save=save,
                                          time_range=time_range)
 
         # Cleanup the temp plugins
@@ -804,9 +825,13 @@ class Context:
         :param selection_str: Query string or sequence of strings to apply.
         :param time_range: (start, stop) range to load, in ns since the epoch
         :param time_selection: Kind of time selectoin to apply:
-        - fully_contained: (default) select things fully contained in the range
-        - touching: select things that (partially) overlap with the range
         - skip: Do not select a time range, even if other arguments say so
+        - touching: select things that (partially) overlap with the range
+        - fully_contained: (default) select things fully contained in the range
+
+        The right bound is, as always in strax, considered exclusive.
+        Thus, data that ends (exclusively) exactly at the right edge of a
+        fully_contained selection is returned.
         """
         # Apply the time selections
         if time_range is None or time_selection == 'skip':
@@ -816,11 +841,11 @@ class Context:
                 "Time range selection requires time information, "
                 "but none of the required plugins provides it.")
         elif time_selection == 'fully_contained':
-            return x[(time_range[0] <= x['time']) &
-                     (strax.endtime(x) < time_range[1])]
+            x = x[(time_range[0] <= x['time']) &
+                  (strax.endtime(x) <= time_range[1])]
         elif time_selection == 'touching':
-            return x[(strax.endtime(x) > x['time']) &
-                     (x['time'] < time_range[1])]
+            x = x[(strax.endtime(x) > time_range[0]) &
+                  (x['time'] < time_range[1])]
         else:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
@@ -935,8 +960,25 @@ class Context:
             except (strax.DataNotAvailable, NotImplementedError):
                 self.log.debug(f"Frontend {sf} does not have "
                                f"run metadata for {run_id}")
-        raise strax.DataNotAvailable(f"No run-level metadata available "
-                                     f"for {run_id}")
+        raise strax.RunMetadataNotAvailable(f"No run-level metadata available "
+                                            f"for {run_id}")
+
+    def run_defaults(self, run_id):
+        """Get configuration defaults from the run metadata (if these exist)
+
+        This will only call the rundb once while the context is in existence;
+        further calls to this will return a cached value.
+        """
+        if run_id in self._run_defaults_cache:
+            return self._run_defaults_cache[run_id]
+        try:
+            defs = self.run_metadata(
+                run_id,
+                projection=RUN_DEFAULTS_KEY).get(RUN_DEFAULTS_KEY, dict())
+        except strax.RunMetadataNotAvailable:
+            defs = dict()
+        self._run_defaults_cache[run_id] = defs
+        return defs
 
     def is_stored(self, run_id, target, **kwargs):
         """Return whether data type target has been saved for run_id
@@ -945,6 +987,10 @@ class Context:
         Note that even if False is returned, the data type may still be made
         with a trivial computation.
         """
+        if isinstance(target, (tuple, list)):
+            return all([self.is_stored(run_id, t, **kwargs)
+                        for t in target])
+
         # If any new options given, replace the current context
         # with a temporary one
         # TODO duplicated code with with get_iter

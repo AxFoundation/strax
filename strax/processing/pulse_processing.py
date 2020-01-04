@@ -88,7 +88,9 @@ def record_links(records):
     """
     # TODO: needs tests
     if not len(records):
-        return
+        return (
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK,
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK)
     n_channels = records['channel'].max() + 1
     samples_per_record = len(records[0]['data'])
     previous_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
@@ -217,6 +219,12 @@ def find_hits(records, threshold=15, _result_buffer=None):
     yield offset
 
 
+@numba.njit(cache=True, nogil=True)
+def _waveforms_to_float(wv, bl):
+    """Convert waveforms to float and restore baseline"""
+    return wv.astype(np.float32) + (bl % 1).reshape(-1, 1)
+
+
 @export
 def filter_records(r, ir):
     """Apply filter with impulse response ir over the records r.
@@ -227,13 +235,14 @@ def filter_records(r, ir):
     :param prev_r: Previous record map from strax.record_links
     :param next_r: Next record map from strax.record_links
     """
-    # Convert waveforms to float and restore baseline
-    ws = r['data'].astype(np.float) + (r['baseline'] % 1)[:, np.newaxis]
+    if not len(r):
+        return r
+    ws = _waveforms_to_float(r['data'], r['baseline'])
 
     prev_r, next_r = strax.record_links(r)
     ws_filtered = filter_waveforms(
         ws,
-        ir / ir.sum(),
+        (ir / ir.sum()).astype(np.float32),
         prev_r, next_r)
 
     # Restore waveforms as integers

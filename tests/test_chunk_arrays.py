@@ -189,3 +189,19 @@ def test_sync_iters(source, source_skipper):
 
     _do_sync_check(list(synced['s1']),
                    list(synced['s2']))
+
+
+@pytest.fixture
+def source_skipper_2000():
+    # Source that only returns even numbers from 0-2000
+    def f():
+        for i in range(200):
+            yield np.arange(0, 10, 2) + 10 * i
+    return f()
+
+
+def test_sync_iters_overhang(source, source_skipper_2000):
+    synced = strax.sync_iters(strax.same_stop,
+                              dict(s1=source, s2=source_skipper_2000))
+    _check_mangling(list(synced['s1']))
+    _check_mangling(list(synced['s2']), total_length=1000, diff=2)
