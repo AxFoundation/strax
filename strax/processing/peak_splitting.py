@@ -72,10 +72,11 @@ class PeakSplitter:
             strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
-            self(new_peaks, records, to_pe,
-                 do_iterations=do_iterations - 1,
-                 min_area=min_area, **kwargs)
-            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split], new_peaks]))
+            new_peaks = self(new_peaks, records, to_pe,
+                             do_iterations=do_iterations - 1,
+                             min_area=min_area, **kwargs)
+            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
+                                                       new_peaks]))
 
         return peaks
 
@@ -96,7 +97,7 @@ class PeakSplitter:
             prev_split_i = 0
             w = p['data'][:p['length']]
 
-            for (split_i, bonus_output) in split_finder(w, p['dt'], p_i, *args_options):
+            for split_i, bonus_output in split_finder(w, p['dt'], p_i, *args_options):
                 if split_i == NO_MORE_SPLITS:
                     p['max_goodness_of_split'] = bonus_output
                     continue    # ... but the iteration will end anyway afterwards
