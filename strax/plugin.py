@@ -48,7 +48,7 @@ class Plugin:
     depends_on: tuple
     provides: tuple
 
-    compressor = 'blosc'
+    compressor = 'lz4'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
 
