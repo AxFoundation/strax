@@ -98,5 +98,8 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Total number of saturated channels',
             'n_saturated_channels'), np.int16),
         (('Hits within tight range of mean',
-          'tight_coincidence'), np.int16)
+          'tight_coincidence'), np.int16),
+        # For peaklets this is likely to be overwritten:
+        (('Classification of the peak(let)',
+          'type'), np.int8)
     ]

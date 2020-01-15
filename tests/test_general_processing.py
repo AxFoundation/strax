@@ -34,6 +34,31 @@ def test_fully_contained_in(things, containers):
             assert _is_contained(thing, containers[result[i]])
 
 
+@given(sorted_intervals, disjoint_sorted_intervals, integers(-2, 2))
+@settings(deadline=None)
+@example(things=np.array([(0, 1, 0, 1),
+                          (0, 1, 1, 5),
+                          (0, 1, 2, 1)],
+                         dtype=strax.interval_dtype),
+         containers=np.array([(0, 1, 0, 4)],
+                             dtype=strax.interval_dtype),
+         window=0)
+def test_touching_windows(things, containers, window):
+    result = strax.touching_windows(things, containers, window=window)
+    assert len(result) == len(containers)
+    if len(result):
+        assert np.all((0 <= result) & (result <= len(things)))
+
+    for c_i, container in enumerate(containers):
+        i_that_touch = np.arange(*result[c_i])
+        for t_i, thing in enumerate(things):
+            if (strax.endtime(thing) <= container['time'] - window
+                    or thing['time'] >= strax.endtime(container) + window):
+                assert t_i not in i_that_touch
+            else:
+                assert t_i in i_that_touch
+
+
 @settings(deadline=None)
 @given(sorted_intervals, disjoint_sorted_intervals)
 # Specific example to trigger issue #37
