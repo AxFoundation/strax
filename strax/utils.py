@@ -185,7 +185,7 @@ def profile_threaded(filename):
         import gil_load  # noqa   # same
         gil_load.init()
         gil_load.start(av_sample_interval=0.1,
-                       output_interval=3,
+                       output_interval=10,
                        output=sys.stdout)
         monitoring_gil = True
     except (RuntimeError, ImportError):
@@ -198,8 +198,9 @@ def profile_threaded(filename):
 
     if monitoring_gil:
         gil_load.stop()
-        print("Gil was held %0.1f %% of the time" %
-              (100 * gil_load.get()[0]))
+        stats = gil_load.get()
+        print("GIL load information: ",
+              gil_load.format(stats))
     p = yappi.get_func_stats()
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)

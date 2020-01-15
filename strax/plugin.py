@@ -36,6 +36,22 @@ class PluginGaveWrongOutput(Exception):
     pass
 
 
+class PendingFutures:
+    def __init__(self):
+        self._pending = []
+
+    def add(self, future):
+        self._pending.append(future)
+
+    def update(self):
+        self._pending = [f for f in self._pending
+                         if not f.done()]
+
+    def remaining_futures(self):
+        self.update()
+        return self._pending
+
+
 @export
 class Plugin:
     """Plugin containing strax computation
@@ -198,11 +214,11 @@ class Plugin:
                 kind_iters)
 
         iters = kind_iters
-        pending = []
+        pending = PendingFutures()
         yield from self._inner_iter(iters, pending, executor)
-        self.cleanup(wait_for=pending)
+        self.cleanup(wait_for=pending.remaining_futures())
 
-    def _inner_iter(self, iters, pending, executor):
+    def _inner_iter(self, iters, pending: PendingFutures, executor):
         last_input_received = time.time()
 
         for chunk_i in itertools.count():
@@ -236,8 +252,8 @@ class Plugin:
                 new_f = executor.submit(self.do_compute,
                                         chunk_i=chunk_i,
                                         **compute_kwargs)
-                pending = [f for f in pending + [new_f]
-                           if not f.done()]
+                pending.add(new_f)
+                pending.update()
                 yield new_f
             else:
                 yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
@@ -517,21 +533,27 @@ class ParallelSourcePlugin(Plugin):
         savers = components.savers
         sub_savers = dict()
         for d, p in sub_plugins.items():
+
             if d not in savers:
                 continue
             if p.rechunk_on_save:
                 # Case 3. has a saver we can't inline (this is checked later)
                 outputs_to_send.add(d)
                 continue
+
+            remaining_savers = []
             for s_i, s in enumerate(savers[d]):
                 if not s.allow_fork:
+                    # Case 3 again, cannot inline saver
                     outputs_to_send.add(d)
+                    remaining_savers.append(s)
                     continue
                 if d not in sub_savers:
                     sub_savers[d] = []
                 s.is_forked = True
                 sub_savers[d].append(s)
-                del savers[s_i]
+            savers[d] = remaining_savers
+
             if not len(savers[d]):
                 del savers[d]
 
@@ -602,7 +624,7 @@ class ParallelSourcePlugin(Plugin):
             assert d in results, f"Output {d} missing!"
 
         # Save anything we can through the inlined savers
-        for d, savers in self.sub_savers:
+        for d, savers in self.sub_savers.items():
             for s in savers:
                 s.save(data=results[d], chunk_i=chunk_i)
 
@@ -615,7 +637,6 @@ class ParallelSourcePlugin(Plugin):
             results = results[self.provides[0]]
 
         return self._fix_output(results)
-
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
