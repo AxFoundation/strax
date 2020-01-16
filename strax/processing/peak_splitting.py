@@ -42,9 +42,7 @@ class PeakSplitter:
                 value = kwargs[k]
             if k == 'threshold':
                 # The 'threshold' option is a user-specified function
-                # of peak properties
-                # TODO: Security? What's that?
-                value = eval(value, dict(np=np, peaks=peaks))
+                value = value(peaks)
             args_options.append(value)
         args_options = tuple(args_options)
 
@@ -82,7 +80,7 @@ class PeakSplitter:
 
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-    @numba.jit(nopython=True, nogil=True, cache=True)
+    @numba.jit(nopython=True, nogil=True)
     def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
                     args_options,
                     _result_buffer=None, result_dtype=None):
@@ -97,17 +95,20 @@ class PeakSplitter:
             prev_split_i = 0
             w = p['data'][:p['length']]
 
-            for split_i, bonus_output in split_finder(w, p['dt'], p_i, *args_options):
+            for split_i, bonus_output in split_finder(
+                    w, p['dt'], p_i, *args_options):
                 if split_i == NO_MORE_SPLITS:
                     p['max_goodness_of_split'] = bonus_output
-                    continue    # ... but the iteration will end anyway afterwards
+                    # although the iteration will end anyway afterwards:
+                    continue
 
                 is_split[p_i] = True
                 r = new_peaks[offset]
                 r['time'] = p['time'] + prev_split_i * p['dt']
                 r['channel'] = p['channel']
                 # Set the dt to the original (lowest) dt first;
-                # this may change when the sum waveform of the new peak is computed
+                # this may change when the sum waveform of the new peak
+                # is computed
                 r['dt'] = orig_dt
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
 
@@ -143,11 +144,10 @@ class LocalMinimumSplitter(PeakSplitter):
     """
     find_split_args_defaults = (
         ('min_height', 0),
-        ('min_ratio', 0),
-    )
+        ('min_ratio', 0))
 
     @staticmethod
-    @numba.jit(nopython=True, nogil=True, cache=True)
+    @numba.jit(nopython=True, nogil=True)
     def find_split_points(w, dt, peak_i, min_height, min_ratio):
         """"Yields indices of prominent local minima in w
         If there was at least one index, yields len(w)-1 at the end
@@ -198,20 +198,22 @@ class NaturalBreaksSplitter(PeakSplitter):
      - split_low: if True, multiply the goodness of split value by the ratio
        between the waveform at the split point and the maximum in the waveform.
        This prevent splits at high density points.
-     - filter_wing_width: if > 0, do a moving average filter (without shift) on the
-       waveform before the split_low computation.
+     - filter_wing_width: if > 0, do a moving average filter (without shift)
+       on the waveform before the split_low computation.
        The window will include the sample itself, plus filter_wing_width (or as
        close as we can get to it given the peaks sampling) on either side.
     """
     find_split_args_defaults = (
-        ('threshold', None),  # will be a numpy array of len(peaks)
+        ('threshold', None),     # will be a numpy array of len(peaks)
         ('normalize', False),
         ('split_low', False),
         ('filter_wing_width', 0))
 
     @staticmethod
-    @numba.njit(nogil=True, cache=True)
-    def find_split_points(w, dt, peak_i, threshold, normalize, split_low, filter_wing_width):
+    @numba.njit(nogil=True)
+    def find_split_points(w, dt, peak_i, 
+                          threshold, normalize, 
+                          split_low, filter_wing_width):
         gofs = natural_breaks_gof(w, dt,
                                   normalize=normalize,
                                   split_low=split_low,
@@ -225,7 +227,9 @@ class NaturalBreaksSplitter(PeakSplitter):
 
 @export
 @numba.njit(nogil=True, cache=True)
-def natural_breaks_gof(w, dt, normalize=False, split_low=False, filter_wing_width=0):
+def natural_breaks_gof(w, dt, 
+                       normalize=False, split_low=False, 
+                       filter_wing_width=0):
     """Return natural breaks goodness of split/fit for the waveform w
     a sharp peak gives ~0, two widely separate peaks ~1.
     """
