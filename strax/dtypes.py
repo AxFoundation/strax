@@ -97,10 +97,13 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'saturated_channel'), np.int16, n_channels),
         (('Total number of saturated channels',
           'n_saturated_channels'), np.int16),
-        (('Number of hits within tight range of mean',
-          'tight_coincidence'), np.int32),
+        (('Hits within tight range of mean',
+          'tight_coincidence'), np.int16),
         (('Largest gap between hits inside peak [ns]',
           'max_gap'), np.int32),
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
+        # For peaklets this is likely to be overwritten:
+        (('Classification of the peak(let)',
+          'type'), np.int8)
     ]
