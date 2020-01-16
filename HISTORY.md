@@ -1,3 +1,11 @@
+0.8.5 / 2019-01-16
+------------------
+- Natural breaks splitting (#225)
+- Add ptype, max_gap and max_goodness_of_split to peaks dtype
+- Fixes for multiprocessing
+- Fixes for time selection
+- Fix for final data in same-length merging
+
 0.8.4 / 2019-12-24
 ------------------
 - Export downsampling function (#224)
@@ -61,7 +69,7 @@
 ------------------
 - Pulse processing upgrades (filtering etc) (#154)
 - Run selection and run-level metadata handling (#155)
-- Stabilize and shortedn lineage hash (#152)
+- Stabilize and shorten lineage hash (#152)
 - Shared memory transfers, parallel save/load (#150)
 - Ensure unique filenames (#143)
 - Many processing fixes (#134, #129)
