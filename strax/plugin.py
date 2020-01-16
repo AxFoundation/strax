@@ -365,7 +365,7 @@ class OverlapWindowPlugin(Plugin):
                 for x in kwargs.values()
                 if len(x)]
         if not len(ends):
-            # Chunk is completely empty, we cannot estimate the data's end.
+            # Input is completely empty, we cannot estimate the data's end.
             # Do not discard or send anything until a chunk with data arrives.
             # (or the last chunk, see iter)
             return self.empty_result()
