@@ -211,8 +211,8 @@ class NaturalBreaksSplitter(PeakSplitter):
 
     @staticmethod
     @numba.njit(nogil=True)
-    def find_split_points(w, dt, peak_i, 
-                          threshold, normalize, 
+    def find_split_points(w, dt, peak_i,
+                          threshold, normalize,
                           split_low, filter_wing_width):
         gofs = natural_breaks_gof(w, dt,
                                   normalize=normalize,
@@ -227,8 +227,8 @@ class NaturalBreaksSplitter(PeakSplitter):
 
 @export
 @numba.njit(nogil=True, cache=True)
-def natural_breaks_gof(w, dt, 
-                       normalize=False, split_low=False, 
+def natural_breaks_gof(w, dt,
+                       normalize=False, split_low=False,
                        filter_wing_width=0):
     """Return natural breaks goodness of split/fit for the waveform w
     a sharp peak gives ~0, two widely separate peaks ~1.
