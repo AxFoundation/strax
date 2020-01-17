@@ -382,7 +382,8 @@ class Context:
             if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
                     # Assume data kind is the same as the first dependency
-                    p.data_kind = p.deps[p.depends_on[0]].data_kind
+                    first_dep = p.depends_on[0]
+                    p.data_kind = p.deps[first_dep].data_kind_for(first_dep)
                 else:
                     # No dependencies: assume provided data kind and
                     # data type are synonymous
