@@ -368,21 +368,27 @@ class OverlapWindowPlugin(Plugin):
             # Input is completely empty, we cannot estimate the data's end.
             # Do not discard or send anything until a chunk with data arrives.
             # (or the last chunk, see iter)
-            return self.empty_result()
-        end = max(ends)
+            invalid_beyond = cache_inputs_beyond = self.last_threshold
+        else:
+            # Take slightly larger windows for safety: it is very easy for me
+            # (or the user) to have made an off-by-one error
+            # TODO: why do tests not fail is I set cache_inputs_beyond to
+            # end - window size - 2 ?
+            # (they do fail if I set to end - 0.5 * window size - 2)
+            end = max(ends)
+            invalid_beyond = end - self.get_window_size() - 1
+            cache_inputs_beyond = end - 2 * self.get_window_size() - 1
 
-        # Take slightly larger windows for safety: it is very easy for me
-        # (or the user) to have made an off-by-one error
-        # TODO: why do tests not fail is I set cache_inputs_beyond to
-        # end - window size - 2 ?
-        # (they do fail if I set to end - 0.5 * window size - 2)
-        invalid_beyond = end - self.get_window_size() - 1
-        cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-
+        # Update input cache
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
+
+        if not len(ends):
+            # Output cache and last_threshold both don't change
+            # so might as well return.
+            return self.empty_result()
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
