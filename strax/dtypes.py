@@ -57,14 +57,16 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
 
 # Data type for a 'hit': a sub-range of a record
 hit_dtype = interval_dtype + [
-    (("Integral in ADC x samples",
-        'area'), np.int32),
+    (("Integral [ADC x samples]",
+        'area'), np.float32),
     (('Index of sample in record in which hit starts',
         'left'), np.int16),
     (('Index of first sample in record just beyond hit (exclusive bound)',
         'right'), np.int16),
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
+    (('Maximum amplitude above baseline [ADC counts]',
+        'height'), np.float32),
 ]
 
 
