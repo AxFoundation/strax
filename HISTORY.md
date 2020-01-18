@@ -1,3 +1,10 @@
+0.8.6 / 2019-01-17
+-------------------
+- Peak merging code (from straxen)
+- time_range selection for user-defined plugins that never save
+- Add hit height, store fpart-baseline corrected hit area
+- Preserve cached input on empty chunks in OverlapWindowPlugin
+
 0.8.5 / 2019-01-16
 ------------------
 - Natural breaks splitting (#225)
