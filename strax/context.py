@@ -440,7 +440,9 @@ class Context:
                 continue
         return False
 
-    def _time_range_to_n_range(self, run_id: str, time_range: ty.Tuple[int], d_with_time: str):
+    def _time_range_to_n_range(self, run_id: str,
+                               time_range: ty.Tuple[int],
+                               d_with_time: str):
         """Return range of chunk numbers that include time_range
         :param run_id: Run name
         :param time_range: (start, stop) ns since unix epoch
@@ -494,43 +496,43 @@ class Context:
                 f"Plugin names must be more than one letter, not {targets[0]}")
 
         plugins = self._get_plugins(targets, run_id)
+        target = targets[0]  # See above, already restricted to one target
+        targetp = plugins[target]
 
-        n_range = None
-        if time_range is not None:
-            # Ensure we have one data kind
-            if len(set([plugins[t].data_kind_for(t) for t in targets])) > 1:
-                raise NotImplementedError(
-                    "Time range selection not implemented "
-                    "for multiple data kinds.")
+        if time_range is None:
+            n_range_for = dict()
+        else:
+            if 'time' not in targetp.dtype_for(target).names:
+                raise ValueError(
+                    f"{target} has no time information. To do time selection "
+                    f"on it, load it alongside a datatype that does.")
 
-            # Which plugin provides time information? We need it to map to
-            # row indices.
-            for d in targets:
-                if 'time' in plugins[d].dtype_for(d).names:
-                    d_with_time = d
-                    break
+            time_mappers = dict()
+            if targetp.save_when == strax.SaveWhen.NEVER:
+                # The target is never saved, it's likely just some merging.
+                # But that means we have to load the dependencies,
+                # which might have different kinds, or be themselves never saved
+                for kind, deps in strax.group_by_kind(targetp.depends_on, plugins).items():
+                    for d in deps:
+                        if ('time' in plugins[d].dtype_for(d).names
+                                and plugins[d].save_when != strax.SaveWhen.NEVER):
+                            time_mappers[kind] = d
+                            break
+                    else:
+                        raise ValueError(
+                            f"Cannot use time range selection for "
+                            f"{target}, since it isn't saved itself "
+                            f"and none of the dependencies {deps} of kind "
+                            f" {kind} provide time information.")
+
+                    # ???
+                    # d_with_time = plugins[d_with_time].provides[0]
             else:
-                raise RuntimeError(f"No time info in targets, should have been"
-                                   f" caught earlier??")
-            if d_with_time.startswith('_temp'):
-                # This is a merge-only data type, which is never stored.
-                # Get the time info from one of its dependencies
-                deps_to_check = plugins[d_with_time].depends_on
-                for d in deps_to_check:
-                    if (d in plugins
-                            and 'time' in plugins[d].dtype_for(d).names):
-                        d_with_time = d
-                        break
-                else:
-                    raise RuntimeError(
-                        "Cannot use time range selection "
-                        f"since none of the dependencies {deps_to_check} "
-                        "of the MergeOnlyPlugin provide time information")
+                time_mappers[targetp.data_kind_for(target)] = target
 
-                d_with_time = plugins[d_with_time].provides[0]
-
-            n_range = self._time_range_to_n_range(
-                run_id, time_range, d_with_time)
+            n_range_for = {
+                kind: self._time_range_to_n_range(run_id, time_range, d)
+                for kind, d in time_mappers.items()}
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -550,7 +552,10 @@ class Context:
             # Can we load this data?
             loading_this_data = False
             key = strax.DataKey(run_id, d, p.lineage)
-            ldr = self._get_partial_loader_for(key, n_range=n_range)
+            ldr = self._get_partial_loader_for(
+                key,
+                n_range=n_range_for.get(p.data_kind_for(d)))
+
             if not ldr and run_id.startswith('_'):
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
@@ -569,8 +574,9 @@ class Context:
                     if sub_run_spec[subrun] == 'all':
                         sub_n_range = None
                     else:
+                        # TODO: this currently fails for data without time
                         sub_n_range = self._time_range_to_n_range(
-                            subrun, sub_run_spec[subrun], d_with_time)
+                            subrun, sub_run_spec[subrun], d)
                     ldr = self._get_partial_loader_for(
                         sub_key, n_range=sub_n_range)
                     if not ldr:
@@ -591,7 +597,8 @@ class Context:
                 del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
-                if time_range is not None and not d.startswith('_temp'):
+                if (time_range is not None
+                        and not plugins[d].save_when == strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
