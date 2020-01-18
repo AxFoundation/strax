@@ -431,8 +431,17 @@ class LoopPlugin(Plugin):
                 f'{base}s overlap'
 
         for k, things in kwargs.items():
-            if len(things) > 1:
-                assert np.diff(things['time']).min() >= 0, f'{k} not sorted'
+            # Check for sorting
+            difs = np.diff(things['time'])
+            if difs.min(initial=0) < 0:
+                i_bad = np.argmin(difs)
+                examples = things[i_bad-1:i_bad+3]
+                t0 = examples['time'].min()
+                raise ValueError(
+                    f'Expected {k} to be sorted, but found ' +
+                    str([(x['time'] - t0, strax.endtime(x) - t0)
+                         for x in examples]))
+
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
