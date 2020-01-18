@@ -477,7 +477,7 @@ class LoopPlugin(Plugin):
 class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_when = SaveWhen.EXPLICIT
+    save_when = SaveWhen.NEVER
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
