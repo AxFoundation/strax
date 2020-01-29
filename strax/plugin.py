@@ -365,24 +365,30 @@ class OverlapWindowPlugin(Plugin):
                 for x in kwargs.values()
                 if len(x)]
         if not len(ends):
-            # Chunk is completely empty, we cannot estimate the data's end.
+            # Input is completely empty, we cannot estimate the data's end.
             # Do not discard or send anything until a chunk with data arrives.
             # (or the last chunk, see iter)
-            return self.empty_result()
-        end = max(ends)
+            invalid_beyond = cache_inputs_beyond = self.last_threshold
+        else:
+            # Take slightly larger windows for safety: it is very easy for me
+            # (or the user) to have made an off-by-one error
+            # TODO: why do tests not fail is I set cache_inputs_beyond to
+            # end - window size - 2 ?
+            # (they do fail if I set to end - 0.5 * window size - 2)
+            end = max(ends)
+            invalid_beyond = end - self.get_window_size() - 1
+            cache_inputs_beyond = end - 2 * self.get_window_size() - 1
 
-        # Take slightly larger windows for safety: it is very easy for me
-        # (or the user) to have made an off-by-one error
-        # TODO: why do tests not fail is I set cache_inputs_beyond to
-        # end - window size - 2 ?
-        # (they do fail if I set to end - 0.5 * window size - 2)
-        invalid_beyond = end - self.get_window_size() - 1
-        cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-
+        # Update input cache
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
+
+        if not len(ends):
+            # Output cache and last_threshold both don't change
+            # so might as well return.
+            return self.empty_result()
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
@@ -425,8 +431,17 @@ class LoopPlugin(Plugin):
                 f'{base}s overlap'
 
         for k, things in kwargs.items():
-            if len(things) > 1:
-                assert np.diff(things['time']).min() >= 0, f'{k} not sorted'
+            # Check for sorting
+            difs = np.diff(things['time'])
+            if difs.min(initial=0) < 0:
+                i_bad = np.argmin(difs)
+                examples = things[i_bad-1:i_bad+3]
+                t0 = examples['time'].min()
+                raise ValueError(
+                    f'Expected {k} to be sorted, but found ' +
+                    str([(x['time'] - t0, strax.endtime(x) - t0)
+                         for x in examples]))
+
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
@@ -462,7 +477,7 @@ class LoopPlugin(Plugin):
 class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_when = SaveWhen.EXPLICIT
+    save_when = SaveWhen.NEVER
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()

@@ -6,6 +6,7 @@ on strax' storage hierarchy.
 import logging
 import time
 import typing
+import warnings
 from ast import literal_eval
 from concurrent.futures import wait
 
@@ -352,9 +353,12 @@ class StorageBackend:
         :param executor: Executor to push load/decompress operations to
         """
         metadata = self.get_metadata(backend_key)
-        if not len(metadata['chunks']):
-            raise DataCorrupted(f"No chunks of data in {backend_key}")
         dtype = literal_eval(metadata['dtype'])
+        if not len(metadata['chunks']):
+            warnings.warn(f"No chunks of data in {backend_key}")
+            yield np.zeros(0, dtype=dtype)
+            return
+
         compressor = metadata['compressor']
 
         for i, ci in enumerate(strax.iter_chunk_meta(metadata)):

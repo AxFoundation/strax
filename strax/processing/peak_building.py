@@ -43,14 +43,17 @@ def find_peaks(hits, adc_to_pe,
 
     in_peak = False
     peak_endtime = 0
-
     for hit_i, hit in enumerate(hits):
         p = buffer[offset]
         t0 = hit['time']
         dt = hit['dt']
         t1 = hit['time'] + dt * hit['length']
 
-        if not in_peak:
+        if in_peak:
+            # This hit continues an existing peak
+            p['max_gap'] = max(p['max_gap'], t0 - peak_endtime)
+
+        else:
             # This hit starts a new peak candidate
             area_per_channel *= 0
             peak_endtime = t1
@@ -61,6 +64,7 @@ def find_peaks(hits, adc_to_pe,
             p['n_hits'] = 0
             p['area'] = 0
             in_peak = True
+            p['max_gap'] = 0
 
         # Add hit's properties to the current peak candidate
         p['n_hits'] += 1
