@@ -57,14 +57,16 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
 
 # Data type for a 'hit': a sub-range of a record
 hit_dtype = interval_dtype + [
-    (("Integral in ADC x samples",
-        'area'), np.int32),
+    (("Integral [ADC x samples]",
+        'area'), np.float32),
     (('Index of sample in record in which hit starts',
         'left'), np.int16),
     (('Index of first sample in record just beyond hit (exclusive bound)',
         'right'), np.int16),
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
+    (('Maximum amplitude above baseline [ADC counts]',
+        'height'), np.float32),
 ]
 
 
@@ -76,29 +78,29 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
     return interval_dtype + [
-        (('Integral across channels in photoelectrons',
-            'area'), np.float32),
-        # Area per channel in ADC * samples
-        (('Integral per channel in PE',
-            'area_per_channel'), np.float32, n_channels),
-        # Number of hits from which this peak was constructed
-        # (zero if peak was split afterwards)
+        (('Integral across channels [PE]',
+          'area'), np.float32),
+        (('Integral per channel [PE]',
+          'area_per_channel'), np.float32, n_channels),
         (("Number of hits from which peak was constructed "
           "(currently zero if peak is split afterwards)",
-            'n_hits'), np.int32),
-        # Waveform data in PE/sample
+          'n_hits'), np.int32),
         (('Waveform data in PE/sample (not PE/ns!)',
-            'data'), np.float32, n_sum_wv_samples),
-        (('Peak widths in ns: range of central area fraction',
-            'width'), np.float32, n_widths),
-        (('Peak widths in ns: area from midpoint',
-            'area_decile_from_midpoint'), np.float32, n_widths),
-        (('Check if channel is saturated',
-            'saturated_channel'), np.int16, n_channels),
+          'data'), np.float32, n_sum_wv_samples),
+        (('Peak widths in range of central area fraction [ns]',
+          'width'), np.float32, n_widths),
+        (('Peak widths: time between nth and 5th area decile [ns]',
+          'area_decile_from_midpoint'), np.float32, n_widths),
+        (('Does the channel reach ADC saturation?',
+          'saturated_channel'), np.int16, n_channels),
         (('Total number of saturated channels',
-            'n_saturated_channels'), np.int16),
+          'n_saturated_channels'), np.int16),
         (('Hits within tight range of mean',
           'tight_coincidence'), np.int16),
+        (('Largest gap between hits inside peak [ns]',
+          'max_gap'), np.int32),
+        (('Maximum interior goodness of split',
+          'max_goodness_of_split'), np.float32),
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8)

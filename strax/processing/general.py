@@ -198,8 +198,11 @@ def touching_windows(things, containers, window=0):
     """Return array of (start, exclusive end) indices into things which extend
     to within window of the container, for each container in containers.
 
+    :param things: Sorted array of interval-like data
+    :param containers: Sorted array of interval-like data
+    :param window: threshold distance for touching check
     For example:
-       - window = 0: things must averlap one sample
+       - window = 0: things must overlap one sample
        - window = -1: things can start right after container ends
          (i.e. container endtime equals the thing starttime, since strax
           endtimes are exclusive)
