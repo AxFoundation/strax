@@ -1,6 +1,7 @@
 numpy
 pandas
 numba>=0.43.1
+skbuild   # Seems to be required for blosc?
 blosc
 zstd
 tqdm
