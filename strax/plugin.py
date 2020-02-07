@@ -313,7 +313,7 @@ class Plugin:
             for d in self.provides:
                 if d not in result:
                     raise ValueError(f"Data type {d} missing from output of "
-                                     f"{p.__class__.__name__}!")
+                                     f"{self.__class__.__name__}!")
                 r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
                 self._check_dtype(r2[d], d)
             return r2
@@ -591,7 +591,8 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = {d: p.sub_plugins[d].dtype_for(d)
                        for d in outputs_to_send}
         else:
-            p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
+            to_send = list(outputs_to_send)[0]
+            p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
         for d in p.provides:
             plugins[d] = p
         p.deps = {d: plugins[d] for d in p.depends_on}
