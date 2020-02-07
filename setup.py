@@ -2,7 +2,7 @@ import setuptools
 
 # Get requirements from requirements.txt, stripping the version tags
 with open('requirements.txt') as f:
-    requires = [x.strip().split('=')[0]
+    requires = [x.strip()
                 for x in f.readlines()]
 
 with open('README.md') as file:
