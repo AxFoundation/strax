@@ -486,7 +486,7 @@ class MergeOnlyPlugin(Plugin):
                              "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return strax.merged_dtype([self.deps[d].dtype
+        return strax.merged_dtype([self.deps[d].dtype_for(d)
                                    for d in self.depends_on])
 
     def compute(self, **kwargs):
