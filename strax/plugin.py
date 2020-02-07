@@ -11,6 +11,7 @@ import typing
 import time
 import inspect
 
+from frozendict import frozendict
 import numpy as np
 
 import strax
@@ -60,7 +61,11 @@ class Plugin:
     Do NOT add unpickleable things (e.g. loggers) as attributes.
     """
     __version__ = '0.0.0'
-    data_kind: str
+
+    # For multi-output plugins these should be (frozen)dicts
+    data_kind: typing.Union[str, frozendict, dict]
+    dtype: typing.Union[tuple, np.dtype, frozendict, dict]
+
     depends_on: tuple
     provides: tuple
 
@@ -85,13 +90,18 @@ class Plugin:
     # Maximum number of output messages
     max_messages = None   # use default
 
+    # Do not specify attributes below
+
+    # Set using the takes_config decorator
+    takes_config = frozendict()
+
     # These are set on plugin initialization, which is done in the core
     run_id: str
     run_i: int
     config: typing.Dict
     deps: typing.Dict       # Dictionary of dependency plugin instances
+    
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    takes_config = dict()           # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
