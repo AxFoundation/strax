@@ -1,19 +1,9 @@
-# This file contains all of the settings for TravisCI, which is the
-# continuous integration system used with strax.  For more information,
-# see: https://travis-ci.org
-#
-# Miniconda is used to provide fine control over Python versions, even
-# though it isn't required for strax.
-
-dist: xenial        # Ubuntu distribution
-language: generic   # This needs to be set for OSX support
+dist: bionic         # Ubuntu 18.4 LTS
+language: python
 
 # Caching the Python dependencies speeds up builds and lightens
 # the load on TravisCI
 cache: pip
-
-# Everything should work in userspace
-sudo: false
 
 # Deploy releases to PyPI for pip installs
 # See https://docs.travis-ci.com/user/encryption-keys/
@@ -26,43 +16,24 @@ deploy:
     tags: true  # Only upload tags from bumpversion
     condition: $DEPLOY_ME = true
 
-# The build matrix over all possible setups
-matrix:
-    include:
-        - env: PYTHON=3.7 DEPLOY_ME=true
-        - env: PYTHON=3.7 NUMBA_DISABLE_JIT=true
-        - env: PYTHON=3.6
-        - os: osx
-          env: PYTHON=3.7
-        - env: PYTHON=3.8
-
+# Unfortunately does not (anymore?) support allow_failure with a build matrix
+# specified by include conditions.
+# (see https://docs.travis-ci.com/user/customizing-the-build)
+# So, for the moment, we test only in the really necessary environments.
 jobs:
-    allow_failures:
-        - env: PYTHON=3.8
+  include:
+    - name: "Python 3.7"
+      python: '3.7'
+      env: DEPLOY_ME=true
+    - name: "Python 3.7 numbaless (for coverage)"
+      python: '3.7'
+      env: NUMBA_DISABLE_JIT=true
+    - name: "Python 3.6 (legacy)"
+      python: '3.6'
 
-# Setup miniconda
-before_install:
-    # Fetch miniconda
-    - if [ "${TRAVIS_OS_NAME}" == "osx" ]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh; fi
-    - if [ "${TRAVIS_OS_NAME}" == "linux" ]; then wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh; fi
-
-    # Install
-    - chmod +x miniconda.sh
-    - ./miniconda.sh -b -p $HOME/miniconda
-
-    # Setup miniconda and environment
-    - export PATH=$HOME/miniconda/bin:$PATH
-    - conda config --set always_yes yes --set changeps1 no
-    - conda create -q -n strax python=${PYTHON}
-    - source activate strax
-
-# This is the actual install of strax
 install:
-  - pip install ripa
-  - ripa -r requirements.txt coveralls
-  - pip install -e .
+  - python setup.py install
 
-# Compute the code coverage
 script:
   - coverage run --source=strax setup.py test
 
