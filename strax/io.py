@@ -2,10 +2,12 @@
 """
 from functools import partial
 import bz2
+import os
 
 import numpy as np
 import blosc
 import zstd
+import lz4.frame as lz4
 
 import strax
 export, __all__ = strax.exporter()
@@ -23,6 +25,7 @@ COMPRESSORS = dict(
     blosc=dict(
         compress=partial(blosc.compress, shuffle=False),
         decompress=blosc.decompress),
+    lz4=dict(compress=lz4.compress, decompress=lz4.decompress)
 )
 
 
@@ -43,8 +46,18 @@ def load_file(f, compressor, dtype):
 
 
 def _load_file(f, compressor, dtype):
-    data = COMPRESSORS[compressor]['decompress'](f.read())
-    return np.frombuffer(data, dtype=dtype)
+    try:
+        data = f.read()
+        if not len(data):
+            return np.zeros(0, dtype=dtype)
+
+        data = COMPRESSORS[compressor]['decompress'](data)
+        return np.frombuffer(data, dtype=dtype)
+
+    except Exception:
+        raise strax.DataCorrupted(
+            f"Fatal Error while reading file {f}: "
+            + strax.utils.formatted_exception())
 
 
 @export
@@ -56,8 +69,12 @@ def save_file(f, data, compressor='zstd'):
     :param compressor: compressor to use
     """
     if isinstance(f, str):
-        with open(f, mode='wb') as f:
-            return _save_file(f, data, compressor)
+        final_fn = f
+        temp_fn = f + '_temp'
+        with open(temp_fn, mode='wb') as f:
+            result = _save_file(f, data, compressor)
+        os.rename(temp_fn, final_fn)
+        return result
     else:
         return _save_file(f, data, compressor)
 

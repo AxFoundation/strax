@@ -68,12 +68,13 @@ class SimpleS3Store(StorageFrontend):
                 raise EnvironmentError("S3 secret key not specified")
             s3_secret_access_key = os.environ.get('S3_SECRET_ACCESS_KEY')
 
-        self.boto3_client_kwargs = {'aws_access_key_id': s3_access_key_id,
-                                    'aws_secret_access_key': s3_secret_access_key,
-                                    'endpoint_url': endpoint_url,
-                                    'service_name': 's3',
-                                    'config': Config(connect_timeout=5,
-                                                     retries={'max_attempts': 10})}
+        self.boto3_client_kwargs = {
+            'aws_access_key_id': s3_access_key_id,
+            'aws_secret_access_key': s3_secret_access_key,
+            'endpoint_url': endpoint_url,
+            'service_name': 's3',
+            'config': Config(connect_timeout=5,
+                             retries={'max_attempts': 10})}
 
         #  Initialized connection to S3-protocol storage
         self.s3 = boto3.client(**self.boto3_client_kwargs)
@@ -169,18 +170,20 @@ class S3Saver(strax.Saver):
     """
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, key, metadata,
-                 **kwargs):
-        super().__init__(metadata, meta_only)
+    def __init__(self, key, metadata=None, **kwargs):
+        if metadata is None:
+            metadata = dict()
+        super().__init__(metadata=metadata)
         self.s3 = boto3.client(**kwargs)
 
         # Unique key specifying processing of a run
         self.strax_unique_key = key
 
-        self.config = boto3.s3.transfer.TransferConfig(max_concurrency=40,
-                                                       num_download_attempts=30)
+        self.config = boto3.s3.transfer.TransferConfig(
+            max_concurrency=40,
+            num_download_attempts=30)
 
-    def _save_chunk(self, data, chunk_info):
+    def _save_chunk(self, data, chunk_info, executor=None):
         # Keyname
         key_name = f"{self.strax_unique_key}/{chunk_info['chunk_i']:06d}"
 
@@ -195,8 +198,7 @@ class S3Saver(strax.Saver):
                                    key_name,
                                    Config=self.config)
 
-        return dict(key_name=key_name,
-                    filesize=filesize)
+        return dict(key_name=key_name, filesize=filesize), None
 
     def _save_chunk_metadata(self, chunk_info):
         self._upload_json(chunk_info,

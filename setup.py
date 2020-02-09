@@ -2,7 +2,7 @@ import setuptools
 
 # Get requirements from requirements.txt, stripping the version tags
 with open('requirements.txt') as f:
-    requires = [x.strip().split('=')[0]
+    requires = [x.strip()
                 for x in f.readlines()]
 
 with open('README.md') as file:
@@ -12,10 +12,9 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='0.5.0',
-                 description='Streaming analysis for XENON',
+                 version='0.8.7',
+                 description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
-                 author_email='j.aalbers@uva.nl',
                  url='https://github.com/AxFoundation/strax',
                  setup_requires=['pytest-runner'],
                  install_requires=requires,
@@ -28,12 +27,7 @@ setuptools.setup(name='strax',
                      'docs': ['sphinx',
                               'sphinx_rtd_theme',
                               'nbsphinx',
-                              'recommonmark',
-                              'graphviz'],
-                     'xenon': ['keras',
-                               'tensorflow',
-                               'scipy',
-                               'pymongo',]
+                              'recommonmark']
                  },
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages(),

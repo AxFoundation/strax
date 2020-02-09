@@ -15,9 +15,33 @@ class ChunkPacer:
         self.source = source
         self.buffer = []
         self.buffer_items = 0
+        self._source_exhausted = False
+
+        if self.dtype is None:
+            # Peek at one item to figure out the dtype
+            self.dtype = self.peek().dtype
+
+    @property
+    def exhausted(self):
+        return self._source_exhausted and self.buffer_items == 0
+
+    def check_is_exhausted(self):
+        """Check thoroughly if we are exhausted, by trying to
+        fetch a new chunk.
+        """
+        try:
+            self._fetch_another()
+        except StopIteration:
+            pass
+        return self.exhausted
 
     def _fetch_another(self):
-        x = next(self.source)
+        try:
+            x = next(self.source)
+        except StopIteration:
+            self._source_exhausted = True
+            raise StopIteration
+        assert isinstance(x, np.ndarray), f"Got {type(x)} instead of ndarray"
         self.buffer.append(x)
         self.buffer_items += len(x)
 
@@ -35,7 +59,7 @@ class ChunkPacer:
     def _take_from_buffer(self, n):
         self._squash_buffer()
         if self.buffer_items == 0:
-            raise StopIteration
+            return np.empty(0, dtype=self.dtype)
         b = self.buffer[0]
 
         n = min(n, len(b))
@@ -72,7 +96,7 @@ class ChunkPacer:
 
         try:
             while (not len(self.buffer[-1])
-                    or not func(self.buffer[-1][-1]) > threshold):
+                   or not func(self.buffer[-1][-1]) > threshold):
                 self._fetch_another()
         except StopIteration:
             pass
@@ -88,14 +112,12 @@ class ChunkPacer:
 
     def peek(self, n=1):
         x = self.get_n(n)
-        self._put_back_at_start(x)
+        if len(x):
+            self._put_back_at_start(x)
         return x
 
     @property
     def itemsize(self):
-        if self.dtype is None:
-            # Peek at one item to figure out the dtype and size
-            self.dtype = self.peek().dtype
         return np.zeros(1, dtype=self.dtype).nbytes
 
 
@@ -103,11 +125,8 @@ class ChunkPacer:
 def fixed_length_chunks(source, n=10):
     """Yield arrays of maximum length n"""
     p = ChunkPacer(source)
-    try:
-        while True:
-            yield p.get_n(n)
-    except StopIteration:
-        return
+    while not p.exhausted:
+        yield p.get_n(n)
 
 
 @export
@@ -115,11 +134,8 @@ def fixed_size_chunks(source, n_bytes=int(1e8), dtype=None):
     """Yield arrays of maximum size n_bytes"""
     p = ChunkPacer(source, dtype=dtype)
     n = int(n_bytes / p.itemsize)
-    try:
-        while True:
-            yield p.get_n(n)
-    except StopIteration:
-        return
+    while not p.exhausted:
+        yield p.get_n(n)
 
 
 @export
@@ -129,11 +145,8 @@ def alternating_size_chunks(source, *sizes):
     p = ChunkPacer(source)
     ns = np.floor(np.array(sizes) / p.itemsize).astype(np.int)
     i = 0
-    while True:
-        try:
-            yield p.get_n(ns[i])
-        except StopIteration:
-            return
+    while not p.exhausted:
+        yield p.get_n(ns[i])
         i = (i + 1) % len(sizes)
 
 
@@ -144,72 +157,28 @@ def alternating_duration_chunks(source, *durations):
     p = ChunkPacer(source)
     t = p.peek()[0]['time']
     i = 0
-    while True:
-        try:
-            t += durations[i]
-            yield p.get_until(t, func=strax.endtime)
-        except StopIteration:
-            return
+    while not p.exhausted:
+        t += durations[i]
+        yield p.get_until(t, func=strax.endtime)
         i = (i + 1) % len(durations)
 
 
 @export
-def chunk_by_break(source,
-                   safe_break,
-                   ignore_below=10,
-                   max_t_buffer=int(1e10)):
-    """Yield arrays whose final elements are separated by at least
-    safe_break from the first elements of the next array.
-    :param source: Iterator producing interval-like arrays
-    :param safe_break: break the LAST time a gap this large occurs in a chunk.
-    If no such gap occurs, saves a chunk in the buffer.
-    :param ignore_below: Exclude intervals with area lower than this from the
-    break calculation
-    :param max_buffer: Maximum duration of time in the buffer.
-    If a larger buffer would result, break the buffer at the largest gap
-    even if it is smaller than safe_break.
-    """
-    # TODO: needs tests!
-    # TODO: add functionality to ChunkPacer instead?
-    buffer = None
-    for chunk_i, x in enumerate(source):
-        if chunk_i == 0:
-            buffer = x.copy()
-        else:
-            buffer = np.concatenate([buffer, x])
-
-        while True:
-            large_peaks = buffer[buffer['area'] > ignore_below]
-            time_in_buffer = buffer['time'][-1] - buffer['time'][0]
-            try:
-                break_i = strax.find_break_i(
-                    large_peaks,
-                    safe_break=safe_break,
-                    tolerant=time_in_buffer > max_t_buffer)
-
-                # TODO: can be faster...
-                mask = buffer['time'] < large_peaks[break_i]['time']
-                yield buffer[mask]
-                buffer = buffer[~mask]
-            except strax.NoBreakFound:
-                break
-
-    if buffer is None:
-        print("No data????")
-
-    if buffer is not None and len(buffer):
-        yield buffer
-
-
-@export
-def same_length(*sources):
+def same_length(*sources, same_length=True):
     """Yield tuples of arrays of the same number of items
+
+    :param same_length: Crash if the sources do not produce
+    items of the same length
     """
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
     for x in pacemaker:
         yield tuple([x] + [s.get_n(len(x)) for s in others])
+
+    if same_length:
+        for s in others:
+            assert s.check_is_exhausted(), f"{s.buffer_items} items left!"
 
 
 @export
@@ -221,25 +190,49 @@ def same_stop(*sources, field=None, func=None):
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
-    for x in pacemaker:
-        if not len(x):
-            continue
-        threshold = x[-1]
-        if field is not None:
-            threshold = threshold[field]
-        if func is not None:
-            threshold = func(threshold)
-        yield tuple([x] + [s.get_until(threshold, func=func)
-                           for s in others])
+    def get_result(pacemaker_chunk, is_last):
+        if is_last:
+            # Final chunk: get ALL remaining data from others
+            other_data = [s.get_until(float('inf'), func=func)
+                          for s in others]
+
+        elif not len(pacemaker_chunk):
+            # Empty chunk: cannot get any data from others.
+            # TODO: should we not just skip this?
+            other_data = [np.empty(0, dtype=s.dtype) for s in others]
+
+        else:
+            threshold = pacemaker_chunk[-1]
+            if field is not None:
+                threshold = threshold[field]
+            if func is not None:
+                threshold = func(threshold)
+            other_data = [s.get_until(threshold, func=func)
+                          for s in others]
+
+        return tuple([pacemaker_chunk] + other_data)
+
+    # The last chunk takes special handling, but does not announce
+    # itself. Hence we must always buffer one pacemaker chunk.
+    buffer = None
+    for next_chunk in pacemaker:
+        if buffer is not None:
+            yield get_result(buffer, is_last=False)
+        buffer = next_chunk
+    yield get_result(buffer, is_last=True)
 
 
 @export
 def sync_iters(chunker, sources):
     """Return dict of iterators over sources (dict name -> iter),
-    synchronized using chunker
+    synchronized using chunker.
+
+    If only one array iter is provided, assume no syncing is needed
     """
     names = list(sources.keys())
     sources = list(sources.values())
+    if len(sources) == 1:
+        return {names[0]: sources[0]}
 
     teed = itertools.tee(chunker(*sources),
                          len(sources))
@@ -254,6 +247,18 @@ def sync_iters(chunker, sources):
 
 @export
 def merge_iters(iters):
+    """Return iterator over merged arrays from several iterators
+    :param iters: list, tuple, or dict of iters
+
+    Iterators must already be synced to produce same-size chunks
+    """
+    if isinstance(iters, dict):
+        iters = list(iters.values())
+    iters = list(iters)
+
+    if len(iters) == 1:
+        yield from iters[0]
+
     try:
         while True:
             yield strax.merge_arrs([next(it)

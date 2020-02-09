@@ -1,6 +1,8 @@
 import builtins
 import typing as ty
 
+from frozendict import frozendict
+
 import strax
 export, __all__ = strax.exporter()
 
@@ -21,14 +23,27 @@ def takes_config(*options):
     :param options: Option instances of options this plugin takes.
     """
     def wrapped(plugin_class):
-        result = []
+        result = {}
         for opt in options:
             if not isinstance(opt, Option):
                 raise RuntimeError("Specify config options by Option objects")
             opt.taken_by = plugin_class.__name__
-            result.append(opt)
+            result[opt.name] = opt
 
-        plugin_class.takes_config = {opt.name: opt for opt in result}
+        # For some reason the second condition is essential, I don't understand
+        # yet why...
+        if (hasattr(plugin_class, 'takes_config')
+                and len(plugin_class.takes_config)):
+            # Already have some options set, e.g. because of subclassing
+            # where both child and parent have a takes_config decorator
+            for opt in result.values():
+                if opt.name in plugin_class.takes_config:
+                    raise RuntimeError(
+                        f"Attempt to specify option {opt.name} twice")
+            plugin_class.takes_config = frozendict({
+                **plugin_class.takes_config, **result})
+        else:
+            plugin_class.takes_config = frozendict(result)
         return plugin_class
 
     return wrapped
@@ -68,6 +83,11 @@ class Option:
         self.track = track
         self.help = help
 
+        # if self.default_by_run is not OMITTED:
+        #     warnings.warn(f"The {self.name} option uses default_by_run,"
+        #                   f" which will soon stop working!",
+        #                   DeprecationWarning)
+
         type = builtins.type
         if sum([self.default is not OMITTED,
                 self.default_factory is not OMITTED,
@@ -78,20 +98,38 @@ class Option:
         if type is OMITTED and default is not OMITTED:
             self.type = type(default)
 
-    def get_default(self, run_id=None):
+    def get_default(self, run_id, run_defaults: dict = None):
         """Return default value for the option"""
-        if run_id is None:
-            run_id = 0          # TODO: think if this makes sense
-        if isinstance(run_id, str):
-            run_id = int(run_id.replace('_', ''))
-
+        if run_defaults is not None and self.name in run_defaults:
+            return run_defaults[self.name]
         if self.default is not OMITTED:
             return self.default
         if self.default_factory is not OMITTED:
             return self.default_factory()
+
         if self.default_by_run is not OMITTED:
+            # TODO: This legacy code for handling default_per_run will soon
+            # be removed!
+            if run_id is None:
+                run_id = 0  # TODO: think if this makes sense
+
+            if isinstance(run_id, str):
+                is_superrun = run_id.startswith('_')
+                if not is_superrun:
+                    run_id = int(run_id.replace('_', ''))
+            else:
+                is_superrun = False
+
             if callable(self.default_by_run):
-                return self.default_by_run(run_id)
+                raise RuntimeError(
+                    "Using functions to specify per-run defaults is no longer"
+                    "supported: specify a (first_run, option) list, or "
+                    "a URL of a file to process in the plugin")
+
+            if is_superrun:
+                return '<SUBRUN-DEPENDENT:%s>' % strax.deterministic_hash(
+                    self.default_by_run)
+
             use_value = OMITTED
             for i, (start_run, value) in enumerate(self.default_by_run):
                 if start_run > run_id:
@@ -103,10 +141,13 @@ class Option:
                     "lowest run id {start_run} for which the default "
                     "of the option {self.name} is known.")
             return use_value
+
         raise InvalidConfiguration(f"Missing option {self.name} "
                                    f"required by {self.taken_by}")
 
-    def validate(self, config, run_id=None, set_defaults=True):
+    def validate(self, config,
+                 run_id=None,   # TODO: will soon be removed
+                 run_defaults=None, set_defaults=True):
         """Checks if the option is in config and sets defaults if needed.
         """
         if self.name in config:
@@ -117,7 +158,7 @@ class Option:
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
-            config[self.name] = self.get_default(run_id)
+            config[self.name] = self.get_default(run_id, run_defaults)
 
 
 @export

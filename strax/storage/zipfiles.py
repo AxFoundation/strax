@@ -5,7 +5,7 @@ import shutil
 import zipfile
 
 import strax
-from .files import RUN_METADATA_FILENAME
+from .files import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 
@@ -37,10 +37,10 @@ class ZipDirectory(strax.StorageFrontend):
         # Check exact match / write case
         bk = self._backend_key(key)
         with zipfile.ZipFile(self._zipname(key)) as zp:
-            print("Still here")
-            print(zp.namelist())
             try:
-                zp.getinfo(str(key) + '/metadata.json')
+                dirname = str(key)
+                prefix = strax.dirname_to_prefix(dirname)
+                zp.getinfo(f'{dirname}/{prefix}-metadata.json')
                 return bk
             except KeyError:
                 pass
@@ -54,7 +54,7 @@ class ZipDirectory(strax.StorageFrontend):
     def run_metadata(self, run_id):
         with zipfile.ZipFile(self._zipname(run_id)) as zp:
             try:
-                with zp.open(RUN_METADATA_FILENAME % run_id) as f:
+                with zp.open(RUN_METADATA_PATTERN % run_id) as f:
                     return json.loads(f.read())
             except KeyError:
                 raise strax.RunMetadataNotAvailable
@@ -112,7 +112,8 @@ class ZipFileBackend(strax.StorageBackend):
     def get_metadata(self, zipn_and_dirn):
         zipn, dirn = zipn_and_dirn
         with zipfile.ZipFile(zipn) as zp:
-            with zp.open(dirn + '/metadata.json') as f:
+            prefix = strax.dirname_to_prefix(dirn)
+            with zp.open(f'{dirn}/{prefix}-metadata.json') as f:
                 return json.loads(f.read())
 
     def saver(self, *args, **kwargs):
