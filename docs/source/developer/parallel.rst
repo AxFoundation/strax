@@ -5,34 +5,27 @@ Strax can process data at 50-100 raw-MB /sec single core, which is not enough fo
 
 Not all plugins can be parallelized. For example, we cannot assign event numbers  (0, 1, 2, ...) in parallel if we want unique numbers that increment without gaps. We also cannot save to a single file in parallel.
 
-Indicating a parallelizable plugin
------------------------------------
+Multithreading
+---------------
 To get parallelization, plugins can defer computations to a pool of **threads** or **processes**. If they do, they yield futures to the output mailbox instead of the actual results (numpy arrays). The mailbox awaits the futures and ensures each consumer gets the results in order.
 
-A plugin indicates to strax it is paralellizable by setting its ``parallel`` attribute to True. This usually causes strax to outsource computations to a pool of threads. Every chunk will result in a call to the thread pool. This has little overhead, but the performance gain is limited by the global interpreter lock. If the computation is in pure python, there is no benefit at all. Numba code reaps benefits until the pure-python overhead around it becomes the limiting factor (at high numbers of cores).
+A plugin indicates to strax it is paralellizable by setting its ``parallel`` attribute to True. This usually causes strax to outsource computations to a pool of threads. Every chunk will result in a call to the thread pool. This has little overhead, though the performance gain is limited by the global interpreter lock. If the computation is in pure python, there is no benefit; however, numpy and numba code can benefit significantly (until the pure-python overhead around it becomes the limiting factor, at high numbers of cores).
 
-You can also set the ``parallel`` attribute to ``process``, to indicate you would rather strax uses a process pool instead of a thread pool. This frees even a pure-python computation from the global interpreter lock, but incurs overhead from (1) forking the strax process and (2) pickling and unpickling the results in the child and parent processes.
+Loaders use multithreading by default, since their work is eminently parallelizable: they just load some data and decompress it (using low-level compressors that happily release the GIL). Savers that rechunk the data (e.g. to achieve more sysadmin-friendly filesizes) are not parallelizable. Savers that do not rechunk use multithreading just like loaders.
 
-Saver and loaders are currently not parallelized at all, except for savers that are optimized away by a ``ParallelSourcePlugin`` (see below).
 
-ParallelSourcePlugin
----------------------
+Multiprocessing
+----------------
 
-Low-level plugins deal with a massive data flow, so parallelizing their computations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the global interpreter lock becomes binding due to pure-python overhead. We thus need a third parallelization mode: the ``ParallelSourcePlugin``. This is how the ``DAQReader`` plugin is implemented.
+Strax can also use multiprocessing for parallelization. This is useful to free pure-python computations from the shackles of the GIL. Low-level plugins deal with a massive data flow, so parallelizing theircomputations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the GIL becomes binding due to pure-python overhead. 
 
-Computations of chunks from a ``ParallelSourcePlugin`` will be outsourced to a process pool, just like ``parallel='process'``. However, during setup, it will also gather as many of its dependencies and their savers as 'subsidiaries'. Their computations are then "inlined", that is, happen immedately after the main computation in the same process.
+You can set the ``parallel`` attribute to ``process``, to suggest strax should use a process pool instead of a thread pool. This is often not a good idea: multiprocessing incurs overhead from (1) forking the strax process and (2) pickling and unpickling the results in the child and parent processes. Strax will still not use multiprocessing at all unless you:
+  - Set the allow_multiprocess context option to True,
+  - Set max_workers to a value higher than 1 in the get_xxx call.
 
-A plugin becomes inlined as a subsidiary if two conditions are met:
-  * It can be paralellized (``parallel=True`` or ``parallel=process``)
-  * It has only one dependency, which must be the ``ParallelSourcePlugin`` itself or another plugin that is inlined.
+During multiprocessing, computations of chunks from ``parallel='process'`` plugins will be outsourced to a process pool. Additionally, to avoid data transfer overhead, strax attempts to gather as many savers, dependencies, and savers of dependencies of a ``parallel='process'`` plugin to "inline" them: their computations are set to happen immedately after the main plugin's computation in the same process. This is achieved behind the scenes by replacing the plugin with a container-like plugin called ParallelSourcePlugin. Only parallelizable plugins and savers that do not rechunk will be inlined.
 
-A saver becomes inlined if two conditions are met:
-  * It belongs to a plugin that is inlined;
-  * It does not rechunk the data (e.g. split it into convenient file sizes).
-
-The resulting combination of outputs are first collected in a single mailbox (named after the ``ParallelSourcePlugin``), which is unique in receiving dictionaries of arrays instead of just arrays. A tiny ``send_outputs`` function then distributes these appropriately to other mailboxes in the pipeline.
-
-Since savers can become inlined, they must work even if they are forked. That implies they cannot keep state, and must store metadata for each chunk in their backend as it arrives. For example, the FileStore backend produces a json file with metadata for each chunk. When the saver is closed, all the json files are read in and concatenated.
+Since savers can become inlined, they should work even if they are forked. That implies they cannot keep state, and must store metadata for each chunk in their backend as it arrives. For example, the FileStore backend produces a json file with metadata for each chunk. When the saver is closed, all the json files are read in and concatenated. A saver that can't do this should set `allow_fork = False`. 
 
 
 Multi-run parallelization: a different problem

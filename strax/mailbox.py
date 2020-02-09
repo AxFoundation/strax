@@ -67,8 +67,8 @@ class Mailbox:
     propagate further upstream than the immediate sender threads.
     """
 
-    DEFAULT_TIMEOUT = 120
-    DEFAULT_MAX_MESSAGES = 5
+    DEFAULT_TIMEOUT = 300
+    DEFAULT_MAX_MESSAGES = 4
 
     def __init__(self,
                  name='mailbox',
@@ -139,16 +139,37 @@ class Mailbox:
             return self._read(subscriber_i=subscriber_i)
 
     def start(self):
+        if not self._n_subscribers:
+            raise ValueError(f"Attempt to start mailbox {self.name} "
+                             f"without subscribers")
         for t in self._threads:
             t.start()
 
+    def kill_from_exception(self, e, reraise=True):
+        """Kill the mailbox following a caught exception e"""
+        if isinstance(e, MailboxKilled):
+            # Kill this mailbox too.
+            self.log.debug("Propagating MailboxKilled exception")
+            self.kill(reason=e.args[0])
+            # Do NOT raise! One traceback on the screen is enough.
+        else:
+            self.log.debug(f"Killing mailbox due to exception {e}!")
+            self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
+            if reraise:
+                raise e
+
     def kill(self, upstream=True, reason=None):
         with self._lock:
+            self.log.debug(f"Kill received by {self.name}")
             if upstream:
                 self.force_killed = True
+            if self.killed:
+                self.log.debug(f"Double kill on {self.name} = NOP")
+                return
             self.killed = True
             self.killed_because = reason
             self._read_condition.notify_all()
+            self._write_condition.notify_all()
 
     def cleanup(self):
         for t in self._threads:
@@ -163,15 +184,10 @@ class Mailbox:
         try:
             for x in iterable:
                 self.send(x)
-        except MailboxKilled as e:
-            # The iterable was reading from a mailbox, which has been killed.
-            # Kill this mailbox too.
-            self.kill(reason=e.args[0])
-            # Do NOT raise! One traceback on the screen is enough.
         except Exception as e:
-            self.kill(reason=(e.__class__, e, sys.exc_info()[2]))
-            raise
+            self.kill_from_exception(e)
         else:
+            self.log.debug("Producing iterable exhausted, regular stop")
             self.close()
 
     def send(self, msg, msg_number: typing.Union[int, None] = None):
@@ -210,13 +226,22 @@ class Mailbox:
                     f'subscribers already read {read_until}.')
 
             def can_write():
-                return len(self._mailbox) < self.max_messages
+                return (len(self._mailbox) < self.max_messages or self.killed)
             if not can_write():
-                self.log.debug(self._subscribers_have_read)
+                self.log.debug("Subscribers have read: "
+                               + str(self._subscribers_have_read))
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
             if not self._write_condition.wait_for(can_write,
                                                   timeout=self.timeout):
                 raise MailboxFullTimeout(f"{self.name} emptied too slow")
+
+            if self.killed:
+                self.log.debug(f"Sender found {self.name} killed while waiting"
+                               " for room for new messages.")
+                # TODO: this is duplicated from above...
+                if self.force_killed:
+                    raise MailboxKilled(self.killed_because)
+                return
 
             heapq.heappush(self._mailbox, (msg_number, msg))
             self.log.debug(f"Sent {msg_number}")
@@ -224,6 +249,7 @@ class Mailbox:
             self._read_condition.notify_all()
 
     def close(self):
+        self.log.debug(f"Closing; sending StopIteration")
         with self._lock:
             self.send(StopIteration)
             self.closed = True
@@ -267,9 +293,9 @@ class Mailbox:
                     next_number += 1
 
                 if len(to_yield) > 1:
-                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}")
+                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}  in subscriber {subscriber_i}")
                 else:
-                    self.log.debug(f"Read {to_yield[0][0]}")
+                    self.log.debug(f"Read {to_yield[0][0]} in subscriber {subscriber_i}")
 
                 self._subscribers_have_read[subscriber_i] = next_number - 1
 
@@ -282,7 +308,7 @@ class Mailbox:
 
             for msg_number, msg in to_yield:
                 if msg is StopIteration:
-                    return
+                    break
                 elif isinstance(msg, Future):
                     if not msg.done():
                         self.log.debug(f"Waiting for future {msg_number}")
@@ -295,9 +321,14 @@ class Mailbox:
                     else:
                         res = msg.result()
                         self.log.debug(f"Future {msg_number} was already done")
-                    yield res
                 else:
-                    yield msg
+                    res = msg
+
+                try:
+                    yield res
+                except Exception as e:
+                    # TODO: Should I also handle timeout errors like this?
+                    self.kill_from_exception(e)
 
         self.log.debug("Done reading")
 
@@ -329,3 +360,28 @@ class Mailbox:
     @property
     def _lowest_msg_number(self):
         return self._mailbox[0][0]
+
+
+@export
+def divide_outputs(source, mailboxes, outputs=None):
+    """This code is a 'mail sorter' which gets dicts of arrays from source
+    and sends the right array to the right mailbox.
+    """
+    # raise ZeroDivisionError   # TODO: check this is handled properly
+    if outputs is None:
+        outputs = mailboxes.keys()
+    mbs_to_kill = [mailboxes[d] for d in outputs]
+    # TODO: this code duplicates exception handling and cleanup
+    # from Mailbox.send_from! Can we avoid that somehow?
+    try:
+        for result in source:
+            for d, x in result.items():
+                mailboxes[d].send(x)
+    except Exception as e:
+        for m in mbs_to_kill:
+            m.kill_from_exception(e, reraise=False)
+        if not isinstance(e, MailboxKilled):
+            raise
+    else:
+        for m in mbs_to_kill:
+            m.close()

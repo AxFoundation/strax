@@ -1,65 +1,37 @@
-"""A very basic test for the strax core.
-Mostly tests if we don't crash immediately..
-"""
+import glob
+import shutil
 import tempfile
 import os
 import os.path as osp
-import glob
 
 import pytest
-import numpy as np
-import strax
 
-
-@strax.takes_config(
-    strax.Option('crash', default=False)
-)
-class Records(strax.Plugin):
-    provides = 'records'
-    depends_on = tuple()
-    dtype = strax.record_dtype()
-
-    def iter(self, *args, **kwargs):
-        if self.config['crash']:
-            raise SomeCrash("CRASH!!!!")
-        for t in range(n_chunks):
-            r = np.zeros(recs_per_chunk, self.dtype)
-            r['time'] = t
-            r['length'] = 1
-            r['dt'] = 1
-            r['channel'] = np.arange(len(r))
-            yield r
-
-
-class SomeCrash(Exception):
-    pass
-
-
-@strax.takes_config(
-    strax.Option('some_option', default=0)
-)
-class Peaks(strax.Plugin):
-    provides = 'peaks'
-    depends_on = ('records',)
-    dtype = strax.peak_dtype()
-
-    def compute(self, records):
-        p = np.zeros(len(records), self.dtype)
-        p['time'] = records['time']
-        return p
-
-
-recs_per_chunk = 10
-n_chunks = 10
-run_id = '0'
+from strax.testutils import *
 
 
 def test_core():
-    mystrax = strax.Context(storage=[],
-                            register=[Records, Peaks])
-    bla = mystrax.get_array(run_id=run_id, targets='peaks')
-    assert len(bla) == recs_per_chunk * n_chunks
-    assert bla.dtype == strax.peak_dtype()
+    for allow_multiprocess in (False, True):
+        for max_workers in [1, 2]:
+            mystrax = strax.Context(storage=[],
+                                    register=[Records, Peaks],
+                                    allow_multiprocess=allow_multiprocess)
+            bla = mystrax.get_array(run_id=run_id, targets='peaks',
+                                    max_workers=max_workers)
+            assert len(bla) == recs_per_chunk * n_chunks
+            assert bla.dtype == strax.peak_dtype()
+
+
+def test_multirun():
+    for max_workers in [1, 2]:
+        mystrax = strax.Context(storage=[],
+                                register=[Records, Peaks],)
+        bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
+                                max_workers=max_workers)
+        n = recs_per_chunk * n_chunks
+        assert len(bla) == n * 2
+        np.testing.assert_equal(
+            bla['run_id'],
+            np.array([0] * n + [1] * n, dtype=np.int32))
 
 
 def test_filestore():
@@ -68,8 +40,15 @@ def test_filestore():
                                 register=[Records, Peaks])
 
         assert not mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
+        assert mystrax.list_available('peaks') == []
+
         mystrax.make(run_id=run_id, targets='peaks')
+
         assert mystrax.is_stored(run_id, 'peaks')
+        mystrax.scan_runs()
+        assert mystrax.list_available('peaks') == [run_id]
+        assert mystrax.scan_runs()['name'].values.tolist() == [run_id]
 
         # We should have two directories
         data_dirs = sorted(glob.glob(osp.join(temp_dir, '*/')))
@@ -77,8 +56,10 @@ def test_filestore():
 
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
-        assert sorted(os.listdir(data_dirs[0])) \
-               == ['000000', 'metadata.json']
+        prefix = strax.dirname_to_prefix(data_dirs[0])
+        assert sorted(os.listdir(data_dirs[0])) == [
+            f'{prefix}-000000',
+            f'{prefix}-metadata.json']
 
         # Check metadata got written correctly.
         metadata = mystrax.get_meta(run_id, 'peaks')
@@ -88,7 +69,7 @@ def test_filestore():
         assert len(metadata['chunks']) == 1
 
         # Check data gets loaded from cache, not rebuilt
-        md_filename = osp.join(data_dirs[0], 'metadata.json')
+        md_filename = osp.join(data_dirs[0], f'{prefix}-metadata.json')
         mtime_before = osp.getmtime(md_filename)
         df = mystrax.get_array(run_id=run_id, targets='peaks')
         assert len(df) == recs_per_chunk * n_chunks
@@ -99,12 +80,35 @@ def test_filestore():
         strax.ZipDirectory.zip_dir(temp_dir, zf, delete=True)
         assert osp.exists(zf)
 
-        print(temp_dir)
-        print(os.listdir(temp_dir))
         mystrax = strax.Context(storage=strax.ZipDirectory(temp_dir),
                                 register=[Records, Peaks])
         metadata_2 = mystrax.get_meta(run_id, 'peaks')
         assert metadata == metadata_2
+
+
+def test_datadirectory_deleted():
+    """Test deleting the data directory does not cause crashes
+    or silent failures to save (#93)
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        data_dir = osp.join(temp_dir, 'bla')
+        os.makedirs(data_dir)
+
+        mystrax = strax.Context(storage=strax.DataDirectory(data_dir),
+                                register=[Records, Peaks])
+
+        # Delete directory AFTER context is created
+        shutil.rmtree(data_dir)
+
+        mystrax.scan_runs()
+        assert not mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == []
+
+        mystrax.make(run_id=run_id, targets='peaks')
+
+        mystrax.scan_runs()
+        assert mystrax.is_stored(run_id, 'peaks')
+        assert mystrax.list_available('peaks') == [run_id]
 
 
 def test_fuzzy_matching():
@@ -115,18 +119,21 @@ def test_fuzzy_matching():
         st.make(run_id=run_id, targets='peaks')
 
         # Changing option causes data not to match
-        st.set_config(dict(some_option=1))
+        st.set_config(dict(base_area=1))
         assert not st.is_stored(run_id, 'peaks')
+        assert st.list_available('peaks') == []
 
         # In fuzzy context, data does match
         st2 = st.new_context(fuzzy_for=('peaks',))
         assert st2.is_stored(run_id, 'peaks')
+        assert st2.list_available('peaks') == [run_id]
+
         # And we can actually load it
         st2.get_meta(run_id, 'peaks')
         st2.get_array(run_id, 'peaks')
 
         # Fuzzy for options also works
-        st3 = st.new_context(fuzzy_for_options=('some_option',))
+        st3 = st.new_context(fuzzy_for_options=('base_area',))
         assert st3.is_stored(run_id, 'peaks')
 
     # No saving occurs at all while fuzzy matching
@@ -154,12 +161,12 @@ def test_storage_converter():
             store_1, store_2 = st.storage
 
             # Data is now in store 1, but not store 2
-            key = st._key_for(run_id, 'peaks')
+            key = st.key_for(run_id, 'peaks')
             store_1.find(key)
             with pytest.raises(strax.DataNotAvailable):
                 store_2.find(key)
 
-            st.make(run_id, 'peaks')
+            st.make(run_id, 'peaks', _skip_if_built=False)
 
             # Data is now in both stores
             store_1.find(key)
@@ -167,23 +174,50 @@ def test_storage_converter():
 
 
 def test_exception():
+    for allow_multiprocess, max_workers in zip((False, True), (1, 2)):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            st = strax.Context(storage=strax.DataDirectory(temp_dir),
+                               register=[Records, Peaks],
+                               allow_multiprocess=allow_multiprocess,
+                               config=dict(crash=True))
+
+            # Check correct exception is thrown
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id,
+                        targets='peaks',
+                        max_workers=max_workers)
+
+            # Check exception is recorded in metadata
+            # in both its original data type and dependents
+            for target in ('peaks', 'records'):
+                assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
+
+            # Check corrupted data does not load
+            st.context_config['forbid_creation_of'] = ('peaks',)
+            with pytest.raises(strax.DataNotAvailable):
+                st.get_df(run_id=run_id,
+                          targets='peaks',
+                          max_workers=max_workers)
+
+
+def test_exception_in_saver(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks],
-                           config=dict(crash=True))
+                           register=[Records, Peaks])
 
-        # Check correct exception is thrown
-        with pytest.raises(SomeCrash):
-            st.make(run_id=run_id, targets='peaks')
+        def kaboom(*args, **kwargs):
+            raise SomeCrash
 
-        # Check exception is recorded in metadata
-        # in both its original data type and dependents
-        for target in ('peaks', 'records'):
-            assert 'SomeCrash' in st.get_meta(run_id, target)['exception']
-
-        # Check data cannot be loaded again
-        with pytest.raises(strax.DataCorrupted):
-            st.get_df(run_id=run_id, targets='peaks')
+        old_save = strax.save_file
+        try:
+            strax.save_file = kaboom
+            with pytest.raises(SomeCrash):
+                st.make(run_id=run_id, targets='records')
+        finally:
+            strax.save_file = old_save
 
 
 def test_random_access():
@@ -195,18 +229,19 @@ def test_random_access():
         Peaks.rechunk_on_save = False
 
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks, PeakClassification])
 
         with pytest.raises(strax.DataNotAvailable):
             # Time range selection requires data already available
             st.get_df(run_id, 'peaks', time_range=(3, 5))
 
-        st.make(run_id=run_id, targets='peaks')
+        st.make(run_id=run_id, targets=('peaks', 'peak_classification'))
 
         # Second part of hack: corrupt data by removing one chunk
+        dirname = str(st.key_for(run_id, 'peaks'))
         os.remove(os.path.join(temp_dir,
-                               str(st._key_for(run_id, 'peaks')),
-                               '000000'))
+                               dirname,
+                               strax.dirname_to_prefix(dirname) + '-000000'))
 
         with pytest.raises(FileNotFoundError):
             st.get_array(run_id, 'peaks')
@@ -215,3 +250,123 @@ def test_random_access():
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+
+        # Try again with unaligned chunks
+        df = st.get_array(run_id, ['peaks', 'peak_classification'],
+                          time_range=(3, 5))
+        assert len(df) == 2 * recs_per_chunk
+        assert df['time'].min() == 3
+        assert df['time'].max() == 4
+
+
+
+def test_run_selection():
+    mock_rundb = [
+        dict(name='0', mode='funny', tags=[dict(name='bad')]),
+        dict(name='1', mode='nice', tags=[dict(name='interesting'),
+                                          dict(name='bad')]),
+        dict(name='2', mode='nice', tags=[dict(name='interesting')])]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+
+        # Write mock runs db
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf)
+        assert len(st.scan_runs()) == len(mock_rundb)
+        assert st.run_metadata('0') == mock_rundb[0]
+        assert st.run_metadata('0', projection='name') == {'name': '0'}
+
+        assert len(st.select_runs(run_mode='nice')) == 2
+        assert len(st.select_runs(include_tags='interesting')) == 2
+        assert len(st.select_runs(include_tags='interesting',
+                                  exclude_tags='bad')) == 1
+        assert len(st.select_runs(include_tags='interesting',
+                                  run_mode='nice')) == 2
+
+        assert len(st.select_runs(run_id='0')) == 1
+        assert len(st.select_runs(run_id='*',
+                                  exclude_tags='bad')) == 1
+
+
+def test_run_defaults():
+    mock_rundb = [{'name': '0', strax.RUN_DEFAULTS_KEY: dict(base_area=43)}]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sf = strax.DataDirectory(path=temp_dir)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+        st = strax.Context(storage=sf, register=[Records, Peaks])
+
+        # The run defaults get used
+        peaks = st.get_array('0', 'peaks')
+        assert np.all(peaks['area'] == 43)
+
+        # ... but the user can still override them
+        peaks = st.get_array('0', 'peaks', config=dict(base_area=44))
+        assert np.all(peaks['area'] == 44)
+
+
+def test_dtype_mismatch():
+    mystrax = strax.Context(storage=[],
+                            register=[Records, Peaks],
+                            config=dict(give_wrong_dtype=True))
+    with pytest.raises(strax.PluginGaveWrongOutput):
+        mystrax.get_array(run_id=run_id, targets='peaks')
+
+
+def test_get_single_plugin():
+    mystrax = strax.Context(storage=[],
+                            register=[Records, Peaks])
+    p = mystrax.get_single_plugin('0', 'peaks')
+    assert isinstance(p, Peaks)
+    assert len(p.config)
+    assert p.config['base_area'] == 0
+
+
+def test_superrun():
+    # TODO: duplicated init with test_run_selection
+    mock_rundb = [
+        dict(name='0', start=0, end=int(1e9)),
+        dict(name='1', start=int(2e9), end=int(3e9))
+    ]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Test run definition
+        sf = strax.DataDirectory(path=temp_dir)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+
+        st = strax.Context(storage=sf, register=[Records, Peaks])
+        st.define_run('super', ['0', '1'])
+
+        md = st.run_metadata('_super')
+        assert md['start'] == 0
+        assert md['end'] == int(3e9)
+        assert md['livetime'] == int(2e9)
+        assert md['sub_run_spec'] == {'0': 'all', '1': 'all'}
+
+        # Test superrun loading
+        r1 = st.get_array('0', 'records')
+        r2 = st.get_array('1', 'records', config=dict(secret_time_offset=int(1e9)))
+        rs = st.get_array('_super', 'records')
+        np.testing.assert_array_equal(rs, np.concatenate([r1, r2]))
+
+        # Test that superrun loading triggers subrun processing
+        ps = st.get_array('_super', 'peaks')
+        p1 = st.get_array('0', 'peaks')
+        p2 = st.get_array('1', 'peaks')
+        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
+        np.testing.assert_array_equal(p2['area'], np.ones(len(p2)))
+        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
+
+        # Test superrun processing can override run-dependent options
+        st.set_config(config=dict(bonus_area=0))
+        ps = st.get_array('_super', 'peaks')
+        p1 = st.get_array('0', 'peaks')
+        p2 = st.get_array('1', 'peaks')
+        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
+        np.testing.assert_array_equal(p2['area'], np.zeros(len(p2)))
+        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))

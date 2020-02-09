@@ -1,50 +1,31 @@
-##
-# Hack to disable numba.jit
-# For the mini-examples run during testing numba actually causes a massive
-# performance drop. Moreover, if you make a buffer overrun bug, jitted fs
-# respond "slightly" less nice (giving you junk data or segfaulting)
-# Once in a while you should test without this...
-##
+"""Utilities to help write strax tests.
+
+Not needed during strax operation, so this file is not imported in __init__.py
+"""
+
 from itertools import accumulate
 from functools import partial
 
 import numpy as np
 from boltons import iterutils
-from hypothesis import strategies as st
+from hypothesis import strategies
 
-
-def mock_numba():
-    from unittest.mock import MagicMock
-
-    class FakeNumba:
-
-        def jit(self, *args, **kwargs):
-            return lambda x: x
-
-    FakeNumba.caching = MagicMock()
-
-    import sys                                # noqa
-    sys.modules['numba'] = FakeNumba()
-
-
-# Mock numba before importing strax
-mock_numba()
-import strax    # noqa
+import strax
 
 
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff
 # wrapping around to the integer boundary. Hence max_value is limited.
 def sorted_bounds(disjoint=False,
-                  max_value=10000,
-                  max_len=100,
+                  max_value=50,
+                  max_len=10,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
         max_value /= max_len
 
-    s = st.lists(st.integers(min_value=0,
-                             max_value=max_value),
-                 min_size=0, max_size=20)
+    s = strategies.lists(strategies.integers(min_value=0,
+                                             max_value=max_value),
+                         min_size=0, max_size=20)
     if disjoint:
         s = s.map(accumulate).map(list)
 
@@ -94,7 +75,7 @@ fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
 ##
 
 
-def bounds_to_records(bs, single=False):
+def bounds_to_records(bs, single=False, single_channel=False):
     """Return strax records corresponding to a list of 2-tuples
     of boundaries.
 
@@ -105,6 +86,9 @@ def bounds_to_records(bs, single=False):
     whose data is 1 inside the given bounds and zero outside.
     TODO: length etc. is not properly set in the single=True mode!
     TODO: this probably needs tests itself...
+
+    :param single_channel: if True, instead create all pulses in channel 0
+    You should only feed in disjoint bounds when using this.
     """
     if not len(bs):
         n_samples = 0
@@ -125,19 +109,98 @@ def bounds_to_records(bs, single=False):
             recs[i]['length'] = pad + length
             recs[i]['data'][pad:pad+length] = 1
             assert recs[i]['data'].sum() == length
-            recs[i]['channel'] = i
-        assert len(np.unique(recs['channel'])) == len(bs)
+            recs[i]['channel'] = 0 if single_channel else i
+        if not single_channel:
+            assert len(np.unique(recs['channel'])) == len(bs)
     else:
-        # Make a single pulse with 1 inside the bounds, 0 outside
+        # Make a single record with 1 inside the bounds, 0 outside
         recs = np.zeros(1, dtype=strax.record_dtype(n_samples))
         for l, r in bs:
             recs[0]['data'][l:r] = 1
+        recs[0]['time'] = 0
+        recs[0]['length'] = n_samples
 
     recs['dt'] = 1
     return recs
 
 
-single_fake_pulse = sorted_bounds(max_value=50)\
+single_fake_pulse = sorted_bounds()\
     .map(partial(bounds_to_records, single=True))
 
-several_fake_records = sorted_bounds(max_value=50).map(bounds_to_records)
+several_fake_records = sorted_bounds().map(bounds_to_records)
+
+several_fake_records_one_channel = sorted_bounds(
+    disjoint=True).map(
+        partial(bounds_to_records, single_channel=True))
+
+
+##
+# Basic test plugins
+##
+@strax.takes_config(
+    strax.Option('crash', default=False),
+    strax.Option('secret_time_offset', default=0, track=False)
+)
+class Records(strax.Plugin):
+    provides = 'records'
+    parallel = 'process'
+    depends_on = tuple()
+    dtype = strax.record_dtype()
+
+    def source_finished(self):
+        return True
+
+    def is_ready(self, chunk_i):
+        return chunk_i < n_chunks
+
+    def compute(self, chunk_i):
+        if self.config['crash']:
+            raise SomeCrash("CRASH!!!!")
+        r = np.zeros(recs_per_chunk, self.dtype)
+        r['time'] = chunk_i + self.config['secret_time_offset']
+        r['length'] = r['dt'] = 1
+        r['channel'] = np.arange(len(r))
+        return r
+
+
+class SomeCrash(Exception):
+    pass
+
+
+@strax.takes_config(
+    strax.Option('base_area', default=0),
+    strax.Option('give_wrong_dtype', default=False),
+    strax.Option('bonus_area', default_by_run=[(0, 0), (1, 1)]))
+class Peaks(strax.Plugin):
+    provides = 'peaks'
+    data_kind = 'peaks'
+    depends_on = ('records',)
+    dtype = strax.peak_dtype()
+    parallel = True
+
+    def compute(self, records):
+        if self.config['give_wrong_dtype']:
+            return np.zeros(5, [('a', np.int), ('b', np.float)])
+        p = np.zeros(len(records), self.dtype)
+        p['time'] = records['time']
+        p['length'] = p['dt'] = 1
+        p['area'] = self.config['base_area'] + self.config['bonus_area']
+        return p
+
+
+# Another peak-kind plugin, to test time_range selection
+# with unaligned chunks
+class PeakClassification(strax.Plugin):
+    provides = 'peak_classification'
+    data_kind = 'peaks'
+    depends_on = ('peaks',)
+    dtype = [('type', np.int8, 'Classification of the peak.'),]
+    rechunk_on_save = True
+
+    def compute(self, peaks):
+        return dict(type=np.zeros(len(peaks)))
+
+
+recs_per_chunk = 10
+n_chunks = 10
+run_id = '0'

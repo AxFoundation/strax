@@ -1,6 +1,21 @@
 from concurrent import futures
+from functools import partial
 import logging
 import typing as ty
+import psutil
+import os
+import signal
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+try:
+    from npshmex import ProcessPoolExecutor as SHMExecutor
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    SHMExecutor = None
+    pass
+
+import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
@@ -10,7 +25,7 @@ export, __all__ = strax.exporter()
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Iterator]
+    loaders: ty.Dict[str, callable]
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
@@ -27,60 +42,104 @@ class ThreadedMailboxProcessor:
 
     def __init__(self,
                  components: ProcessorComponents,
-                 allow_rechunk=True,
+                 allow_rechunk=True, allow_shm=False,
+                 allow_multiprocess=False,
                  max_workers=None):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
         self.mailboxes = MailboxDict()
 
         self.log.debug("Processor components are: " + str(components))
-        plugins = components.plugins
-        savers = components.savers
+
+        if allow_multiprocess and os.name == 'nt':
+            print("You're on Windows! "
+                  "Multiprocessing disabled, here be dragons.")
+            allow_multiprocess = False
 
         if max_workers in [None, 1]:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
-            process_executor = thread_executor = None
+            self.process_executor = self.thread_executor = None
         else:
             # Use executors for parallelization of computations.
-            process_executor = futures.ProcessPoolExecutor(
-                max_workers=max_workers)
-            thread_executor = futures.ThreadPoolExecutor(
+            self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
-        # Deal with parallel input processes
-        # Setting up one of these modifies plugins, so we must gather
-        # them all first.
-        par_inputs = [p for p in plugins.values()
-                      if issubclass(p.__class__, strax.ParallelSourcePlugin)]
-        for p in par_inputs:
-            components = p.setup_mailboxes(components,
-                                           self.mailboxes,
-                                           process_executor)
+            mp_plugins = {d: p for d, p in components.plugins.items()
+                          if p.parallel == 'process'}
+            if (allow_multiprocess and len(mp_plugins)):
+                _proc_ex = ProcessPoolExecutor
+                if allow_shm:
+                    if SHMExecutor is None:
+                        raise RuntimeError(
+                            "You must install npshmex to enable shm"
+                            " transfer of numpy arrays.")
+                    _proc_ex = SHMExecutor
+                self.process_executor = _proc_ex(max_workers=max_workers)
 
-        self.log.debug("After optimization: " + str(components))
+                # Combine as many plugins /savers as possible in one process
+                # TODO: more intelligent start determination, multiple starts
+                start_from = list(mp_plugins.keys())[
+                    int(np.argmin([len(p.depends_on)
+                                   for p in mp_plugins.values()]))]
+                components = strax.ParallelSourcePlugin.inline_plugins(
+                    components, start_from, log=self.log)
+                self.components = components
+                self.log.debug("Altered components for multiprocessing: "
+                               + str(components))
+            else:
+                self.process_executor = self.thread_executor
 
         for d, loader in components.loaders.items():
-            assert d not in plugins
-            self.mailboxes[d].add_sender(loader, name=f'load:{d}')
+            assert d not in components.plugins
+            # If paralellizing, use threads for loading
+            # the decompressor releases the gil, and we have a lot
+            # of data transfer to do
+            self.mailboxes[d].add_sender(
+                loader(executor=self.thread_executor),
+                name=f'load:{d}')
 
-        for d, p in plugins.items():
+        multi_output_seen = []
+        for d, p in components.plugins.items():
+            if p in multi_output_seen:
+                continue
+
             executor = None
             if p.parallel == 'process':
-                executor = process_executor
+                executor = self.process_executor
             elif p.parallel:
-                executor = thread_executor
+                executor = self.thread_executor
 
-            self.mailboxes[d].add_sender(p.iter(
-                    iters={d: self.mailboxes[d].subscribe()
-                           for d in p.depends_on},
-                    executor=executor),
-                name=f'build:{d}')
+            if p.multi_output:
+                multi_output_seen.append(p)
 
-        for d, savers in savers.items():
+                # Create temp mailbox that receives multi-output dicts
+                # and sends them forth to other mailboxes
+                mname = p.__class__.__name__ + '_divide_outputs'
+                self.mailboxes[mname].add_sender(
+                    p.iter(
+                        iters={dep: self.mailboxes[dep].subscribe()
+                               for dep in p.depends_on},
+                        executor=executor),
+                    name=f'divide_outputs:{d}')
+
+                self.mailboxes[mname].add_reader(
+                    partial(strax.divide_outputs,
+                            mailboxes=self.mailboxes,
+                            outputs=p.provides))
+
+            else:
+                self.mailboxes[d].add_sender(
+                    p.iter(
+                        iters={dep: self.mailboxes[dep].subscribe()
+                               for dep in p.depends_on},
+                        executor=executor),
+                    name=f'build:{d}')
+
+        for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
-                if d in plugins:
-                    rechunk = plugins[d].rechunk_on_save
+                if d in components.plugins:
+                    rechunk = components.plugins[d].rechunk_on_save
                 else:
                     # This is storage conversion mode
                     # TODO: Don't know how to get this info, for now,
@@ -89,10 +148,37 @@ class ThreadedMailboxProcessor:
                 if not allow_rechunk:
                     rechunk = False
 
-                from functools import partial
                 self.mailboxes[d].add_reader(
-                    partial(saver.save_from, rechunk=rechunk),
+                    partial(saver.save_from,
+                            rechunk=rechunk,
+                            # If paralellizing, use threads for saving
+                            # the compressor releases the gil,
+                            # and we have a lot of data transfer to do
+                            executor=self.thread_executor),
                     name=f'save_{s_i}:{d}')
+
+        # For multi-output plugins, an output may be neither saved nor
+        # required, and thus has to be discarded.
+        # This should happen rarely in production (when you actually
+        # care about the data, you will be saving it)
+        def discarder(source):
+            for _ in source:
+                pass
+
+        for p in multi_output_seen:
+            for d in p.provides:
+                if d in components.targets or self.mailboxes[d]._n_subscribers:
+                    continue
+                self.mailboxes[d].add_reader(
+                    discarder, name=f'discard_{d}')
+
+        # Set to preferred number of maximum messages
+        # TODO: may not work if plugins are inlined
+        for d, m in self.mailboxes.items():
+            if d in components.plugins:
+                max_m = components.plugins[d].max_messages
+                if max_m is not None:
+                    m.max_messages = max_m
 
     def iter(self):
         target = self.components.targets[0]
@@ -103,28 +189,80 @@ class ThreadedMailboxProcessor:
             m.start()
 
         self.log.debug(f"Yielding {target}")
+        traceback = None
+        exc = None
+
         try:
             yield from final_generator
-            traceback = None
-            exc = None
-        except strax.MailboxKilled as e:
-            self.log.debug(f"Target Mailbox ({target}) killed")
+
+        except Exception as e:
+            self.log.debug(f"Target Mailbox ({target}) killed, exception {e}")
             for m in self.mailboxes.values():
                 if m != target:
                     self.log.debug(f"Killing {m}")
-                    m.kill(upstream=True,
-                           reason=e.args[0])
-            _, exc, traceback = e.args[0]
+                    if isinstance(e, strax.MailboxKilled):
+                        _, exc, traceback = reason = e.args[0]
+                    else:
+                        exc = e
+                        reason = (e.__class__, e, sys.exc_info()[2])
+                        traceback = reason[2]
+
+                    m.kill(upstream=True, reason=reason)
+            # We will reraise it in just a moment...
+
         finally:
             self.log.debug("Closing threads")
             for m in self.mailboxes.values():
                 m.cleanup()
+            self.log.debug("Closing threads completed")
 
-        # Reraise exception. This is outside the except block
-        # to avoid the 'during handling of this exception, another
-        # exception occurred' stuff from confusing the traceback
-        # which is printed for the user
+            self.log.debug("Closing executors")
+            if self.thread_executor is not None:
+                self.thread_executor.shutdown(wait=False)
+
+            if self.process_executor not in [None, self.thread_executor]:
+                # Unfortunately there is no wait=timeout option, so we have to
+                # roll our own
+                pids = self.process_executor._processes.keys()
+                self.process_executor.shutdown(wait=False)
+
+                t0 = time.time()
+                while time.time() < t0 + 20:
+                    if all([not psutil.pid_exists(pid) for pid in pids]):
+                        break
+                    self.log.info("Waiting for subprocesses to end")
+                    time.sleep(2)
+                else:
+                    self.log.warning("Subprocesses failed to terminate, "
+                                     "resorting to brute force killing")
+                    for pid in pids:
+                        try:
+                            os.kill(pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            # Didn't exist
+                            pass
+                    self.log.info("Sent SIGTERM to all subprocesses")
+
+            self.log.debug("Closing executors completed")
+
         if traceback is not None:
+            # Reraise exception. This is outside the except block
+            # to avoid the 'during handling of this exception, another
+            # exception occurred' stuff from confusing the traceback
+            # which is printed for the user
+            self.log.debug("Reraising exception")
             raise exc.with_traceback(traceback)
+
+        # Check the savers for any exception that occurred during saving
+        # These are thrown back to the mailbox, but if that has already closed
+        # it doesn't trigger a crash...
+        # TODO: add savers inlined by parallelsourceplugin
+        # TODO: need to look at plugins too if we ever implement true
+        # multi-target mode
+        for k, saver_list in self.components.savers.items():
+            for s in saver_list:
+                if s.got_exception:
+                    self.log.fatal(f"Caught error while saving {k}!")
+                    raise s.got_exception
 
         self.log.debug("Processing finished")

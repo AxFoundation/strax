@@ -1,5 +1,5 @@
-from . import helpers   # noqa
 import numpy as np
+
 import strax
 
 

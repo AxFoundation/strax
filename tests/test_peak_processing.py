@@ -1,7 +1,7 @@
-from .helpers import fake_hits, several_fake_records
+from strax.testutils import fake_hits, several_fake_records
 
 import numpy as np
-from hypothesis import given
+from hypothesis import given, settings
 import hypothesis.strategies as st
 
 import strax
@@ -10,25 +10,29 @@ import strax
 @given(fake_hits,
        st.one_of(st.just(1), st.just(3)),
        st.one_of(st.just(0), st.just(3)))
-def test_find_peaks(hits, min_hits, min_area):
+@settings(deadline=None)
+def test_find_peaks(hits, min_channels, min_area):
+    hits['area'] = 1
     gap_threshold = 10
     peaks = strax.find_peaks(hits,
-                             to_pe=np.ones(1),
+                             adc_to_pe=np.ones(1),
                              right_extension=0, left_extension=0,
                              gap_threshold=gap_threshold,
-                             min_hits=min_hits,
+                             min_channels=min_channels,
                              min_area=min_area)
     # Check sanity
     assert np.all(peaks['length'] > 0)
+    assert np.all(peaks['n_hits'] > 0)
 
     # Check if requirements satisfied
     if min_area != 0:
         assert np.all(peaks['area'] >= min_area)
-    if min_hits != 1:
-        assert np.all(peaks['n_hits'] >= min_hits)
+    if min_channels != 1:
+        assert np.all(peaks['n_hits'] >= min_channels)
+    assert np.all(peaks['max_gap'] < gap_threshold)
 
     # Without requirements, all hits must occur in a peak
-    if min_area == 0 and min_hits == 1:
+    if min_area == 0 and min_channels == 1:
         assert np.sum(peaks['n_hits']) == len(hits)
         assert np.all(strax.fully_contained_in(hits, peaks) > -1)
 
@@ -39,9 +43,12 @@ def test_find_peaks(hits, min_hits, min_area):
 
     assert np.all(starts == np.sort(starts)), "Not sorted"
 
+    assert np.all(peaks['time'] < strax.endtime(peaks)), "Non+ peak length"
+
     # TODO: add more tests, preferably test against a second algorithm
 
 
+@settings(deadline=None)
 @given(several_fake_records,
        st.integers(min_value=0, max_value=100),
        st.integers(min_value=1, max_value=100)
@@ -53,7 +60,7 @@ def test_sum_waveform(records, peak_left, peak_length):
     p = peaks[0]
     p['time'] = peak_left
     p['length'] = peak_length
-    p['dt'] = 0
+    p['dt'] = 1
 
     strax.sum_waveform(peaks, records, np.ones(n_ch))
 

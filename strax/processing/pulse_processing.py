@@ -3,12 +3,14 @@
 """
 import numpy as np
 import numba
+from scipy.ndimage import convolve1d
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['NO_RECORD_LINK']
 
 # Constant for use in record_links, to indicate there is no prev/next record
-NOT_APPLICABLE = -1
+NO_RECORD_LINK = -1
 
 
 @export
@@ -22,7 +24,7 @@ def baseline(records, baseline_samples=40):
     baselining them!)
     """
     if not len(records):
-        return
+        return records
     samples_per_record = len(records[0]['data'])
 
     # Array for looking up last baseline seen in channel
@@ -49,9 +51,33 @@ def baseline(records, baseline_samples=40):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
+def zero_out_of_bounds(records):
+    """"Set waveforms to zero out of pulse bounds
+    """
+    if not len(records):
+        return records
+    samples_per_record = len(records[0]['data'])
+
+    for r in records:
+        end = r['pulse_length'] - r['record_i'] * samples_per_record
+        if end < samples_per_record:
+            r['data'][end:] = 0
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
+    if not len(records):
+        return
+    samples_per_record = len(records[0]['data'])
     for i, r in enumerate(records):
-        records[i]['area'] = r['data'].sum()
+        n_real_samples = min(
+            samples_per_record,
+            r['pulse_length'] - r['record_i'] * samples_per_record)
+        records[i]['area'] = (
+            r['data'].sum()
+            + int(round(r['baseline'] % 1)) * n_real_samples)
+
 
 
 @export
@@ -62,25 +88,36 @@ def record_links(records):
     """
     # TODO: needs tests
     if not len(records):
-        return
+        return (
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK,
+            np.ones(0, dtype=np.int32) * NO_RECORD_LINK)
     n_channels = records['channel'].max() + 1
     samples_per_record = len(records[0]['data'])
-    previous_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
-    next_record = np.ones(len(records), dtype=np.int32) * NOT_APPLICABLE
+    previous_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
+    next_record = np.ones(len(records), dtype=np.int32) * NO_RECORD_LINK
 
     # What was the index of the last record seen in each channel?
-    last_record_seen = np.ones(n_channels, dtype=np.int32) * NOT_APPLICABLE
+    last_record_seen = np.ones(n_channels, dtype=np.int32) * NO_RECORD_LINK
     # What would the start time be of a record that continues that record?
     expected_next_start = np.zeros(n_channels, dtype=np.int64)
 
     for i, r in enumerate(records):
         ch = r['channel']
         if ch < 0:
-            raise RuntimeError("Negative channel number?")
+            # We can't print the channel number in the exception message
+            # from numba, hence the extra print here.
+            print("Found negative channel number")
+            print(ch)
+            raise ValueError("Negative channel number?!")
         last_i = last_record_seen[ch]
+
+        # if r['time'] < expected_next_start[ch]:
+        #     print(r['time'], expected_next_start[ch], ch)
+        #     raise ValueError("Overlapping pulse found!")
+
         if r['record_i'] == 0:
             # Record starts a new pulse
-            previous_record[i] = NOT_APPLICABLE
+            previous_record[i] = NO_RECORD_LINK
 
         elif r['time'] == expected_next_start[ch]:
             # Continuing record.
@@ -89,9 +126,8 @@ def record_links(records):
 
         # (If neither matches, this is a continuing record, but the starting
         #  record has been cut away (e.g. for data reduction))
-
         last_record_seen[ch] = i
-        expected_next_start[ch] = samples_per_record * r['dt']
+        expected_next_start[ch] = r['time'] + samples_per_record * r['dt']
 
     return previous_record, next_record
 
@@ -119,11 +155,14 @@ def find_hits(records, threshold=15, _result_buffer=None):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+        area = height = 0
 
         for i in range(samples_per_record):
-            # We can't use enumerate over r['data'], numba gives error
+            # We can't use enumerate over r['data'],
+            # numba gives errors if we do.
             # TODO: file issue?
-            above_threshold = r['data'][i] > threshold
+            x = r['data'][i]
+            above_threshold = x > threshold
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
             if not in_interval and above_threshold:
@@ -137,15 +176,23 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     hit_end = i
                     in_interval = False
 
-                elif i == samples_per_record - 1:
-                    # Hit ends at the *end* of this sample
-                    # (because the record ends)
-                    hit_end = i + 1
-                    in_interval = False
+                else:
+                    area += x
+                    height = max(height, x)
+
+                    if i == samples_per_record - 1:
+                        # Hit ends at the *end* of this sample
+                        # (because the record ends)
+                        hit_end = i + 1
+                        in_interval = False
 
                 if not in_interval:
                     # print('saving hit')
                     # Hit is done, add it to the result
+                    if hit_end == hit_start:
+                        print(r['time'], r['channel'], hit_start)
+                        raise ValueError(
+                            "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
                     res['left'] = hit_start
                     res['right'] = hit_end
@@ -155,6 +202,13 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     res['dt'] = r['dt']
                     res['channel'] = r['channel']
                     res['record_i'] = record_i
+
+                    # Store areas and height.
+                    baseline_fpart = r['baseline'] % 1
+                    area += res['length'] * baseline_fpart
+                    res['area'] = area
+                    res['height'] = height + baseline_fpart
+                    area = height = 0
 
                     # Yield buffer to caller if needed
                     offset += 1
@@ -166,3 +220,91 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
+
+
+@numba.njit(cache=True, nogil=True)
+def _waveforms_to_float(wv, bl):
+    """Convert waveforms to float and restore baseline"""
+    return wv.astype(np.float32) + (bl % 1).reshape(-1, 1)
+
+
+@export
+def filter_records(r, ir):
+    """Apply filter with impulse response ir over the records r.
+    Assumes the filter origin is at the impulse response maximum.
+
+    :param ws: Waveform matrix, must be float
+    :param ir: Impulse response, must have odd length. Will normalize.
+    :param prev_r: Previous record map from strax.record_links
+    :param next_r: Next record map from strax.record_links
+    """
+    if not len(r):
+        return r
+    ws = _waveforms_to_float(r['data'], r['baseline'])
+
+    prev_r, next_r = strax.record_links(r)
+    ws_filtered = filter_waveforms(
+        ws,
+        (ir / ir.sum()).astype(np.float32),
+        prev_r, next_r)
+
+    # Restore waveforms as integers
+    r['data'] = ws_filtered.astype(np.int16)
+
+
+@export
+def filter_waveforms(ws, ir, prev_r, next_r):
+    """Convolve filter with impulse response ir over each row of ws.
+    Assumes the filter origin is at the impulse response maximum.
+
+    :param ws: Waveform matrix, must be float
+    :param ir: Impulse response, must have odd length.
+    :param prev_r: Previous record map from strax.record_links
+    :param next_r: Next record map from strax.record_links
+    """
+    n = len(ir)
+    a = n//2
+    if n % 2 == 0:
+        raise ValueError("Impulse response must have odd length")
+
+    # Do the convolutions outside numba;
+    # numba supports np.convolve, but this seems to be quite slow
+
+    # Main convolution
+    maxi = np.argmax(ir)
+    result = convolve1d(ws,
+                        ir,
+                        origin=maxi - a,
+                        mode='constant')
+
+    # Contribution to next record (if present)
+    have_next = ws[next_r != -1]
+    to_next = convolve1d(have_next[:, -(n - maxi - 1):],
+                         ir,
+                         origin=a,
+                         mode='constant')
+
+    # Contribution to previous record (if present)
+    have_prev = ws[prev_r != -1]
+    to_prev = convolve1d(have_prev[:, :maxi],
+                         ir,
+                         origin=-a,
+                         mode='constant')
+
+    # Combine the results in numba; here numba is much faster (~100x?)
+    # than a numpy assignment using boolean array instead of a for loop.
+    _combine_filter_results(result, to_next, to_prev, next_r, prev_r, maxi, n)
+    return result
+
+
+@numba.jit(nopython=True, cache=True, nogil=True)
+def _combine_filter_results(result, to_next, to_prev, next_r, prev_r, maxi, n):
+    seen_that_have_next = 0
+    seen_that_have_prev = 0
+    for i in range(len(result)):
+        if next_r[i] != NO_RECORD_LINK:
+            result[next_r[i], :n - maxi - 1] += to_next[seen_that_have_next]
+            seen_that_have_next += 1
+        if prev_r[i] != NO_RECORD_LINK:
+            result[prev_r[i], -maxi:] += to_prev[seen_that_have_prev]
+            seen_that_have_prev += 1
