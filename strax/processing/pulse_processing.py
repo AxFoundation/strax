@@ -139,11 +139,15 @@ def record_links(records):
 @export
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_hits(records, threshold=15, _result_buffer=None):
+def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, _result_buffer=None):
     """Return hits (intervals above threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
     NB: returned hits are NOT sorted yet!
+
+    TODO:
+        I cannot see how one could possible keep threshold as an keyword argument. The number of thresholds depends on
+        the detector.
     """
     buffer = _result_buffer
     if not len(records):
@@ -151,24 +155,48 @@ def find_hits(records, threshold=15, _result_buffer=None):
     samples_per_record = len(records[0]['data'])
     offset = 0
 
+    # Bookkeeping of rms values:
+    channels = np.array(list(set(records['channel'])))  # Channels do not need to start with 0
+    nchannels = len(channels)
+    rms_values = np.ones(nchannels) * 5
+
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
         area = 0
+        height = 0
+
+        # Computing rms:
+        if r['record_i'] == 0:
+            rms = _baseline_rms(r, nbaseline)
+            rms_values[channels == r['channel']] = rms
+        else:
+            # Numba cannot unify rms float and rms array float but array[mask] should yield a float?
+            # if np.sum(channels == r['channel']) > 1:
+            #     print(channels, r['channel'])
+            rms = rms_values[channels == r['channel']][0]
 
         for i in range(samples_per_record):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
             # TODO: file issue?
             x = r['data'][i]
-            above_threshold = x > threshold
+
+            # TODO: Find some criterion to decide threshold: Most likely simple max
+            if static:
+                above_threshold = x > threshold
+            else:
+                threshold = int(rms * scaling_factor)
+                above_threshold = x > threshold
+
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
             if not in_interval and above_threshold:
                 # Start of a hit
                 in_interval = True
                 hit_start = i
+                height = max(x, height)
 
             if in_interval:
                 if not above_threshold:
@@ -182,9 +210,11 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     hit_end = i + 1
                     area += x
                     in_interval = False
+                    height = max(height, x)
 
                 else:
                     area += x
+                    height = max(height, x)
 
                 if not in_interval:
                     # print('saving hit')
@@ -194,6 +224,10 @@ def find_hits(records, threshold=15, _result_buffer=None):
                         raise ValueError(
                             "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
+
+                    res['rms'] = rms
+                    res['threshold'] = threshold  # No idea if we want to keep this after tuning...
+                    res['height'] = height  # No idea if we want to keep this after tuning...
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
@@ -206,6 +240,7 @@ def find_hits(records, threshold=15, _result_buffer=None):
                         res['length'] * (r['baseline'] % 1)))
                     res['area'] = area
                     area = 0
+                    height = 0
 
                     # Yield buffer to caller if needed
                     offset += 1
@@ -217,6 +252,37 @@ def find_hits(records, threshold=15, _result_buffer=None):
                     # hit_start = 0
                     # hit_end = 0
     yield offset
+
+
+@numba.njit(cache=True, nogil=True)
+def _baseline_rms(rr, n_samples=40):
+    """
+    Function which estimates the baseline rms within a certain number of samples.
+
+    The rms value is estimated based adc counts >= 0.
+
+    Args:
+        rr (raw_records): single raw_record
+
+    Keyword Args:
+        n_samples (int): First n samples on which the rms is estimated.
+    """
+    d = rr['data']
+    n = 0
+    rms = 0
+    for s in d[:n_samples]:
+        if s < 0:
+            rms += s**2
+            n += 1
+    # TODO: Ask maybe other fall back solution?
+    if n == 0:
+        # raise ValueError(
+        #     "Did not find any sample which is <= 0!"
+        # )
+        # Returning mean RMS since some of the calibration data throws an error....
+        return 3
+
+    return np.sqrt(rms / n)
 
 
 @numba.njit(cache=True, nogil=True)
