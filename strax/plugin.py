@@ -11,6 +11,7 @@ import typing
 import time
 import inspect
 
+from frozendict import frozendict
 import numpy as np
 
 import strax
@@ -60,7 +61,11 @@ class Plugin:
     Do NOT add unpickleable things (e.g. loggers) as attributes.
     """
     __version__ = '0.0.0'
-    data_kind: str
+
+    # For multi-output plugins these should be (frozen)dicts
+    data_kind: typing.Union[str, frozendict, dict]
+    dtype: typing.Union[tuple, np.dtype, frozendict, dict]
+
     depends_on: tuple
     provides: tuple
 
@@ -85,13 +90,18 @@ class Plugin:
     # Maximum number of output messages
     max_messages = None   # use default
 
+    # Do not specify attributes below
+
+    # Set using the takes_config decorator
+    takes_config = frozendict()
+
     # These are set on plugin initialization, which is done in the core
     run_id: str
     run_i: int
     config: typing.Dict
     deps: typing.Dict       # Dictionary of dependency plugin instances
+    
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    takes_config = dict()           # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -303,7 +313,7 @@ class Plugin:
             for d in self.provides:
                 if d not in result:
                     raise ValueError(f"Data type {d} missing from output of "
-                                     f"{p.__class__.__name__}!")
+                                     f"{self.__class__.__name__}!")
                 r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
                 self._check_dtype(r2[d], d)
             return r2
@@ -365,24 +375,30 @@ class OverlapWindowPlugin(Plugin):
                 for x in kwargs.values()
                 if len(x)]
         if not len(ends):
-            # Chunk is completely empty, we cannot estimate the data's end.
+            # Input is completely empty, we cannot estimate the data's end.
             # Do not discard or send anything until a chunk with data arrives.
             # (or the last chunk, see iter)
-            return self.empty_result()
-        end = max(ends)
+            invalid_beyond = cache_inputs_beyond = self.last_threshold
+        else:
+            # Take slightly larger windows for safety: it is very easy for me
+            # (or the user) to have made an off-by-one error
+            # TODO: why do tests not fail is I set cache_inputs_beyond to
+            # end - window size - 2 ?
+            # (they do fail if I set to end - 0.5 * window size - 2)
+            end = max(ends)
+            invalid_beyond = end - self.get_window_size() - 1
+            cache_inputs_beyond = end - 2 * self.get_window_size() - 1
 
-        # Take slightly larger windows for safety: it is very easy for me
-        # (or the user) to have made an off-by-one error
-        # TODO: why do tests not fail is I set cache_inputs_beyond to
-        # end - window size - 2 ?
-        # (they do fail if I set to end - 0.5 * window size - 2)
-        invalid_beyond = end - self.get_window_size() - 1
-        cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-
+        # Update input cache
         for k, v in kwargs.items():
             if len(self.cached_input):
                 kwargs[k] = v = np.concatenate([self.cached_input[k], v])
             self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
+
+        if not len(ends):
+            # Output cache and last_threshold both don't change
+            # so might as well return.
+            return self.empty_result()
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
@@ -425,8 +441,17 @@ class LoopPlugin(Plugin):
                 f'{base}s overlap'
 
         for k, things in kwargs.items():
-            if len(things) > 1:
-                assert np.diff(things['time']).min() >= 0, f'{k} not sorted'
+            # Check for sorting
+            difs = np.diff(things['time'])
+            if difs.min(initial=0) < 0:
+                i_bad = np.argmin(difs)
+                examples = things[i_bad-1:i_bad+3]
+                t0 = examples['time'].min()
+                raise ValueError(
+                    f'Expected {k} to be sorted, but found ' +
+                    str([(x['time'] - t0, strax.endtime(x) - t0)
+                         for x in examples]))
+
             if k != loop_over:
                 r = strax.split_by_containment(things, base)
                 if len(r) != len(base):
@@ -462,7 +487,7 @@ class LoopPlugin(Plugin):
 class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_when = SaveWhen.EXPLICIT
+    save_when = SaveWhen.NEVER
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
@@ -471,7 +496,7 @@ class MergeOnlyPlugin(Plugin):
                              "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return strax.merged_dtype([self.deps[d].dtype
+        return strax.merged_dtype([self.deps[d].dtype_for(d)
                                    for d in self.depends_on])
 
     def compute(self, **kwargs):
@@ -566,7 +591,8 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = {d: p.sub_plugins[d].dtype_for(d)
                        for d in outputs_to_send}
         else:
-            p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
+            to_send = list(outputs_to_send)[0]
+            p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
         for d in p.provides:
             plugins[d] = p
         p.deps = {d: plugins[d] for d in p.depends_on}

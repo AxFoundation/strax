@@ -29,6 +29,7 @@ def test_find_peaks(hits, min_channels, min_area):
         assert np.all(peaks['area'] >= min_area)
     if min_channels != 1:
         assert np.all(peaks['n_hits'] >= min_channels)
+    assert np.all(peaks['max_gap'] < gap_threshold)
 
     # Without requirements, all hits must occur in a peak
     if min_area == 0 and min_channels == 1:
