@@ -31,7 +31,7 @@ def test_multirun():
         assert len(bla) == n * 2
         np.testing.assert_equal(
             bla['run_id'],
-            np.array([0] * n + [1] * n, dtype=np.int32))
+            np.array(['0'] * n + ['1'] * n))
 
 
 def test_filestore():
