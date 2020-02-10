@@ -164,6 +164,7 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+<<<<<<< HEAD
         area = 0
         height = 0
 
@@ -176,6 +177,9 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
             # if np.sum(channels == r['channel']) > 1:
             #     print(channels, r['channel'])
             rms = rms_values[channels == r['channel']][0]
+=======
+        area = height = 0
+>>>>>>> upstream/master
 
         for i in range(samples_per_record):
             # We can't use enumerate over r['data'],
@@ -204,6 +208,7 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                     hit_end = i
                     in_interval = False
 
+<<<<<<< HEAD
                 elif i == samples_per_record - 1:
                     # Hit ends at the *end* of this sample
                     # (because the record ends)
@@ -215,6 +220,17 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                 else:
                     area += x
                     height = max(height, x)
+=======
+                else:
+                    area += x
+                    height = max(height, x)
+
+                    if i == samples_per_record - 1:
+                        # Hit ends at the *end* of this sample
+                        # (because the record ends)
+                        hit_end = i + 1
+                        in_interval = False
+>>>>>>> upstream/master
 
                 if not in_interval:
                     # print('saving hit')
@@ -236,11 +252,18 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                     res['dt'] = r['dt']
                     res['channel'] = r['channel']
                     res['record_i'] = record_i
-                    area += int(round(
-                        res['length'] * (r['baseline'] % 1)))
+
+                    # Store areas and height.
+                    baseline_fpart = r['baseline'] % 1
+                    area += res['length'] * baseline_fpart
                     res['area'] = area
+<<<<<<< HEAD
                     area = 0
                     height = 0
+=======
+                    res['height'] = height + baseline_fpart
+                    area = height = 0
+>>>>>>> upstream/master
 
                     # Yield buffer to caller if needed
                     offset += 1

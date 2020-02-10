@@ -2,7 +2,7 @@ import setuptools
 
 # Get requirements from requirements.txt, stripping the version tags
 with open('requirements.txt') as f:
-    requires = [x.strip().split('=')[0]
+    requires = [x.strip()
                 for x in f.readlines()]
 
 with open('README.md') as file:
@@ -12,7 +12,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='0.8.4',
+                 version='0.8.7',
                  description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
                  url='https://github.com/AxFoundation/strax',
