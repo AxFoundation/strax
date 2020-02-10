@@ -164,10 +164,7 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
-<<<<<<< HEAD
-        area = 0
-        height = 0
-
+        
         # Computing rms:
         if r['record_i'] == 0:
             rms = _baseline_rms(r, nbaseline)
@@ -177,10 +174,9 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
             # if np.sum(channels == r['channel']) > 1:
             #     print(channels, r['channel'])
             rms = rms_values[channels == r['channel']][0]
-=======
+            
         area = height = 0
->>>>>>> upstream/master
-
+        
         for i in range(samples_per_record):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
@@ -207,20 +203,6 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                     # Hit ends at the start of this sample
                     hit_end = i
                     in_interval = False
-
-<<<<<<< HEAD
-                elif i == samples_per_record - 1:
-                    # Hit ends at the *end* of this sample
-                    # (because the record ends)
-                    hit_end = i + 1
-                    area += x
-                    in_interval = False
-                    height = max(height, x)
-
-                else:
-                    area += x
-                    height = max(height, x)
-=======
                 else:
                     area += x
                     height = max(height, x)
@@ -230,7 +212,6 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                         # (because the record ends)
                         hit_end = i + 1
                         in_interval = False
->>>>>>> upstream/master
 
                 if not in_interval:
                     # print('saving hit')
@@ -243,7 +224,6 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
 
                     res['rms'] = rms
                     res['threshold'] = threshold  # No idea if we want to keep this after tuning...
-                    res['height'] = height  # No idea if we want to keep this after tuning...
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
@@ -257,13 +237,8 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                     baseline_fpart = r['baseline'] % 1
                     area += res['length'] * baseline_fpart
                     res['area'] = area
-<<<<<<< HEAD
-                    area = 0
-                    height = 0
-=======
                     res['height'] = height + baseline_fpart
                     area = height = 0
->>>>>>> upstream/master
 
                     # Yield buffer to caller if needed
                     offset += 1
