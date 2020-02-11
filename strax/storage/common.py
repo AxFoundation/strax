@@ -374,7 +374,7 @@ class StorageBackend:
         for i, ci in enumerate(strax.iter_chunk_meta(metadata)):
 
             # Chunk number constraint
-            if chunk_number:
+            if chunk_number is not None:
                 if i != chunk_number:
                     continue
 
