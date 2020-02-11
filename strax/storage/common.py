@@ -121,14 +121,15 @@ class StorageFrontend:
         self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, key: DataKey,
-               n_range=None,
+               row_range=None,
                allow_incomplete=False,
                fuzzy_for=tuple(),
                fuzzy_for_options=tuple(),
+               chunk_number=None,
                executor=None):
         """Return loader for data described by DataKey.
         :param key: DataKey describing data
-        :param n_range: 2-length arraylike of (start, exclusive end)
+        :param row_range: 2-length arraylike of (start, exclusive end)
         of row numbers to get. Default is None, which means get the entire
         run.
         :param allow_incomplete: Allow loading of data which has not been
@@ -137,6 +138,7 @@ class StorageFrontend:
         plugin name, version, or option check is performed.
         :param fuzzy_for_options: list/tuple of configuration options for which
         no check is performed.
+        :param chunk_number: Chunk number to load exclusively.
         :param executor: Executor for pushing load computation to
         """
         backend, backend_key = self.find(key,
@@ -145,7 +147,10 @@ class StorageFrontend:
                                          fuzzy_for=fuzzy_for,
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).loader(
-            backend_key, n_range, executor)
+            backend_key,
+            row_range=row_range,
+            executor=executor,
+            chunk_number=chunk_number)
 
     def saver(self, key, metadata):
         """Return saver for data described by DataKey."""
@@ -345,11 +350,16 @@ class StorageBackend:
     these have to be hardcoded (or made part of the key).
     """
 
-    def loader(self, backend_key, n_range=None, executor=None):
+    def loader(self,
+               backend_key,
+               row_range=None,
+               chunk_number=None,
+               executor=None):
         """Iterates over strax data in backend_key
-        :param n_range: 2-length arraylike of (start, exclusive end)
+        :param row_range: 2-length arraylike of (start, exclusive end)
         of row numbers to get. Default is None, which means get the entire
         run.
+        :param chunk_number: Chunk number to get exclusively
         :param executor: Executor to push load/decompress operations to
         """
         metadata = self.get_metadata(backend_key)
@@ -363,21 +373,27 @@ class StorageBackend:
 
         for i, ci in enumerate(strax.iter_chunk_meta(metadata)):
 
-            # If we have a row number constraint, obey it.
+            # Chunk number constraint
+            if chunk_number:
+                if i != chunk_number:
+                    continue
+
+            # Row number constraint
             in_range_mask = None
-            if n_range:
-                if ci['n_to'] <= n_range[0] or n_range[1] <= ci['n_from']:
+            if row_range:
+                if ci['n_to'] < row_range[0] or row_range[1] <= ci['n_from']:
                     # Chunk does not cover any part of range
                     continue
                 n_index = np.arange(ci['n_from'], ci['n_to'])
-                in_range_mask = (n_range[0] <= n_index) & (n_index < n_range[1])
+                in_range_mask = (
+                        (row_range[0] <= n_index) & (n_index < row_range[1]))
 
             kwargs = dict(chunk_info=ci,
                           dtype=dtype,
                           compressor=compressor)
-            if executor is None or n_range:
+            if executor is None or row_range:
                 result = self._read_chunk(backend_key, **kwargs)
-                if n_range:
+                if row_range:
                     yield result[in_range_mask]
                 else:
                     yield result
