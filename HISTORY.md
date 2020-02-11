@@ -1,11 +1,17 @@
-0.8.6 / 2019-01-17
+0.8.7 / 2020-02-07
+------------------
+- Small bugfixes:
+  - Fixes for multi-output plugins
+  - Use frozendict for Plugin.takes_config 
+
+0.8.6 / 2020-01-17
 -------------------
 - Peak merging code (from straxen)
 - time_range selection for user-defined plugins that never save
 - Add hit height, store fpart-baseline corrected hit area
 - Preserve cached input on empty chunks in OverlapWindowPlugin
 
-0.8.5 / 2019-01-16
+0.8.5 / 2020-01-16
 ------------------
 - Natural breaks splitting (#225)
 - Add ptype, max_gap and max_goodness_of_split to peaks dtype

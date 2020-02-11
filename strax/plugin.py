@@ -11,6 +11,7 @@ import typing
 import time
 import inspect
 
+from frozendict import frozendict
 import numpy as np
 
 import strax
@@ -60,7 +61,11 @@ class Plugin:
     Do NOT add unpickleable things (e.g. loggers) as attributes.
     """
     __version__ = '0.0.0'
-    data_kind: str
+
+    # For multi-output plugins these should be (frozen)dicts
+    data_kind: typing.Union[str, frozendict, dict]
+    dtype: typing.Union[tuple, np.dtype, frozendict, dict]
+
     depends_on: tuple
     provides: tuple
 
@@ -85,13 +90,18 @@ class Plugin:
     # Maximum number of output messages
     max_messages = None   # use default
 
+    # Do not specify attributes below
+
+    # Set using the takes_config decorator
+    takes_config = frozendict()
+
     # These are set on plugin initialization, which is done in the core
     run_id: str
     run_i: int
     config: typing.Dict
     deps: typing.Dict       # Dictionary of dependency plugin instances
+    
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
-    takes_config = dict()           # Config options
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -303,7 +313,7 @@ class Plugin:
             for d in self.provides:
                 if d not in result:
                     raise ValueError(f"Data type {d} missing from output of "
-                                     f"{p.__class__.__name__}!")
+                                     f"{self.__class__.__name__}!")
                 r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
                 self._check_dtype(r2[d], d)
             return r2
@@ -486,7 +496,7 @@ class MergeOnlyPlugin(Plugin):
                              "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return strax.merged_dtype([self.deps[d].dtype
+        return strax.merged_dtype([self.deps[d].dtype_for(d)
                                    for d in self.depends_on])
 
     def compute(self, **kwargs):
@@ -581,7 +591,8 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = {d: p.sub_plugins[d].dtype_for(d)
                        for d in outputs_to_send}
         else:
-            p.dtype = p.sub_plugins[list(outputs_to_send)[0]].dtype
+            to_send = list(outputs_to_send)[0]
+            p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
         for d in p.provides:
             plugins[d] = p
         p.deps = {d: plugins[d] for d in p.depends_on}
