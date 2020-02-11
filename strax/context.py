@@ -569,10 +569,23 @@ class Context:
             # Can we load this data?
             loading_this_data = False
             key = strax.DataKey(run_id, d, p.lineage)
+
+            if time_range:
+                kind = p.data_kind_for(d)
+                if kind in row_range_for:
+                    row_range = row_range_for[kind]
+                else:
+                    # Fallback, can happen if target and one of its dependencies
+                    # is not stored (e.g. merging peaks with something else)
+                    row_range = self._time_range_to_row_range(
+                        run_id, time_range, d)
+            else:
+                row_range = None
+
             ldr = self._get_partial_loader_for(
                 key,
                 chunk_number=chunk_number,
-                row_range=row_range_for.get(p.data_kind_for(d)))
+                row_range=row_range)
 
             if not ldr and run_id.startswith('_'):
                 if time_range is not None:
@@ -618,7 +631,7 @@ class Context:
             else:
                 # Data not found anywhere. We will be computing it.
                 if (time_range is not None
-                        and not plugins[d].save_when == strax.SaveWhen.NEVER):
+                        and plugins[d].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
