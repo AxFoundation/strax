@@ -465,6 +465,10 @@ class Context:
         n_start, n_stop = None, None
         chunk_info = dict()  # Otherwise pycharm complains later
         for chunk_i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
+            if 'last_endtime' not in chunk_info:
+                raise ValueError(
+                    f"{d_with_time} does not have time information, "
+                    "cannot use it to convert time range to row numbers")
 
             has_start = (
                 n_start is None
@@ -577,8 +581,8 @@ class Context:
                 else:
                     # Fallback, can happen if target and one of its dependencies
                     # is not stored (e.g. merging peaks with something else)
-                    row_range = self._time_range_to_row_range(
-                        run_id, time_range, d)
+                    row_range = row_range_for[kind] = \
+                        self._time_range_to_row_range(run_id, time_range, d)
             else:
                 row_range = None
 
