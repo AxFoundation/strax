@@ -48,7 +48,14 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       "during scan_run."),
     strax.Option(name='check_available', default=tuple(),
                  help="Tuple of data types to scan availability for "
-                      "during scan_run."))
+                      "during scan_run."),
+    strax.Option(name='max_messages', default=4,
+                 help="Maximum number of mailbox messages, i.e. size of buffer "
+                      "between plugins. Too high = RAM blows up. "
+                      "Too low = likely deadlocks."),
+    strax.Option(name='timeout', default=300,
+                 help="Terminate processing if any one mailbox receives "
+                      "no result for more than this many seconds"))
 @export
 class Context:
     """Context for strax analysis.
@@ -860,7 +867,9 @@ class Context:
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
-                allow_rechunk=self.context_config['allow_rechunk']).iter():
+                allow_rechunk=self.context_config['allow_rechunk'],
+                max_messages=self.context_config['max_messages'],
+                timeout=self.context_config['timeout']).iter():
             if not isinstance(x, np.ndarray):
                 raise ValueError(f"Got type {type(x)} rather than numpy array "
                                  "from the processor!")
