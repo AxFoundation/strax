@@ -443,22 +443,23 @@ class Context:
                 continue
         return False
 
-    def _time_range_to_row_range(self,
-                                 run_id: str,
-                                 time_range: ty.Tuple[int],
-                                 d_with_time: str):
+    def time_range_to_row_range(self,
+                                run_id: str,
+                                dtypename: str,
+                                time_range: ty.Tuple[int]):
         """Return range of row numbers (with exclusive stop) of data
         that intersect with time_range.
         :param run_id: Run name
+        :param dtypename: Data type to derive mapping from.
+        Must have time information
         :param time_range: (start, stop) ns since unix epoch
-        :param d_with_time: Data type to derive mapping from
         """
-        if not self.is_stored(run_id, d_with_time):
+        if not self.is_stored(run_id, dtypename):
             raise strax.DataNotAvailable(
-                f"{d_with_time} from {run_id} is not available, so you cannot " 
+                f"{dtypename} from {run_id} is not available, so you cannot " 
                 "select a time slice from it.")
 
-        meta = self.get_meta(run_id, d_with_time)
+        meta = self.get_meta(run_id, dtypename)
         if not len(meta['chunks']):
             raise ValueError("Data has no chunks??")
 
@@ -467,7 +468,7 @@ class Context:
         for chunk_i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
             if 'last_endtime' not in chunk_info:
                 raise ValueError(
-                    f"{d_with_time} does not have time information, "
+                    f"{dtypename} does not have time information, "
                     "cannot use it to convert time range to row numbers")
 
             has_start = (
@@ -480,7 +481,7 @@ class Context:
             df = None
             if has_start or has_end:
                 # Load data to get exact row number mapping
-                df = self.get_array(run_id, d_with_time, _chunk_number=chunk_i)
+                df = self.get_array(run_id, dtypename, _chunk_number=chunk_i)
 
             # np.argmax on a boolean array gives the first index where it is
             # True (or 0 if the entire array is False)
@@ -497,7 +498,7 @@ class Context:
 
         if not (0 <= n_start <= n_stop <= chunk_info['n_to'] + 1):
             raise RuntimeError(
-                f"Time range {time_range} for {d_with_time} "
+                f"Time range {time_range} for {dtypename} "
                 f"mapped to invalid row range {n_start}-{n_stop}.")
         return n_start, n_stop
 
@@ -552,7 +553,7 @@ class Context:
                 time_mappers[targetp.data_kind_for(target)] = target
 
             row_range_for = {
-                kind: self._time_range_to_row_range(run_id, time_range, d)
+                kind: self.time_range_to_row_range(run_id, d, time_range)
                 for kind, d in time_mappers.items()}
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
@@ -582,7 +583,7 @@ class Context:
                     # Fallback, can happen if target and one of its dependencies
                     # is not stored (e.g. merging peaks with something else)
                     row_range = row_range_for[kind] = \
-                        self._time_range_to_row_range(run_id, time_range, d)
+                        self.time_range_to_row_range(run_id, d, time_range)
             else:
                 row_range = None
 
@@ -610,8 +611,8 @@ class Context:
                         sub_n_range = None
                     else:
                         # TODO: this currently fails for data without time
-                        sub_n_range = self._time_range_to_row_range(
-                            subrun, sub_run_spec[subrun], d)
+                        sub_n_range = self.time_range_to_row_range(
+                            subrun, d, sub_run_spec[subrun])
                     ldr = self._get_partial_loader_for(
                         sub_key,
                         row_range=sub_n_range,
