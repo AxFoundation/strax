@@ -132,6 +132,18 @@ def record_links(records):
     return previous_record, next_record
 
 
+# -----------
+# Default thresholds for find_hits:
+# -----------
+default_thresholds = np.zeros(248,
+                              dtype=[(('Hitfinder threshold in absolute adc counts above baseline',
+                                       'absolute_adc_counts_threshold'), np.int16),
+                                     (('Multiplicator for a RMS based threshold (h_o_n * RMS).', 'height_over_noise'),
+                                      np.float32),
+                                     (('Channel/PMT number', 'channel'), np.int16)
+                                     ])
+default_thresholds['absolute_adc_counts_threshold'] = 15
+default_thresholds['channel'] = np.arange(0, 248, 1, dtype=np.int16)
 # Chunk size should be at least a thousand,
 # else copying buffers / switching context dominates over actual computation
 # No max_duration argument: hits terminate at record boundaries, and
@@ -139,15 +151,11 @@ def record_links(records):
 @export
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, _result_buffer=None):
+def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffer=None):
     """Return hits (intervals above threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
     NB: returned hits are NOT sorted yet!
-
-    TODO:
-        I cannot see how one could possible keep threshold as an keyword argument. The number of thresholds depends on
-        the detector.
     """
     buffer = _result_buffer
     if not len(records):
@@ -156,9 +164,8 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
     offset = 0
 
     # Bookkeeping of rms values:
-    channels = np.array(list(set(records['channel'])))  # Channels do not need to start with 0
-    nchannels = len(channels)
-    rms_values = np.ones(nchannels) * 5
+    nchannels = len(threshold['channel'])
+    rms_values = np.zeros(nchannels)
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
@@ -168,12 +175,10 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
         # Computing rms:
         if r['record_i'] == 0:
             rms = _baseline_rms(r, nbaseline)
-            rms_values[channels == r['channel']] = rms
+            rms_values[threshold['channel'] == r['channel']] = rms   # channel could not start with 0 e.g. nVETO and
+                                                                     # might not be successive/equidistant
         else:
-            # Numba cannot unify rms float and rms array float but array[mask] should yield a float?
-            # if np.sum(channels == r['channel']) > 1:
-            #     print(channels, r['channel'])
-            rms = rms_values[channels == r['channel']][0]
+            rms = rms_values[threshold['channel'] == r['channel']][0]
             
         area = height = 0
         
@@ -183,12 +188,9 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
             # TODO: file issue?
             x = r['data'][i]
 
-            # TODO: Find some criterion to decide threshold: Most likely simple max
-            if static:
-                above_threshold = x > threshold
-            else:
-                threshold = int(rms * scaling_factor)
-                above_threshold = x > threshold
+            th = max(threshold['absolute_adc_counts_threshold'][threshold['channel'] == r['channel']][0],
+                     rms * threshold['height_over_noise'][threshold['channel'] == r['channel']][0])
+            above_threshold = x > th  # can ignore the flat part since > and [0,1)?
 
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
@@ -223,7 +225,7 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
                     res = buffer[offset]
 
                     res['rms'] = rms
-                    res['threshold'] = threshold  # No idea if we want to keep this after tuning...
+                    res['threshold'] = th  # No idea if we want to keep this after tuning...
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
@@ -252,12 +254,13 @@ def find_hits(records, threshold,  scaling_factor=1, nbaseline=40, static=True, 
     yield offset
 
 
+
 @numba.njit(cache=True, nogil=True)
 def _baseline_rms(rr, n_samples=40):
     """
     Function which estimates the baseline rms within a certain number of samples.
 
-    The rms value is estimated based adc counts >= 0.
+    The rms value is estimated for all samples with adc counts <= 0.
 
     Args:
         rr (raw_records): single raw_record
@@ -266,19 +269,17 @@ def _baseline_rms(rr, n_samples=40):
         n_samples (int): First n samples on which the rms is estimated.
     """
     d = rr['data']
+    b = rr['baseline']%1
+    d_b = d + b
     n = 0
     rms = 0
-    for s in d[:n_samples]:
+    for s in d_b[:n_samples]:
         if s < 0:
             rms += s**2
             n += 1
     # TODO: Ask maybe other fall back solution?
     if n == 0:
-        # raise ValueError(
-        #     "Did not find any sample which is <= 0!"
-        # )
-        # Returning mean RMS since some of the calibration data throws an error....
-        return 3
+        return 42000
 
     return np.sqrt(rms / n)
 
