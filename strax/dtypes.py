@@ -66,7 +66,7 @@ hit_dtype = interval_dtype + [
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
     (('Baseline RMS computed on the first samples specified by nbaseline',
-        'rms'), np.int32),
+        'rms'), np.float32),
     (('ADC threshold applied in order to find hits',
         'threshold'), np.int32),
     (('Maximum amplitude above baseline [ADC counts]',
