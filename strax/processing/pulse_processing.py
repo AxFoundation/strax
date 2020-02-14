@@ -190,7 +190,8 @@ def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffe
 
             th = max(threshold['absolute_adc_counts_threshold'][threshold['channel'] == r['channel']][0],
                      rms * threshold['height_over_noise'][threshold['channel'] == r['channel']][0])
-            above_threshold = x > th  # can ignore the flat part since > and [0,1)?
+
+            above_threshold = x > th  # can ignore the flat part since > and [0,1)
 
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
@@ -279,7 +280,7 @@ def _baseline_rms(rr, n_samples=40):
             n += 1
     # TODO: Ask maybe other fall back solution?
     if n == 0:
-        return 42000
+        return -42
 
     return np.sqrt(rms / n)
 
