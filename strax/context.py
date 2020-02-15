@@ -48,7 +48,14 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       "during scan_run."),
     strax.Option(name='check_available', default=tuple(),
                  help="Tuple of data types to scan availability for "
-                      "during scan_run."))
+                      "during scan_run."),
+    strax.Option(name='max_messages', default=4,
+                 help="Maximum number of mailbox messages, i.e. size of buffer "
+                      "between plugins. Too high = RAM blows up. "
+                      "Too low = likely deadlocks."),
+    strax.Option(name='timeout', default=300,
+                 help="Terminate processing if any one mailbox receives "
+                      "no result for more than this many seconds"))
 @export
 class Context:
     """Context for strax analysis.
@@ -64,6 +71,8 @@ class Context:
 
     runs: ty.Union[pd.DataFrame, type(None)] = None
     _run_defaults_cache: dict = None
+
+    storage: ty.List[strax.StorageFrontend]
 
     def __init__(self,
                  storage=None,
@@ -425,7 +434,7 @@ class Context:
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
-    def _get_partial_loader_for(self, key, n_range=None):
+    def _get_partial_loader_for(self, key, row_range=None, chunk_number=None):
         for sb_i, sf in enumerate(self.storage):
             try:
                 # Partial is clunky... but allows specifying executor later
@@ -434,53 +443,76 @@ class Context:
                 sf.find(key, **self._find_options)
                 return partial(sf.loader,
                                key,
-                               n_range=n_range,
+                               row_range=row_range,
+                               chunk_number=chunk_number,
                                **self._find_options)
             except strax.DataNotAvailable:
                 continue
         return False
 
-    def _time_range_to_n_range(self, run_id: str,
-                               time_range: ty.Tuple[int],
-                               d_with_time: str):
-        """Return range of chunk numbers that include time_range
+    def time_range_to_row_range(self,
+                                run_id: str,
+                                dtypename: str,
+                                time_range: ty.Tuple[int]):
+        """Return range of row numbers (with exclusive stop) of data
+        that intersect with time_range.
         :param run_id: Run name
+        :param dtypename: Data type to derive mapping from.
+        Must have time information
         :param time_range: (start, stop) ns since unix epoch
-        :param d_with_time: Name of data type
-
-        With 'includes', we here mean that includes at least one piece of data
-        that intersects the time range.
         """
-        # Find a range of row numbers that contains the time range
-        # It's a bit too large: to
-        # Get the n <-> time mapping in needed chunks
-        if not self.is_stored(run_id, d_with_time):
+        if not self.is_stored(run_id, dtypename):
             raise strax.DataNotAvailable(
-                "Time range selection needs time info from "
-                f"{d_with_time}, but this data is not yet available")
+                f"{dtypename} from {run_id} is not available, so you cannot " 
+                "select a time slice from it.")
 
-        meta = self.get_meta(run_id, d_with_time)
+        meta = self.get_meta(run_id, dtypename)
         if not len(meta['chunks']):
             raise ValueError("Data has no chunks??")
 
-        result = [0, -1]
+        n_start, n_stop = None, None
         chunk_info = dict()  # Otherwise pycharm complains later
-        prev_endtime = 0
-        for i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
-            n_range = [chunk_info['n_from'], chunk_info['n_to']]
-            for j, t in enumerate(time_range):
-                if prev_endtime < t <= chunk_info['last_endtime']:
-                    result[j] = n_range[j]
-            prev_endtime = chunk_info['last_endtime']
+        for chunk_i, chunk_info in enumerate(strax.iter_chunk_meta(meta)):
+            if 'last_endtime' not in chunk_info:
+                raise ValueError(
+                    f"{dtypename} does not have time information, "
+                    "cannot use it to convert time range to row numbers")
 
-        if result[1] == -1:
-            result[1] = chunk_info['n_to']
-        return result
+            has_start = (
+                n_start is None
+                and time_range[0] < chunk_info['last_endtime'])
+            has_end = (
+                n_stop is None
+                and time_range[1] < chunk_info['last_endtime'])
+
+            df = None
+            if has_start or has_end:
+                # Load data to get exact row number mapping
+                df = self.get_array(run_id, dtypename, _chunk_number=chunk_i)
+
+            # np.argmax on a boolean array gives the first index where it is
+            # True (or 0 if the entire array is False)
+            if has_start:
+                n_start = chunk_info['n_from'] + \
+                          np.argmax(strax.endtime(df) > time_range[0])
+            if has_end:
+                n_stop = chunk_info['n_from'] \
+                         + np.argmax(df['time'] >= time_range[1])
+
+        if n_stop is None:
+            # Time range extends beyond the final chunk
+            n_stop = chunk_info['n_to'] + 1
+
+        if not (0 <= n_start <= n_stop <= chunk_info['n_to'] + 1):
+            raise RuntimeError(
+                f"Time range {time_range} for {dtypename} "
+                f"mapped to invalid row range {n_start}-{n_stop}.")
+        return n_start, n_stop
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
-                       time_range=None,
-                      ) -> strax.ProcessorComponents:
+                       time_range=None, chunk_number=None
+                       ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
         """
@@ -500,7 +532,7 @@ class Context:
         targetp = plugins[target]
 
         if time_range is None:
-            n_range_for = dict()
+            row_range_for = dict()
         else:
             if 'time' not in targetp.dtype_for(target).names:
                 raise ValueError(
@@ -510,7 +542,7 @@ class Context:
             time_mappers = dict()
             if targetp.save_when == strax.SaveWhen.NEVER:
                 # The target is never saved, it's likely just some merging.
-                # But that means we have to load the dependencies,
+                # That means we have to load the dependencies,
                 # which might have different kinds, or be themselves never saved
                 for kind, deps in strax.group_by_kind(targetp.depends_on, plugins).items():
                     for d in deps:
@@ -524,14 +556,11 @@ class Context:
                             f"{target}, since it isn't saved itself "
                             f"and none of the dependencies {deps} of kind "
                             f" {kind} provide time information.")
-
-                    # ???
-                    # d_with_time = plugins[d_with_time].provides[0]
             else:
                 time_mappers[targetp.data_kind_for(target)] = target
 
-            n_range_for = {
-                kind: self._time_range_to_n_range(run_id, time_range, d)
+            row_range_for = {
+                kind: self.time_range_to_row_range(run_id, d, time_range)
                 for kind, d in time_mappers.items()}
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
@@ -552,9 +581,23 @@ class Context:
             # Can we load this data?
             loading_this_data = False
             key = strax.DataKey(run_id, d, p.lineage)
+
+            if time_range:
+                kind = p.data_kind_for(d)
+                if kind in row_range_for:
+                    row_range = row_range_for[kind]
+                else:
+                    # Fallback, can happen if target and one of its dependencies
+                    # is not stored (e.g. merging peaks with something else)
+                    row_range = row_range_for[kind] = \
+                        self.time_range_to_row_range(run_id, d, time_range)
+            else:
+                row_range = None
+
             ldr = self._get_partial_loader_for(
                 key,
-                n_range=n_range_for.get(p.data_kind_for(d)))
+                chunk_number=chunk_number,
+                row_range=row_range)
 
             if not ldr and run_id.startswith('_'):
                 if time_range is not None:
@@ -575,10 +618,12 @@ class Context:
                         sub_n_range = None
                     else:
                         # TODO: this currently fails for data without time
-                        sub_n_range = self._time_range_to_n_range(
-                            subrun, sub_run_spec[subrun], d)
+                        sub_n_range = self.time_range_to_row_range(
+                            subrun, d, sub_run_spec[subrun])
                     ldr = self._get_partial_loader_for(
-                        sub_key, n_range=sub_n_range)
+                        sub_key,
+                        row_range=sub_n_range,
+                        chunk_number=chunk_number)
                     if not ldr:
                         raise RuntimeError(
                             f"Could not load {d} for subrun {subrun} "
@@ -598,7 +643,7 @@ class Context:
             else:
                 # Data not found anywhere. We will be computing it.
                 if (time_range is not None
-                        and not plugins[d].save_when == strax.SaveWhen.NEVER):
+                        and plugins[d].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
@@ -770,6 +815,7 @@ class Context:
                  time_within=None,
                  time_selection='fully_contained',
                  selection_str=None,
+                 _chunk_number=None,
                  **kwargs) -> ty.Iterator[np.ndarray]:
         """Compute target for run_id and iterate over results.
 
@@ -808,7 +854,8 @@ class Context:
         components = self.get_components(run_id,
                                          targets=targets,
                                          save=save,
-                                         time_range=time_range)
+                                         time_range=time_range,
+                                         chunk_number=_chunk_number)
 
         # Cleanup the temp plugins
         for k in list(self._plugin_class_registry.keys()):
@@ -820,7 +867,9 @@ class Context:
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
-                allow_rechunk=self.context_config['allow_rechunk']).iter():
+                allow_rechunk=self.context_config['allow_rechunk'],
+                max_messages=self.context_config['max_messages'],
+                timeout=self.context_config['timeout']).iter():
             if not isinstance(x, np.ndarray):
                 raise ValueError(f"Got type {type(x)} rather than numpy array "
                                  "from the processor!")
@@ -1035,6 +1084,7 @@ the start of the run to load.
 - fully_contained: (default) select things fully contained in the range
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
+:param _chunk_number: For internal use: return data from one chunk.
 """
 
 get_docs = """

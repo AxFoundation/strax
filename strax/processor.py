@@ -44,7 +44,9 @@ class ThreadedMailboxProcessor:
                  components: ProcessorComponents,
                  allow_rechunk=True, allow_shm=False,
                  allow_multiprocess=False,
-                 max_workers=None):
+                 max_workers=None,
+                 max_messages=4,
+                 timeout=60):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
         self.mailboxes = MailboxDict()
@@ -173,8 +175,10 @@ class ThreadedMailboxProcessor:
                     discarder, name=f'discard_{d}')
 
         # Set to preferred number of maximum messages
-        # TODO: may not work if plugins are inlined
+        # TODO: may not work if plugins are inlined??
         for d, m in self.mailboxes.items():
+            m.max_messages = max_messages
+            m.timeout = timeout
             if d in components.plugins:
                 max_m = components.plugins[d].max_messages
                 if max_m is not None:

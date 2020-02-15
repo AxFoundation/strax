@@ -460,10 +460,12 @@ class LoopPlugin(Plugin):
                 kwargs[k] = r
 
         results = np.zeros(len(base), dtype=self.dtype)
+        deps_by_kind = self.dependencies_by_kind()
+
         for i in range(len(base)):
             r = self.compute_loop(base[i],
                                   **{k: kwargs[k][i]
-                                     for k in self.dependencies_by_kind()
+                                     for k in deps_by_kind
                                      if k != loop_over})
 
             # Convert from dict to array row:

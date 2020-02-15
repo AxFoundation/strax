@@ -411,24 +411,21 @@ def multi_run(f, run_ids, *args, max_workers=None,
               throw_away_result=False,
               **kwargs):
     """Execute f(run_id, **kwargs) over multiple runs,
-    then return list of results.
+    then return list of result arrays, each with a run_id column added.
 
+    :param f: Function to run
     :param run_ids: list/tuple of runids
-    :param max_workers: number of worker threads/processes to spawn
+    :param max_workers: number of worker threads/processes to spawn.
+    If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
 
     Other (kw)args will be passed to f
     """
-    # Try to int all run_ids
+    if max_workers is None:
+        max_workers = 1
 
-    # Get a numpy array of run ids.
-    try:
-        run_id_numpy = np.array([int(x) for x in run_ids],
-                                dtype=np.int32)
-    except ValueError:
-        # If there are string id's among them,
-        # numpy will autocast all the run ids to Unicode fixed-width
-        run_id_numpy = np.array(run_ids)
+    # This will autocast all run ids to Unicode fixed-width
+    run_id_numpy = np.array(run_ids)
 
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
@@ -445,6 +442,7 @@ def multi_run(f, run_ids, *args, max_workers=None,
             r = f.result()
             if throw_away_result:
                 continue
+            # Append the run id column
             ids = np.array([run_id_numpy[i]] * len(r),
                            dtype=[('run_id', run_id_numpy.dtype)])
             r = merge_arrs([ids, r])
