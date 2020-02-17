@@ -46,6 +46,8 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
             'record_i'), np.int16),
         (('Baseline in ADC counts. data = int(baseline) - data_orig',
             'baseline'), np.float32),
+        (('Baseline RMS computed on: data = baseline - data_orig; NOTE: baseline != int(baseline)',
+          'rms'), np.float32),
         (('Level of data reduction applied (strax.ReductionLevel enum)',
             'reduction_level'), np.uint8),
         # Note this is defined as a SIGNED integer, so we can
@@ -65,8 +67,6 @@ hit_dtype = interval_dtype + [
         'right'), np.int16),
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
-    (('Baseline RMS computed on the first samples specified by nbaseline',
-        'rms'), np.float32),
     (('ADC threshold applied in order to find hits',
         'threshold'), np.int32),
     (('Maximum amplitude above baseline [ADC counts]',

@@ -31,6 +31,7 @@ def baseline(records, baseline_samples=40):
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
     last_bl_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
+    last_rms_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
 
     for d_i, d in enumerate(records):
 
@@ -38,8 +39,10 @@ def baseline(records, baseline_samples=40):
         # otherwise take the last baseline we've seen in the channel
         if d.record_i == 0:
             bl = last_bl_in[d.channel] = d.data[:baseline_samples].mean()
+            rms = _baseline_rms(d['data'], bl, baseline_samples)
         else:
             bl = last_bl_in[d.channel]
+            rms = last_rms_in[d['channel']]
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
@@ -47,6 +50,34 @@ def baseline(records, baseline_samples=40):
                    d.pulse_length - d.record_i * samples_per_record)
         d.data[:last] = int(bl) - d.data[:last]
         d.baseline = bl
+        d['rms'] = rms
+
+
+@numba.njit(cache=True, nogil=True)
+def _baseline_rms(d, b, n_samples=40):
+    """
+    Function which estimates the baseline rms within a certain number of samples.
+
+    The rms value is estimated for all samples with adc counts <= 0.
+
+    Args:
+        d (np.array): "data" of raw_record
+        b (float): baseline mean
+
+    Keyword Args:
+        n_samples (int): First n samples on which the rms is estimated.
+    """
+    d = b - d
+    n = 0
+    rms = 0
+    for s in d[:n_samples]:
+        if s <= 0:
+            rms += s**2
+            n += 1
+    if n == 0:
+        return -42
+
+    return np.sqrt(rms / n)
 
 
 @export
@@ -151,7 +182,7 @@ default_thresholds['channel'] = np.arange(0, 248, 1, dtype=np.int16)
 @export
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffer=None):
+def find_hits(records, threshold=default_thresholds, _result_buffer=None):
     """Return hits (intervals above threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
@@ -163,23 +194,11 @@ def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffe
     samples_per_record = len(records[0]['data'])
     offset = 0
 
-    # Bookkeeping of rms values:
-    nchannels = len(threshold['channel'])
-    rms_values = np.zeros(nchannels)
-
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
-        
-        # Computing rms:
-        if r['record_i'] == 0:
-            rms = _baseline_rms(r, nbaseline)
-            rms_values[threshold['channel'] == r['channel']] = rms   # channel could not start with 0 e.g. nVETO and
-                                                                     # might not be successive/equidistant
-        else:
-            rms = rms_values[threshold['channel'] == r['channel']][0]
-            
+
         area = height = 0
         
         for i in range(samples_per_record):
@@ -187,9 +206,10 @@ def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffe
             # numba gives errors if we do.
             # TODO: file issue?
             x = r['data'][i]
-
-            th = max(threshold['absolute_adc_counts_threshold'][threshold['channel'] == r['channel']][0],
-                     rms * threshold['height_over_noise'][threshold['channel'] == r['channel']][0])
+            rms = r['rms']
+            which_channel = threshold['channel'] == r['channel']
+            th = max(threshold['absolute_adc_counts_threshold'][which_channel][0],
+                     rms * threshold['height_over_noise'][which_channel][0])
 
             above_threshold = x > th  # can ignore the flat part since > and [0,1)
 
@@ -225,7 +245,6 @@ def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffe
                             "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
 
-                    res['rms'] = rms
                     res['threshold'] = th  # No idea if we want to keep this after tuning...
                     res['left'] = hit_start
                     res['right'] = hit_end
@@ -253,36 +272,6 @@ def find_hits(records, threshold=default_thresholds, nbaseline=40, _result_buffe
                     # hit_start = 0
                     # hit_end = 0
     yield offset
-
-
-
-@numba.njit(cache=True, nogil=True)
-def _baseline_rms(rr, n_samples=40):
-    """
-    Function which estimates the baseline rms within a certain number of samples.
-
-    The rms value is estimated for all samples with adc counts <= 0.
-
-    Args:
-        rr (raw_records): single raw_record
-
-    Keyword Args:
-        n_samples (int): First n samples on which the rms is estimated.
-    """
-    d = rr['data']
-    b = rr['baseline']%1
-    d_b = d + b
-    n = 0
-    rms = 0
-    for s in d_b[:n_samples]:
-        if s < 0:
-            rms += s**2
-            n += 1
-    # TODO: Ask maybe other fall back solution?
-    if n == 0:
-        return -42
-
-    return np.sqrt(rms / n)
 
 
 @numba.njit(cache=True, nogil=True)
