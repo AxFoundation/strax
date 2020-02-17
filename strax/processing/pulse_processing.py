@@ -275,7 +275,7 @@ def _baseline_rms(rr, n_samples=40):
     n = 0
     rms = 0
     for s in d_b[:n_samples]:
-        if s < 0:
+        if s <= 0:
             rms += s**2
             n += 1
     # TODO: Ask maybe other fall back solution?
