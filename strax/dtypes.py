@@ -36,9 +36,8 @@ interval_dtype = [
     # and int32 for per-channel waveforms (area in ADC x samples)
 ]
 
-
-def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
-    """Data type for a waveform record.
+def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
+    """Data type for a waveform raw_record.
 
     Length can be shorter than the number of samples in data,
     this indicates a record with zero-padding at the end.
@@ -59,6 +58,18 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
         # still represent negative values after subtracting baselines
         (('Waveform data in ADC counts above baseline',
             'data'), np.int16, samples_per_record),
+    ]
+
+
+def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
+    """Data type for a waveform record.
+
+    Length can be shorter than the number of samples in data,
+    this indicates a record with zero-padding at the end.
+    """
+    return interval_dtype + raw_record_dtype(samples_per_record) + [
+        (('Baseline RMS in ADC counts. data = baseline - data_orig',
+          'baseline'), np.float32)
     ]
 
 
