@@ -29,9 +29,8 @@ interval_dtype = [
     # and int32 for per-channel waveforms (area in ADC x samples)
 ]
 
-
-def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
-    """Data type for a waveform record.
+def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
+    """Data type for a waveform raw_record.
 
     Length can be shorter than the number of samples in data,
     this indicates a record with zero-padding at the end.
@@ -46,14 +45,24 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
             'record_i'), np.int16),
         (('Baseline in ADC counts. data = int(baseline) - data_orig',
             'baseline'), np.float32),
-        (('Baseline RMS computed on: data = baseline - data_orig; NOTE: baseline != int(baseline)',
-          'rms'), np.float32),
         (('Level of data reduction applied (strax.ReductionLevel enum)',
             'reduction_level'), np.uint8),
         # Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines
         (('Waveform data in ADC counts above baseline',
             'data'), np.int16, samples_per_record),
+    ]
+
+
+def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
+    """Data type for a waveform record.
+
+    Length can be shorter than the number of samples in data,
+    this indicates a record with zero-padding at the end.
+    """
+    return interval_dtype + raw_record_dtype(samples_per_record) + [
+        (('Baseline RMS in ADC counts. data = baseline - data_orig',
+          'baseline'), np.float32)
     ]
 
 
