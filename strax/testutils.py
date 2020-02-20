@@ -157,10 +157,11 @@ class Records(strax.Plugin):
         if self.config['crash']:
             raise SomeCrash("CRASH!!!!")
         r = np.zeros(recs_per_chunk, self.dtype)
-        r['time'] = chunk_i + self.config['secret_time_offset']
+        t0 = chunk_i + self.config['secret_time_offset']
+        r['time'] = t0
         r['length'] = r['dt'] = 1
         r['channel'] = np.arange(len(r))
-        return r
+        return self.chunk(start=t0, end=t0 + 1, data=r)
 
 
 class SomeCrash(Exception):

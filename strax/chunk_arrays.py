@@ -41,14 +41,15 @@ class ChunkPacer:
         except StopIteration:
             self._source_exhausted = True
             raise StopIteration
-        assert isinstance(x, np.ndarray), f"Got {type(x)} instead of ndarray"
+        assert isinstance(x, strax.Chunk), \
+            f"Got {type(x)} instead of a strax Chunk!"
         self.buffer.append(x)
-        self.buffer_items += len(x)
+        self.buffer_items += x.n_rows
 
     def _squash_buffer(self):
-        """Squash the buffer into a single array using np.concatenate"""
+        """Squash the buffer into a single chunk using np.concatenate"""
         if len(self.buffer) > 1:
-            self.buffer = [np.concatenate(self.buffer)]
+            self.buffer = [strax.concatenate_chunks(self.buffer)]
 
         # Sanity check on buffer_items
         if not len(self.buffer):
@@ -63,6 +64,7 @@ class ChunkPacer:
         b = self.buffer[0]
 
         n = min(n, len(b))
+
         result, b = np.split(b, [n])
         self.buffer = [b]
         self.buffer_items = len(b)
