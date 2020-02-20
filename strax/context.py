@@ -870,9 +870,10 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter():
-            if not isinstance(x, np.ndarray):
-                raise ValueError(f"Got type {type(x)} rather than numpy array "
-                                 "from the processor!")
+            if not isinstance(x, strax.Chunk):
+                raise ValueError(f"Got type {type(x)} rather than a strax "
+                                 f"Chunk from the processor!")
+            x = x.data
             x = self.apply_selection(x, selection_str,
                                      time_range, time_selection)
             yield x

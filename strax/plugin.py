@@ -297,14 +297,37 @@ class Plugin:
         This is the 'job' that gets executed in different processes/threads
         during multiprocessing
         """
+        for k, v in kwargs.items():
+            if not isinstance(v, strax.Chunk):
+                raise RuntimeError(
+                    f"do_compute of {self.__class__.__name__} got a {type(v)} "
+                    f"instead of a strax Chunk for {k}")
+
+        if len(kwargs):
+            # Check inputs describe the same time range
+            tranges = {k: (v.start, v.end) for k, v in kwargs.items()}
+            if len(set(tranges.values())) != 1:
+                raise ValueError(f"{self.__class__.__name__} got inconsistent "
+                                 f"time ranges of inputs: {tranges}")
+            start, stop = list(tranges.values())[0]
+        else:
+            # This plugin starts from scratch
+            start, stop = None, None
+
+        # TODO: Give option to pass start and stop?
+        # only needed for overlapwindowplugin...
+        kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
             result = self.compute(**kwargs)
-        return self._fix_output(result)
 
-    def _fix_output(self, result):
+        return self._fix_output(result, start, stop)
+
+    def _fix_output(self, result, start, stop):
         if self.multi_output:
+            raise NotImplementedError
+
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
@@ -318,9 +341,38 @@ class Plugin:
                 self._check_dtype(r2[d], d)
             return r2
 
-        result = strax.dict_to_rec(result, dtype=self.dtype)
-        self._check_dtype(result)
+        if not isinstance(result, strax.Chunk):
+            if start is None:
+                assert len(self.depends_on) == 0
+                raise ValueError(
+                    "Plugins without dependencies must return full strax "
+                    f"Chunks, but {self.__class__.__name__} produced a "
+                    f"{type(result)}!")
+
+            result = strax.dict_to_rec(result, dtype=self.dtype)
+            self._check_dtype(result)   # TODO: could refactor into chunk?
+            result = self.chunk(
+                start=start,
+                end=stop,
+                data=result)
         return result
+
+    def chunk(self, *, start, end, data, data_type=None, run_id=None):
+        if data_type is None:
+            if self.multi_output:
+                raise ValueError("Must give data_type when making chunks from "
+                                 "a multi-output plugin")
+            data_type = self.provides[0]
+        if run_id is None:
+            run_id = self.run_id
+        return strax.Chunk(
+            start=start,
+            end=end,
+            run_id=run_id,
+            data_kind=self.data_kind_for(data_type),
+            data_type=data_type,
+            dtype=self.dtype_for(data_type),
+            data=data)
 
     def compute(self, **kwargs):
         raise NotImplementedError

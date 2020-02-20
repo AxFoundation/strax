@@ -363,15 +363,48 @@ class StorageBackend:
         :param executor: Executor to push load/decompress operations to
         """
         metadata = self.get_metadata(backend_key)
+
+        required_fields = 'run_id, data_type data_kind dtype run_id start end compressor'.split()
+        missing_fields = [x for x in required_fields if x not in metadata]
+        if len(missing_fields):
+            raise ValueError(
+                f"Cannot load run at {backend_key}: run metadata is " 
+                f"missing the required fields {missing_fields}.")
+
+        # TODO: should literal_eval inside get_metadata, maybe?
         dtype = literal_eval(metadata['dtype'])
+
+        # Common arguments for chunk construction, not stored with chunk-level
+        # metadata
+        chunk_kwargs = dict(
+            data_type=metadata['data_type'],
+            data_kind=metadata['data_kind'],
+            dtype=dtype)
+
         if not len(metadata['chunks']):
-            warnings.warn(f"No chunks of data in {backend_key}")
-            yield np.zeros(0, dtype=dtype)
+            warnings.warn(f"No chunks of data for {metadata['data_kind']}"
+                          f" in run {metadata['run_id']}",
+                          # TODO: Custom warning class
+                          )
+            yield strax.Chunk(
+                start=metadata['start'],
+                end=metadata['end'],
+                run_id=metadata['run_id'],
+                data=None,
+                **chunk_kwargs)
             return
 
-        compressor = metadata['compressor']
+        required_chunk_metadata_fields = 'start end run_id'.split()
 
         for i, ci in enumerate(strax.iter_chunk_meta(metadata)):
+
+            missing_fields = [x for x in required_chunk_metadata_fields
+                              if x not in ci]
+            if len(missing_fields):
+                raise ValueError(
+                    f"Error reading chunk {i} of {metadata['dtype']} " 
+                    f"of {metadata['run_d']} from {backend_key}: "
+                    f"chunk metadata is missing fields {missing_fields}")
 
             # Chunk number constraint
             if chunk_number is not None:
@@ -388,17 +421,41 @@ class StorageBackend:
                 in_range_mask = (
                         (row_range[0] <= n_index) & (n_index < row_range[1]))
 
-            kwargs = dict(chunk_info=ci,
-                          dtype=dtype,
-                          compressor=compressor)
+            read_chunk_kwargs = dict(
+                backend_key=backend_key,
+                dtype=dtype,
+                metadata=metadata,
+                chunk_info=chunk_info,
+                chunk_construction_kwargs=chunk_kwargs)
             if executor is None or row_range:
-                result = self._read_chunk(backend_key, **kwargs)
+                result = self._read_and_format_chunk(**read_chunk_kwargs)
                 if row_range:
+                    raise NotImplementedError
                     yield result[in_range_mask]
                 else:
                     yield result
             else:
-                yield executor.submit(self._read_chunk, backend_key, **kwargs)
+                yield executor.submit(self._read_and_format_chunk,
+                                      **read_chunk_kwargs)
+
+    def _read_and_format_chunk(self,
+                               *,
+                               backend_key,
+                               dtype,
+                               metadata,
+                               chunk_info,
+                               chunk_construction_kwargs) -> strax.Chunk:
+        data = self._read_chunk(backend_key,
+                                chunk_info=chunk_info,
+                                dtype=dtype,
+                                compressor=metadata['compressor'])
+        return strax.Chunk(
+            start=chunk_info['start'],
+            end=chunk_info['end'],
+            run_id=chunk_info['run_id'],
+            data=data,
+            metadata=chunk_info.get('metadata'),
+            **chunk_construction_kwargs)
 
     def saver(self, key, metadata):
         """Return saver for data described by key"""
