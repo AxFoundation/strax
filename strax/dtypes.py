@@ -6,11 +6,11 @@ TODO: file numba issue.
 """
 import numpy as np
 
-__all__ = ('interval_dtype record_dtype hit_dtype peak_dtype '
+__all__ = ('interval_dtype record_dtype raw_record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
-DEFAULT_RECORD_LENGTH = 110
+DEFAULT_RECORD_LENGTH = 600
 
 
 # Base dtype for interval-like objects (pulse, peak, hit)
@@ -28,6 +28,7 @@ interval_dtype = [
     # However, the type varies: float for sum waveforms (area in PE)
     # and int32 for per-channel waveforms (area in ADC x samples)
 ]
+
 
 def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform raw_record.
@@ -60,9 +61,9 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     Length can be shorter than the number of samples in data,
     this indicates a record with zero-padding at the end.
     """
-    return interval_dtype + raw_record_dtype(samples_per_record) + [
+    return raw_record_dtype(samples_per_record) + [
         (('Baseline RMS in ADC counts. data = baseline - data_orig',
-          'baseline'), np.float32)
+          'rms'), np.float32)
     ]
 
 

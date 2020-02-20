@@ -7,7 +7,7 @@ from scipy.ndimage import convolve1d
 
 import strax
 export, __all__ = strax.exporter()
-__all__ += ['NO_RECORD_LINK']
+__all__ += ['NO_RECORD_LINK', 'baseline_rms']
 
 # Constant for use in record_links, to indicate there is no prev/next record
 NO_RECORD_LINK = -1
@@ -31,7 +31,6 @@ def baseline(records, baseline_samples=40):
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
     last_bl_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
-    last_rms_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
 
     for d_i, d in enumerate(records):
 
@@ -39,10 +38,8 @@ def baseline(records, baseline_samples=40):
         # otherwise take the last baseline we've seen in the channel
         if d.record_i == 0:
             bl = last_bl_in[d.channel] = d.data[:baseline_samples].mean()
-            rms = _baseline_rms(d['data'], bl, baseline_samples)
         else:
             bl = last_bl_in[d.channel]
-            rms = last_rms_in[d['channel']]
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
@@ -50,7 +47,42 @@ def baseline(records, baseline_samples=40):
                    d.pulse_length - d.record_i * samples_per_record)
         d.data[:last] = int(bl) - d.data[:last]
         d.baseline = bl
-        d['rms'] = rms
+
+
+@export
+@numba.njit(cache=True, nogil=True)
+def baseline_rms(records, nsampels=40):
+    """
+    Function which estimates the baseline rms within a certain number of samples.
+
+    The rms value is estimated for all samples with adc counts <= 0.
+
+    Args:
+        records (np.array): Array of the data_kind raw_records or records.
+
+    Keyword Args:
+        nsampels (int): First n samples on which the rms is estimated.
+
+    Note:
+
+
+    Returns:
+        np.array: array of the length of records containing the rms values.
+    """
+    # Init result and temp_rms storage:
+    res = np.zeros(len(records))
+    last_rms_in = np.zeros(records['channel'].max() + 1, dtype=np.float32)
+
+    for ind, r in enumerate(records):
+        if r['record_i'] == 0:
+            rms = _baseline_rms(r['data'], r['baseline']%1, nsampels)
+            last_rms_in[r['channel']] = rms
+            res[ind] = rms
+        else:
+            # if higher fragment take previous rms value:
+            res[ind] = last_rms_in[r['channel']]
+
+    return res
 
 
 @numba.njit(cache=True, nogil=True)
@@ -67,7 +99,7 @@ def _baseline_rms(d, b, n_samples=40):
     Keyword Args:
         n_samples (int): First n samples on which the rms is estimated.
     """
-    d = b - d
+    d = b + d
     n = 0
     rms = 0
     for s in d[:n_samples]:
