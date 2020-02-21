@@ -6,12 +6,19 @@ TODO: file numba issue.
 """
 import numpy as np
 
-__all__ = ('interval_dtype record_dtype hit_dtype peak_dtype '
+__all__ = ('interval_dtype record_dtype hit_dtype peak_dtype time_fields '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
 
+
+time_fields = [
+    (('Start time since unix epoch [ns]',
+     'time'), np.int64),
+    (('Exclusive end time since unix epoch [ns]',
+     'endtime'), np.int64),
+]
 
 # Base dtype for interval-like objects (pulse, peak, hit)
 interval_dtype = [

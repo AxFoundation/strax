@@ -253,7 +253,7 @@ def merge_iters(iters):
     """Return iterator over merged arrays from several iterators
     :param iters: list, tuple, or dict of iters
 
-    Iterators must already be synced to produce same-size chunks
+    Iterators must already be synced to produce same-time-range chunks
     """
     if isinstance(iters, dict):
         iters = list(iters.values())
@@ -264,7 +264,7 @@ def merge_iters(iters):
 
     try:
         while True:
-            yield strax.merge_arrs([next(it)
-                                    for it in iters])
+            yield strax.Chunk.merge([next(it)
+                                     for it in iters])
     except StopIteration:
         return

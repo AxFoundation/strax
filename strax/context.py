@@ -53,7 +53,7 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=300,
+    strax.Option(name='timeout', default=10,  # TODO HACK!!
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"))
 @export
@@ -398,24 +398,7 @@ class Context:
                     # data type are synonymous
                     p.data_kind = p.provides[0]
 
-            if not hasattr(p, 'dtype'):
-                p.dtype = p.infer_dtype()
-
-            if p.multi_output:
-                if (not hasattr(p, 'data_kind')
-                        or not isinstance(p.data_kind, dict)):
-                    raise ValueError(
-                        f"{p.__class__.__name__} has multiple outputs and "
-                        "must declare its data kind as a dict: "
-                        "{dtypename: data kind}.")
-                if not isinstance(p.dtype, dict):
-                    raise ValueError(
-                        f"{p.__class__.__name__} has multiple outputs, so its "
-                        "dtype must be specified as a dict: {output: dtype}.")
-                p.dtype = {k: strax.to_numpy_dtype(dt)
-                           for k, dt in p.dtype.items()}
-            else:
-                p.dtype = strax.to_numpy_dtype(p.dtype)
+            p.fix_dtype()
 
             return p
 
