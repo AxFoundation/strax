@@ -54,7 +54,7 @@ class Chunk:
 
     def __repr__(self):
         return f"{self.run_id}.{self.data_type}:" \
-               f"({self.start}-{self.stop}, {len(self)})"
+               f"({self.start}-{self.end}, {len(self)})"
 
     @property
     def nbytes(self):
@@ -66,7 +66,17 @@ class Chunk:
 
     def split(self,
               n_items: ty.Union[int, None] = None,
-              at: ty.Union[int, None] = None):
+              at: ty.Union[int, None] = None,
+              extend=False):
+        """Split a chunk in two.
+
+        :param n_items: Number of items to put in the first chunk
+        :param at: Time at or before which all items in the first chunk
+        must end
+        :param extend: If True, and at > self.end, will extend the endtime of
+        the right chunk to at. Usually it will be self.end.
+        :return: 2-tuple of strax.Chunks
+        """
         if n_items is None and at is None:
             raise ValueError("Provide either n_items or at")
         if n_items is not None and at is not None:
@@ -93,16 +103,20 @@ class Chunk:
             data_type=self.data_type,
             data_kind=self.data_kind)
 
-        c1 = strax.Chunk(start=self.start,
-                         # NB: this can extend the chunk!
-                         # TODO: document. converse for start?
-                         end=at,
-                         data=data1,
-                         **common_kwargs)
-        c2 = strax.Chunk(start=at,
-                         end=max(at, self.end),
-                         data=data2,
-                         **common_kwargs)
+        if at > self.end and not extend:
+            at = self.end
+
+        c1 = strax.Chunk(
+            start=self.start,
+            end=max(self.start, at),
+            data=data1,
+            **common_kwargs)
+        c2 = strax.Chunk(
+            # if at < start, second fragment contains everything
+            start=max(self.start, at),
+            end=max(at, self.end),
+            data=data2,
+            **common_kwargs)
         return c1, c2
 
     @classmethod

@@ -426,7 +426,7 @@ class OverlapWindowPlugin(Plugin):
         super().__init__()
         self.cached_input = {}
         self.cached_results = None
-        self.last_threshold = -float('inf')
+        self.last_threshold = -42
         # This guy can have a logger, it's not parallelized anyway
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -450,50 +450,34 @@ class OverlapWindowPlugin(Plugin):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
         # Determine (a lower bound on) the data's last endtime
-        ends = [strax.endtime(x[-1])
-                for x in kwargs.values()
-                if len(x)]
-        if not len(ends):
-            # Input is completely empty, we cannot estimate the data's end.
-            # Do not discard or send anything until a chunk with data arrives.
-            # (or the last chunk, see iter)
-            invalid_beyond = cache_inputs_beyond = self.last_threshold
-        else:
-            # Take slightly larger windows for safety: it is very easy for me
-            # (or the user) to have made an off-by-one error
-            # TODO: why do tests not fail is I set cache_inputs_beyond to
-            # end - window size - 2 ?
-            # (they do fail if I set to end - 0.5 * window size - 2)
-            end = max(ends)
-            invalid_beyond = end - self.get_window_size() - 1
-            cache_inputs_beyond = end - 2 * self.get_window_size() - 1
+        ends = [v.end for v in kwargs.values()]
+        if not len(ends) == 1:
+            raise RuntimeError(f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
+        end = ends[0]
+
+        # Take slightly larger windows for safety: it is very easy for me
+        # (or the user) to have made an off-by-one error
+        # TODO: why do tests not fail is I set cache_inputs_beyond to
+        # end - window size - 2 ?
+        # (they do fail if I set to end - 0.5 * window size - 2)
+        invalid_beyond = int(end - self.get_window_size() - 1)
+        cache_inputs_beyond = int(end - 2 * self.get_window_size() - 1)
 
         # Update input cache
         for k, v in kwargs.items():
             if len(self.cached_input):
-                kwargs[k] = v = np.concatenate([self.cached_input[k], v])
-            self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
-
-        if not len(ends):
-            # Output cache and last_threshold both don't change
-            # so might as well return.
-            return self.empty_result()
+                kwargs[k] = v = strax.Chunk.concatenate(
+                    [self.cached_input[k], v])
+            print(v, cache_inputs_beyond)
+            _, self.cached_input[k] = v.split(at=cache_inputs_beyond)
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
-        endtimes = strax.endtime(kwargs[self.data_kind]
-                                 if self.data_kind in kwargs
-                                 else result)
-        assert len(endtimes) == len(result)
+        # Throw away results we already sent last time
+        _, result = result.split(at=self.last_threshold)
 
-        is_valid = endtimes < invalid_beyond
-        not_sent_yet = endtimes >= self.last_threshold
-
-        # Cache all results we have not sent, nor are sending now
-        self.cached_results = result[not_sent_yet & (~is_valid)]
-
-        # Send out only valid results we haven't sent yet
-        result = result[is_valid & not_sent_yet]
+        # Send out valid results, cache the rest
+        result, self.cached_results = result.split(at=invalid_beyond)
 
         self.last_threshold = invalid_beyond
         return result
