@@ -121,7 +121,7 @@ class StorageFrontend:
         self.log = logging.getLogger(self.__class__.__name__)
 
     def loader(self, key: DataKey,
-               row_range=None,
+               time_range=None,
                allow_incomplete=False,
                fuzzy_for=tuple(),
                fuzzy_for_options=tuple(),
@@ -129,7 +129,7 @@ class StorageFrontend:
                executor=None):
         """Return loader for data described by DataKey.
         :param key: DataKey describing data
-        :param row_range: 2-length arraylike of (start, exclusive end)
+        :param time_range: 2-length arraylike of (start, exclusive end)
         of row numbers to get. Default is None, which means get the entire
         run.
         :param allow_incomplete: Allow loading of data which has not been
@@ -148,7 +148,7 @@ class StorageFrontend:
                                          fuzzy_for_options=fuzzy_for_options)
         return self._get_backend(backend).loader(
             backend_key,
-            row_range=row_range,
+            time_range=time_range,
             executor=executor,
             chunk_number=chunk_number)
 
@@ -352,13 +352,14 @@ class StorageBackend:
 
     def loader(self,
                backend_key,
-               row_range=None,
+               time_range=None,
                chunk_number=None,
                executor=None):
         """Iterates over strax data in backend_key
-        :param row_range: 2-length arraylike of (start, exclusive end)
-        of row numbers to get. Default is None, which means get the entire
-        run.
+        :param time_range: 2-length arraylike of (start, exclusive end)
+        of desired data. Will return all data that partially overlaps with
+        the range.
+        Default is None, which means get the entire
         :param chunk_number: Chunk number to get exclusively
         :param executor: Executor to push load/decompress operations to
         """
@@ -411,30 +412,22 @@ class StorageBackend:
                 if i != chunk_number:
                     continue
 
-            # Row number constraint
-            in_range_mask = None
-            if row_range:
-                if (chunk_info['n_to'] < row_range[0]
-                        or row_range[1] <= chunk_info['n_from']):
+            # Time constraint
+            if time_range:
+                if (chunk_info['end'] <= time_range[0]
+                        or time_range[1] <= chunk_info['start']):
                     # Chunk does not cover any part of range
                     continue
-                n_index = np.arange(chunk_info['n_from'], chunk_info['n_to'])
-                in_range_mask = (
-                        (row_range[0] <= n_index) & (n_index < row_range[1]))
 
             read_chunk_kwargs = dict(
                 backend_key=backend_key,
                 dtype=dtype,
                 metadata=metadata,
                 chunk_info=chunk_info,
+                time_range=time_range,
                 chunk_construction_kwargs=chunk_kwargs)
-            if executor is None or row_range:
-                result = self._read_and_format_chunk(**read_chunk_kwargs)
-                if row_range:
-                    raise NotImplementedError
-                    yield result[in_range_mask]
-                else:
-                    yield result
+            if executor is None:
+                yield self._read_and_format_chunk(**read_chunk_kwargs)
             else:
                 yield executor.submit(self._read_and_format_chunk,
                                       **read_chunk_kwargs)
@@ -445,17 +438,29 @@ class StorageBackend:
                                dtype,
                                metadata,
                                chunk_info,
+                               time_range,
                                chunk_construction_kwargs) -> strax.Chunk:
         data = self._read_chunk(backend_key,
                                 chunk_info=chunk_info,
                                 dtype=dtype,
                                 compressor=metadata['compressor'])
-        return strax.Chunk(
+
+        result = strax.Chunk(
             start=chunk_info['start'],
             end=chunk_info['end'],
             run_id=chunk_info['run_id'],
             data=data,
             **chunk_construction_kwargs)
+
+        if time_range:
+            if result.start < time_range[0]:
+                result = result.split(at=time_range[0])[1]
+                assert result.start >= time_range[0]
+            if result.end > time_range[1]:
+                result = result.split(at=time_range[1])[0]
+                assert result.end <= time_range[1]
+
+        return result
 
     def saver(self, key, metadata):
         """Return saver for data described by key"""
