@@ -364,11 +364,11 @@ class StorageBackend:
         """
         metadata = self.get_metadata(backend_key)
 
-        required_fields = 'run_id, data_type data_kind dtype run_id start end compressor'.split()
+        required_fields = 'run_id data_type data_kind dtype run_id start end compressor'.split()
         missing_fields = [x for x in required_fields if x not in metadata]
         if len(missing_fields):
             raise ValueError(
-                f"Cannot load run at {backend_key}: run metadata is " 
+                f"Cannot load data at {backend_key}: metadata is " 
                 f"missing the required fields {missing_fields}.")
 
         # TODO: should literal_eval inside get_metadata, maybe?
@@ -396,10 +396,10 @@ class StorageBackend:
 
         required_chunk_metadata_fields = 'start end run_id'.split()
 
-        for i, ci in enumerate(strax.iter_chunk_meta(metadata)):
+        for i, chunk_info in enumerate(strax.iter_chunk_meta(metadata)):
 
             missing_fields = [x for x in required_chunk_metadata_fields
-                              if x not in ci]
+                              if x not in chunk_info]
             if len(missing_fields):
                 raise ValueError(
                     f"Error reading chunk {i} of {metadata['dtype']} " 
@@ -414,10 +414,11 @@ class StorageBackend:
             # Row number constraint
             in_range_mask = None
             if row_range:
-                if ci['n_to'] < row_range[0] or row_range[1] <= ci['n_from']:
+                if (chunk_info['n_to'] < row_range[0]
+                        or row_range[1] <= chunk_info['n_from']):
                     # Chunk does not cover any part of range
                     continue
-                n_index = np.arange(ci['n_from'], ci['n_to'])
+                n_index = np.arange(chunk_info['n_from'], chunk_info['n_to'])
                 in_range_mask = (
                         (row_range[0] <= n_index) & (n_index < row_range[1]))
 
@@ -513,7 +514,7 @@ class Saver:
         pending = []
         try:
             for chunk_i, s in enumerate(source):
-                new_f = self.save(data=s, chunk_i=chunk_i, executor=executor)
+                new_f = self.save(chunk=s, chunk_i=chunk_i, executor=executor)
                 if new_f is not None:
                     pending = [f for f in pending + [new_f]
                                if not f.done()]
@@ -536,22 +537,27 @@ class Saver:
             if not self.closed:
                 self.close(wait_for=pending)
 
-    def save(self, data: np.ndarray, chunk_i: int, executor=None):
+    def save(self, chunk: strax.Chunk, chunk_i: int, executor=None):
         """Save a chunk, returning future to wait on or None"""
         if self.closed:
             raise RuntimeError(f"Attmpt to save to {self.md} saver, "
                                f"which is already closed!")
 
         chunk_info = dict(chunk_i=chunk_i,
-                          n=len(data),
-                          nbytes=data.nbytes)
-        if len(data) != 0 and 'time' in data[0].dtype.names:
+                          n=len(chunk),
+                          start=chunk.start,
+                          end=chunk.end,
+                          run_id=chunk.run_id,
+                          nbytes=chunk.nbytes)
+        if len(chunk) != 0 and 'time' in chunk.dtype.names:
             for desc, i in (('first', 0), ('last', -1)):
-                chunk_info[f'{desc}_time'] = int(data[i]['time'])
-                chunk_info[f'{desc}_endtime'] = int(strax.endtime(data[i]))
+                chunk_info[f'{desc}_time'] = \
+                    int(chunk.data[i]['time'])
+                chunk_info[f'{desc}_endtime'] = \
+                    int(strax.endtime(chunk.data[i]))
 
         bonus_info, future = self._save_chunk(
-            data,
+            chunk.data,
             chunk_info,
             executor=None if self.is_forked else executor)
 

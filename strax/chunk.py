@@ -38,6 +38,7 @@ class Chunk:
         assert isinstance(end, int)
         assert isinstance(data, np.ndarray)
         assert data.dtype == dtype
+        dtype = np.dtype(dtype)
 
         self.data_type = data_type
         self.data_kind = data_kind
@@ -106,7 +107,47 @@ class Chunk:
         return c1, c2
 
     @classmethod
+    def merge(cls, chunks, data_type='<UNKNOWN>'):
+        """Create chunk by merging columns of chunks of same data kind"""
+        if not chunks:
+            raise ValueError("Need at least one chunk to merge")
+        if len(chunks) == 1:
+            return chunks[0]
+
+        data_kinds = [c.data_kind for c in chunks]
+        if len(set(data_kinds)) != 1:
+            raise ValueError(f"Cannot concatenate chunks of different"
+                             f" data kinds: {data_kinds}")
+        data_kind = data_kinds[0]
+
+        run_ids = [c.run_id for c in chunks]
+        if len(set(run_ids)) != 1:
+            raise ValueError(
+                f"Cannot merge chunks of data kind {data_kind} with "
+                f"different run ids: {run_ids}")
+        run_id = run_ids[0]
+
+        tranges = [(c.start, c.end) for c in chunks]
+        if len(set(tranges)) != 1:
+            raise ValueError(
+                f"Cannot merge chunks of data kind {data_kind} corresponding "
+                f"to different time ranges: {tranges}")
+        start, end = tranges[0]
+
+        data = strax.merge_arrs([c.data for c in chunks])
+
+        return cls(
+            start=start,
+            end=end,
+            dtype=data.dtype,
+            data_type=data_type,
+            data_kind=data_kind,
+            run_id=run_id,
+            data=data)
+
+    @classmethod
     def concatenate(cls, chunks):
+        """Create chunk by concatenating chunks of same data type"""
         if not chunks:
             raise ValueError("Need at least one chunk to concatenate")
         if len(chunks) == 1:
@@ -114,8 +155,8 @@ class Chunk:
 
         data_types = [c.data_type for c in chunks]
         if len(set(data_types)) != 1:
-            raise ValueError(
-                f"Cannot concatenate chunks of different data types: {data_types}")
+            raise ValueError(f"Cannot concatenate chunks of different "
+                             f"data types: {data_types}")
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]

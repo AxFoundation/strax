@@ -306,11 +306,18 @@ class FileSaver(strax.Saver):
                 "Did you attemt to run two savers pointing to the same "
                 "directory? Otherwise this could be a strange race "
                 "condition or bug.")
+
         for fn in sorted(glob.glob(
                 self.tempdirname + '/metadata_*.json')):
             with open(fn, mode='r') as f:
                 self.md['chunks'].append(json.load(f))
             os.remove(fn)
+
+        if self.md['chunks']:
+            # TODO: warning otherwise? Don't want to raise exception
+            # since we might already be crashing due to another exception
+            self.md['start'] = min([x['start'] for x in self.md['chunks']])
+            self.md['end'] = min([x['start'] for x in self.md['chunks']])
 
         self._flush_metadata()
 

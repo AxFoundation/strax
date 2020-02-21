@@ -195,11 +195,15 @@ class PeakClassification(strax.Plugin):
     provides = 'peak_classification'
     data_kind = 'peaks'
     depends_on = ('peaks',)
-    dtype = [('type', np.int8, 'Classification of the peak.'),]
+    dtype = (
+        [('type', np.int8, 'Classification of the peak.')]
+        + strax.time_fields)
     rechunk_on_save = True
 
     def compute(self, peaks):
-        return dict(type=np.zeros(len(peaks)))
+        return dict(type=np.zeros(len(peaks)),
+                    time=peaks['time'],
+                    endtime=strax.endtime(peaks))
 
 
 recs_per_chunk = 10

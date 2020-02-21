@@ -4,12 +4,12 @@ A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
 from enum import IntEnum
+import inspect
 import itertools
 import logging
-from functools import partial
-import typing
 import time
-import inspect
+import typing
+import warnings
 
 from frozendict import frozendict
 import numpy as np
@@ -118,6 +118,38 @@ class Plugin:
             del compute_pars[compute_pars.index('chunk_i')]
 
         self.compute_pars = compute_pars
+
+    def fix_dtype(self):
+        if not hasattr(self, 'dtype'):
+            self.dtype = self.infer_dtype()
+
+        if self.multi_output:
+            # Convert to a dict of numpy dtypes
+            if (not hasattr(self, 'data_kind')
+                    or not isinstance(self.data_kind, dict)):
+                raise ValueError(
+                    f"{self.__class__.__name__} has multiple outputs and "
+                    "must declare its data kind as a dict: "
+                    "{dtypename: data kind}.")
+            if not isinstance(self.dtype, dict):
+                raise ValueError(
+                    f"{self.__class__.__name__} has multiple outputs, so its "
+                    "dtype must be specified as a dict: {output: dtype}.")
+            self.dtype = {k: strax.to_numpy_dtype(dt)
+                          for k, dt in self.dtype.items()}
+        else:
+            # Convert to a numpy dtype
+            self.dtype = strax.to_numpy_dtype(self.dtype)
+
+        # Check required time information is present
+        for d in self.provides:
+            fieldnames = self.dtype_for(d).names
+            ok = 'time' in fieldnames and (
+                    ('dt' in fieldnames and 'length' in fieldnames)
+                    or 'endtime' in fieldnames)
+            if not ok:
+                raise ValueError(
+                    f"Missing time and endtime information for {d}")
 
     @property
     def multi_output(self):
@@ -704,7 +736,7 @@ class ParallelSourcePlugin(Plugin):
         # Save anything we can through the inlined savers
         for d, savers in self.sub_savers.items():
             for s in savers:
-                s.save(data=results[d], chunk_i=chunk_i)
+                s.save(chunk=results[d], chunk_i=chunk_i)
 
         # Remove results we do not need to send
         for d in list(results.keys()):
