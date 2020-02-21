@@ -32,14 +32,18 @@ def test_overlap_plugin(input_peaks, split_i):
     chunked.
     """
     chunks = np.split(input_peaks, [split_i])
-    chunks = [c for c in chunks]
+    chunks = [c for c in chunks if not len(c) == 0]
 
     class Peaks(strax.Plugin):
         depends_on = tuple()
         dtype = strax.interval_dtype
 
         def compute(self, chunk_i):
-            return chunks[chunk_i]
+            data = chunks[chunk_i]
+            return self.chunk(
+                data=data,
+                start=int(data[0]['time']),
+                end=int(strax.endtime(data[-1])))
 
         # Hack to make peak output stop after a few chunks
         def is_ready(self, chunk_i):
@@ -64,15 +68,16 @@ def test_overlap_plugin(input_peaks, split_i):
 
     class WithinWindow(strax.OverlapWindowPlugin):
         depends_on = ('peaks',)
-        dtype = [('n_within_window', np.int16)]
+        dtype = [('n_within_window', np.int16)] + strax.time_fields
 
         def get_window_size(self):
             return window
 
         def compute(self, peaks):
-            result = dict(
-                n_within_window=count_in_window(strax.endtime(peaks)))
-            return result
+            return dict(
+                n_within_window=count_in_window(strax.endtime(peaks)),
+                time=peaks['time'][:1],
+                endtime=strax.endtime(peaks)[-1:])
 
         def iter(self, *args, **kwargs):
             yield from super().iter(*args, **kwargs)

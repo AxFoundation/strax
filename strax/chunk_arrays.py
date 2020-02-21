@@ -75,7 +75,8 @@ class ChunkPacer:
             raise NotImplementedError("Oops")
 
         b = self.buffer[0]
-        result, b = b.split(n_items=n_items, at=until)
+        result, b = b.split(n_items=n_items, at=until,
+                            extend=True)
 
         self.buffer = [b]
         self.buffer_items = len(b)
