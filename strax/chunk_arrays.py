@@ -10,16 +10,15 @@ export, __all__ = strax.exporter()
 @export
 class ChunkPacer:
 
-    def __init__(self, source, dtype=None):
-        self.dtype = dtype
+    def __init__(self, source):
         self.source = source
         self.buffer = []
         self.buffer_items = 0
         self._source_exhausted = False
 
-        if self.dtype is None:
-            # Peek at one item to figure out the dtype
-            self.dtype = self.peek().dtype
+        # Will initialize dtype and other things needed to make empty chunk
+        x = self.peek()
+        self.dtype = x.dtype
 
     @property
     def exhausted(self):
@@ -35,7 +34,16 @@ class ChunkPacer:
             pass
         return self.exhausted
 
+    def slurp(self):
+        while not self._source_exhausted:
+            try:
+                self._fetch_another()
+            except StopIteration:
+                return
+
     def _fetch_another(self):
+        # Remember to catch StopIteration if you're using this guy!
+        # TODO: custom exception?
         try:
             x = next(self.source)
         except StopIteration:
@@ -43,13 +51,16 @@ class ChunkPacer:
             raise StopIteration
         assert isinstance(x, strax.Chunk), \
             f"Got {type(x)} instead of a strax Chunk!"
+
+        self.last_time_in_buffer = x.end
+
         self.buffer.append(x)
-        self.buffer_items += x.n_rows
+        self.buffer_items += len(x)
 
     def _squash_buffer(self):
         """Squash the buffer into a single chunk using np.concatenate"""
         if len(self.buffer) > 1:
-            self.buffer = [strax.concatenate_chunks(self.buffer)]
+            self.buffer = [strax.Chunk.concatenate(self.buffer)]
 
         # Sanity check on buffer_items
         if not len(self.buffer):
@@ -57,55 +68,49 @@ class ChunkPacer:
         else:
             assert self.buffer_items == len(self.buffer[0])
 
-    def _take_from_buffer(self, n):
+    def _take_from_buffer(self, n_items=None, until=None):
         self._squash_buffer()
-        if self.buffer_items == 0:
-            return np.empty(0, dtype=self.dtype)
-        b = self.buffer[0]
 
-        n = min(n, len(b))
+        result, b = self.buffer[0].split(n_items=n_items, at=until)
 
-        result, b = np.split(b, [n])
         self.buffer = [b]
         self.buffer_items = len(b)
+        self.last_time_in_buffer = b.end  # Can change if at > buffer_time
         return result
 
     def get_n(self, n: int):
         """Return array of the next n elements produced by source,
         or (if this is less) as many as the source can still produce.
         """
+        assert isinstance(n, int)
         try:
             while self.buffer_items < n:
                 self._fetch_another()
         except StopIteration:
-            pass
+            n = self.buffer_items
+
+        if n == 0:
+            raise NotImplementedError
 
         return self._take_from_buffer(n)
 
-    def get_until(self, threshold, func=None):
-        """Return remaining elements of source below or at threshold,
+    def get_until(self, threshold: int):
+        """Return elements of source ending before or at threshold,
         assuming source gives sorted arrays.
-
-        :param func: computation to do on array elements before comparison
         """
-        if func is None:
-            def func(x):
-                return x
-
-        if not len(self.buffer):
-            self._fetch_another()
-            assert len(self.buffer) == 1
-
+        assert isinstance(threshold, int)
         try:
-            while (not len(self.buffer[-1])
-                   or not func(self.buffer[-1][-1]) > threshold):
+            while self.last_time_in_buffer < threshold:
                 self._fetch_another()
         except StopIteration:
             pass
 
-        n = strax.first_index_not_below(func(self.buffer[-1]), threshold)
-        n += sum(len(x) for x in self.buffer[:-1])
-        return self._take_from_buffer(n)
+        if not len(self.buffer):
+            assert self.exhausted
+            return self.empty_chunk(start=self.last_time_in_buffer,
+                                    end=threshold)
+
+        return self._take_from_buffer(until=threshold)
 
     def _put_back_at_start(self, x):
         self.buffer = [x] + self.buffer
@@ -132,9 +137,9 @@ def fixed_length_chunks(source, n=10):
 
 
 @export
-def fixed_size_chunks(source, n_bytes=int(1e8), dtype=None):
+def fixed_size_chunks(source, n_bytes=int(1e8)):
     """Yield arrays of maximum size n_bytes"""
-    p = ChunkPacer(source, dtype=dtype)
+    p = ChunkPacer(source)
     n = int(n_bytes / p.itemsize)
     while not p.exhausted:
         yield p.get_n(n)
@@ -157,11 +162,11 @@ def alternating_duration_chunks(source, *durations):
     """Yield arrays of sizes[0], then sizes[1], ... sizes[n],
     then sizes[0], etc."""
     p = ChunkPacer(source)
-    t = p.peek()[0]['time']
+    t = p.peek().start
     i = 0
     while not p.exhausted:
         t += durations[i]
-        yield p.get_until(t, func=strax.endtime)
+        yield p.get_until(t)
         i = (i + 1) % len(durations)
 
 
@@ -184,32 +189,28 @@ def same_length(*sources, same_length=True):
 
 
 @export
-def same_stop(*sources, field=None, func=None):
+def same_end(*sources):
     """Yield tuples of arrays whose values (of field_name) are below common
-    thresholds (set by the chunking of sources[0])
-    assumes sources are sorted by field (or return value of func)
+    endtime thresholds (set by the chunking of sources[0])
+    assumes sources are sorted by endtime
     """
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
 
     def get_result(pacemaker_chunk, is_last):
         if is_last:
+            for x in others:
+                x.slurp()
+            endtime = max([x.last_time_in_buffer for x in others])
+            endtime = max(endtime, pacemaker_chunk.end)
+
             # Final chunk: get ALL remaining data from others
-            other_data = [s.get_until(float('inf'), func=func)
+            other_data = [s.get_until(endtime)
                           for s in others]
-
-        elif not len(pacemaker_chunk):
-            # Empty chunk: cannot get any data from others.
-            # TODO: should we not just skip this?
-            other_data = [np.empty(0, dtype=s.dtype) for s in others]
-
+            pacemaker_chunk.stop = endtime
         else:
-            threshold = pacemaker_chunk[-1]
-            if field is not None:
-                threshold = threshold[field]
-            if func is not None:
-                threshold = func(threshold)
-            other_data = [s.get_until(threshold, func=func)
+            threshold = pacemaker_chunk.end
+            other_data = [s.get_until(threshold)
                           for s in others]
 
         return tuple([pacemaker_chunk] + other_data)

@@ -454,7 +454,6 @@ class StorageBackend:
             end=chunk_info['end'],
             run_id=chunk_info['run_id'],
             data=data,
-            metadata=chunk_info.get('metadata'),
             **chunk_construction_kwargs)
 
     def saver(self, key, metadata):
