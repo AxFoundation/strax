@@ -219,9 +219,7 @@ class Plugin:
 
         if len(deps_by_kind) > 1:
             # Sync iterators of different kinds by time
-            kind_iters = strax.sync_iters(
-                partial(strax.same_stop, func=strax.endtime),
-                kind_iters)
+            kind_iters = strax.sync_iters(strax.same_end, kind_iters)
 
         iters = kind_iters
         pending = PendingFutures()
