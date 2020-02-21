@@ -354,22 +354,18 @@ class Plugin:
 
         return self._fix_output(result, start, stop)
 
-    def _fix_output(self, result, start, stop):
-        if self.multi_output:
-            raise NotImplementedError
-
+    def _fix_output(self, result, start, end, _dtype=None):
+        if self.multi_output and _dtype is None:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
-                    "provide a dict output {dtypename: array}")
-            r2 = dict()
-            for d in self.provides:
-                if d not in result:
-                    raise ValueError(f"Data type {d} missing from output of "
-                                     f"{self.__class__.__name__}!")
-                r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
-                self._check_dtype(r2[d], d)
-            return r2
+                    "provide a dict output {dtypename: result}")
+            return {d: self._fix_output(result[d], start, end, _dtype=d)
+                    for d in self.provides}
+
+        if _dtype is None:
+            assert not self.multi_output
+            _dtype = self.provides[0]
 
         if not isinstance(result, strax.Chunk):
             if start is None:
@@ -379,11 +375,12 @@ class Plugin:
                     f"Chunks, but {self.__class__.__name__} produced a "
                     f"{type(result)}!")
 
-            result = strax.dict_to_rec(result, dtype=self.dtype)
-            self._check_dtype(result)   # TODO: could refactor into chunk?
+            result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
+            self._check_dtype(result, _dtype)  # TODO: could refactor into chunk?
             result = self.chunk(
                 start=start,
-                end=stop,
+                end=end,
+                data_type=_dtype,
                 data=result)
         return result
 
@@ -744,9 +741,12 @@ class ParallelSourcePlugin(Plugin):
                 del results[d]
 
         if not self.multi_output:
-            results = results[self.provides[0]]
+            results = r0 = results[self.provides[0]]
+        else:
+            r0 = results[self.start_from]
+        assert isinstance(r0, strax.Chunk)
 
-        return self._fix_output(results)
+        return self._fix_output(results, start=r0.start, end=r0.end)
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "

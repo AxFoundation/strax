@@ -52,6 +52,10 @@ class Chunk:
     def __len__(self):
         return len(self.data)
 
+    def __repr__(self):
+        return f"{self.run_id}.{self.data_type}:" \
+               f"({self.start}-{self.stop}, {len(self)})"
+
     @property
     def nbytes(self):
         return self.data.nbytes
@@ -60,17 +64,8 @@ class Chunk:
     def duration(self):
         return self.end - self.start
 
-    def json_metadata(self, **kwargs):
-        return json.dumps(
-            dict(
-                start=self.start,
-                end=self.end,
-                n_rows=len(self),
-                run_id=self.run_id),
-            **kwargs)
-
     def split(self,
-              n_items : ty.Union[int, None] = None,
+              n_items: ty.Union[int, None] = None,
               at: ty.Union[int, None] = None):
         if n_items is None and at is None:
             raise ValueError("Provide either n_items or at")
@@ -100,6 +95,7 @@ class Chunk:
 
         c1 = strax.Chunk(start=self.start,
                          # NB: this can extend the chunk!
+                         # TODO: document. converse for start?
                          end=at,
                          data=data1,
                          **common_kwargs)
@@ -119,22 +115,20 @@ class Chunk:
 
         data_kinds = [c.data_kind for c in chunks]
         if len(set(data_kinds)) != 1:
-            raise ValueError(f"Cannot concatenate chunks of different"
+            raise ValueError(f"Cannot merge chunks {chunks} of different"
                              f" data kinds: {data_kinds}")
         data_kind = data_kinds[0]
 
         run_ids = [c.run_id for c in chunks]
         if len(set(run_ids)) != 1:
             raise ValueError(
-                f"Cannot merge chunks of data kind {data_kind} with "
-                f"different run ids: {run_ids}")
+                f"Cannot merge chunks of different run_ids: {chunks}")
         run_id = run_ids[0]
 
         tranges = [(c.start, c.end) for c in chunks]
         if len(set(tranges)) != 1:
             raise ValueError(
-                f"Cannot merge chunks of data kind {data_kind} corresponding "
-                f"to different time ranges: {tranges}")
+                f"Cannot merge chunks with different time ranges: {chunks}")
         start, end = tranges[0]
 
         data = strax.merge_arrs([c.data for c in chunks])
@@ -174,9 +168,7 @@ class Chunk:
             if c.start < prev_end:
                 raise ValueError(
                     "Attempt to concatenate overlapping or "
-                    f"out-of-order chunks of {data_type} for run {run_id}. "
-                    f"Starts: {[c.start for c in chunks]}, "
-                    f"Ends: {[c.end for c in chunks]}.")
+                    f"out-of-order chunks: {chunks} ")
             prev_end = c.end
 
         return cls(
