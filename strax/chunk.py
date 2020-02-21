@@ -39,6 +39,7 @@ class Chunk:
         assert isinstance(data, np.ndarray)
         assert data.dtype == dtype
         dtype = np.dtype(dtype)
+        assert end >= start
 
         self.data_type = data_type
         self.data_kind = data_kind
@@ -68,16 +69,17 @@ class Chunk:
                 run_id=self.run_id),
             **kwargs)
 
-    def split(self, n_items: ty.Union[int, None], at: ty.Union[int, None]):
+    def split(self,
+              n_items : ty.Union[int, None] = None,
+              at: ty.Union[int, None] = None):
         if n_items is None and at is None:
             raise ValueError("Provide either n_items or at")
         if n_items is not None and at is not None:
             raise ValueError("Don't provide both n_items and at")
 
         if n_items is None:
-            n_items = strax.first_index_not_below(
-                strax.endtime(self.data),
-                at)
+            n_items = strax.first_true(
+                strax.endtime(self.data) > at)
 
         data1, data2 = np.split(self.data, [n_items])
 
@@ -97,11 +99,12 @@ class Chunk:
             data_kind=self.data_kind)
 
         c1 = strax.Chunk(start=self.start,
+                         # NB: this can extend the chunk!
                          end=at,
                          data=data1,
                          **common_kwargs)
         c2 = strax.Chunk(start=at,
-                         end=self.end,
+                         end=max(at, self.end),
                          data=data2,
                          **common_kwargs)
         return c1, c2

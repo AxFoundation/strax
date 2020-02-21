@@ -15,7 +15,7 @@ _common_kwargs = frozendict(
 def _make_chunk(ts):
     data = np.zeros(len(ts), dtype=strax.interval_dtype)
     data['time'] = ts
-    data['length'] = 0
+    data['length'] = 1
     data['dt'] = 1
 
     return strax.Chunk(
@@ -111,10 +111,15 @@ def test_get_until(source):
     for t in thresholds:
         result.append(unchunk(p.get_until(t)))
 
+    # We're testing with length 1 intervals here,
+    # so end <= 457 is last satisfied by item that starts at 456
+    # which is the 457th item
     _check_mangling(result, total_length=457)
 
     result.append(unchunk(p.get_until(678)))
 
+    # Remember we have length 1 intervals, so
+    # start times must be < the threshold in the same block
     assert all([result[i][-1] < thresholds[i]
                 for i in range(len(thresholds))])
     assert all([result[i + 1][0] >= thresholds[i]
@@ -215,7 +220,7 @@ def _do_sync_check(r1, r2):
         seen_r1 = max(r1[i])
 
         # Second r does not outpace first
-        assert seen_r1 >= seen_r2
+        assert seen_r1 >= seen_r2, f"{i}, {r1[i]}, {r2[i]}"
 
 
 def test_sync_iters(source, source_skipper):
