@@ -6,8 +6,9 @@ TODO: file numba issue.
 """
 import numpy as np
 
-__all__ = ('interval_dtype record_dtype hit_dtype peak_dtype time_fields '
-           'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
+__all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
+           'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
+           'time_fields').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -36,6 +37,7 @@ interval_dtype = [
     # and int32 for per-channel waveforms (area in ADC x samples)
 ]
 
+
 def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform raw_record.
 
@@ -43,22 +45,15 @@ def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     this indicates a record with zero-padding at the end.
     """
     return interval_dtype + [
-        (("Integral in ADC x samples",
-            'area'), np.int32),
         # np.int16 is not enough for some PMT flashes...
         (('Length of pulse to which the record belongs (without zero-padding)',
             'pulse_length'), np.int32),
         (('Fragment number in the pulse',
             'record_i'), np.int16),
-        (('Baseline in ADC counts. data = int(baseline) - data_orig',
-            'baseline'), np.float32),
-        (('Level of data reduction applied (strax.ReductionLevel enum)',
-            'reduction_level'), np.uint8),
         # Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines
         (('Waveform data in ADC counts above baseline',
-            'data'), np.int16, samples_per_record),
-    ]
+            'data'), np.int16, samples_per_record)]
 
 
 def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
@@ -67,10 +62,15 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     Length can be shorter than the number of samples in data,
     this indicates a record with zero-padding at the end.
     """
-    return interval_dtype + raw_record_dtype(samples_per_record) + [
+    return raw_record_dtype(samples_per_record) + [
+        (("Integral in ADC x samples",
+          'area'), np.int32),
+        (('Level of data reduction applied (strax.ReductionLevel enum)',
+          'reduction_level'), np.uint8),
+        (('Baseline in ADC counts. data = int(baseline) - data_orig',
+          'baseline'), np.float32),
         (('Baseline RMS in ADC counts. data = baseline - data_orig',
-          'baseline'), np.float32)
-    ]
+          'rms'), np.float32)]
 
 
 # Data type for a 'hit': a sub-range of a record
