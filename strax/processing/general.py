@@ -27,10 +27,10 @@ def sort_by_time(x):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def first_index_not_below(arr, t):
-    """Return first index of array >= t, or len(arr) if no such found"""
+def first_true(arr):
+    """Return first index of array that is true, or len(arr) if no such found"""
     for i, x in enumerate(arr):
-        if x >= t:
+        if x:
             return i
     return len(arr)
 

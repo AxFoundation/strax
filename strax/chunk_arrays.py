@@ -71,7 +71,11 @@ class ChunkPacer:
     def _take_from_buffer(self, n_items=None, until=None):
         self._squash_buffer()
 
-        result, b = self.buffer[0].split(n_items=n_items, at=until)
+        if not len(self.buffer):
+            raise NotImplementedError("Oops")
+
+        b = self.buffer[0]
+        result, b = b.split(n_items=n_items, at=until)
 
         self.buffer = [b]
         self.buffer_items = len(b)
@@ -83,14 +87,14 @@ class ChunkPacer:
         or (if this is less) as many as the source can still produce.
         """
         assert isinstance(n, int)
+        if n == 0:
+            raise NotImplementedError("Cannot get zero elements (yet?)")
+
         try:
             while self.buffer_items < n:
                 self._fetch_another()
         except StopIteration:
             n = self.buffer_items
-
-        if n == 0:
-            raise NotImplementedError
 
         return self._take_from_buffer(n)
 
@@ -104,11 +108,6 @@ class ChunkPacer:
                 self._fetch_another()
         except StopIteration:
             pass
-
-        if not len(self.buffer):
-            assert self.exhausted
-            return self.empty_chunk(start=self.last_time_in_buffer,
-                                    end=threshold)
 
         return self._take_from_buffer(until=threshold)
 
