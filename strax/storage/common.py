@@ -530,9 +530,9 @@ class Saver:
         try:
             for chunk_i, s in enumerate(source):
                 new_f = self.save(chunk=s, chunk_i=chunk_i, executor=executor)
+                pending = [f for f in pending if not f.done()]
                 if new_f is not None:
-                    pending = [f for f in pending + [new_f]
-                               if not f.done()]
+                    pending += [new_f]
 
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
