@@ -148,7 +148,7 @@ def merged_dtype(dtypes):
 
 
 @export
-def merge_arrs(arrs):
+def merge_arrs(arrs, dtype=None):
     """Merge structured arrays of equal length.
     On field name collisions, data from later arrays is kept.
 
@@ -169,7 +169,10 @@ def merge_arrs(arrs):
             "Arrays to merge must have the same length, got lengths " +
             ', '.join([str(len(x)) for x in arrs]))
 
-    result = np.zeros(n, dtype=merged_dtype([x.dtype for x in arrs]))
+    if dtype is None:
+        dtype = merged_dtype([x.dtype for x in arrs])
+
+    result = np.zeros(n, dtype=dtype)
     for arr in arrs:
         for fn in arr.dtype.names:
             result[fn] = arr[fn]
