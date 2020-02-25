@@ -563,8 +563,10 @@ class MergeOnlyPlugin(Plugin):
                              "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return strax.merged_dtype([self.deps[d].dtype_for(d)
-                                   for d in self.depends_on])
+        return strax.merged_dtype([
+            self.deps[d].dtype_for(d)
+            # Sorting is needed here to match what strax.Chunk does in merging
+            for d in sorted(self.depends_on)])
 
     def compute(self, **kwargs):
         return kwargs[list(kwargs.keys())[0]]
