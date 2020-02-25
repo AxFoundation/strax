@@ -3,14 +3,13 @@
 Please see the developer documentation for more details
 on strax' storage hierarchy.
 """
+from ast import literal_eval
+from concurrent.futures import wait
 import logging
+from packaging import version
 import time
 import typing
 import warnings
-from ast import literal_eval
-from concurrent.futures import wait
-
-import numpy as np
 
 import strax
 
@@ -365,12 +364,26 @@ class StorageBackend:
         """
         metadata = self.get_metadata(backend_key)
 
-        required_fields = 'run_id data_type data_kind dtype run_id start end compressor'.split()
+        if 'strax_version' in metadata:
+            v_old = metadata['strax_version']
+            if version.parse(v_old) < version.parse('0.9.0'):
+                raise strax.DataNotAvailable(
+                    f"Cannot load data at {backend_key}: "
+                    f"it was created with strax {v_old}, "
+                    f"but you have strax {strax.__version__}. ")
+        else:
+            warnings.warn(f"Data at {backend_key} does not say what strax "
+                          "version it was generated with. This means it is "
+                          "corrupted, or very, very old. Probably "
+                          "we cannot load this.")
+
+        required_fields = ('start end run_id data_type data_kind '
+                           'dtype compressor').split()
         missing_fields = [x for x in required_fields if x not in metadata]
         if len(missing_fields):
-            raise ValueError(
-                f"Cannot load data at {backend_key}: metadata is " 
-                f"missing the required fields {missing_fields}.")
+            raise strax.DataNotAvailable(
+                f"Cannot load data at {backend_key}: metadata is "
+                f"missing the required fields {missing_fields}. ")
 
         # TODO: should literal_eval inside get_metadata, maybe?
         dtype = literal_eval(metadata['dtype'])
