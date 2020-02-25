@@ -37,7 +37,7 @@ class Chunk:
         assert isinstance(start, int)
         assert isinstance(end, int)
         assert isinstance(data, np.ndarray)
-        assert data.dtype == dtype
+        assert strax.remove_titles_from_dtype(data.dtype) == strax.remove_titles_from_dtype(dtype), f"Cannot create chunk: promised {dtype}, fot {data.dtype}"
         dtype = np.dtype(dtype)
         assert end >= start
 
@@ -121,7 +121,14 @@ class Chunk:
 
     @classmethod
     def merge(cls, chunks, data_type='<UNKNOWN>'):
-        """Create chunk by merging columns of chunks of same data kind"""
+        """Create chunk by merging columns of chunks of same data kind
+
+        :param chunks: Chunks to merge
+        :param dtype: Numpy dtype of merged chunk. Must be explicitly provided,
+        otherwise field order is ambiguous
+        :param data_type: data_type name of new created chunk. Set to <UNKNOWN>
+        if not provided.
+        """
         if not chunks:
             raise ValueError("Need at least one chunk to merge")
         if len(chunks) == 1:
@@ -144,6 +151,11 @@ class Chunk:
             raise ValueError(
                 f"Cannot merge chunks with different time ranges: {chunks}")
         start, end = tranges[0]
+
+        # Merge chunks in order of data_type name
+        # so the field order is consistent
+        # regardless of the order in which chunks they are passed
+        chunks = list(sorted(chunks, key=lambda x: x.data_type))
 
         data = strax.merge_arrs([c.data for c in chunks])
 
