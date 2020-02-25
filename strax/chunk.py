@@ -49,12 +49,22 @@ class Chunk:
         self.end = end
         self.data = data
 
+        if len(data):
+            assert data[0]['time'] >= self.start
+            assert strax.endtime(data[-1]) <= self.end
+
     def __len__(self):
         return len(self.data)
 
+    @staticmethod
+    def _t_fmt(t):
+        return f'{t // int(1e9)}sec {t % int(1e9)} ns'
+
     def __repr__(self):
-        return f"{self.run_id}.{self.data_type}:" \
-               f"({self.start}-{self.end}, {len(self)})"
+        return (
+            f"[{self.run_id}.{self.data_type}: "
+            f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
+            f"{len(self)} items]")
 
     @property
     def nbytes(self):
@@ -146,11 +156,30 @@ class Chunk:
                 f"Cannot merge chunks of different run_ids: {chunks}")
         run_id = run_ids[0]
 
+        if len(set([len(c) for c in chunks])) != 1:
+            raise ValueError(
+                f"Cannot merge chunks with different number of items: {chunks}")
+
         tranges = [(c.start, c.end) for c in chunks]
         if len(set(tranges)) != 1:
-            raise ValueError(
-                f"Cannot merge chunks with different time ranges: {chunks}")
-        start, end = tranges[0]
+            # Merging different time ranges is allowed if the only difference
+            # is the amount of no-data padding. This happens because some
+            # splitting happens by row count and other splitting by
+            # specific time thresholds
+            if len(chunks[0]) > 0:
+                tranges_data = [
+                    (c.data[0]['time'], strax.endtime(c.data[-1]))
+                    for c in chunks]
+                if not len(set(tranges_data)) == 1:
+                    raise ValueError(
+                        f"Cannot merge chunks {chunks}, which have data "
+                        f"corresponding to different "
+                        f"time ranges {tranges_data}")
+            # Result will extend the minimal amount of padding
+            start = max([c.start for c in chunks])
+            end = min([c.end for c in chunks])
+        else:
+            start, end = tranges[0]
 
         # Merge chunks in order of data_type name
         # so the field order is consistent
