@@ -130,7 +130,7 @@ def test_get_until(source):
 
     # Regression test
     bla = p.get_until(5000)
-    assert bla.end == 5000
+    assert bla.end == 1000
     assert len(bla) == 0
     assert p.exhausted
 

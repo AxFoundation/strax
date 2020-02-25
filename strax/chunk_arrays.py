@@ -75,8 +75,7 @@ class ChunkPacer:
             raise NotImplementedError("Oops")
 
         b = self.buffer[0]
-        result, b = b.split(n_items=n_items, at=until,
-                            extend=True)
+        result, b = b.split(n_items=n_items, at=until)
 
         self.buffer = [b]
         self.buffer_items = len(b)
@@ -171,11 +170,8 @@ def alternating_duration_chunks(source, *durations):
 
 
 @export
-def same_length(*sources, same_length=True):
+def same_length(*sources):
     """Yield tuples of arrays of the same number of items
-
-    :param same_length: Crash if the sources do not produce
-    items of the same length
     """
     pacemaker = sources[0]
     others = [ChunkPacer(s) for s in sources[1:]]
@@ -262,9 +258,14 @@ def merge_iters(iters):
     if len(iters) == 1:
         yield from iters[0]
 
+    last_end = None
     try:
         while True:
-            yield strax.Chunk.merge([next(it)
-                                     for it in iters])
+            result = strax.Chunk.merge([next(it)
+                                        for it in iters])
+            if last_end:
+                result.start = last_end
+            yield result
+            last_end = result.end
     except StopIteration:
         return
