@@ -117,8 +117,9 @@ def integrate(records):
             r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
             r['data'].sum()
-            + int(round(r['baseline'] % 1)) * n_real_samples)
-
+            # Add floating part of baseline * number of samples
+            # int(round()) the result since the area field is an int
+            + int(round((r['baseline'] % 1) * n_real_samples)))
 
 
 @export
