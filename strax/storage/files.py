@@ -314,10 +314,10 @@ class FileSaver(strax.Saver):
             os.remove(fn)
 
         if self.md['chunks']:
-            # TODO: warning otherwise? Don't want to raise exception
-            # since we might already be crashing due to another exception
             self.md['start'] = min([x['start'] for x in self.md['chunks']])
-            self.md['end'] = min([x['start'] for x in self.md['chunks']])
+            self.md['end'] = max([x['end'] for x in self.md['chunks']])
+        # If there were no chunks, we are certainly crashing.
+        # Don't throw another exception
 
         self._flush_metadata()
 
