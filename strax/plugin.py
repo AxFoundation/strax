@@ -305,21 +305,23 @@ class Plugin:
         if d is None:
             assert not self.multi_output
             d = self.provides[0]
-        expect = self.dtype_for(d)
         pname = self.__class__.__name__
         if not isinstance(x, np.ndarray):
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
                 f"Delivered a {type(x)}")
+
+        expect = strax.remove_titles_from_dtype(self.dtype_for(d))
         if not isinstance(expect, np.dtype):
             raise ValueError(f"Plugin {pname} expects {expect} as dtype??")
-        if x.dtype != expect:
+        got = strax.remove_titles_from_dtype(x.dtype)
+        if got != expect:
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
-                f"Promised: {self.dtype_for(d)}\n"
-                f"Delivered: {x.dtype}.")
+                f"Promised:  {expect}\n"
+                f"Delivered: {got}.")
 
     def do_compute(self, chunk_i=None, **kwargs):
         """Wrapper for the user-defined compute method
@@ -694,7 +696,7 @@ class ParallelSourcePlugin(Plugin):
                 compute_kwargs = dict(chunk_i=chunk_i)
 
                 for kind, d_of_kind in p.dependencies_by_kind().items():
-                    compute_kwargs[kind] = strax.merge_arrs(
+                    compute_kwargs[kind] = strax.Chunk.merge(
                         [results[d] for d in d_of_kind])
 
                 # Store compute result(s)

@@ -124,6 +124,14 @@ def unpack_dtype(dtype):
 
 
 @export
+def remove_titles_from_dtype(dtype):
+    """Return np.dtype with titles removed from fields"""
+    return np.dtype(
+        [(fieldname[-1] if isinstance(fieldname, tuple) else fieldname, dt)
+         for fieldname, dt in unpack_dtype(np.dtype(dtype))])
+
+
+@export
 def merged_dtype(dtypes):
     result = {}
     for x in dtypes:
