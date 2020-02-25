@@ -59,6 +59,11 @@ class DataNotAvailable(Exception):
 
 
 @export
+class EmptyDataWarning(UserWarning):
+    pass
+
+
+@export
 class DataExistsError(Exception):
     """Raised when attempting to write a piece of data
     that is already written"""
@@ -377,13 +382,18 @@ class StorageBackend:
                           "corrupted, or very, very old. Probably "
                           "we cannot load this.")
 
-        required_fields = ('start end run_id data_type data_kind '
-                           'dtype compressor').split()
+        # 'start' and 'end' are not required, to allow allow_incomplete
+        required_fields = (
+            'run_id data_type data_kind dtype compressor').split()
         missing_fields = [x for x in required_fields if x not in metadata]
         if len(missing_fields):
             raise strax.DataNotAvailable(
                 f"Cannot load data at {backend_key}: metadata is "
                 f"missing the required fields {missing_fields}. ")
+
+        if not len(metadata['chunks']):
+            raise ValueError(
+                f"Cannot load data at {backend_key}, it has no chunks!")
 
         # TODO: should literal_eval inside get_metadata, maybe?
         dtype = literal_eval(metadata['dtype'])
@@ -394,19 +404,6 @@ class StorageBackend:
             data_type=metadata['data_type'],
             data_kind=metadata['data_kind'],
             dtype=dtype)
-
-        if not len(metadata['chunks']):
-            warnings.warn(f"No chunks of data for {metadata['data_kind']}"
-                          f" in run {metadata['run_id']}",
-                          # TODO: Custom warning class
-                          )
-            yield strax.Chunk(
-                start=metadata['start'],
-                end=metadata['end'],
-                run_id=metadata['run_id'],
-                data=None,
-                **chunk_kwargs)
-            return
 
         required_chunk_metadata_fields = 'start end run_id'.split()
 
@@ -574,14 +571,18 @@ class Saver:
                 chunk_info[f'{desc}_endtime'] = \
                     int(strax.endtime(chunk.data[i]))
 
-        bonus_info, future = self._save_chunk(
-            chunk.data,
-            chunk_info,
-            executor=None if self.is_forked else executor)
+        if len(chunk):
+            bonus_info, future = self._save_chunk(
+                chunk.data,
+                chunk_info,
+                executor=None if self.is_forked else executor)
+            chunk_info.update(bonus_info)
+        else:
+            # No need to create an empty file for an empty chunk;
+            # the annotation in the metadata is sufficient.
+            future = None
 
-        chunk_info.update(bonus_info)
         self._save_chunk_metadata(chunk_info)
-
         return future
 
     def close(self,
