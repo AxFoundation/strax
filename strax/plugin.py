@@ -428,7 +428,7 @@ class OverlapWindowPlugin(Plugin):
         super().__init__()
         self.cached_input = {}
         self.cached_results = None
-        self.last_threshold = -42
+        self.last_threshold = 0
         # This guy can have a logger, it's not parallelized anyway
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -437,31 +437,32 @@ class OverlapWindowPlugin(Plugin):
         raise NotImplementedError
 
     def iter(self, iters, executor=None):
-        yield from super().iter(iters, executor=executor)
+        # Keep one chunk in reserve, since we have to do something special
+        # if we see the last chunk.
+        last_result = None
+        for x in super().iter(iters, executor=executor):
+            if last_result is not None:
+                yield last_result
+            last_result = x
 
-        # Yield results initially suppressed in fear of a next chunk
-        if self.cached_results is not None and len(self.cached_results):
-            self.log.debug(f"Last chunk! Sending out cached result "
-                           f"{self.cached_results}")
-            yield self.cached_results
-        else:
-            self.log.debug("Last chunk! No cached results to send.")
+        if self.cached_results is not None and last_result is not None:
+            # Note we do this even if the cached_result is only emptiness,
+            # to make sure our final result ends at the right time.
+            yield strax.Chunk.concatenate([last_result, self.cached_results])
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
-        # Determine (a lower bound on) the data's last endtime
+        # When does this batch of inputs end?
         ends = [v.end for v in kwargs.values()]
-        if not len(ends) == 1:
-            raise RuntimeError(f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
+        if not len(set(ends)) == 1:
+            raise RuntimeError(
+                f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
         end = ends[0]
 
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
-        # TODO: why do tests not fail is I set cache_inputs_beyond to
-        # end - window size - 2 ?
-        # (they do fail if I set to end - 0.5 * window size - 2)
         invalid_beyond = int(end - self.get_window_size() - 1)
         cache_inputs_beyond = int(end - 2 * self.get_window_size() - 1)
 
@@ -470,7 +471,6 @@ class OverlapWindowPlugin(Plugin):
             if len(self.cached_input):
                 kwargs[k] = v = strax.Chunk.concatenate(
                     [self.cached_input[k], v])
-            print(v, cache_inputs_beyond)
             _, self.cached_input[k] = v.split(at=cache_inputs_beyond)
 
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
