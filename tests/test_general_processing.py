@@ -11,11 +11,11 @@ import strax
 @settings(deadline=None)
 # Tricky example: uncontained interval precedes contained interval
 # (this did not produce an issue, but good to show this is handled)
-@example(things=np.array([(0, 1, 0, 1),
-                          (0, 1, 1, 5),
-                          (0, 1, 2, 1)],
+@example(things=np.array([(0, 1, 1, 0),
+                          (1, 5, 1, 0),
+                          (2, 1, 1, 0)],
                          dtype=strax.interval_dtype),
-         containers=np.array([(0, 1, 0, 4)],
+         containers=np.array([(0, 4, 1, 0)],
                              dtype=strax.interval_dtype))
 def test_fully_contained_in(things, containers):
     result = strax.fully_contained_in(things, containers)
@@ -36,11 +36,11 @@ def test_fully_contained_in(things, containers):
 
 @given(sorted_intervals, disjoint_sorted_intervals, integers(-2, 2))
 @settings(deadline=None)
-@example(things=np.array([(0, 1, 0, 1),
-                          (0, 1, 1, 5),
-                          (0, 1, 2, 1)],
+@example(things=np.array([(0, 1, 1, 0),
+                          (1, 5, 1, 0),
+                          (2, 1, 1, 0)],
                          dtype=strax.interval_dtype),
-         containers=np.array([(0, 1, 0, 4)],
+         containers=np.array([(0, 4, 1, 0)],
                              dtype=strax.interval_dtype),
          window=0)
 def test_touching_windows(things, containers, window):
@@ -63,9 +63,9 @@ def test_touching_windows(things, containers, window):
 @given(sorted_intervals, disjoint_sorted_intervals)
 # Specific example to trigger issue #37
 @example(
-    things=np.array([(0, 1, 2, 1)],
+    things=np.array([(2, 1, 1, 0)],
                     dtype=strax.interval_dtype),
-    containers=np.array([(0, 1, 0, 1), (0, 1, 2, 1)],
+    containers=np.array([(0, 1, 1, 0), (2, 1, 1, 0)],
                         dtype=strax.interval_dtype))
 def test_split_by_containment(things, containers):
     result = strax.split_by_containment(things, containers)

@@ -12,21 +12,20 @@ import strax
 # Examples that trigger issue #49
 @example(
     input_peaks=np.array(
-        [(0, 1,  0,  1), (0, 1,  1, 10), (0, 1, 11,  1)],
+        [(0, 1, 1, 0), (1, 10, 1, 0), (11, 1, 1, 0)],
         dtype=strax.interval_dtype),
     split_i=2)
 @example(
     input_peaks=np.array(
-        [(0, 1, 0, 1), (0, 1, 1, 1), (0, 1, 2, 9), (0, 1, 11, 1)],
+        [(0, 1, 1, 0), (1, 1, 1, 0), (2, 9, 1, 0), (11, 1, 1, 0)],
         dtype=strax.interval_dtype),
     split_i=3)
 # Other example that caused failures at some point
 @example(
     input_peaks=np.array(
-        [(0, 1, 0, 1), (0, 1, 7, 6), (0, 1, 13, 1)],
+        [(0, 1, 1, 0), (7, 6, 1, 0), (13, 1, 1, 0)],
         dtype=strax.interval_dtype),
-    split_i=2
-)
+    split_i=2)
 def test_overlap_plugin(input_peaks, split_i):
     """Counting the number of nearby peaks should not depend on how peaks are
     chunked.
