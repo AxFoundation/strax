@@ -126,7 +126,4 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'max_gap'), np.int32),
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
-        # For peaklets this is likely to be overwritten:
-        (('Classification of the peak(let)',
-          'type'), np.int8)
     ]
