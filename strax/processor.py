@@ -228,7 +228,7 @@ class ThreadedMailboxProcessor:
                 # Unfortunately there is no wait=timeout option, so we have to
                 # roll our own
                 pids = self.process_executor._processes.keys()
-                self.process_executor.shutdown(wait=False)
+                self.process_executor.shutdown(wait=True)
 
                 t0 = time.time()
                 while time.time() < t0 + 20:
