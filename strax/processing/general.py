@@ -26,27 +26,17 @@ def sort_by_time(x):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def first_true(arr):
-    """Return first index of array that is true, or len(arr) if no such found"""
-    for i, x in enumerate(arr):
-        if x:
-            return i
-    return len(arr)
-
-
-@export
+@numba.generated_jit(nopython=True, nogil=True)
 def endtime(x):
     """Return endtime of intervals x"""
-    try:
-        return x['endtime']
-    except (KeyError, ValueError, IndexError):
-        return x['time'] + x['length'] * x['dt']
+    if 'endtime' in x.dtype.fields:
+        return lambda x: x['endtime']
+    else:
+        return lambda x: x['time'] + x['length'] * x['dt']
 
 
 @export
-# TODO: somehow numba compilation hangs on this one? reproduce / file issue?
-# numba.jit(nopython=True, nogil=True, cache=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def from_break(x, safe_break=10000, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long
     If there is no such break, return the best break found.

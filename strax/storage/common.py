@@ -464,11 +464,14 @@ class StorageBackend:
 
         if time_range:
             if result.start < time_range[0]:
-                result = result.split(at=time_range[0])[1]
-                assert result.start >= time_range[0]
+                _, result = result.split(t=time_range[0],
+                                         allow_early_split=True)
             if result.end > time_range[1]:
-                result = result.split(at=time_range[1])[0]
-                assert result.end <= time_range[1]
+                try:
+                    result, _ = result.split(t=time_range[1],
+                                             allow_early_split=False)
+                except strax.CannotSplit:
+                    pass
 
         return result
 

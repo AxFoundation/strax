@@ -1,7 +1,7 @@
-import json
 import typing as ty
 
 import numpy as np
+import numba
 
 import strax
 export, __all__ = strax.exporter()
@@ -32,26 +32,49 @@ class Chunk:
                  start,
                  end,
                  data):
-        if data is None:
-            data = np.empty(0, dtype)
-        assert isinstance(start, int)
-        assert isinstance(end, int)
-        assert isinstance(data, np.ndarray)
-        assert strax.remove_titles_from_dtype(data.dtype) == strax.remove_titles_from_dtype(dtype), f"Cannot create chunk: promised {dtype}, fot {data.dtype}"
-        dtype = np.dtype(dtype)
-        assert end >= start
-
         self.data_type = data_type
         self.data_kind = data_kind
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
         self.run_id = run_id
         self.start = start
         self.end = end
+        if data is None:
+            data = np.empty(0, dtype)
         self.data = data
 
+        if not (isinstance(start, int) and isinstance(end, int)):
+            raise ValueError(f"Attempt to create chunk {self} "
+                             "with non-integer start times")
+        if not isinstance(data, np.ndarray):
+            raise ValueError(f"Attempt to create chunk {self} "
+                             "with data that isn't a numpy array")
+        expected_dtype = strax.remove_titles_from_dtype(dtype)
+        got_dtype = strax.remove_titles_from_dtype(dtype)
+        if expected_dtype != got_dtype:
+            raise ValueError(f"Attempt to create chunk {self} "
+                             f"with data of {dtype}, "
+                             f"should be {expected_dtype}")
+        if start > end:
+            raise ValueError(f"Attempt to create chunk {self} "
+                             f"with negative length")
+
         if len(data):
-            assert data[0]['time'] >= self.start
-            assert strax.endtime(data[-1]) <= self.end
+            data_starts_at = data[0]['time']
+            data_ends_at = strax.endtime(data[-1])
+
+            if data_starts_at < self.start:
+                raise ValueError(f"Attempt to create chunk {self} "
+                                 f"whose data starts early at {data_starts_at}")
+            if data_ends_at > self.end:
+                raise ValueError(f"Attempt to create chunk {self} "
+                                 f"whose data ends late at {data_ends_at}")
+
+        # TODO: remove this in production, for performance
+        # (or let it be some debug mode)
+        if len(data) > 1:
+            if min(np.diff(data['time'])) < 0:
+                raise ValueError(f"Attempt to create chunk {self} "
+                                 "whose data is not sorted by time.")
 
     def __len__(self):
         return len(self.data)
@@ -75,37 +98,27 @@ class Chunk:
         return self.end - self.start
 
     def split(self,
-              n_items: ty.Union[int, None] = None,
-              at: ty.Union[int, None] = None,
-              extend=False):
-        """Split a chunk in two.
+              t: ty.Union[int, None],
+              allow_early_split=False):
+        """Return (chunk_left, chunk_right) split at time t.
 
-        :param n_items: Number of items to put in the first chunk
-        :param at: Time at or before which all items in the first chunk
-        must end
-        :param extend: If True, and at > self.end, will extend the endtime of
-        the right chunk to at. Usually it will be self.end.
-        :return: 2-tuple of strax.Chunks
+        :param t: Time at which to split the data.
+        All data in the left chunk will have their (exclusive) end <= t,
+        all data in the right chunk will have (inclusive) start >=t.
+        :param allow_early_split:
+          If False, raise CannotSplit if the requirements above cannot be met.
+          If True, split at the closest possible time before t.
         """
-        if n_items is None and at is None:
-            raise ValueError("Provide either n_items or at")
-        if n_items is not None and at is not None:
-            raise ValueError("Don't provide both n_items and at")
-
-        if n_items is None:
-            n_items = strax.first_true(
-                strax.endtime(self.data) > at)
-
-        data1, data2 = np.split(self.data, [n_items])
-
-        if at is None:
-            # TODO: say somewhere this only works for disjoint data
-            if not len(data1):
-                at = self.start
-            elif not len(data2):
-                at = self.end
-            else:
-                at = int((strax.endtime(data1[-1]) + data2[0]['time']) // 2)
+        t = max(min(t, self.end), self.start)
+        if t == self.end:
+            data1, data2 = self.data, self.data[:0]
+        elif t == self.start:
+            data1, data2 = self.data[:0], self.data
+        else:
+            data1, data2, t = split_array(
+                data=self.data,
+                t=t,
+                allow_early_split=allow_early_split)
 
         common_kwargs = dict(
             run_id=self.run_id,
@@ -113,18 +126,14 @@ class Chunk:
             data_type=self.data_type,
             data_kind=self.data_kind)
 
-        if at > self.end and not extend:
-            at = self.end
-
         c1 = strax.Chunk(
             start=self.start,
-            end=max(self.start, at),
+            end=max(self.start, t),
             data=data1,
             **common_kwargs)
         c2 = strax.Chunk(
-            # if at < start, second fragment contains everything
-            start=max(self.start, at),
-            end=max(at, self.end),
+            start=max(self.start, t),
+            end=max(t, self.end),
             data=data2,
             **common_kwargs)
         return c1, c2
@@ -133,12 +142,13 @@ class Chunk:
     def merge(cls, chunks, data_type='<UNKNOWN>'):
         """Create chunk by merging columns of chunks of same data kind
 
-        :param chunks: Chunks to merge
+        :param chunks: Chunks to merge. None is allowed and will be ignored.
         :param dtype: Numpy dtype of merged chunk. Must be explicitly provided,
         otherwise field order is ambiguous
         :param data_type: data_type name of new created chunk. Set to <UNKNOWN>
         if not provided.
         """
+        chunks = [c for c in chunks if c is not None]
         if not chunks:
             raise ValueError("Need at least one chunk to merge")
         if len(chunks) == 1:
@@ -162,24 +172,9 @@ class Chunk:
 
         tranges = [(c.start, c.end) for c in chunks]
         if len(set(tranges)) != 1:
-            # Merging different time ranges is allowed if the only difference
-            # is the amount of no-data padding. This happens because some
-            # splitting happens by row count and other splitting by
-            # specific time thresholds
-            if len(chunks[0]) > 0:
-                tranges_data = [
-                    (c.data[0]['time'], strax.endtime(c.data[-1]))
-                    for c in chunks]
-                if not len(set(tranges_data)) == 1:
-                    raise ValueError(
-                        f"Cannot merge chunks {chunks}, which have data "
-                        f"corresponding to different "
-                        f"time ranges {tranges_data}")
-            # Result will extend the minimal amount of padding
-            start = max([c.start for c in chunks])
-            end = min([c.end for c in chunks])
-        else:
-            start, end = tranges[0]
+            raise ValueError("Cannot merge chunks with different time "
+                             f"ranges: {tranges}")
+        start, end = tranges[0]
 
         # Merge chunks in order of data_type name
         # so the field order is consistent
@@ -199,7 +194,10 @@ class Chunk:
 
     @classmethod
     def concatenate(cls, chunks):
-        """Create chunk by concatenating chunks of same data type"""
+        """Create chunk by concatenating chunks of same data type
+        You can pass None's, they will be ignored
+        """
+        chunks = [c for c in chunks if c is not None]
         if not chunks:
             raise ValueError("Need at least one chunk to concatenate")
         if len(chunks) == 1:
@@ -234,3 +232,99 @@ class Chunk:
             data_kind=chunks[0].data_kind,
             run_id=run_id,
             data=np.concatenate([c.data for c in chunks]))
+
+
+@export
+def continuity_check(iter):
+    last_end = None
+    last_runid = None
+    for s in iter:
+        if s.run_id != last_runid:
+            # TODO: can we do better?
+            last_end = None
+        if last_end is not None:
+            if s.start != last_end:
+                raise ValueError("Data is not continuous. "
+                                 f"Chunk {s} should have started at {last_end}")
+        yield s
+
+        last_end = s.end
+        last_runid = s.run_id
+
+
+@export
+@numba.njit(cache=True, nogil=True)
+def split_array(data, t, allow_early_split=False):
+    """Return (data left of t, data right of t, t), or raise CannotSplit
+    if that would split a data element in two.
+
+    :param data: strax numpy data
+    :param t: Time to split data
+    :param allow_early_split: Instead of raising CannotSplit,
+    split at t_split as close as possible before t where a split can happen.
+    The new split time replaces t in the return value.
+    """
+    # Slitting an empty array is easy
+    if not len(data):
+        print("Splitting empty array")
+        return data[:0], data[:0], t
+
+    # Splitting off a bit of nothing from the start is easy
+    # since the data is sorted by time.
+    if data[0]['time'] >= t:
+        print("Splitting off nothing from start")
+        return data[:0], data, t
+
+    # Find:
+    #  i_first_beyond: the first element starting after t
+    #  splittable_i: nearest index left of t where we can safely split BEFORE
+    latest_end_seen = -1
+    splittable_i = 0
+    for i, d in enumerate(data):
+        if d['time'] >= latest_end_seen:
+            splittable_i = i
+        if d['time'] >= t:
+            i_first_beyond = i
+            break
+        latest_end_seen = max(latest_end_seen,
+                              strax.endtime(d))
+        if latest_end_seen > t:
+            # Cannot split anywhere after this
+            break
+    else:
+        if latest_end_seen <= t:
+            print("All data ends before t")
+            return data, data[:0], t
+        i_first_beyond = -1
+
+    print('i_first_beyond = ', i_first_beyond)
+    print('splittable_i = ', splittable_i)
+    print('latest_end_seen = ', latest_end_seen)
+
+    if (splittable_i != i_first_beyond or
+            latest_end_seen > t):
+        if not allow_early_split:
+            # Raise custom exception, make better one outside numba
+            raise CannotSplit()
+        t = min(data[splittable_i]['time'], t)
+
+    return data[:splittable_i], data[splittable_i:], t
+
+
+@export
+class CannotSplit(Exception):
+    pass
+
+# n_to_left = strax.false_before_true(strax.endtime(data) > at)
+# data1, data2 = np.split(data, [n_to_left])
+# return data1, data2, at
+
+#
+# if n_to_left != len(self) and self.data[n_to_left]['time'] < at:
+#     # We cannot split here, that would create two overlapping chunks
+#     if overlap_handling == 'error':
+#         raise ValueError(f"Cannot split {self} at {at}, "
+#                          f"that would split individual data elements.")
+#     raise NotImplementedError
+#
+#
