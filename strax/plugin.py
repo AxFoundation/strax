@@ -456,7 +456,7 @@ class OverlapWindowPlugin(Plugin):
         super().__init__()
         self.cached_input = {}
         self.cached_results = None
-        self.last_threshold = 0
+        self.sent_until = 0
         # This guy can have a logger, it's not parallelized anyway
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -482,6 +482,19 @@ class OverlapWindowPlugin(Plugin):
         if not len(kwargs):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
+        # Add cached inputs to compute arguments
+        for k, v in kwargs.items():
+            if len(self.cached_input):
+                kwargs[k] = strax.Chunk.concatenate(
+                    [self.cached_input[k], v])
+
+        # Compute new results
+        result = super().do_compute(chunk_i=chunk_i, **kwargs)
+
+        # Throw away results we already sent out
+        _, result = result.split(t=self.sent_until,
+                                 allow_early_split=False)
+
         # When does this batch of inputs end?
         ends = [v.end for v in kwargs.values()]
         if not len(set(ends)) == 1:
@@ -489,27 +502,27 @@ class OverlapWindowPlugin(Plugin):
                 f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
         end = ends[0]
 
+        # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
         invalid_beyond = int(end - self.get_window_size() - 1)
-        cache_inputs_beyond = int(end - 2 * self.get_window_size() - 1)
 
-        # Update input cache
+        # Prepare to send out valid results, cache the rest
+        # Do not modify result anymore after this
+        # Note result.end <= invalid_beyond, with equality if there are
+        # no overlaps
+        result, self.cached_results = result.split(t=invalid_beyond,
+                                                   allow_early_split=True)
+        self.sent_until = result.end
+
+        # Cache a necessary amount of input for next time
+        # Again, take a bit of overkill for good measure
+        cache_inputs_beyond = int(self.sent_until
+                                  - 2 * self.get_window_size() - 1)
         for k, v in kwargs.items():
-            if len(self.cached_input):
-                kwargs[k] = v = strax.Chunk.concatenate(
-                    [self.cached_input[k], v])
-            _, self.cached_input[k] = v.split(at=cache_inputs_beyond)
+            _, self.cached_input[k] = v.split(t=cache_inputs_beyond,
+                                              allow_early_split=True)
 
-        result = super().do_compute(chunk_i=chunk_i, **kwargs)
-
-        # Throw away results we already sent last time
-        _, result = result.split(at=self.last_threshold)
-
-        # Send out valid results, cache the rest
-        result, self.cached_results = result.split(at=invalid_beyond)
-
-        self.last_threshold = invalid_beyond
         return result
 
 
