@@ -418,13 +418,13 @@ def dict_to_rec(x, dtype=None):
 
 
 @export
-def multi_run(f, run_ids, *args, max_workers=None,
+def multi_run(fun, run_ids, *args, max_workers=None,
               throw_away_result=False,
               **kwargs):
     """Execute f(run_id, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
 
-    :param f: Function to run
+    :param fun: Function to run
     :param run_ids: list/tuple of runids
     :param max_workers: number of worker threads/processes to spawn.
     If set to None, defaults to 1.
@@ -442,15 +442,15 @@ def multi_run(f, run_ids, *args, max_workers=None,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(f, r, *args, **kwargs)
+        futures = [exc.submit(fun, r, *args, **kwargs)
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
                       desc="Loading %d runs" % len(run_ids)):
             pass
 
         result = []
-        for i, f in enumerate(futures):
-            r = f.result()
+        for i, fun in enumerate(futures):
+            r = fun.result()
             if throw_away_result:
                 continue
             # Append the run id column

@@ -410,7 +410,7 @@ class Plugin:
                     f"{type(result)}!")
 
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
-            self._check_dtype(result, _dtype)  # TODO: could refactor into chunk?
+            self._check_dtype(result, _dtype)
             result = self.chunk(
                 start=start,
                 end=end,
