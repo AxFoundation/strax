@@ -78,9 +78,6 @@ def test_overlap_plugin(input_peaks, split_i):
                 time=peaks['time'][:1],
                 endtime=strax.endtime(peaks)[-1:])
 
-        def iter(self, *args, **kwargs):
-            yield from super().iter(*args, **kwargs)
-
     st = strax.Context(storage=[])
     st.register(Peaks)
     st.register(WithinWindow)
