@@ -1,22 +1,22 @@
-from hypothesis import given, example, settings
-from hypothesis.strategies import integers
-from strax.testutils import sorted_intervals, disjoint_sorted_intervals
-from strax.testutils import several_fake_records
+import hypothesis.strategies
+import strax.testutils
 
 import numpy as np
 import strax
 
 
-@given(sorted_intervals, disjoint_sorted_intervals)
-@settings(deadline=None)
+@hypothesis.given(strax.testutils.sorted_intervals,
+                  strax.testutils.disjoint_sorted_intervals)
+@hypothesis.settings(deadline=None)
 # Tricky example: uncontained interval precedes contained interval
 # (this did not produce an issue, but good to show this is handled)
-@example(things=np.array([(0, 1, 1, 0),
-                          (1, 5, 1, 0),
-                          (2, 1, 1, 0)],
-                         dtype=strax.interval_dtype),
-         containers=np.array([(0, 4, 1, 0)],
-                             dtype=strax.interval_dtype))
+@hypothesis.example(
+    things=np.array([(0, 1, 1, 0),
+                     (1, 5, 1, 0),
+                     (2, 1, 1, 0)],
+                    dtype=strax.interval_dtype),
+    containers=np.array([(0, 4, 1, 0)],
+                        dtype=strax.interval_dtype))
 def test_fully_contained_in(things, containers):
     result = strax.fully_contained_in(things, containers)
 
@@ -34,15 +34,18 @@ def test_fully_contained_in(things, containers):
             assert _is_contained(thing, containers[result[i]])
 
 
-@given(sorted_intervals, disjoint_sorted_intervals, integers(-2, 2))
-@settings(deadline=None)
-@example(things=np.array([(0, 1, 1, 0),
-                          (1, 5, 1, 0),
-                          (2, 1, 1, 0)],
-                         dtype=strax.interval_dtype),
-         containers=np.array([(0, 4, 1, 0)],
-                             dtype=strax.interval_dtype),
-         window=0)
+@hypothesis.given(strax.testutils.sorted_intervals,
+                  strax.testutils.disjoint_sorted_intervals,
+                  hypothesis.strategies.integers(-2, 2))
+@hypothesis.settings(deadline=None)
+@hypothesis.example(
+    things=np.array([(0, 1, 1, 0),
+                     (1, 5, 1, 0),
+                     (2, 1, 1, 0)],
+                    dtype=strax.interval_dtype),
+    containers=np.array([(0, 4, 1, 0)],
+                        dtype=strax.interval_dtype),
+    window=0)
 def test_touching_windows(things, containers, window):
     result = strax.touching_windows(things, containers, window=window)
     assert len(result) == len(containers)
@@ -59,10 +62,11 @@ def test_touching_windows(things, containers, window):
                 assert t_i in i_that_touch
 
 
-@settings(deadline=None)
-@given(sorted_intervals, disjoint_sorted_intervals)
+@hypothesis.settings(deadline=None, max_examples=1000)
+@hypothesis.given(strax.testutils.sorted_intervals,
+                  strax.testutils.disjoint_sorted_intervals)
 # Specific example to trigger issue #37
-@example(
+@hypothesis.example(
     things=np.array([(2, 1, 1, 0)],
                     dtype=strax.interval_dtype),
     containers=np.array([(0, 1, 1, 0), (2, 1, 1, 0)],
@@ -89,8 +93,39 @@ def _is_contained(_thing, _container):
            <= _container['time'] + _container['length']
 
 
-@settings(deadline=None)
-@given(several_fake_records)
+@hypothesis.settings(deadline=None)
+@hypothesis.given(strax.testutils.several_fake_records,
+                  hypothesis.strategies.integers(0, 50),
+                  hypothesis.strategies.booleans())
+def test_split_array(data, t, allow_early_split):
+    print(f"\nCalled with {np.transpose([data['time'], strax.endtime(data)]).tolist()}, "
+          f"{t}, {allow_early_split}")
+
+    try:
+        data1, data2, tsplit = strax.split_array(
+            data, t, allow_early_split=allow_early_split)
+
+    except strax.CannotSplit:
+        assert not allow_early_split
+        # There must be data straddling t
+        for d in data:
+            if d['time'] < t < strax.endtime(d):
+                break
+        else:
+            raise ValueError("threw CannotSplit needlessly")
+
+    else:
+        if allow_early_split:
+            assert tsplit <= t
+            t = tsplit
+
+        assert len(data1) + len(data2) == len(data)
+        assert np.all(strax.endtime(data1) <= t)
+        assert np.all(data2['time'] >= t)
+
+
+@hypothesis.settings(deadline=None)
+@hypothesis.given(strax.testutils.several_fake_records)
 def test_from_break(records):
     window = 5
 
@@ -117,8 +152,12 @@ def test_from_break(records):
         assert not has_break(right)
 
 
-@settings(deadline=None)
-@given(integers(0, 100), integers(0, 100), integers(0, 100), integers(0, 100))
+@hypothesis.settings(deadline=None)
+@hypothesis.given(
+    hypothesis.strategies.integers(0, 100),
+    hypothesis.strategies.integers(0, 100),
+    hypothesis.strategies.integers(0, 100),
+    hypothesis.strategies.integers(0, 100))
 def test_overlap_indices(a1, n_a, b1, n_b):
     a2 = a1 + n_a
     b2 = b1 + n_b
