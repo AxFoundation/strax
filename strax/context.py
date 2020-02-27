@@ -494,8 +494,9 @@ class Context:
                         subrun,
                         d,
                         self._get_plugins((d,), subrun)[d].lineage)
-                    _subrun_time_range = None
-                    if sub_run_spec[subrun] != 'all':
+                    if sub_run_spec[subrun] == 'all':
+                        _subrun_time_range = None
+                    else:
                         _subrun_time_range = sub_run_spec[subrun]
                     ldr = self._get_partial_loader_for(
                         sub_key,
@@ -739,14 +740,14 @@ class Context:
             if k.startswith('_temp'):
                 del self._plugin_class_registry[k]
 
-        for x in strax.ThreadedMailboxProcessor(
+        for x in strax.continuity_check(strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter():
+                timeout=self.context_config['timeout']).iter()):
             if not isinstance(x, strax.Chunk):
                 raise ValueError(f"Got type {type(x)} rather than a strax "
                                  f"Chunk from the processor!")
@@ -775,10 +776,6 @@ class Context:
         # Apply the time selections
         if time_range is None or time_selection == 'skip':
             pass
-        elif 'time' not in x.dtype.names:
-            raise NotImplementedError(
-                "Time range selection requires time information, "
-                "but none of the required plugins provides it.")
         elif time_selection == 'fully_contained':
             x = x[(time_range[0] <= x['time']) &
                   (strax.endtime(x) <= time_range[1])]
