@@ -53,7 +53,7 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=10,  # TODO HACK!!
+    strax.Option(name='timeout', default=30,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"))
 @export

@@ -69,12 +69,12 @@ class Chunk:
                 raise ValueError(f"Attempt to create chunk {self} "
                                  f"whose data ends late at {data_ends_at}")
 
-        # TODO: remove this in production, for performance
-        # (or let it be some debug mode)
-        if len(data) > 1:
-            if min(np.diff(data['time'])) < 0:
-                raise ValueError(f"Attempt to create chunk {self} "
-                                 "whose data is not sorted by time.")
+        # This is commented out for performance, but it's perhaps useful
+        # when debugging
+        # if len(data) > 1:
+        #     if min(np.diff(data['time'])) < 0:
+        #         raise ValueError(f"Attempt to create chunk {self} "
+        #                          "whose data is not sorted by time.")
 
     def __len__(self):
         return len(self.data)
@@ -143,8 +143,6 @@ class Chunk:
         """Create chunk by merging columns of chunks of same data kind
 
         :param chunks: Chunks to merge. None is allowed and will be ignored.
-        :param dtype: Numpy dtype of merged chunk. Must be explicitly provided,
-        otherwise field order is ambiguous
         :param data_type: data_type name of new created chunk. Set to <UNKNOWN>
         if not provided.
         """
@@ -235,10 +233,11 @@ class Chunk:
 
 
 @export
-def continuity_check(iter):
+def continuity_check(chunk_iter):
+    """Check continuity of chunks yielded by chunk_iter as they are yielded"""
     last_end = None
     last_runid = None
-    for s in iter:
+    for s in chunk_iter:
         if s.run_id != last_runid:
             # TODO: can we do better?
             last_end = None
@@ -250,6 +249,11 @@ def continuity_check(iter):
 
         last_end = s.end
         last_runid = s.run_id
+
+
+@export
+class CannotSplit(Exception):
+    pass
 
 
 @export
@@ -278,6 +282,7 @@ def split_array(data, t, allow_early_split=False):
     #  splittable_i: nearest index left of t where we can safely split BEFORE
     latest_end_seen = -1
     splittable_i = 0
+    i_first_beyond = -1
     for i, d in enumerate(data):
         if d['time'] >= latest_end_seen:
             splittable_i = i
@@ -292,7 +297,6 @@ def split_array(data, t, allow_early_split=False):
     else:
         if latest_end_seen <= t:
             return data, data[:0], t
-        i_first_beyond = -1
 
     if (splittable_i != i_first_beyond or
             latest_end_seen > t):
@@ -302,22 +306,3 @@ def split_array(data, t, allow_early_split=False):
         t = min(data[splittable_i]['time'], t)
 
     return data[:splittable_i], data[splittable_i:], t
-
-
-@export
-class CannotSplit(Exception):
-    pass
-
-# n_to_left = strax.false_before_true(strax.endtime(data) > at)
-# data1, data2 = np.split(data, [n_to_left])
-# return data1, data2, at
-
-#
-# if n_to_left != len(self) and self.data[n_to_left]['time'] < at:
-#     # We cannot split here, that would create two overlapping chunks
-#     if overlap_handling == 'error':
-#         raise ValueError(f"Cannot split {self} at {at}, "
-#                          f"that would split individual data elements.")
-#     raise NotImplementedError
-#
-#

@@ -397,7 +397,6 @@ class StorageBackend:
             raise ValueError(
                 f"Cannot load data at {backend_key}, it has no chunks!")
 
-        # TODO: should literal_eval inside get_metadata, maybe?
         dtype = literal_eval(metadata['dtype'])
 
         # Common arguments for chunk construction, not stored with chunk-level
