@@ -519,20 +519,35 @@ class Saver:
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
 
-    def save_from(self, source: typing.Iterable, rechunk=True, executor=None):
+    def save_from(self, source: typing.Generator, rechunk=True, executor=None):
         """Iterate over source and save the results under key
         along with metadata
         """
-        if rechunk and self.allow_rechunk:
-            source = strax.fixed_size_chunks(source)
-
         pending = []
+        exhausted = False
+        chunk_i = 0
         try:
-            for chunk_i, s in enumerate(source):
-                new_f = self.save(chunk=s, chunk_i=chunk_i, executor=executor)
+            while not exhausted:
+                chunk = None
+                try:
+                    if rechunk and self.allow_rechunk:
+                        while chunk is None or chunk.data.nbytes < 1e8:
+                            chunk = strax.Chunk.concatenate(
+                                [chunk, next(source)])
+                    else:
+                        chunk = next(source)
+                except StopIteration:
+                    exhausted = True
+
+                if chunk is None:
+                    break
+
+                new_f = self.save(chunk=chunk,
+                                  chunk_i=chunk_i, executor=executor)
                 pending = [f for f in pending if not f.done()]
                 if new_f is not None:
                     pending += [new_f]
+                chunk_i += 1
 
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
