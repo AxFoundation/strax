@@ -9,7 +9,6 @@ import itertools
 import logging
 import time
 import typing
-import warnings
 
 from frozendict import frozendict
 import numpy as np
@@ -37,22 +36,6 @@ class PluginGaveWrongOutput(Exception):
     pass
 
 
-class PendingFutures:
-    def __init__(self):
-        self._pending = []
-
-    def add(self, future):
-        self._pending.append(future)
-
-    def update(self):
-        self._pending = [f for f in self._pending
-                         if not f.done()]
-
-    def remaining_futures(self):
-        self.update()
-        return self._pending
-
-
 @export
 class Plugin:
     """Plugin containing strax computation
@@ -68,6 +51,7 @@ class Plugin:
 
     depends_on: tuple
     provides: tuple
+    input_buffer: typing.Dict[str, strax.Chunk]
 
     compressor = 'blosc'
 
@@ -118,6 +102,7 @@ class Plugin:
             del compute_pars[compute_pars.index('chunk_i')]
 
         self.compute_pars = compute_pars
+        self.input_buffer = dict()
 
     def fix_dtype(self):
         if not hasattr(self, 'dtype'):
@@ -239,35 +224,40 @@ class Plugin:
         :param executor: Executor to punt computation tasks to. If None,
             will compute inside the plugin's thread.
         """
-        deps_by_kind = self.dependencies_by_kind()
-
-        # Merge iterators of data that has the same kind
-        kind_iters = dict()
-        for kind, deps in deps_by_kind.items():
-            kind_iters[kind] = strax.merge_iters(
-                strax.sync_iters(
-                    strax.same_length,
-                    {d: iters[d] for d in deps}))
-
-        if len(deps_by_kind) > 1:
-            # Sync iterators of different kinds by time
-            kind_iters = strax.sync_iters(strax.same_end, kind_iters)
-
-        iters = kind_iters
-        pending = PendingFutures()
-        yield from self._inner_iter(iters, pending, executor)
-        self.cleanup(wait_for=pending.remaining_futures())
-
-    def _inner_iter(self, iters, pending: PendingFutures, executor):
+        pending_futures = []
         last_input_received = time.time()
+
+        self.input_buffer = {d: None
+                             for d in self.depends_on}
+        if len(self.depends_on):
+            pacemaker = self.depends_on[0]
+        else:
+            pacemaker = None
+
+        def _fetch_chunk(d, hope_to_see=None):
+            try:
+                print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
+                self.input_buffer[d] = strax.Chunk.concatenate(
+                    [self.input_buffer[d], next(iters[d])])
+                print(f"Fetched {d} in {self}, now have {self.input_buffer[d]}")
+                return True
+            except StopIteration:
+                print(f"Got StopIteration while fetching for {d} in {self}")
+                if (hope_to_see is not None
+                        and self.input_buffer[d].end < hope_to_see):
+                    raise RuntimeError(
+                        f"Tried to get data until {hope_to_see}, but {d} "
+                        f"ended prematurely at {self.input_buffer[d].end}")
+                return False
 
         for chunk_i in itertools.count():
 
             # Online input support
             while not self.is_ready(chunk_i):
                 if self.source_finished():
+                    # Chunk_i does not exist. We are done.
                     print("Source finished!")
-                    # Source is finished, there is no next chunk: break out
+                    self.cleanup(wait_for=pending_futures)
                     return
 
                 if time.time() > last_input_received + self.input_timeout:
@@ -281,22 +271,62 @@ class Plugin:
                 time.sleep(2)
             last_input_received = time.time()
 
-            # Actually fetch the input from the iterators
-            try:
-                compute_kwargs = {k: next(iters[k])
-                                  for k in iters}
-            except StopIteration:
-                return
-
-            if self.parallel and executor is not None:
-                new_f = executor.submit(self.do_compute,
-                                        chunk_i=chunk_i,
-                                        **compute_kwargs)
-                pending.add(new_f)
-                pending.update()
-                yield new_f
+            if pacemaker is None:
+                inputs_merged = dict()
             else:
-                yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
+                # Fetch the pacemaker, to figure out when this chunk ends
+                if not _fetch_chunk(pacemaker):
+                    self.cleanup(wait_for=pending_futures)
+                    # TODO: check others empty?
+                    return
+                this_chunk_end = self.input_buffer[pacemaker].end
+
+                inputs = dict()
+                # Fetch other inputs (when needed)
+                for d in self.depends_on:
+                    if d != pacemaker:
+                        while (self.input_buffer[d] is None
+                               or self.input_buffer[d].end < this_chunk_end):
+                            _fetch_chunk(d, hope_to_see=this_chunk_end)
+                    inputs[d], self.input_buffer[d] = \
+                        self.input_buffer[d].split(
+                            t=this_chunk_end,
+                            allow_early_split=True)
+
+                # If any of the inputs were trimmed due to early splits,
+                # trim the others too.
+                # In very hairy cases this can take multiple passes.
+                # TODO: can we optimize this, or code it more elegantly?
+                while True:
+                    this_chunk_end = min([x.end for x in inputs.values()]
+                                         + [this_chunk_end])
+                    if len(set([x.end for x in inputs.values()])) <= 1:
+                        break
+                    for d in self.depends_on:
+                        inputs[d], self.input_buffer[d] = \
+                            self.input_buffer[d].split(
+                                t=this_chunk_end,
+                                allow_early_split=True)
+
+                # Merge inputs of the same kind
+                inputs_merged = {
+                    kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
+                    for kind, deps_of_kind in self.dependencies_by_kind().items()}
+
+            # Submit the computation
+            print(f"{self} calling with {inputs_merged}")
+            if self.parallel and executor is not None:
+                new_future = executor.submit(
+                    self.do_compute,
+                    chunk_i=chunk_i,
+                    **inputs_merged)
+                pending_futures.append(new_future)
+                pending_futures = [f for f in pending_futures if not f.done()]
+                yield new_future
+            else:
+                yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+
+        raise RuntimeError("This cannot happen.")
 
     def cleanup(self, wait_for):
         pass
@@ -341,20 +371,18 @@ class Plugin:
             if len(set(tranges.values())) != 1:
                 raise ValueError(f"{self.__class__.__name__} got inconsistent "
                                  f"time ranges of inputs: {tranges}")
-            start, stop = list(tranges.values())[0]
+            start, end = list(tranges.values())[0]
         else:
             # This plugin starts from scratch
-            start, stop = None, None
+            start, end = None, None
 
-        # TODO: Give option to pass start and stop?
-        # only needed for overlapwindowplugin...
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
             result = self.compute(**kwargs)
 
-        return self._fix_output(result, start, stop)
+        return self._fix_output(result, start, end)
 
     def _fix_output(self, result, start, end, _dtype=None):
         if self.multi_output and _dtype is None:
