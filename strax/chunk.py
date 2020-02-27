@@ -266,13 +266,11 @@ def split_array(data, t, allow_early_split=False):
     """
     # Slitting an empty array is easy
     if not len(data):
-        print("Splitting empty array")
         return data[:0], data[:0], t
 
     # Splitting off a bit of nothing from the start is easy
     # since the data is sorted by time.
     if data[0]['time'] >= t:
-        print("Splitting off nothing from start")
         return data[:0], data, t
 
     # Find:
@@ -293,13 +291,8 @@ def split_array(data, t, allow_early_split=False):
             break
     else:
         if latest_end_seen <= t:
-            print("All data ends before t")
             return data, data[:0], t
         i_first_beyond = -1
-
-    print('i_first_beyond = ', i_first_beyond)
-    print('splittable_i = ', splittable_i)
-    print('latest_end_seen = ', latest_end_seen)
 
     if (splittable_i != i_first_beyond or
             latest_end_seen > t):

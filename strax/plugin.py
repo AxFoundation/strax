@@ -239,13 +239,14 @@ class Plugin:
 
         def _fetch_chunk(d, hope_to_see=None):
             try:
-                print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
+                # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
                 self.input_buffer[d] = strax.Chunk.concatenate(
                     [self.input_buffer[d], next(iters[d])])
-                print(f"Fetched {d} in {self}, now have {self.input_buffer[d]}")
+                # print(f"Fetched {d} in {self}, "
+                #      f"now have {self.input_buffer[d]}")
                 return True
             except StopIteration:
-                print(f"Got StopIteration while fetching for {d} in {self}")
+                # print(f"Got StopIteration while fetching for {d} in {self}")
                 if (hope_to_see is not None
                         and self.input_buffer[d].end < hope_to_see):
                     raise RuntimeError(
@@ -317,7 +318,7 @@ class Plugin:
                     for kind, deps_of_kind in self.dependencies_by_kind().items()}
 
             # Submit the computation
-            print(f"{self} calling with {inputs_merged}")
+            # print(f"{self} calling with {inputs_merged}")
             if self.parallel and executor is not None:
                 new_future = executor.submit(
                     self.do_compute,
