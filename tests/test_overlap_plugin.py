@@ -2,13 +2,14 @@ from strax import testutils
 
 import numpy as np
 
-from hypothesis import given, strategies, example
+from hypothesis import given, strategies, example, settings
 
 import strax
 
 
 @given(testutils.disjoint_sorted_intervals.filter(lambda x: len(x) > 0),
        strategies.integers(min_value=0, max_value=3))
+@settings(deadline=None)
 # Examples that trigger issue #49
 @example(
     input_peaks=np.array(
