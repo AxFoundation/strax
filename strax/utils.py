@@ -449,8 +449,8 @@ def multi_run(fun, run_ids, *args, max_workers=None,
             pass
 
         result = []
-        for i, fun in enumerate(futures):
-            r = fun.result()
+        for i, f in enumerate(futures):
+            r = f.result()
             if throw_away_result:
                 continue
             # Append the run id column
