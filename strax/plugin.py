@@ -160,6 +160,9 @@ class Plugin:
         """
         return self.__version__
 
+    def __repr__(self):
+        return self.__class__.__name__
+
     def dtype_for(self, data_type):
         if self.multi_output:
             return self.dtype[data_type]

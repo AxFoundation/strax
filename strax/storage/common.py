@@ -11,6 +11,8 @@ import time
 import typing
 import warnings
 
+import numpy as np
+
 import strax
 
 export, __all__ = strax.exporter()
@@ -450,10 +452,15 @@ class StorageBackend:
                                chunk_info,
                                time_range,
                                chunk_construction_kwargs) -> strax.Chunk:
-        data = self._read_chunk(backend_key,
-                                chunk_info=chunk_info,
-                                dtype=dtype,
-                                compressor=metadata['compressor'])
+
+        if chunk_info['n'] == 0:
+            # No data, no need to load
+            data = np.empty(0, dtype=dtype)
+        else:
+            data = self._read_chunk(backend_key,
+                                    chunk_info=chunk_info,
+                                    dtype=dtype,
+                                    compressor=metadata['compressor'])
 
         result = strax.Chunk(
             start=chunk_info['start'],
