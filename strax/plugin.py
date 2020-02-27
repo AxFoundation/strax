@@ -3,6 +3,7 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
+from concurrent.futures import wait
 from enum import IntEnum
 import inspect
 import itertools
@@ -281,7 +282,6 @@ class Plugin:
                 # Fetch the pacemaker, to figure out when this chunk ends
                 if not _fetch_chunk(pacemaker):
                     self.cleanup(wait_for=pending_futures)
-                    # TODO: check others empty?
                     return
                 this_chunk_end = self.input_buffer[pacemaker].end
 
@@ -333,9 +333,17 @@ class Plugin:
         raise RuntimeError("This cannot happen.")
 
     def cleanup(self, wait_for):
-        pass
+        # By default we do NOT wait for the computation futures to complete;
+        # there is nothing to specific to be done when a plugin exits.
+        for d, buffer in self.input_buffer.items():
+            if len(buffer):
+                raise RuntimeError(
+                    f"Plugin {d} terminated with leftover {d}: {buffer}")
 
     def _check_dtype(self, x, d=None):
+        # There is an additional 'last resort' data type check
+        # in the chunk initialization.
+        # This one is broader and gives a more context-aware message.
         if d is None:
             assert not self.multi_output
             d = self.provides[0]
@@ -787,3 +795,4 @@ class ParallelSourcePlugin(Plugin):
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=wait_for)
+        super().cleanup(wait_for)
