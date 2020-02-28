@@ -694,7 +694,7 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  _chunk_number=None,
-                 **kwargs) -> ty.Iterator[np.ndarray]:
+                 **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
         Do NOT interrupt the iterator (i.e. break): it will keep running stuff
@@ -740,7 +740,7 @@ class Context:
             if k.startswith('_temp'):
                 del self._plugin_class_registry[k]
 
-        for x in strax.continuity_check(strax.ThreadedMailboxProcessor(
+        for result in strax.continuity_check(strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
@@ -748,13 +748,12 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()):
-            if not isinstance(x, strax.Chunk):
-                raise ValueError(f"Got type {type(x)} rather than a strax "
+            if not isinstance(result, strax.Chunk):
+                raise ValueError(f"Got type {type(result)} rather than a strax "
                                  f"Chunk from the processor!")
-            x = x.data
-            x = self.apply_selection(x, selection_str,
-                                     time_range, time_selection)
-            yield x
+            result.data = self.apply_selection(result.data, selection_str,
+                                               time_range, time_selection)
+            yield result
 
     def apply_selection(self, x, selection_str=None,
                         time_range=None,
@@ -833,9 +832,13 @@ class Context:
                 self.get_array, run_ids, targets=targets,
                 save=save, max_workers=max_workers, **kwargs)
         else:
-            results = list(self.get_iter(run_ids[0], targets,
-                                         save=save, max_workers=max_workers,
-                                         **kwargs))
+            source = self.get_iter(
+                run_ids[0],
+                targets,
+                save=save,
+                max_workers=max_workers,
+                **kwargs)
+            results = [x.data for x in source]
         if len(results):
             return np.concatenate(results)
         raise ValueError("No results returned?")
