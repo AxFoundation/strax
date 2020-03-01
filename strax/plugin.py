@@ -780,11 +780,14 @@ class ParallelSourcePlugin(Plugin):
             if d not in self.provides:
                 del results[d]
 
-        if not self.multi_output:
-            results = r0 = results[self.provides[0]]
+        if self.multi_output:
+            for k in self.provides:
+                assert k in results
+                assert isinstance(results[k], strax.Chunk)
+                r0 = results[k]
         else:
-            r0 = results[self.start_from]
-        assert isinstance(r0, strax.Chunk)
+            r0 = results[self.provides[0]]
+            assert isinstance(r0, strax.Chunk)
 
         return self._fix_output(results, start=r0.start, end=r0.end)
 
