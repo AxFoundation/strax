@@ -740,6 +740,7 @@ class Context:
             if k.startswith('_temp'):
                 del self._plugin_class_registry[k]
 
+        seen_a_chunk = False
         for result in strax.continuity_check(strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
@@ -748,12 +749,18 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()):
+            seen_a_chunk = True
             if not isinstance(result, strax.Chunk):
                 raise ValueError(f"Got type {type(result)} rather than a strax "
                                  f"Chunk from the processor!")
             result.data = self.apply_selection(result.data, selection_str,
                                                time_range, time_selection)
             yield result
+        if not seen_a_chunk:
+            if time_range is None:
+                raise strax.DataCorrupted("No data returned!")
+            raise ValueError(f"Invalid time range: {time_range}, "
+                             "returned no chunks!")
 
     def apply_selection(self, x, selection_str=None,
                         time_range=None,
@@ -839,9 +846,7 @@ class Context:
                 max_workers=max_workers,
                 **kwargs)
             results = [x.data for x in source]
-        if len(results):
-            return np.concatenate(results)
-        raise ValueError("No results returned?")
+        return np.concatenate(results)
 
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
