@@ -42,10 +42,15 @@ class Chunk:
             data = np.empty(0, dtype)
         self.data = data
 
-        if not (isinstance(start, int) and isinstance(end, int)):
+        if not (isinstance(self.start, (int, np.integer))
+                and isinstance(self.end, (int, np.integer))):
             raise ValueError(f"Attempt to create chunk {self} "
                              "with non-integer start times")
-        if not isinstance(data, np.ndarray):
+        # Convert to bona fide python integers
+        self.start = int(self.start)
+        self.end = int(self.end)
+
+        if not isinstance(self.data, np.ndarray):
             raise ValueError(f"Attempt to create chunk {self} "
                              "with data that isn't a numpy array")
         expected_dtype = strax.remove_titles_from_dtype(dtype)
@@ -54,13 +59,13 @@ class Chunk:
             raise ValueError(f"Attempt to create chunk {self} "
                              f"with data of {dtype}, "
                              f"should be {expected_dtype}")
-        if start > end:
+        if self.start > self.end:
             raise ValueError(f"Attempt to create chunk {self} "
                              f"with negative length")
 
-        if len(data):
-            data_starts_at = data[0]['time']
-            data_ends_at = strax.endtime(data[-1])
+        if len(self.data):
+            data_starts_at = self.data[0]['time']
+            data_ends_at = strax.endtime(self.data[-1])
 
             if data_starts_at < self.start:
                 raise ValueError(f"Attempt to create chunk {self} "
