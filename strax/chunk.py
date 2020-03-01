@@ -179,12 +179,14 @@ class Chunk:
                              f"ranges: {tranges}")
         start, end = tranges[0]
 
-        # Merge chunks in order of data_type name
-        # so the field order is consistent
-        # regardless of the order in which chunks they are passed
-        chunks = list(sorted(chunks, key=lambda x: x.data_type))
-
-        data = strax.merge_arrs([c.data for c in chunks])
+        data = strax.merge_arrs(
+            [c.data for c in chunks],
+            # Make sure dtype field order is consistent, regardless of the
+            # order in which chunks are passed to merge:
+            dtype=strax.merged_dtype(
+                [c.dtype
+                 for c in sorted(chunks,
+                                 key=lambda x: x.data_type)]))
 
         return cls(
             start=start,

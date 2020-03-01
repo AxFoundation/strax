@@ -465,47 +465,23 @@ def multi_run(fun, run_ids, *args, max_workers=None,
 
 
 @export
-def group_by_kind(dtypes, plugins=None, context=None,
-                  require_time=None) -> ty.Dict[str, ty.List]:
+def group_by_kind(dtypes, plugins=None, context=None) -> ty.Dict[str, ty.List]:
     """Return dtypes grouped by data kind
     i.e. {kind1: [d, d, ...], kind2: [d, d, ...], ...}
     :param plugins: plugins providing the dtypes.
     :param context: context to get plugins from if not given.
-    :param require_time: If True, one data type of each kind
-    must provide time information. It will be put first in the list.
-
-    If require_time is None (default), we will require time only if there
-    is more than one data kind in dtypes.
     """
     if plugins is None:
         if context is None:
             raise RuntimeError("group_by_kind requires plugins or context")
         plugins = context._get_plugins(targets=dtypes, run_id='0')
 
-    if require_time is None:
-        require_time = len(group_by_kind(
-            dtypes, plugins=plugins, context=context, require_time=False)) > 1
-
     deps_by_kind = dict()
-    key_deps = []
     for d in dtypes:
         p = plugins[d]
         k = p.data_kind_for(d)
         deps_by_kind.setdefault(k, [])
-
-        # If this has time information, put it first in the list
-        if (require_time
-                and 'time' in p.dtype_for(d).names):
-            key_deps.append(d)
-            deps_by_kind[k].insert(0, d)
-        else:
-            deps_by_kind[k].append(d)
-
-    if require_time:
-        for k, d in deps_by_kind.items():
-            if not d[0] in key_deps:
-                raise ValueError(f"No dependency of data kind {k} "
-                                 "has time information!")
+        deps_by_kind[k].append(d)
 
     return deps_by_kind
 
