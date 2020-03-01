@@ -127,28 +127,41 @@ def test_split_array(data, t, allow_early_split):
 @hypothesis.settings(deadline=None)
 @hypothesis.given(strax.testutils.several_fake_records)
 def test_from_break(records):
+    if not len(records):
+        return
+
     window = 5
 
     def has_break(x):
         if len(x) < 2:
             return False
-        return np.diff(x['time']).max() > window
+        for i in range(1, len(x)):
+            if strax.endtime(x[:i]).max() + window <= x[i]['time']:
+                return True
+        return False
 
     try:
-        left = strax.from_break(records, safe_break=window,
-                                left=True, tolerant=False)
-        right = strax.from_break(records, safe_break=window,
-                                 left=False, tolerant=False)
+        left, t_break_l = strax.from_break(records, safe_break=window,
+                                           left=True, tolerant=False)
+        right, t_break_r = strax.from_break(records, safe_break=window,
+                                            left=False, tolerant=False)
     except strax.NoBreakFound:
         assert not has_break(records)
 
     else:
-        assert len(left) + len(right) == len(records)
+        assert t_break_l == t_break_r, "Inconsistent break time"
+        t_break = t_break_l
+
+        assert has_break(records), f"Found nonexistent break at {t_break}"
+
+        assert len(left) + len(right) == len(records), "Data loss"
+
         if len(records) > 0:
             np.testing.assert_equal(np.concatenate([left, right]),
                                     records)
-        if len(left) and len(right):
-            assert left[-1]['time'] <= right[0]['time'] - window
+        if len(right) and len(left):
+            assert t_break == right[0]['time']
+            assert strax.endtime(left).max() <= right[0]['time'] - window
         assert not has_break(right)
 
 
