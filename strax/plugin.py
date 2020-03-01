@@ -705,6 +705,7 @@ class ParallelSourcePlugin(Plugin):
 
         p = cls(depends_on=sub_plugins[start_from].depends_on)
         p.sub_plugins = sub_plugins
+        assert len(outputs_to_send)
         p.provides = tuple(outputs_to_send)
         p.sub_savers = sub_savers
         p.start_from = start_from
@@ -786,7 +787,7 @@ class ParallelSourcePlugin(Plugin):
                 assert isinstance(results[k], strax.Chunk)
                 r0 = results[k]
         else:
-            r0 = results[self.provides[0]]
+            results = r0 = results[self.provides[0]]
             assert isinstance(r0, strax.Chunk)
 
         return self._fix_output(results, start=r0.start, end=r0.end)
