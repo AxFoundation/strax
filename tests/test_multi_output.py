@@ -14,9 +14,9 @@ class EvenOddSplit(strax.Plugin):
         rec_count='chunk_bonus_data')
 
     dtype = dict(
-        even_recs = Records.dtype,
+        even_recs=Records.dtype,
         odd_recs=Records.dtype,
-        rec_count = [
+        rec_count=[
             ('time', np.int64, 'Time of first record in chunk'),
             ('endtime', np.int64, 'Endtime of last record in chunk'),
             ('n_records', np.int32, 'Number of records'),
@@ -26,7 +26,9 @@ class EvenOddSplit(strax.Plugin):
         mask = records['time'] % 2 == 0
         return dict(even_recs=records[mask],
                     odd_recs=records[~mask],
-                    rec_count=dict(n_records=[len(records)]))
+                    rec_count=dict(n_records=[len(records)],
+                                   time=records[0]['time'],
+                                   endtime=strax.endtime(records[-1])))
 
 
 class FunnyPeaks(strax.Plugin):
@@ -68,6 +70,7 @@ def test_multi_output():
 
             # Record count is correct
             rec_count = mystrax.get_array(run_id, 'rec_count')
+            print(rec_count)
             assert len(rec_count) == n_chunks
             np.testing.assert_array_equal(rec_count['n_records'], recs_per_chunk)
 
