@@ -194,7 +194,7 @@ class Plugin:
             compressor=self.compressor,
             lineage=self.lineage)
 
-    def dependencies_by_kind(self, require_time=None):
+    def dependencies_by_kind(self):
         """Return dependencies grouped by data kind
         i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
         :param require_time: If True, one dependency of each kind
@@ -205,8 +205,7 @@ class Plugin:
         """
         return strax.group_by_kind(
             self.depends_on,
-            plugins=self.deps,
-            require_time=require_time)
+            plugins=self.deps)
 
     def is_ready(self, chunk_i):
         """Return whether the chunk chunk_i is ready for reading.
@@ -336,7 +335,7 @@ class Plugin:
         # By default we do NOT wait for the computation futures to complete;
         # there is nothing to specific to be done when a plugin exits.
         for d, buffer in self.input_buffer.items():
-            if len(buffer):
+            if buffer is not None and len(buffer):
                 raise RuntimeError(
                     f"Plugin {d} terminated with leftover {d}: {buffer}")
 
