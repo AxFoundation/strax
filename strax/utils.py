@@ -124,6 +124,14 @@ def unpack_dtype(dtype):
 
 
 @export
+def remove_titles_from_dtype(dtype):
+    """Return np.dtype with titles removed from fields"""
+    return np.dtype(
+        [(fieldname[-1] if isinstance(fieldname, tuple) else fieldname, dt)
+         for fieldname, dt in unpack_dtype(np.dtype(dtype))])
+
+
+@export
 def merged_dtype(dtypes):
     result = {}
     for x in dtypes:
@@ -140,7 +148,7 @@ def merged_dtype(dtypes):
 
 
 @export
-def merge_arrs(arrs):
+def merge_arrs(arrs, dtype=None):
     """Merge structured arrays of equal length.
     On field name collisions, data from later arrays is kept.
 
@@ -161,7 +169,10 @@ def merge_arrs(arrs):
             "Arrays to merge must have the same length, got lengths " +
             ', '.join([str(len(x)) for x in arrs]))
 
-    result = np.zeros(n, dtype=merged_dtype([x.dtype for x in arrs]))
+    if dtype is None:
+        dtype = merged_dtype([x.dtype for x in arrs])
+
+    result = np.zeros(n, dtype=dtype)
     for arr in arrs:
         for fn in arr.dtype.names:
             result[fn] = arr[fn]
@@ -407,13 +418,13 @@ def dict_to_rec(x, dtype=None):
 
 
 @export
-def multi_run(f, run_ids, *args, max_workers=None,
+def multi_run(fun, run_ids, *args, max_workers=None,
               throw_away_result=False,
               **kwargs):
     """Execute f(run_id, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
 
-    :param f: Function to run
+    :param fun: Function to run
     :param run_ids: list/tuple of runids
     :param max_workers: number of worker threads/processes to spawn.
     If set to None, defaults to 1.
@@ -431,7 +442,7 @@ def multi_run(f, run_ids, *args, max_workers=None,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(f, r, *args, **kwargs)
+        futures = [exc.submit(fun, r, *args, **kwargs)
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
                       desc="Loading %d runs" % len(run_ids)):
@@ -454,47 +465,23 @@ def multi_run(f, run_ids, *args, max_workers=None,
 
 
 @export
-def group_by_kind(dtypes, plugins=None, context=None,
-                  require_time=None) -> ty.Dict[str, ty.List]:
+def group_by_kind(dtypes, plugins=None, context=None) -> ty.Dict[str, ty.List]:
     """Return dtypes grouped by data kind
     i.e. {kind1: [d, d, ...], kind2: [d, d, ...], ...}
     :param plugins: plugins providing the dtypes.
     :param context: context to get plugins from if not given.
-    :param require_time: If True, one data type of each kind
-    must provide time information. It will be put first in the list.
-
-    If require_time is None (default), we will require time only if there
-    is more than one data kind in dtypes.
     """
     if plugins is None:
         if context is None:
             raise RuntimeError("group_by_kind requires plugins or context")
         plugins = context._get_plugins(targets=dtypes, run_id='0')
 
-    if require_time is None:
-        require_time = len(group_by_kind(
-            dtypes, plugins=plugins, context=context, require_time=False)) > 1
-
     deps_by_kind = dict()
-    key_deps = []
     for d in dtypes:
         p = plugins[d]
         k = p.data_kind_for(d)
         deps_by_kind.setdefault(k, [])
-
-        # If this has time information, put it first in the list
-        if (require_time
-                and 'time' in p.dtype_for(d).names):
-            key_deps.append(d)
-            deps_by_kind[k].insert(0, d)
-        else:
-            deps_by_kind[k].append(d)
-
-    if require_time:
-        for k, d in deps_by_kind.items():
-            if not d[0] in key_deps:
-                raise ValueError(f"No dependency of data kind {k} "
-                                 "has time information!")
+        deps_by_kind[k].append(d)
 
     return deps_by_kind
 

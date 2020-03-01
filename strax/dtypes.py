@@ -6,28 +6,51 @@ TODO: file numba issue.
 """
 import numpy as np
 
-__all__ = ('interval_dtype record_dtype hit_dtype peak_dtype '
-           'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
+__all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
+           'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
+           'time_fields time_dt_fields').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
 
 
-# Base dtype for interval-like objects (pulse, peak, hit)
-interval_dtype = [
-    (('Channel/PMT number',
-        'channel'), np.int16),
-    (('Time resolution in ns',
-        'dt'), np.int16),
-    (('Start time of the interval (ns since unix epoch)',
-        'time'), np.int64),
+time_fields = [
+    (('Start time since unix epoch [ns]',
+     'time'), np.int64),
+    (('Exclusive end time since unix epoch [ns]',
+     'endtime'), np.int64)]
+
+time_dt_fields = [
+    (('Start time since unix epoch [ns]',
+      'time'), np.int64),
     # Don't try to make O(second) long intervals!
     (('Length of the interval in samples',
-        'length'), np.int32),
-    # Sub-dtypes MUST contain an area field
-    # However, the type varies: float for sum waveforms (area in PE)
-    # and int32 for per-channel waveforms (area in ADC x samples)
-]
+      'length'), np.int32),
+    (('Width of one sample [ns]',
+      'dt'), np.int16)]
+
+# Base dtype for interval-like objects (pulse, peak, hit)
+interval_dtype = time_dt_fields + [
+    (('Channel/PMT number',
+        'channel'), np.int16)]
+
+
+def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
+    """Data type for a waveform raw_record.
+
+    Length can be shorter than the number of samples in data,
+    this indicates a record with zero-padding at the end.
+    """
+    return interval_dtype + [
+        # np.int16 is not enough for some PMT flashes...
+        (('Length of pulse to which the record belongs (without zero-padding)',
+            'pulse_length'), np.int32),
+        (('Fragment number in the pulse',
+            'record_i'), np.int16),
+        # Note this is defined as a SIGNED integer, so we can
+        # still represent negative values after subtracting baselines
+        (('Waveform data in raw ADC counts',
+            'data'), np.int16, samples_per_record)]
 
 
 def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
@@ -37,22 +60,21 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     this indicates a record with zero-padding at the end.
     """
     return interval_dtype + [
-        (("Integral in ADC x samples",
-            'area'), np.int32),
         # np.int16 is not enough for some PMT flashes...
         (('Length of pulse to which the record belongs (without zero-padding)',
             'pulse_length'), np.int32),
         (('Fragment number in the pulse',
             'record_i'), np.int16),
-        (('Baseline in ADC counts. data = int(baseline) - data_orig',
-            'baseline'), np.float32),
-        (('Level of data reduction applied (strax.ReductionLevel enum)',
-            'reduction_level'), np.uint8),
-        # Note this is defined as a SIGNED integer, so we can
-        # still represent negative values after subtracting baselines
-        (('Waveform data in ADC counts above baseline',
+        (('Waveform data in raw counts above integer part of baseline',
             'data'), np.int16, samples_per_record),
-    ]
+        (("Integral in ADC counts x samples",
+          'area'), np.int32),
+        (('Level of data reduction applied (strax.ReductionLevel enum)',
+          'reduction_level'), np.uint8),
+        (('Baseline in ADC counts. data = int(baseline) - data_orig',
+          'baseline'), np.float32),
+        (('Baseline RMS in ADC counts. data = baseline - data_orig',
+          'baseline_rms'), np.float32)]
 
 
 # Data type for a 'hit': a sub-range of a record
@@ -78,6 +100,9 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
     return interval_dtype + [
+        # For peaklets this is likely to be overwritten:
+        (('Classification of the peak(let)',
+          'type'), np.int8),
         (('Integral across channels [PE]',
           'area'), np.float32),
         (('Integral per channel [PE]',
@@ -101,7 +126,4 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'max_gap'), np.int32),
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
-        # For peaklets this is likely to be overwritten:
-        (('Classification of the peak(let)',
-          'type'), np.int8)
     ]
