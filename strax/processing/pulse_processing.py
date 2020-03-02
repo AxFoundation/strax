@@ -90,69 +90,6 @@ def record_length_from_dtype(dtype):
 
 
 @export
-@numba.njit(cache=True, nogil=True)
-def baseline_rms(records, nsampels=40):
-    """
-    Function which estimates the baseline rms within a certain number of samples.
-
-    The rms value is estimated for all samples with adc counts <= 0.
-
-    Args:
-        records (np.array): Array of the data_kind raw_records or records.
-
-    Keyword Args:
-        nsampels (int): First n samples on which the rms is estimated.
-
-    Note:
-
-
-    Returns:
-        np.array: array of the length of records containing the rms values.
-    """
-    # Init result and temp_rms storage:
-    res = np.zeros(len(records))
-    last_rms_in = np.zeros(records['channel'].max() + 1, dtype=np.float32)
-
-    for ind, r in enumerate(records):
-        if r['record_i'] == 0:
-            rms = _baseline_rms(r['data'], r['baseline']%1, nsampels)
-            last_rms_in[r['channel']] = rms
-            res[ind] = rms
-        else:
-            # if higher fragment take previous rms value:
-            res[ind] = last_rms_in[r['channel']]
-
-    return res
-
-
-@numba.njit(cache=True, nogil=True)
-def _baseline_rms(d, b, n_samples=40):
-    """
-    Function which estimates the baseline rms within a certain number of samples.
-
-    The rms value is estimated for all samples with adc counts <= 0.
-
-    Args:
-        d (np.array): "data" of raw_record
-        b (float): baseline mean
-
-    Keyword Args:
-        n_samples (int): First n samples on which the rms is estimated.
-    """
-    d = b + d
-    n = 0
-    rms = 0
-    for s in d[:n_samples]:
-        if s <= 0:
-            rms += s**2
-            n += 1
-    if n == 0:
-        return -42
-
-    return np.sqrt(rms / n)
-
-
-@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def zero_out_of_bounds(records):
     """"Set waveforms to zero out of pulse bounds
