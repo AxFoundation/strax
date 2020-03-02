@@ -276,7 +276,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
         area = height = 0
         threshold = max(
             min_amplitude[r['channel']],
-            r['rms'] * min_height_over_noise[r['channel']])
+            r['baseline_rms'] * min_height_over_noise[r['channel']])
         n_samples = r['length']
 
         for i in range(n_samples):
