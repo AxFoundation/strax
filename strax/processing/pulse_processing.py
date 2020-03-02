@@ -15,38 +15,78 @@ NO_RECORD_LINK = -1
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def baseline(records, baseline_samples=40):
-    """Subtract pulses from int(baseline), store baseline in baseline field
-    :param baseline_samples: number of samples at start of pulse to average
-    Assumes records are sorted in time (or at least by channel, then time)
+def baseline(records, baseline_samples=40, flip=True):
+    """Determine baseline as the average of the first baseline_samples
+    of each pulse. Subtract the pulse data from int(baseline),
+    and store the baseline mean and rms.
 
-    Assumes record_i information is accurate (so don't cut pulses before
-    baselining them!)
+    :param baseline_samples: number of samples at start of pulse to average
+    to determine the baseline.
+    :param flip: If true, flip sign of data
+
+    Assumes records are sorted in time (or at least by channel, then time).
+
+    Assumes record_i information is accurate -- so don't cut pulses before
+    baselining them!
     """
     if not len(records):
         return records
     samples_per_record = len(records[0]['data'])
 
-    # Array for looking up last baseline seen in channel
+    # Array for looking up last baseline (mean, rms) seen in channel
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
-    last_bl_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
+    last_bl_in = np.zeros((records['channel'].max() + 1, 2), dtype=np.int16)
 
     for d_i, d in enumerate(records):
 
         # Compute the baseline if we're the first record of the pulse,
         # otherwise take the last baseline we've seen in the channel
         if d.record_i == 0:
-            bl = last_bl_in[d.channel] = d.data[:baseline_samples].mean()
+            w = d.data[:baseline_samples]
+            last_bl_in[d.channel] = bl, rms = w.mean(), w.std()
         else:
-            bl = last_bl_in[d.channel]
+            bl, rms = last_bl_in[d.channel]
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
         last = min(samples_per_record,
                    d.pulse_length - d.record_i * samples_per_record)
-        d.data[:last] = int(bl) - d.data[:last]
+        d.data[:last] = (-1 * flip) * (d.data[:last] - int(bl))
         d.baseline = bl
+        d.baseline_rms = rms
+
+
+@export
+def raw_to_records(raw_records):
+    records = np.zeros(
+        len(raw_records),
+        dtype=strax.record_dtype(
+            record_length_from_dtype(raw_records.dtype)))
+    copy_raw_records(raw_records, records)
+    return records
+
+
+# Numpy record arrays have a rowwise memory layout, so filling it
+# rowwise should be faster.
+@export
+@numba.njit(nogil=True, cache=True)
+def copy_raw_records(old, new):
+    for i in range(len(old)):
+        r = old[i]
+        r2 = new[i]
+        r2['channel'] = r['channel']
+        r2['dt'] = r['dt']
+        r2['time'] = r['time']
+        r2['length'] = r['length']
+        r2['pulse_length'] = r['pulse_length']
+        r2['record_i'] = r['record_i']
+        r2['data'][:] = r['data'][:]
+
+
+@export
+def record_length_from_dtype(dtype):
+    return len(np.zeros(1, dtype)[0]['data'])
 
 
 @export
@@ -130,6 +170,7 @@ def zero_out_of_bounds(records):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
+    """Integrate records in-place"""
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -139,8 +180,9 @@ def integrate(records):
             r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
             r['data'].sum()
-            + int(round(r['baseline'] % 1)) * n_real_samples)
-
+            # Add floating part of baseline * number of samples
+            # int(round()) the result since the area field is an int
+            + int(round((r['baseline'] % 1) * n_real_samples)))
 
 
 @export

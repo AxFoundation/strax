@@ -3,13 +3,13 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
+from concurrent.futures import wait
 from enum import IntEnum
+import inspect
 import itertools
 import logging
-from functools import partial
-import typing
 import time
-import inspect
+import typing
 
 from frozendict import frozendict
 import numpy as np
@@ -37,22 +37,6 @@ class PluginGaveWrongOutput(Exception):
     pass
 
 
-class PendingFutures:
-    def __init__(self):
-        self._pending = []
-
-    def add(self, future):
-        self._pending.append(future)
-
-    def update(self):
-        self._pending = [f for f in self._pending
-                         if not f.done()]
-
-    def remaining_futures(self):
-        self.update()
-        return self._pending
-
-
 @export
 class Plugin:
     """Plugin containing strax computation
@@ -68,6 +52,7 @@ class Plugin:
 
     depends_on: tuple
     provides: tuple
+    input_buffer: typing.Dict[str, strax.Chunk]
 
     compressor = 'blosc'
 
@@ -118,6 +103,39 @@ class Plugin:
             del compute_pars[compute_pars.index('chunk_i')]
 
         self.compute_pars = compute_pars
+        self.input_buffer = dict()
+
+    def fix_dtype(self):
+        if not hasattr(self, 'dtype'):
+            self.dtype = self.infer_dtype()
+
+        if self.multi_output:
+            # Convert to a dict of numpy dtypes
+            if (not hasattr(self, 'data_kind')
+                    or not isinstance(self.data_kind, dict)):
+                raise ValueError(
+                    f"{self.__class__.__name__} has multiple outputs and "
+                    "must declare its data kind as a dict: "
+                    "{dtypename: data kind}.")
+            if not isinstance(self.dtype, dict):
+                raise ValueError(
+                    f"{self.__class__.__name__} has multiple outputs, so its "
+                    "dtype must be specified as a dict: {output: dtype}.")
+            self.dtype = {k: strax.to_numpy_dtype(dt)
+                          for k, dt in self.dtype.items()}
+        else:
+            # Convert to a numpy dtype
+            self.dtype = strax.to_numpy_dtype(self.dtype)
+
+        # Check required time information is present
+        for d in self.provides:
+            fieldnames = self.dtype_for(d).names
+            ok = 'time' in fieldnames and (
+                    ('dt' in fieldnames and 'length' in fieldnames)
+                    or 'endtime' in fieldnames)
+            if not ok:
+                raise ValueError(
+                    f"Missing time and endtime information for {d}")
 
     @property
     def multi_output(self):
@@ -142,6 +160,9 @@ class Plugin:
         (e.g. time-dependent corrections).
         """
         return self.__version__
+
+    def __repr__(self):
+        return self.__class__.__name__
 
     def dtype_for(self, data_type):
         if self.multi_output:
@@ -173,7 +194,7 @@ class Plugin:
             compressor=self.compressor,
             lineage=self.lineage)
 
-    def dependencies_by_kind(self, require_time=None):
+    def dependencies_by_kind(self):
         """Return dependencies grouped by data kind
         i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
         :param require_time: If True, one dependency of each kind
@@ -184,8 +205,7 @@ class Plugin:
         """
         return strax.group_by_kind(
             self.depends_on,
-            plugins=self.deps,
-            require_time=require_time)
+            plugins=self.deps)
 
     def is_ready(self, chunk_i):
         """Return whether the chunk chunk_i is ready for reading.
@@ -207,37 +227,41 @@ class Plugin:
         :param executor: Executor to punt computation tasks to. If None,
             will compute inside the plugin's thread.
         """
-        deps_by_kind = self.dependencies_by_kind()
-
-        # Merge iterators of data that has the same kind
-        kind_iters = dict()
-        for kind, deps in deps_by_kind.items():
-            kind_iters[kind] = strax.merge_iters(
-                strax.sync_iters(
-                    strax.same_length,
-                    {d: iters[d] for d in deps}))
-
-        if len(deps_by_kind) > 1:
-            # Sync iterators of different kinds by time
-            kind_iters = strax.sync_iters(
-                partial(strax.same_stop, func=strax.endtime),
-                kind_iters)
-
-        iters = kind_iters
-        pending = PendingFutures()
-        yield from self._inner_iter(iters, pending, executor)
-        self.cleanup(wait_for=pending.remaining_futures())
-
-    def _inner_iter(self, iters, pending: PendingFutures, executor):
+        pending_futures = []
         last_input_received = time.time()
+
+        self.input_buffer = {d: None
+                             for d in self.depends_on}
+        if len(self.depends_on):
+            pacemaker = self.depends_on[0]
+        else:
+            pacemaker = None
+
+        def _fetch_chunk(d, hope_to_see=None):
+            try:
+                # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
+                self.input_buffer[d] = strax.Chunk.concatenate(
+                    [self.input_buffer[d], next(iters[d])])
+                # print(f"Fetched {d} in {self}, "
+                #      f"now have {self.input_buffer[d]}")
+                return True
+            except StopIteration:
+                # print(f"Got StopIteration while fetching for {d} in {self}")
+                if (hope_to_see is not None
+                        and self.input_buffer[d].end < hope_to_see):
+                    raise RuntimeError(
+                        f"Tried to get data until {hope_to_see}, but {d} "
+                        f"ended prematurely at {self.input_buffer[d].end}")
+                return False
 
         for chunk_i in itertools.count():
 
             # Online input support
             while not self.is_ready(chunk_i):
                 if self.source_finished():
+                    # Chunk_i does not exist. We are done.
                     print("Source finished!")
-                    # Source is finished, there is no next chunk: break out
+                    self.cleanup(wait_for=pending_futures)
                     return
 
                 if time.time() > last_input_received + self.input_timeout:
@@ -251,45 +275,94 @@ class Plugin:
                 time.sleep(2)
             last_input_received = time.time()
 
-            # Actually fetch the input from the iterators
-            try:
-                compute_kwargs = {k: next(iters[k])
-                                  for k in iters}
-            except StopIteration:
-                return
-
-            if self.parallel and executor is not None:
-                new_f = executor.submit(self.do_compute,
-                                        chunk_i=chunk_i,
-                                        **compute_kwargs)
-                pending.add(new_f)
-                pending.update()
-                yield new_f
+            if pacemaker is None:
+                inputs_merged = dict()
             else:
-                yield self.do_compute(chunk_i=chunk_i, **compute_kwargs)
+                # Fetch the pacemaker, to figure out when this chunk ends
+                if not _fetch_chunk(pacemaker):
+                    self.cleanup(wait_for=pending_futures)
+                    return
+                this_chunk_end = self.input_buffer[pacemaker].end
+
+                inputs = dict()
+                # Fetch other inputs (when needed)
+                for d in self.depends_on:
+                    if d != pacemaker:
+                        while (self.input_buffer[d] is None
+                               or self.input_buffer[d].end < this_chunk_end):
+                            _fetch_chunk(d, hope_to_see=this_chunk_end)
+                    inputs[d], self.input_buffer[d] = \
+                        self.input_buffer[d].split(
+                            t=this_chunk_end,
+                            allow_early_split=True)
+
+                # If any of the inputs were trimmed due to early splits,
+                # trim the others too.
+                # In very hairy cases this can take multiple passes.
+                # TODO: can we optimize this, or code it more elegantly?
+                while True:
+                    this_chunk_end = min([x.end for x in inputs.values()]
+                                         + [this_chunk_end])
+                    if len(set([x.end for x in inputs.values()])) <= 1:
+                        break
+                    for d in self.depends_on:
+                        inputs[d], self.input_buffer[d] = \
+                            self.input_buffer[d].split(
+                                t=this_chunk_end,
+                                allow_early_split=True)
+
+                # Merge inputs of the same kind
+                inputs_merged = {
+                    kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
+                    for kind, deps_of_kind in self.dependencies_by_kind().items()}
+
+            # Submit the computation
+            # print(f"{self} calling with {inputs_merged}")
+            if self.parallel and executor is not None:
+                new_future = executor.submit(
+                    self.do_compute,
+                    chunk_i=chunk_i,
+                    **inputs_merged)
+                pending_futures.append(new_future)
+                pending_futures = [f for f in pending_futures if not f.done()]
+                yield new_future
+            else:
+                yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+
+        raise RuntimeError("This cannot happen.")
 
     def cleanup(self, wait_for):
-        pass
+        # By default we do NOT wait for the computation futures to complete;
+        # there is nothing to specific to be done when a plugin exits.
+        for d, buffer in self.input_buffer.items():
+            if buffer is not None and len(buffer):
+                raise RuntimeError(
+                    f"Plugin {d} terminated with leftover {d}: {buffer}")
 
     def _check_dtype(self, x, d=None):
+        # There is an additional 'last resort' data type check
+        # in the chunk initialization.
+        # This one is broader and gives a more context-aware message.
         if d is None:
             assert not self.multi_output
             d = self.provides[0]
-        expect = self.dtype_for(d)
         pname = self.__class__.__name__
         if not isinstance(x, np.ndarray):
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
                 f"Delivered a {type(x)}")
+
+        expect = strax.remove_titles_from_dtype(self.dtype_for(d))
         if not isinstance(expect, np.dtype):
             raise ValueError(f"Plugin {pname} expects {expect} as dtype??")
-        if x.dtype != expect:
+        got = strax.remove_titles_from_dtype(x.dtype)
+        if got != expect:
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
-                f"Promised: {self.dtype_for(d)}\n"
-                f"Delivered: {x.dtype}.")
+                f"Promised:  {expect}\n"
+                f"Delivered: {got}.")
 
     def do_compute(self, chunk_i=None, **kwargs):
         """Wrapper for the user-defined compute method
@@ -297,30 +370,77 @@ class Plugin:
         This is the 'job' that gets executed in different processes/threads
         during multiprocessing
         """
+        for k, v in kwargs.items():
+            if not isinstance(v, strax.Chunk):
+                raise RuntimeError(
+                    f"do_compute of {self.__class__.__name__} got a {type(v)} "
+                    f"instead of a strax Chunk for {k}")
+
+        if len(kwargs):
+            # Check inputs describe the same time range
+            tranges = {k: (v.start, v.end) for k, v in kwargs.items()}
+            if len(set(tranges.values())) != 1:
+                raise ValueError(f"{self.__class__.__name__} got inconsistent "
+                                 f"time ranges of inputs: {tranges}")
+            start, end = list(tranges.values())[0]
+        else:
+            # This plugin starts from scratch
+            start, end = None, None
+
+        kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             result = self.compute(chunk_i=chunk_i, **kwargs)
         else:
             result = self.compute(**kwargs)
-        return self._fix_output(result)
 
-    def _fix_output(self, result):
-        if self.multi_output:
+        return self._fix_output(result, start, end)
+
+    def _fix_output(self, result, start, end, _dtype=None):
+        if self.multi_output and _dtype is None:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
-                    "provide a dict output {dtypename: array}")
-            r2 = dict()
-            for d in self.provides:
-                if d not in result:
-                    raise ValueError(f"Data type {d} missing from output of "
-                                     f"{self.__class__.__name__}!")
-                r2[d] = strax.dict_to_rec(result[d], self.dtype_for(d))
-                self._check_dtype(r2[d], d)
-            return r2
+                    "provide a dict output {dtypename: result}")
+            return {d: self._fix_output(result[d], start, end, _dtype=d)
+                    for d in self.provides}
 
-        result = strax.dict_to_rec(result, dtype=self.dtype)
-        self._check_dtype(result)
+        if _dtype is None:
+            assert not self.multi_output
+            _dtype = self.provides[0]
+
+        if not isinstance(result, strax.Chunk):
+            if start is None:
+                assert len(self.depends_on) == 0
+                raise ValueError(
+                    "Plugins without dependencies must return full strax "
+                    f"Chunks, but {self.__class__.__name__} produced a "
+                    f"{type(result)}!")
+
+            result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
+            self._check_dtype(result, _dtype)
+            result = self.chunk(
+                start=start,
+                end=end,
+                data_type=_dtype,
+                data=result)
         return result
+
+    def chunk(self, *, start, end, data, data_type=None, run_id=None):
+        if data_type is None:
+            if self.multi_output:
+                raise ValueError("Must give data_type when making chunks from "
+                                 "a multi-output plugin")
+            data_type = self.provides[0]
+        if run_id is None:
+            run_id = self.run_id
+        return strax.Chunk(
+            start=start,
+            end=end,
+            run_id=run_id,
+            data_kind=self.data_kind_for(data_type),
+            data_type=data_type,
+            dtype=self.dtype_for(data_type),
+            data=data)
 
     def compute(self, **kwargs):
         raise NotImplementedError
@@ -347,7 +467,7 @@ class OverlapWindowPlugin(Plugin):
         super().__init__()
         self.cached_input = {}
         self.cached_results = None
-        self.last_threshold = -float('inf')
+        self.sent_until = 0
         # This guy can have a logger, it's not parallelized anyway
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -356,67 +476,64 @@ class OverlapWindowPlugin(Plugin):
         raise NotImplementedError
 
     def iter(self, iters, executor=None):
-        yield from super().iter(iters, executor=executor)
+        # Keep one chunk in reserve, since we have to do something special
+        # if we see the last chunk.
+        last_result = None
+        for x in super().iter(iters, executor=executor):
+            if last_result is not None:
+                yield last_result
+            last_result = x
 
-        # Yield results initially suppressed in fear of a next chunk
-        if self.cached_results is not None and len(self.cached_results):
-            self.log.debug(f"Last chunk! Sending out cached result "
-                           f"{self.cached_results}")
-            yield self.cached_results
-        else:
-            self.log.debug("Last chunk! No cached results to send.")
+        if self.cached_results is not None and last_result is not None:
+            # Note we do this even if the cached_result is only emptiness,
+            # to make sure our final result ends at the right time.
+            yield strax.Chunk.concatenate([last_result, self.cached_results])
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
-        # Determine (a lower bound on) the data's last endtime
-        ends = [strax.endtime(x[-1])
-                for x in kwargs.values()
-                if len(x)]
-        if not len(ends):
-            # Input is completely empty, we cannot estimate the data's end.
-            # Do not discard or send anything until a chunk with data arrives.
-            # (or the last chunk, see iter)
-            invalid_beyond = cache_inputs_beyond = self.last_threshold
-        else:
-            # Take slightly larger windows for safety: it is very easy for me
-            # (or the user) to have made an off-by-one error
-            # TODO: why do tests not fail is I set cache_inputs_beyond to
-            # end - window size - 2 ?
-            # (they do fail if I set to end - 0.5 * window size - 2)
-            end = max(ends)
-            invalid_beyond = end - self.get_window_size() - 1
-            cache_inputs_beyond = end - 2 * self.get_window_size() - 1
-
-        # Update input cache
+        # Add cached inputs to compute arguments
         for k, v in kwargs.items():
             if len(self.cached_input):
-                kwargs[k] = v = np.concatenate([self.cached_input[k], v])
-            self.cached_input[k] = v[strax.endtime(v) > cache_inputs_beyond]
+                kwargs[k] = strax.Chunk.concatenate(
+                    [self.cached_input[k], v])
 
-        if not len(ends):
-            # Output cache and last_threshold both don't change
-            # so might as well return.
-            return self.empty_result()
-
+        # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
 
-        endtimes = strax.endtime(kwargs[self.data_kind]
-                                 if self.data_kind in kwargs
-                                 else result)
-        assert len(endtimes) == len(result)
+        # Throw away results we already sent out
+        _, result = result.split(t=self.sent_until,
+                                 allow_early_split=False)
 
-        is_valid = endtimes < invalid_beyond
-        not_sent_yet = endtimes >= self.last_threshold
+        # When does this batch of inputs end?
+        ends = [v.end for v in kwargs.values()]
+        if not len(set(ends)) == 1:
+            raise RuntimeError(
+                f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
+        end = ends[0]
 
-        # Cache all results we have not sent, nor are sending now
-        self.cached_results = result[not_sent_yet & (~is_valid)]
+        # When can we no longer trust our results?
+        # Take slightly larger windows for safety: it is very easy for me
+        # (or the user) to have made an off-by-one error
+        invalid_beyond = int(end - self.get_window_size() - 1)
 
-        # Send out only valid results we haven't sent yet
-        result = result[is_valid & not_sent_yet]
+        # Prepare to send out valid results, cache the rest
+        # Do not modify result anymore after this
+        # Note result.end <= invalid_beyond, with equality if there are
+        # no overlaps
+        result, self.cached_results = result.split(t=invalid_beyond,
+                                                   allow_early_split=True)
+        self.sent_until = result.end
 
-        self.last_threshold = invalid_beyond
+        # Cache a necessary amount of input for next time
+        # Again, take a bit of overkill for good measure
+        cache_inputs_beyond = int(self.sent_until
+                                  - 2 * self.get_window_size() - 1)
+        for k, v in kwargs.items():
+            _, self.cached_input[k] = v.split(t=cache_inputs_beyond,
+                                              allow_early_split=True)
+
         return result
 
 
@@ -460,10 +577,12 @@ class LoopPlugin(Plugin):
                 kwargs[k] = r
 
         results = np.zeros(len(base), dtype=self.dtype)
+        deps_by_kind = self.dependencies_by_kind()
+
         for i in range(len(base)):
             r = self.compute_loop(base[i],
                                   **{k: kwargs[k][i]
-                                     for k in self.dependencies_by_kind()
+                                     for k in deps_by_kind
                                      if k != loop_over})
 
             # Convert from dict to array row:
@@ -496,8 +615,10 @@ class MergeOnlyPlugin(Plugin):
                              "of the same kind, but got multiple kinds: "
                              + str(deps_by_kind))
 
-        return strax.merged_dtype([self.deps[d].dtype_for(d)
-                                   for d in self.depends_on])
+        return strax.merged_dtype([
+            self.deps[d].dtype_for(d)
+            # Sorting is needed here to match what strax.Chunk does in merging
+            for d in sorted(self.depends_on)])
 
     def compute(self, **kwargs):
         return kwargs[list(kwargs.keys())[0]]
@@ -584,6 +705,7 @@ class ParallelSourcePlugin(Plugin):
 
         p = cls(depends_on=sub_plugins[start_from].depends_on)
         p.sub_plugins = sub_plugins
+        assert len(outputs_to_send)
         p.provides = tuple(outputs_to_send)
         p.sub_savers = sub_savers
         p.start_from = start_from
@@ -629,7 +751,7 @@ class ParallelSourcePlugin(Plugin):
                 compute_kwargs = dict(chunk_i=chunk_i)
 
                 for kind, d_of_kind in p.dependencies_by_kind().items():
-                    compute_kwargs[kind] = strax.merge_arrs(
+                    compute_kwargs[kind] = strax.Chunk.merge(
                         [results[d] for d in d_of_kind])
 
                 # Store compute result(s)
@@ -652,17 +774,23 @@ class ParallelSourcePlugin(Plugin):
         # Save anything we can through the inlined savers
         for d, savers in self.sub_savers.items():
             for s in savers:
-                s.save(data=results[d], chunk_i=chunk_i)
+                s.save(chunk=results[d], chunk_i=chunk_i)
 
         # Remove results we do not need to send
         for d in list(results.keys()):
             if d not in self.provides:
                 del results[d]
 
-        if not self.multi_output:
-            results = results[self.provides[0]]
+        if self.multi_output:
+            for k in self.provides:
+                assert k in results
+                assert isinstance(results[k], strax.Chunk)
+                r0 = results[k]
+        else:
+            results = r0 = results[self.provides[0]]
+            assert isinstance(r0, strax.Chunk)
 
-        return self._fix_output(results)
+        return self._fix_output(results, start=r0.start, end=r0.end)
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
@@ -670,3 +798,4 @@ class ParallelSourcePlugin(Plugin):
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=wait_for)
+        super().cleanup(wait_for)
