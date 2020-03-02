@@ -7,7 +7,7 @@ from scipy.ndimage import convolve1d
 
 import strax
 export, __all__ = strax.exporter()
-__all__ += ['NO_RECORD_LINK', 'baseline_rms']
+__all__ += ['NO_RECORD_LINK']
 
 # Constant for use in record_links, to indicate there is no prev/next record
 NO_RECORD_LINK = -1

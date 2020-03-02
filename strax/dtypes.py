@@ -11,7 +11,7 @@ __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'time_fields time_dt_fields').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
-DEFAULT_RECORD_LENGTH = 600
+DEFAULT_RECORD_LENGTH = 110
 
 
 time_fields = [
