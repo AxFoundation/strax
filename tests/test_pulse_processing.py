@@ -8,16 +8,7 @@ import strax
 
 
 def _find_hits(r):
-    default_thresholds = np.zeros(248,
-                                  dtype=[(('Hitfinder threshold in absolute adc counts above baseline',
-                                           'absolute_adc_counts_threshold'), np.int16),
-                                         (('Multiplicator for a RMS based threshold (h_o_n * RMS).',
-                                           'height_over_noise'),
-                                          np.float32),
-                                         (('Channel/PMT number', 'channel'), np.int16)
-                                         ])
-    default_thresholds['channel'] = np.arange(0, 248, 1, dtype=np.int16)
-    hits = strax.find_hits(r, threshold=default_thresholds)
+    hits = strax.find_hits(r, min_amplitude=1)
     # Test pulses have dt=1 and time=0
     # TODO: hm, maybe this doesn't test everything
     np.testing.assert_equal(hits['time'], hits['left'])
