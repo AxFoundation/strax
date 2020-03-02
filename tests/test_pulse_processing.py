@@ -8,7 +8,7 @@ import strax
 
 
 def _find_hits(r):
-    hits = strax.find_hits(r, threshold=0)
+    hits = strax.find_hits(r, min_amplitude=1)
     # Test pulses have dt=1 and time=0
     # TODO: hm, maybe this doesn't test everything
     np.testing.assert_equal(hits['time'], hits['left'])

@@ -8,17 +8,20 @@ import signal
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
-try:
-    from npshmex import ProcessPoolExecutor as SHMExecutor
-except ImportError:
-    # This is allowed to fail, it only crashes if allow_shm = True
-    SHMExecutor = None
-    pass
 
 import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
+
+try:
+    import npshmex
+    SHMExecutor = npshmex.ProcessPoolExecutor
+    npshmex.register_array_wrapper(strax.Chunk, 'data')
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    SHMExecutor = None
+    pass
 
 
 @export
