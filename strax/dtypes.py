@@ -65,8 +65,6 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
             'pulse_length'), np.int32),
         (('Fragment number in the pulse',
             'record_i'), np.int16),
-        (('Waveform data in raw counts above integer part of baseline',
-            'data'), np.int16, samples_per_record),
         (("Integral in ADC counts x samples",
           'area'), np.int32),
         (('Level of data reduction applied (strax.ReductionLevel enum)',
@@ -74,7 +72,10 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
         (('Baseline in ADC counts. data = int(baseline) - data_orig',
           'baseline'), np.float32),
         (('Baseline RMS in ADC counts. data = baseline - data_orig',
-          'baseline_rms'), np.float32)]
+          'baseline_rms'), np.float32),
+        (('Waveform data in raw counts above integer part of baseline',
+          'data'), np.int16, samples_per_record),
+    ]
 
 
 # Data type for a 'hit': a sub-range of a record
@@ -87,6 +88,8 @@ hit_dtype = interval_dtype + [
         'right'), np.int16),
     (('Internal (temporary) index of fragment in which hit was found',
         'record_i'), np.int32),
+    (('ADC threshold applied in order to find hits',
+        'threshold'), np.int32),
     (('Maximum amplitude above baseline [ADC counts]',
         'height'), np.float32),
 ]
