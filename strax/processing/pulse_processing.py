@@ -174,55 +174,73 @@ def record_links(records):
     return previous_record, next_record
 
 
-# Chunk size should be at least a thousand,
-# else copying buffers / switching context dominates over actual computation
-# No max_duration argument: hits terminate at record boundaries, and
-# anyone insane enough to try O(sec) long records deserves to be punished
 @export
-@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
-def find_hits(records, threshold=15, _result_buffer=None):
-    """Return hits (intervals above threshold) found in records.
+def find_hits(records, min_amplitude=15, min_height_over_noise=0):
+    """Return hits (intervals >= threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
     NB: returned hits are NOT sorted yet!
     """
+    # Convert to per-channel thresholds if needed
+    amp_per_ch = isinstance(min_amplitude, np.ndarray)
+    hon_per_ch = isinstance(min_height_over_noise, np.ndarray)
+    if not (amp_per_ch and hon_per_ch):
+        n_channels = records['channel'].max() + 1
+        min_amplitude = min_amplitude * np.ones(n_channels)
+        min_height_over_noise = min_height_over_noise * np.ones(n_channels)
+
+    return _find_hits(records, min_amplitude, min_height_over_noise)
+
+
+# Chunk size should be at least a thousand,
+# else copying buffers / switching context dominates over actual computation
+# No max_duration argument: hits terminate at record boundaries, and
+# anyone insane enough to try O(sec) long records deserves to be punished
+@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _find_hits(records, min_amplitude, min_height_over_noise,
+               _result_buffer=None):
     buffer = _result_buffer
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
     offset = 0
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
-        area = height = 0
 
-        for i in range(samples_per_record):
+        area = height = 0
+        threshold = max(
+            min_amplitude[r['channel']],
+            r['baseline_rms'] * min_height_over_noise[r['channel']])
+        n_samples = r['length']
+
+        for i in range(n_samples):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
             # TODO: file issue?
             x = r['data'][i]
-            above_threshold = x > threshold
+
+            satisfy_threshold = x >= threshold
             # print(r['data'][i], above_threshold, in_interval, hit_start)
 
-            if not in_interval and above_threshold:
+            if not in_interval and satisfy_threshold:
                 # Start of a hit
                 in_interval = True
                 hit_start = i
+                height = max(x, height)
 
             if in_interval:
-                if not above_threshold:
+                if not satisfy_threshold:
                     # Hit ends at the start of this sample
                     hit_end = i
                     in_interval = False
-
                 else:
                     area += x
                     height = max(height, x)
 
-                    if i == samples_per_record - 1:
+                    if i == n_samples - 1:
                         # Hit ends at the *end* of this sample
                         # (because the record ends)
                         hit_end = i + 1
@@ -236,6 +254,8 @@ def find_hits(records, threshold=15, _result_buffer=None):
                         raise ValueError(
                             "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
+
+                    res['threshold'] = threshold
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
