@@ -1,3 +1,11 @@
+0.8.8 / 2020-02-11
+------------------
+- Fixes for time range selection (#231)
+- Mailbox timeout and max_messages accessible as context options
+- Fix output inference for ParallelSourcePlugin (straxen #46)
+- Sane default for max_workers in multi-run loading
+- run_id field is now a string when loading multiple runs
+
 0.8.7 / 2020-02-07
 ------------------
 - Small bugfixes:

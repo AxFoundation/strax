@@ -272,9 +272,14 @@ class FileSaver(strax.Saver):
         with open(self.tempdirname + '/' + self.metadata_json, mode='w') as f:
             f.write(json.dumps(self.md, **self.json_options))
 
-    def _save_chunk(self, data, chunk_info, executor=None):
+    def _chunk_filename(self, chunk_info):
+        if 'filename' in chunk_info:
+            return chunk_info['filename']
         ichunk = '%06d' % chunk_info['chunk_i']
-        filename = f'{self.prefix}-{ichunk}'
+        return f'{self.prefix}-{ichunk}'
+
+    def _save_chunk(self, data, chunk_info, executor=None):
+        filename = self._chunk_filename(chunk_info)
 
         fn = os.path.join(self.tempdirname, filename)
         kwargs = dict(data=data, compressor=self.md['compressor'])
@@ -287,8 +292,11 @@ class FileSaver(strax.Saver):
 
     def _save_chunk_metadata(self, chunk_info):
         if self.is_forked:
+            # We might not have a filename yet:
+            # the chunk is not saved when it is empty
+            filename = self._chunk_filename(chunk_info)
             # Write a separate metadata.json file for each chunk
-            fn = f'{self.tempdirname}/metadata_{chunk_info["filename"]}.json'
+            fn = f'{self.tempdirname}/metadata_{filename}.json'
             with open(fn, mode='w') as f:
                 f.write(json.dumps(chunk_info, **self.json_options))
         else:
@@ -306,11 +314,18 @@ class FileSaver(strax.Saver):
                 "Did you attemt to run two savers pointing to the same "
                 "directory? Otherwise this could be a strange race "
                 "condition or bug.")
+
         for fn in sorted(glob.glob(
                 self.tempdirname + '/metadata_*.json')):
             with open(fn, mode='r') as f:
                 self.md['chunks'].append(json.load(f))
             os.remove(fn)
+
+        if self.md['chunks']:
+            self.md['start'] = min([x['start'] for x in self.md['chunks']])
+            self.md['end'] = max([x['end'] for x in self.md['chunks']])
+        # If there were no chunks, we are certainly crashing.
+        # Don't throw another exception
 
         self._flush_metadata()
 
