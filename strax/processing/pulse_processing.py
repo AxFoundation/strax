@@ -216,6 +216,10 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             r['baseline_rms'] * min_height_over_noise[r['channel']])
         n_samples = r['length']
 
+        # If someone passes a length > n_samples record,
+        # and we don't abort here, numba will happily overrun the buffer!
+        assert n_samples <= len(r['data'])
+
         for i in range(n_samples):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
@@ -223,7 +227,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             x = r['data'][i]
 
             satisfy_threshold = x >= threshold
-            # print(r['data'][i], above_threshold, in_interval, hit_start)
+            # print(x, satisfy_threshold, in_interval, hit_start)
 
             if not in_interval and satisfy_threshold:
                 # Start of a hit
