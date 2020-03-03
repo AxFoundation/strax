@@ -47,6 +47,8 @@ def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
             'pulse_length'), np.int32),
         (('Fragment number in the pulse',
             'record_i'), np.int16),
+        (('Baseline determined by the digitizer (if this is supported)',
+            'baseline'), np.int16),
         # Note this is defined as a SIGNED integer, so we can
         # still represent negative values after subtracting baselines
         (('Waveform data in raw ADC counts',
