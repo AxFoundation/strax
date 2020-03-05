@@ -87,6 +87,7 @@ class Plugin:
     deps: typing.Dict       # Dictionary of dependency plugin instances
     
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
+    compute_takes_start_end = False
 
     def __init__(self):
         if not hasattr(self, 'depends_on'):
@@ -101,6 +102,13 @@ class Plugin:
         if 'chunk_i' in compute_pars:
             self.compute_takes_chunk_i = True
             del compute_pars[compute_pars.index('chunk_i')]
+        if 'start' in compute_pars:
+            if 'end' not in compute_pars:
+                raise ValueError(f"Compute of {self} takes start, "
+                                 f"so it should also take end.")
+            self.compute_takes_start_end = True
+            del compute_pars[compute_pars.index('start')]
+            del compute_pars[compute_pars.index('end')]
 
         self.compute_pars = compute_pars
         self.input_buffer = dict()
@@ -389,9 +397,11 @@ class Plugin:
 
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
-            result = self.compute(chunk_i=chunk_i, **kwargs)
-        else:
-            result = self.compute(**kwargs)
+            kwargs['chunk_i'] = chunk_i
+        if self.compute_takes_start_end:
+            kwargs['start'] = start
+            kwargs['end'] = end
+        result = self.compute(**kwargs)
 
         return self._fix_output(result, start, end)
 
