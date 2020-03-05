@@ -1,6 +1,8 @@
 """Functions that perform processing on pulses
 (other than data reduction functions, which are in data_reduction.py)
 """
+import typing as ty
+
 import numpy as np
 import numba
 from scipy.ndimage import convolve1d
@@ -175,7 +177,9 @@ def record_links(records):
 
 
 @export
-def find_hits(records, min_amplitude=15, min_height_over_noise=0):
+def find_hits(records,
+              min_amplitude: ty.Union[int, np.ndarray] = 15,
+              min_height_over_noise: ty.Union[int, np.ndarray] = 0):
     """Return hits (intervals >= threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
@@ -184,10 +188,24 @@ def find_hits(records, min_amplitude=15, min_height_over_noise=0):
     # Convert to per-channel thresholds if needed
     amp_per_ch = isinstance(min_amplitude, np.ndarray)
     hon_per_ch = isinstance(min_height_over_noise, np.ndarray)
+
     if not (amp_per_ch and hon_per_ch):
-        n_channels = records['channel'].max() + 1
-        min_amplitude = min_amplitude * np.ones(n_channels)
-        min_height_over_noise = min_height_over_noise * np.ones(n_channels)
+        # At least one of the thresholds was specified as a number
+        # (constant over all channels)
+        # First infer the number of channels
+        if amp_per_ch:
+            n_channels = len(min_amplitude)
+        elif hon_per_ch:
+            n_channels = len(min_height_over_noise)
+        else:
+            n_channels = records['channel'].max() + 1
+
+        # Then create constant arrays for arguments we don't have
+        # per-channel thresholds for yet
+        if not amp_per_ch:
+            min_amplitude = min_amplitude * np.ones(n_channels)
+        if not hon_per_ch:
+            min_height_over_noise = min_height_over_noise * np.ones(n_channels)
 
     return _find_hits(records, min_amplitude, min_height_over_noise)
 
