@@ -185,10 +185,14 @@ def find_hits(records,
 
     NB: returned hits are NOT sorted yet!
     """
+    if isinstance(min_amplitude, (tuple, list)):
+        min_amplitude = np.array(min_amplitude)
+    if isinstance(min_height_over_noise, (tuple, list)):
+        min_height_over_noise = np.array(min_height_over_noise)
+
     # Convert to per-channel thresholds if needed
     amp_per_ch = isinstance(min_amplitude, np.ndarray)
     hon_per_ch = isinstance(min_height_over_noise, np.ndarray)
-
     if not (amp_per_ch and hon_per_ch):
         # At least one of the thresholds was specified as a number
         # (constant over all channels)
@@ -207,6 +211,7 @@ def find_hits(records,
         if not hon_per_ch:
             min_height_over_noise = min_height_over_noise * np.ones(n_channels)
 
+    # Do the actual hitfinding
     return _find_hits(records, min_amplitude, min_height_over_noise)
 
 
