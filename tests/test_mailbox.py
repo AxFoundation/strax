@@ -85,23 +85,16 @@ def test_result_timeout():
     """Test that our mailbox tester actually times out.
     (if not, the other tests might hang indefinitely if something is broken)
     """
-    for lazy in [False, True]:
-        print(f"Lazy mode: {lazy}")
-
-        with pytest.raises(concurrent.futures.TimeoutError):
-            mailbox_tester([0, 1],
-                           lazy=lazy,
-                           numbers=[1, 2],
-                           timeout=2 * LONG_TIMEOUT)
+    with pytest.raises(concurrent.futures.TimeoutError):
+        mailbox_tester([0, 1],
+                       numbers=[1, 2],
+                       timeout=2 * LONG_TIMEOUT)
 
 
 def test_read_timeout():
     """Subscribers time out if we cannot read for too long"""
-    for lazy in [False, True]:
-        print(f"Lazy mode: {lazy}")
-
-        with pytest.raises(strax.MailboxReadTimeout):
-            mailbox_tester([0, 1], numbers=[1, 2], lazy=lazy)
+    with pytest.raises(strax.MailboxReadTimeout):
+        mailbox_tester([0, 1], numbers=[1, 2])
 
 
 def test_write_timeout():
