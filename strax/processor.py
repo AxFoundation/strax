@@ -34,8 +34,13 @@ class ProcessorComponents(ty.NamedTuple):
 
 
 class MailboxDict(dict):
+    def __init__(self, *args, lazy=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lazy = lazy
+
     def __missing__(self, key):
-        res = self[key] = strax.Mailbox(name=key + '_mailbox')
+        res = self[key] = strax.Mailbox(name=key + '_mailbox',
+                                        lazy=self.lazy)
         return res
 
 
@@ -52,7 +57,6 @@ class ThreadedMailboxProcessor:
                  timeout=60):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
-        self.mailboxes = MailboxDict()
 
         self.log.debug("Processor components are: " + str(components))
 
@@ -65,6 +69,7 @@ class ThreadedMailboxProcessor:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
             self.process_executor = self.thread_executor = None
+            max_workers = 1
         else:
             # Use executors for parallelization of computations.
             self.thread_executor = futures.ThreadPoolExecutor(
@@ -72,7 +77,7 @@ class ThreadedMailboxProcessor:
 
             mp_plugins = {d: p for d, p in components.plugins.items()
                           if p.parallel == 'process'}
-            if (allow_multiprocess and len(mp_plugins)):
+            if allow_multiprocess and len(mp_plugins):
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
                     if SHMExecutor is None:
@@ -94,6 +99,8 @@ class ThreadedMailboxProcessor:
                                + str(components))
             else:
                 self.process_executor = self.thread_executor
+
+        self.mailboxes = MailboxDict(lazy=max_workers == 1)
 
         for d, loader in components.loaders.items():
             assert d not in components.plugins
