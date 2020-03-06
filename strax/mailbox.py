@@ -238,7 +238,8 @@ class Mailbox:
             if self.lazy:
                 def can_write():
                     return (
-                        (msg_number in self.subscriber_waiting_for
+                        (any([x is not None
+                              for x in self.subscriber_waiting_for])
                          and len(self._mailbox) < self.max_messages)
                         or self.killed)
             else:
