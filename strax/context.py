@@ -39,6 +39,9 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       "If False, will use multithreading only."),
     strax.Option(name='allow_shm', default=False,
                  help="Allow use of /dev/shm for interprocess communication."),
+    strax.Option(name='allow_lazy', default=True,
+                 help='Allow "lazy" processing. Saves memory, but incompatible '
+                      'with multiprocessing and perhaps slightly slower.'),
     strax.Option(name='forbid_creation_of', default=tuple(),
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
@@ -747,6 +750,7 @@ class Context:
                 allow_shm=self.context_config['allow_shm'],
                 allow_multiprocess=self.context_config['allow_multiprocess'],
                 allow_rechunk=self.context_config['allow_rechunk'],
+                allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()):
             seen_a_chunk = True

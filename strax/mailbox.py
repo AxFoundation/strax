@@ -102,8 +102,15 @@ class Mailbox:
         self._n_sent = 0
         self._threads = []
         self._lock = threading.RLock()
+
+        # If you're waiting to read a new message that hasn't yet arrived:
         self._read_condition = threading.Condition(lock=self._lock)
+
+        # If you're waiting to write a new message because the mailbox is full
         self._write_condition = threading.Condition(lock=self._lock)
+
+        # If you're waiting to fetch a new element because the subscribers
+        # stil have other things to do
         self._fetch_new_condition = threading.Condition(lock=self._lock)
 
         self.log = logging.getLogger(self.name)
@@ -191,25 +198,43 @@ class Mailbox:
             if t.is_alive():
                 raise RuntimeError("Thread %s did not terminate!" % t.name)
 
+    def _can_fetch(self):
+        """Return if we can fetch, then send the next element from the source,
+        when in lazy mode"""
+        assert self.lazy
+
+        # The .send() knows how to raise properly
+        # TODO: raise right here?
+        if self.killed:
+            return True
+
+        # If someone is still waiting for a message we already have
+        # (so they just haven't woken up yet), don't fetch a new message.
+        if (len(self._mailbox)
+                and any([x is not None and x <= self._lowest_msg_number
+                         for x in self._subscriber_waiting_for])):
+            return False
+
+        # Everyone is waiting for the new chunk or not at all.
+        # Fetch only if a driver is waiting.
+        for _i, waiting_for in enumerate(self._subscriber_waiting_for):
+            if self._subscriber_can_drive[_i] and waiting_for is not None:
+                return True
+        return False
+
     def _send_from(self, iterable):
         """Send to mailbox from iterable, exiting appropriately if an
         exception is thrown
         """
-
-        def can_fetch():
-            return (self.killed
-                    or any([x is not None and self._subscriber_can_drive[i]
-                            for i, x in enumerate(self._subscriber_waiting_for)]))
-
         try:
             i = 0
             while True:
                 if self.lazy:
                     with self._lock:
-                        if not can_fetch():
+                        if not self._can_fetch():
                             self.log.debug(f"Waiting to fetch {i}, {self._subscriber_waiting_for}, {self._subscriber_can_drive}")
                         if not self._fetch_new_condition.wait_for(
-                                can_fetch, timeout=self.timeout):
+                                self._can_fetch, timeout=self.timeout):
                             raise MailboxReadTimeout(f"{self} could not progress beyond {i} since no driving subscriber requested it.")
 
                 try:
@@ -313,8 +338,7 @@ class Mailbox:
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
                     self._subscriber_waiting_for[subscriber_i] = next_number
-                    if self.lazy:
-                        self._fetch_new_condition.notify_all()
+                    self._fetch_new_condition.notify_all()
                 if not self._read_condition.wait_for(next_ready,
                                                      self.timeout):
                     raise MailboxReadTimeout(
@@ -322,6 +346,7 @@ class Mailbox:
                         "This is likely caused by a deadlock in the processing;"
                         " try SLIGHTLY increasing max_messages.")
                 self._subscriber_waiting_for[subscriber_i] = None
+                self._fetch_new_condition.notify_all()
 
                 if self.killed:
                     self.log.debug(f"Reader finds {self.name} killed")

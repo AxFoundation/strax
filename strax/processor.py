@@ -52,6 +52,7 @@ class ThreadedMailboxProcessor:
                  components: ProcessorComponents,
                  allow_rechunk=True, allow_shm=False,
                  allow_multiprocess=False,
+                 allow_lazy=True,
                  max_workers=None,
                  max_messages=4,
                  timeout=60):
@@ -69,7 +70,7 @@ class ThreadedMailboxProcessor:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
             self.process_executor = self.thread_executor = None
-            lazy = True
+            lazy = allow_lazy
         else:
             lazy = False
             # Use executors for parallelization of computations.
