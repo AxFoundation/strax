@@ -69,8 +69,9 @@ class ThreadedMailboxProcessor:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
             self.process_executor = self.thread_executor = None
-            max_workers = 1
+            lazy = True
         else:
+            lazy = False
             # Use executors for parallelization of computations.
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
@@ -100,7 +101,7 @@ class ThreadedMailboxProcessor:
             else:
                 self.process_executor = self.thread_executor
 
-        self.mailboxes = MailboxDict(lazy=max_workers == 1)
+        self.mailboxes = MailboxDict(lazy=lazy)
 
         for d, loader in components.loaders.items():
             assert d not in components.plugins
@@ -148,16 +149,20 @@ class ThreadedMailboxProcessor:
                         executor=executor),
                     name=f'build:{d}')
 
+        dtypes_built = {d: p
+                        for p in components.plugins.values()
+                        for d in p.provides}
         for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
-                if d in components.plugins:
-                    rechunk = components.plugins[d].rechunk_on_save
+                if d in dtypes_built:
+                    can_drive = not lazy
+                    rechunk = (dtypes_built[d].rechunk_on_save
+                               and allow_rechunk)
                 else:
                     # This is storage conversion mode
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
-                    rechunk = False
-                if not allow_rechunk:
+                    can_drive = True
                     rechunk = False
 
                 self.mailboxes[d].add_reader(
@@ -167,6 +172,7 @@ class ThreadedMailboxProcessor:
                             # the compressor releases the gil,
                             # and we have a lot of data transfer to do
                             executor=self.thread_executor),
+                    can_drive=can_drive,
                     name=f'save_{s_i}:{d}')
 
         # For multi-output plugins, an output may be neither saved nor
