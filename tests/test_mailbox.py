@@ -62,10 +62,10 @@ def mailbox_tester(messages,
 def test_highlevel():
     """Test highlevel mailbox API"""
     for lazy in [False, True]:
-        print(f"Single mode: {lazy}")
+        print(f"Lazy mode: {lazy}")
 
         mb = strax.Mailbox(lazy=lazy)
-        mb.add_sender(range(10))
+        mb.add_sender(iter(list(range(10))))
 
         def test_reader(source):
             test_reader.got = r = []
@@ -99,14 +99,10 @@ def test_read_timeout():
 
 def test_write_timeout():
     """Writers time out if we cannot write for too long"""
-    for lazy in [False, True]:
-        print(f"Lazy mode: {lazy}")
-
-        with pytest.raises(strax.MailboxFullTimeout):
-            mailbox_tester([0, 1, 2, 3, 4],
-                           max_messages=1,
-                           lazy=lazy,
-                           reader_sleeps=LONG_TIMEOUT)
+    with pytest.raises(strax.MailboxFullTimeout):
+        mailbox_tester([0, 1, 2, 3, 4],
+                       max_messages=1,
+                       reader_sleeps=LONG_TIMEOUT)
 
 
 def test_reversed():
