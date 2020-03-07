@@ -139,11 +139,12 @@ class Mailbox:
     def add_reader(self, subscriber, name=None, can_drive=True, **kwargs):
         """Subscribe a function to the mailbox.
 
-        Function should accept the generator over messages as first argument.
-        kwargs will be passed to function.
-
+        :param subscriber: Function which accepts a generator over messages
+        as the first argument. Any kwargs will also be passed to the function.
         :param name: Name of the thread in which the function will run.
             Defaults to read_<number>:<mailbox_name>
+        :param can_drive: Whether this reader can cause new messages to be
+        generated when in lazy mode.
         """
         if name is None:
             name = f'read_{self._n_subscribers}:{self.name}'
@@ -211,8 +212,8 @@ class Mailbox:
         timeout was broken)"""
         assert self.lazy
 
-        # The .send() knows how to raise properly
-        # TODO: raise right here?
+        # The .send() knows how to handle the exception properly
+        # (if we raise here we will likely duplicate the exception)
         if self.killed:
             return True
 
@@ -240,14 +241,19 @@ class Mailbox:
                 if self.lazy:
                     with self._lock:
                         if not self._can_fetch():
-                            self.log.debug(f"Waiting to fetch {i}, {self._subscriber_waiting_for}, {self._subscriber_can_drive}")
+                            self.log.debug(f"Waiting to fetch {i}, "
+                                           f"{self._subscriber_waiting_for}, "
+                                           f"{self._subscriber_can_drive}")
                             if not self._fetch_new_condition.wait_for(
                                     self._can_fetch, timeout=self.timeout):
-                                raise MailboxReadTimeout(f"{self} could not progress beyond {i} since no driving subscriber requested it.")
+                                raise MailboxReadTimeout(
+                                    f"{self} could not progress beyond {i}, "
+                                    f"no driving subscriber requested it.")
 
                 try:
                     x = next(iterable)
                 except StopIteration:
+                    # No need to send this yet, close will do that
                     break
                 self.send(x)
                 i += 1
@@ -303,9 +309,7 @@ class Mailbox:
                 if not self._write_condition.wait_for(can_write,
                                                       timeout=self.timeout):
                     raise MailboxFullTimeout(
-                        f"Mailbox buffer for {self.name} emptied too slow. "
-                        "This is likely caused by a deadlock in the processing; "
-                        "try SLIGHTLY increasing max_messages.")
+                        f"Mailbox buffer for {self.name} emptied too slow.")
 
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
@@ -371,9 +375,11 @@ class Mailbox:
                     next_number += 1
 
                 if len(to_yield) > 1:
-                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}  in subscriber {subscriber_i}")
+                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}"
+                                   f" in subscriber {subscriber_i}")
                 else:
-                    self.log.debug(f"Read {to_yield[0][0]} in subscriber {subscriber_i}")
+                    self.log.debug(f"Read {to_yield[0][0]} "
+                                   f"in subscriber {subscriber_i}")
 
                 self._subscribers_have_read[subscriber_i] = next_number - 1
 
