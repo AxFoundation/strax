@@ -315,10 +315,12 @@ class Plugin:
                     if len(set([x.end for x in inputs.values()])) <= 1:
                         break
                     for d in self.depends_on:
-                        inputs[d], self.input_buffer[d] = \
-                            self.input_buffer[d].split(
+                        inputs[d], back_to_buffer = \
+                            inputs[d].split(
                                 t=this_chunk_end,
                                 allow_early_split=True)
+                        self.input_buffer[d] = strax.Chunk.concatenate(
+                            [back_to_buffer, self.input_buffer[d]])
                     max_passes_left -= 1
                 else:
                     raise RuntimeError(
