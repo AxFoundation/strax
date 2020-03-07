@@ -103,6 +103,12 @@ class Mailbox:
         self._threads = []
         self._lock = threading.RLock()
 
+        # Conditions to wait on
+        # Do NOT call notify_all when the condition is False!
+        # We use wait_for, which also returns False when the timeout is broken
+        # (Is this an odd design decision in the standard library
+        #  or am I misunderstanding something?)
+        
         # If you're waiting to read a new message that hasn't yet arrived:
         self._read_condition = threading.Condition(lock=self._lock)
 
@@ -199,8 +205,10 @@ class Mailbox:
                 raise RuntimeError("Thread %s did not terminate!" % t.name)
 
     def _can_fetch(self):
-        """Return if we can fetch, then send the next element from the source,
-        when in lazy mode"""
+        """Return if we can fetch then send the next element from the source.
+        
+        If not, it returns None (to distinguish from False, which means the
+        timeout was broken)"""
         assert self.lazy
 
         # The .send() knows how to raise properly
@@ -233,9 +241,9 @@ class Mailbox:
                     with self._lock:
                         if not self._can_fetch():
                             self.log.debug(f"Waiting to fetch {i}, {self._subscriber_waiting_for}, {self._subscriber_can_drive}")
-                        if not self._fetch_new_condition.wait_for(
-                                self._can_fetch, timeout=self.timeout):
-                            raise MailboxReadTimeout(f"{self} could not progress beyond {i} since no driving subscriber requested it.")
+                            if not self._fetch_new_condition.wait_for(
+                                    self._can_fetch, timeout=self.timeout):
+                                raise MailboxReadTimeout(f"{self} could not progress beyond {i} since no driving subscriber requested it.")
 
                 try:
                     x = next(iterable)
@@ -292,12 +300,12 @@ class Mailbox:
                 self.log.debug("Subscribers have read: "
                                + str(self._subscribers_have_read))
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
-            if not self._write_condition.wait_for(can_write,
-                                                  timeout=self.timeout):
-                raise MailboxFullTimeout(
-                    f"Mailbox buffer for {self.name} emptied too slow. "
-                    "This is likely caused by a deadlock in the processing; "
-                    "try SLIGHTLY increasing max_messages.")
+                if not self._write_condition.wait_for(can_write,
+                                                      timeout=self.timeout):
+                    raise MailboxFullTimeout(
+                        f"Mailbox buffer for {self.name} emptied too slow. "
+                        "This is likely caused by a deadlock in the processing; "
+                        "try SLIGHTLY increasing max_messages.")
 
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
@@ -338,15 +346,15 @@ class Mailbox:
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
                     self._subscriber_waiting_for[subscriber_i] = next_number
-                    self._fetch_new_condition.notify_all()
-                if not self._read_condition.wait_for(next_ready,
-                                                     self.timeout):
-                    raise MailboxReadTimeout(
-                        f"{self.name} did not get {next_number} in time. "
-                        "This is likely caused by a deadlock in the processing;"
-                        " try SLIGHTLY increasing max_messages.")
+                    if self.lazy and self._can_fetch():
+                        self._fetch_new_condition.notify_all()
+                    if not self._read_condition.wait_for(next_ready,
+                                                         self.timeout):
+                        raise MailboxReadTimeout(
+                            f"{self.name} did not get {next_number} in time.")
                 self._subscriber_waiting_for[subscriber_i] = None
-                self._fetch_new_condition.notify_all()
+                if self.lazy and self._can_fetch():
+                    self._fetch_new_condition.notify_all()
 
                 if self.killed:
                     self.log.debug(f"Reader finds {self.name} killed")
