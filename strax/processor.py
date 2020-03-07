@@ -8,17 +8,20 @@ import signal
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
-try:
-    from npshmex import ProcessPoolExecutor as SHMExecutor
-except ImportError:
-    # This is allowed to fail, it only crashes if allow_shm = True
-    SHMExecutor = None
-    pass
 
 import numpy as np
 
 import strax
 export, __all__ = strax.exporter()
+
+try:
+    import npshmex
+    SHMExecutor = npshmex.ProcessPoolExecutor
+    npshmex.register_array_wrapper(strax.Chunk, 'data')
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    SHMExecutor = None
+    pass
 
 
 @export
@@ -220,33 +223,12 @@ class ThreadedMailboxProcessor:
                 m.cleanup()
             self.log.debug("Closing threads completed")
 
+            # It would be great if python had a timeout for Executor.shutdown!
             self.log.debug("Closing executors")
             if self.thread_executor is not None:
-                self.thread_executor.shutdown(wait=False)
-
+                self.thread_executor.shutdown(wait=True)
             if self.process_executor not in [None, self.thread_executor]:
-                # Unfortunately there is no wait=timeout option, so we have to
-                # roll our own
-                pids = self.process_executor._processes.keys()
-                self.process_executor.shutdown(wait=False)
-
-                t0 = time.time()
-                while time.time() < t0 + 20:
-                    if all([not psutil.pid_exists(pid) for pid in pids]):
-                        break
-                    self.log.info("Waiting for subprocesses to end")
-                    time.sleep(2)
-                else:
-                    self.log.warning("Subprocesses failed to terminate, "
-                                     "resorting to brute force killing")
-                    for pid in pids:
-                        try:
-                            os.kill(pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            # Didn't exist
-                            pass
-                    self.log.info("Sent SIGTERM to all subprocesses")
-
+                self.process_executor.shutdown(wait=True)
             self.log.debug("Closing executors completed")
 
         if traceback is not None:

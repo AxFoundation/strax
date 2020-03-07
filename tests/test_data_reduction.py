@@ -7,7 +7,7 @@ from strax.testutils import *
 @settings(deadline=None)
 @given(single_fake_pulse)
 def test_cut_outside_hits(records):
-    hits = strax.find_hits(records, threshold=0)
+    hits = strax.find_hits(records, min_amplitude=1)
 
     # Set all record waveforms to 1 (still and 0 out of bounds)
     for r in records:
