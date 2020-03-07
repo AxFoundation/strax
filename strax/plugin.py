@@ -317,7 +317,8 @@ class Plugin:
                 # trim the others too.
                 # In very hairy cases this can take multiple passes.
                 # TODO: can we optimize this, or code it more elegantly?
-                while True:
+                max_passes_left = 10
+                while max_passes_left > 0:
                     this_chunk_end = min([x.end for x in inputs.values()]
                                          + [this_chunk_end])
                     if len(set([x.end for x in inputs.values()])) <= 1:
@@ -327,6 +328,12 @@ class Plugin:
                             self.input_buffer[d].split(
                                 t=this_chunk_end,
                                 allow_early_split=True)
+                    max_passes_left -= 1
+                else:
+                    raise RuntimeError(
+                        f"{self} was unable to get time-consistent "
+                        f"inputs after ten passess. Inputs: \n{inputs}\n"
+                        f"Input buffer:\n{self.input_buffer}")
 
                 # Merge inputs of the same kind
                 inputs_merged = {
