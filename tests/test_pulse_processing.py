@@ -8,16 +8,23 @@ import strax
 
 
 def _find_hits(r):
-    hits = strax.find_hits(r, threshold=0)
     # Test pulses have dt=1 and time=0
     # TODO: hm, maybe this doesn't test everything
+
+    hits = strax.find_hits(r, min_amplitude=1)
+
+    # dt = 1, so:
     np.testing.assert_equal(hits['time'], hits['left'])
+
     # NB: exclusive right bound, no + 1 here
     np.testing.assert_equal(hits['length'],
                             hits['right'] - hits['left'])
+
+    # Check hits are properly integrated
     for h in hits:
         q = r[h['record_i']]
         assert q['data'][h['left']:h['right']].sum() == h['area']
+
     return list(zip(hits['left'], hits['right']))
 
 

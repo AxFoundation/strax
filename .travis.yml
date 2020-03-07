@@ -25,7 +25,7 @@ jobs:
     - name: "Python 3.7"
       env: PYTHON=3.7 DEPLOY_ME=true
     - name: "Python 3.7 numbaless (for coverage)"
-      env: PYTHON=3.7 NUMBA_DISABLE_JIT=true
+      env: PYTHON=3.7 NUMBA_DISABLE_JIT=1
     - name: "Python 3.6 (legacy)"
       env: PYTHON=3.6
 

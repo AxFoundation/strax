@@ -1,6 +1,8 @@
 """Functions that perform processing on pulses
 (other than data reduction functions, which are in data_reduction.py)
 """
+import typing as ty
+
 import numpy as np
 import numba
 from scipy.ndimage import convolve1d
@@ -15,38 +17,78 @@ NO_RECORD_LINK = -1
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def baseline(records, baseline_samples=40):
-    """Subtract pulses from int(baseline), store baseline in baseline field
-    :param baseline_samples: number of samples at start of pulse to average
-    Assumes records are sorted in time (or at least by channel, then time)
+def baseline(records, baseline_samples=40, flip=True):
+    """Determine baseline as the average of the first baseline_samples
+    of each pulse. Subtract the pulse data from int(baseline),
+    and store the baseline mean and rms.
 
-    Assumes record_i information is accurate (so don't cut pulses before
-    baselining them!)
+    :param baseline_samples: number of samples at start of pulse to average
+    to determine the baseline.
+    :param flip: If true, flip sign of data
+
+    Assumes records are sorted in time (or at least by channel, then time).
+
+    Assumes record_i information is accurate -- so don't cut pulses before
+    baselining them!
     """
     if not len(records):
         return records
     samples_per_record = len(records[0]['data'])
 
-    # Array for looking up last baseline seen in channel
+    # Array for looking up last baseline (mean, rms) seen in channel
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
-    last_bl_in = np.zeros(records['channel'].max() + 1, dtype=np.int16)
+    last_bl_in = np.zeros((records['channel'].max() + 1, 2), dtype=np.int16)
 
     for d_i, d in enumerate(records):
 
         # Compute the baseline if we're the first record of the pulse,
         # otherwise take the last baseline we've seen in the channel
         if d.record_i == 0:
-            bl = last_bl_in[d.channel] = d.data[:baseline_samples].mean()
+            w = d.data[:baseline_samples]
+            last_bl_in[d.channel] = bl, rms = w.mean(), w.std()
         else:
-            bl = last_bl_in[d.channel]
+            bl, rms = last_bl_in[d.channel]
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
         last = min(samples_per_record,
                    d.pulse_length - d.record_i * samples_per_record)
-        d.data[:last] = int(bl) - d.data[:last]
+        d.data[:last] = (-1 * flip) * (d.data[:last] - int(bl))
         d.baseline = bl
+        d.baseline_rms = rms
+
+
+@export
+def raw_to_records(raw_records):
+    records = np.zeros(
+        len(raw_records),
+        dtype=strax.record_dtype(
+            record_length_from_dtype(raw_records.dtype)))
+    copy_raw_records(raw_records, records)
+    return records
+
+
+# Numpy record arrays have a rowwise memory layout, so filling it
+# rowwise should be faster.
+@export
+@numba.njit(nogil=True, cache=True)
+def copy_raw_records(old, new):
+    for i in range(len(old)):
+        r = old[i]
+        r2 = new[i]
+        r2['channel'] = r['channel']
+        r2['dt'] = r['dt']
+        r2['time'] = r['time']
+        r2['length'] = r['length']
+        r2['pulse_length'] = r['pulse_length']
+        r2['record_i'] = r['record_i']
+        r2['data'][:] = r['data'][:]
+
+
+@export
+def record_length_from_dtype(dtype):
+    return len(np.zeros(1, dtype)[0]['data'])
 
 
 @export
@@ -67,6 +109,7 @@ def zero_out_of_bounds(records):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def integrate(records):
+    """Integrate records in-place"""
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
@@ -76,8 +119,9 @@ def integrate(records):
             r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
             r['data'].sum()
-            + int(round(r['baseline'] % 1)) * n_real_samples)
-
+            # Add floating part of baseline * number of samples
+            # int(round()) the result since the area field is an int
+            + int(round((r['baseline'] % 1) * n_real_samples)))
 
 
 @export
@@ -132,55 +176,98 @@ def record_links(records):
     return previous_record, next_record
 
 
-# Chunk size should be at least a thousand,
-# else copying buffers / switching context dominates over actual computation
-# No max_duration argument: hits terminate at record boundaries, and
-# anyone insane enough to try O(sec) long records deserves to be punished
 @export
-@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
-def find_hits(records, threshold=15, _result_buffer=None):
-    """Return hits (intervals above threshold) found in records.
+def find_hits(records,
+              min_amplitude: ty.Union[int, np.ndarray] = 15,
+              min_height_over_noise: ty.Union[int, np.ndarray] = 0):
+    """Return hits (intervals >= threshold) found in records.
     Hits that straddle record boundaries are split (TODO: fix this?)
 
     NB: returned hits are NOT sorted yet!
     """
+    if isinstance(min_amplitude, (tuple, list)):
+        min_amplitude = np.array(min_amplitude)
+    if isinstance(min_height_over_noise, (tuple, list)):
+        min_height_over_noise = np.array(min_height_over_noise)
+
+    # Convert to per-channel thresholds if needed
+    amp_per_ch = isinstance(min_amplitude, np.ndarray)
+    hon_per_ch = isinstance(min_height_over_noise, np.ndarray)
+    if not (amp_per_ch and hon_per_ch):
+        # At least one of the thresholds was specified as a number
+        # (constant over all channels)
+        # First infer the number of channels
+        if amp_per_ch:
+            n_channels = len(min_amplitude)
+        elif hon_per_ch:
+            n_channels = len(min_height_over_noise)
+        else:
+            n_channels = records['channel'].max() + 1
+
+        # Then create constant arrays for arguments we don't have
+        # per-channel thresholds for yet
+        if not amp_per_ch:
+            min_amplitude = min_amplitude * np.ones(n_channels)
+        if not hon_per_ch:
+            min_height_over_noise = min_height_over_noise * np.ones(n_channels)
+
+    # Do the actual hitfinding
+    return _find_hits(records, min_amplitude, min_height_over_noise)
+
+
+# Chunk size should be at least a thousand,
+# else copying buffers / switching context dominates over actual computation
+# No max_duration argument: hits terminate at record boundaries, and
+# anyone insane enough to try O(sec) long records deserves to be punished
+@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _find_hits(records, min_amplitude, min_height_over_noise,
+               _result_buffer=None):
     buffer = _result_buffer
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
     offset = 0
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
-        area = height = 0
 
-        for i in range(samples_per_record):
+        area = height = 0
+        threshold = max(
+            min_amplitude[r['channel']],
+            r['baseline_rms'] * min_height_over_noise[r['channel']])
+        n_samples = r['length']
+
+        # If someone passes a length > n_samples record,
+        # and we don't abort here, numba will happily overrun the buffer!
+        assert n_samples <= len(r['data'])
+
+        for i in range(n_samples):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
             # TODO: file issue?
             x = r['data'][i]
-            above_threshold = x > threshold
-            # print(r['data'][i], above_threshold, in_interval, hit_start)
 
-            if not in_interval and above_threshold:
+            satisfy_threshold = x >= threshold
+            # print(x, satisfy_threshold, in_interval, hit_start)
+
+            if not in_interval and satisfy_threshold:
                 # Start of a hit
                 in_interval = True
                 hit_start = i
+                height = max(x, height)
 
             if in_interval:
-                if not above_threshold:
+                if not satisfy_threshold:
                     # Hit ends at the start of this sample
                     hit_end = i
                     in_interval = False
-
                 else:
                     area += x
                     height = max(height, x)
 
-                    if i == samples_per_record - 1:
+                    if i == n_samples - 1:
                         # Hit ends at the *end* of this sample
                         # (because the record ends)
                         hit_end = i + 1
@@ -194,6 +281,8 @@ def find_hits(records, threshold=15, _result_buffer=None):
                         raise ValueError(
                             "Caught attempt to save zero-length hit!")
                     res = buffer[offset]
+
+                    res['threshold'] = threshold
                     res['left'] = hit_start
                     res['right'] = hit_end
                     res['time'] = r['time'] + hit_start * r['dt']
