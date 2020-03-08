@@ -120,7 +120,7 @@ class Plugin:
         if self.multi_output:
             # Convert to a dict of numpy dtypes
             if (not hasattr(self, 'data_kind')
-                    or not isinstance(self.data_kind, dict)):
+                    or not isinstance(self.data_kind, (dict, frozendict))):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs and "
                     "must declare its data kind as a dict: "
