@@ -1,3 +1,7 @@
+0.9.1 / 2020-03-08
+------------------
+- Fix bug in input synchronization
+
 0.9.0 / 2020-03-05
 ------------------
 - Use chunks with defined start/end rather than plain arrays (#235)
