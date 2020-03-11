@@ -1,3 +1,5 @@
+import os
+
 import strax
 import numba
 import numpy as np
@@ -25,40 +27,48 @@ def sort_by_time(x):
     return x[sort_i]
 
 
+# Getting endtime jitted is a bit awkward, especially since it has to
+# keep working with NUMBA_DISABLE_JIT, which we use for coverage tests.
+# See https://github.com/numba/numba/issues/4759
+if os.environ.get("NUMBA_DISABLE_JIT"):
+    @export
+    def endtime(x):
+        """Return endtime of intervals x"""
+        if 'endtime' in x.dtype.fields:
+            return x['endtime']
+        else:
+            return x['time'] + x['length'] * x['dt']
+else:
+    @export
+    @numba.generated_jit(nopython=True, nogil=True)
+    def endtime(x):
+        """Return endtime of intervals x"""
+        if 'endtime' in x.dtype.fields:
+            return lambda x: x['endtime']
+        else:
+            return lambda x: x['time'] + x['length'] * x['dt']
+
+
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def first_index_not_below(arr, t):
-    """Return first index of array >= t, or len(arr) if no such found"""
-    for i, x in enumerate(arr):
-        if x >= t:
-            return i
-    return len(arr)
-
-
-@export
-def endtime(x):
-    """Return endtime of intervals x"""
-    try:
-        return x['endtime']
-    except (KeyError, ValueError, IndexError):
-        return x['time'] + x['length'] * x['dt']
-
-
-@export
-# TODO: somehow numba compilation hangs on this one? reproduce / file issue?
-# numba.jit(nopython=True, nogil=True, cache=True)
-def from_break(x, safe_break=10000, left=True, tolerant=False):
+def from_break(x, safe_break, not_before=0, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long
     If there is no such break, return the best break found.
     """
-    # TODO: This is extremely rough. Better to find proper gaps, and if we
-    # know the timing of the readers, consider breaks at end and start too.
-    break_i = find_break_i(x, safe_break=safe_break, tolerant=tolerant)
+    if tolerant:
+        raise NotImplementedError
+    if not len(x):
+        raise NotImplementedError("Cannot find breaks in empty data")
+    if len(x) == 1:
+        raise NoBreakFound()
+
+    break_i = _find_break_i(x, safe_break=safe_break, not_before=not_before)
+    break_time = x[break_i]['time']
 
     if left:
-        return x[:break_i]
+        return x[:break_i], break_time
     else:
-        return x[break_i:]
+        return x[break_i:], break_time
 
 
 @export
@@ -68,30 +78,25 @@ class NoBreakFound(Exception):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def find_break_i(x, safe_break, tolerant=True):
-    """Returns LAST index of x whose time is more than safe_break away
-    from the x before
+def _find_break_i(data, safe_break, not_before):
+    """Return first index of element right of the first gap
+    larger than safe_break in data.
+
+    Assumes all x have the same length and are sorted!
+
     :param tolerant: if no break found, yield an as good as possible break
     anyway.
     """
-    max_gap = 0
-    max_gap_i = -1
-    for _i in range(len(x) - 1):
-        i = len(x) - 1 - _i
-        gap = x[i]['time'] - x[i - 1]['time']
-        if gap >= safe_break:
+    assert len(data) >= 2
+    latest_end_seen = max(not_before, strax.endtime(data[0]))
+    for i, d in enumerate(data):
+        if i == 0:
+            continue
+        if d['time'] >= latest_end_seen + safe_break:
             return i
-        if gap > max_gap:
-            max_gap_i = i
-            max_gap = gap
-
-    if not tolerant:
-        raise NoBreakFound
-
-    print("\t\tDid not find safe break, using largest available break: ",
-          max_gap,
-          " ns")
-    return max_gap_i
+        latest_end_seen = max(latest_end_seen,
+                              strax.endtime(d))
+    raise NoBreakFound
 
 
 @export

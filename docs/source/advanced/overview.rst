@@ -1,5 +1,5 @@
-Strax overview
-==============
+Strax overview (old)
+====================
 
 .. image:: architecture.svg
 
