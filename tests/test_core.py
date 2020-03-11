@@ -31,7 +31,7 @@ def test_multirun():
         assert len(bla) == n * 2
         np.testing.assert_equal(
             bla['run_id'],
-            np.array([0] * n + [1] * n, dtype=np.int32))
+            np.array(['0'] * n + ['1'] * n))
 
 
 def test_filestore():
@@ -43,7 +43,9 @@ def test_filestore():
         mystrax.scan_runs()
         assert mystrax.list_available('peaks') == []
 
-        mystrax.make(run_id=run_id, targets='peaks')
+        # Create it
+        peaks_1 = mystrax.get_array(run_id=run_id, targets='peaks')
+        assert len(peaks_1) == recs_per_chunk * n_chunks
 
         assert mystrax.is_stored(run_id, 'peaks')
         mystrax.scan_runs()
@@ -71,8 +73,8 @@ def test_filestore():
         # Check data gets loaded from cache, not rebuilt
         md_filename = osp.join(data_dirs[0], f'{prefix}-metadata.json')
         mtime_before = osp.getmtime(md_filename)
-        df = mystrax.get_array(run_id=run_id, targets='peaks')
-        assert len(df) == recs_per_chunk * n_chunks
+        peaks_2 = mystrax.get_array(run_id=run_id, targets='peaks')
+        np.testing.assert_array_equal(peaks_1, peaks_2)
         assert mtime_before == osp.getmtime(md_filename)
 
         # Test the zipfile store. Zipping is still awkward...
@@ -258,6 +260,26 @@ def test_random_access():
         assert df['time'].min() == 3
         assert df['time'].max() == 4
 
+    # Remove hack
+    Peaks.rechunk_on_save = True
+
+
+def test_rechunk_on_save():
+    """Test saving works with and without rechunk on save
+
+    Doesn't test whether rechunk on save actually rechunks:
+    that's done in test_filestore
+    """
+    for do_rechunk in (False, True):
+        Peaks.rechunk_on_save = do_rechunk
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            st = strax.Context(storage=strax.DataDirectory(path=temp_dir),
+                               register=[Records, Peaks])
+
+            peaks_0 = st.get_array('0', 'peaks')
+            peaks_0a = st.get_array('0', 'peaks')
+            np.testing.assert_array_equal(peaks_0, peaks_0a)
 
 
 def test_run_selection():
