@@ -10,7 +10,7 @@ __all__ = ('interval_dtype record_dtype raw_record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
-DEFAULT_RECORD_LENGTH = 600
+DEFAULT_RECORD_LENGTH = 110
 
 
 # Base dtype for interval-like objects (pulse, peak, hit)

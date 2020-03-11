@@ -15,7 +15,7 @@ NO_RECORD_LINK = -1
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def baseline(records, baseline_samples=40):
+def baseline(records, baseline_samples=20):
     """Subtract pulses from int(baseline), store baseline in baseline field
     :param baseline_samples: number of samples at start of pulse to average
     Assumes records are sorted in time (or at least by channel, then time)
@@ -51,7 +51,7 @@ def baseline(records, baseline_samples=40):
 
 @export
 @numba.njit(cache=True, nogil=True)
-def baseline_rms(records, nsampels=40):
+def baseline_rms(records, nsampels=20):
     """
     Function which estimates the baseline rms within a certain number of samples.
 
@@ -86,7 +86,7 @@ def baseline_rms(records, nsampels=40):
 
 
 @numba.njit(cache=True, nogil=True)
-def _baseline_rms(d, b, n_samples=40):
+def _baseline_rms(d, b, n_samples=20):
     """
     Function which estimates the baseline rms within a certain number of samples.
 
