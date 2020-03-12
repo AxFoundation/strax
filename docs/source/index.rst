@@ -30,15 +30,15 @@ You might also find these presentations useful:
     :maxdepth: 1
     :caption: Advanced usage
 
-    advanced/overview
+    advanced/chunking
     advanced/superrun
     advanced/plugin_dev
+    advanced/overview
 
 .. toctree::
     :maxdepth: 1
     :caption: Developer documentation
 
-    developer/chunking
     developer/pipeline
     developer/parallel
     developer/overlaps

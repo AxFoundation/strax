@@ -67,6 +67,9 @@ class Mailbox:
     propagate further upstream than the immediate sender threads.
     """
 
+    # In strax, these are overriden by context options
+    # 'timeout' and 'max_messages'. They are here only to support
+    # creating mailboxes directly without strax.
     DEFAULT_TIMEOUT = 300
     DEFAULT_MAX_MESSAGES = 4
 
@@ -233,7 +236,10 @@ class Mailbox:
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
             if not self._write_condition.wait_for(can_write,
                                                   timeout=self.timeout):
-                raise MailboxFullTimeout(f"{self.name} emptied too slow")
+                raise MailboxFullTimeout(
+                    f"Mailbox buffer for {self.name} emptied too slow. "
+                    "This is likely caused by a deadlock in the processing; "
+                    "try SLIGHTLY increasing max_messages.")
 
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
@@ -276,7 +282,9 @@ class Mailbox:
                 if not self._read_condition.wait_for(next_ready,
                                                      self.timeout):
                     raise MailboxReadTimeout(
-                        f"{self.name} did not get {next_number} in time")
+                        f"{self.name} did not get {next_number} in time. "
+                        "This is likely caused by a deadlock in the processing;"
+                        " try SLIGHTLY increasing max_messages.")
 
                 if self.killed:
                     self.log.debug(f"Reader finds {self.name} killed")
