@@ -55,7 +55,7 @@ def _load_file(f, compressor, dtype):
         try:
             return np.frombuffer(data, dtype=dtype)
         except ValueError as e:
-            raise ValueError(f"ValueError while loading data with dtype =\n\t{dtype}")
+            raise ValueError(f"ValueError while loading data with dtype =\n\t{dtype}") from e
 
     except Exception:
         raise strax.DataCorrupted(
