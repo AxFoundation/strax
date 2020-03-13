@@ -4,6 +4,7 @@ import numpy as np
 import numba
 
 import strax
+
 export, __all__ = strax.exporter()
 
 
@@ -90,9 +91,10 @@ class Chunk:
 
     def __repr__(self):
         return (
-            f"[{self.run_id}.{self.data_type}: "
-            f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items]")
+                f"[{self.run_id}.{self.data_type}: "
+                f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
+                f"{len(self)} items, " +
+                "{0:.1f} MB/s]".format(self._mbs()))
 
     @property
     def nbytes(self):
@@ -101,6 +103,9 @@ class Chunk:
     @property
     def duration(self):
         return self.end - self.start
+
+    def _mbs(self):
+        return (self.nbytes / 1e6) / (self.duration / 1e9)
 
     def split(self,
               t: ty.Union[int, None],
