@@ -911,11 +911,16 @@ class Context:
         raise strax.RunMetadataNotAvailable(f"No run-level metadata available "
                                             f"for {run_id}")
 
+    def size_mb(self, run_id, target):
+        """Return megabytes of memory required to hold data"""
+        md = self.get_meta(run_id, target)
+        return sum([x['nbytes'] for x in md['chunks']]) / 1e6
+
     def run_defaults(self, run_id):
         """Get configuration defaults from the run metadata (if these exist)
 
-        This will only call the rundb once while the context is in existence;
-        further calls to this will return a cached value.
+        This will only call the rundb once for each run while the context is
+        in existence; further calls to this will return a cached value.
         """
         if run_id in self._run_defaults_cache:
             return self._run_defaults_cache[run_id]
