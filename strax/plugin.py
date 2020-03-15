@@ -120,7 +120,7 @@ class Plugin:
         if self.multi_output:
             # Convert to a dict of numpy dtypes
             if (not hasattr(self, 'data_kind')
-                    or not isinstance(self.data_kind, dict)):
+                    or not isinstance(self.data_kind, (dict, frozendict))):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs and "
                     "must declare its data kind as a dict: "
@@ -288,6 +288,15 @@ class Plugin:
             else:
                 # Fetch the pacemaker, to figure out when this chunk ends
                 if not _fetch_chunk(pacemaker):
+                    # Source is exhausted. The other sources should also be
+                    # exhausted. This (a) checks this, and (b) ensures that
+                    # the content of all sources are requested all the way to
+                    # the end -- which lazy-mode processing requires
+                    for d in self.depends_on:
+                        if _fetch_chunk(d):
+                            raise RuntimeError(
+                                f"{self} sees that {pacemaker} is exhausted "
+                                f"before other dependency {d}!")
                     self.cleanup(wait_for=pending_futures)
                     return
                 this_chunk_end = self.input_buffer[pacemaker].end
