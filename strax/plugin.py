@@ -511,18 +511,11 @@ class OverlapWindowPlugin(Plugin):
         raise NotImplementedError
 
     def iter(self, iters, executor=None):
-        # Keep one chunk in reserve, since we have to do something special
-        # if we see the last chunk.
-        last_result = None
-        for x in super().iter(iters, executor=executor):
-            if last_result is not None:
-                yield last_result
-            last_result = x
+        yield from super().iter(iters, executor=executor)
 
-        if self.cached_results is not None and last_result is not None:
-            # Note we do this even if the cached_result is only emptiness,
-            # to make sure our final result ends at the right time.
-            yield strax.Chunk.concatenate([last_result, self.cached_results])
+        # Yield final results, kept at bay in fear of a new chunk
+        if self.cached_results is not None:
+            yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
