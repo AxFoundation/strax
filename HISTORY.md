@@ -1,3 +1,15 @@
+0.10.0 / 2020-03-15
+------------------
+- Lazy mailbox for processing (#241)
+- Baselining checks for nonzero first fragment (#243)
+- Add `size_mb` context method
+- Force time range to be integer
+- Update messages and exceptions (#244, #245)
+
+0.9.1 / 2020-03-08
+------------------
+- Fix bug in input synchronization
+
 0.9.0 / 2020-03-05
 ------------------
 - Use chunks with defined start/end rather than plain arrays (#235)
