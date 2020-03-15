@@ -673,7 +673,7 @@ class Context:
         :param targets: data types. Used only if run metadata is unavailable,
         so run start time has to be estimated from data.
         :param seconds_range: (start, stop) seconds since start of run
-        :param time_within: row of strax data (e.g. event)
+        :param time_within: row of strax data (e.g. eent)
         """
         if ((time_range is None)
                 + (seconds_range is None)
@@ -687,6 +687,10 @@ class Context:
                           t0 + int(1e9 * seconds_range[1]))
         if time_within is not None:
             time_range = (time_within['time'], strax.endtime(time_within))
+        if time_range is not None:
+            # Force time range to be integers, since float math on large numbers
+            # in not precise
+            time_range = tuple([int(x) for x in time_range])
         return time_range
 
     def get_iter(self, run_id: str,
