@@ -357,8 +357,6 @@ class Mailbox:
                         raise MailboxReadTimeout(
                             f"{self.name} did not get {next_number} in time.")
                 self._subscriber_waiting_for[subscriber_i] = None
-                if self.lazy and self._can_fetch():
-                    self._fetch_new_condition.notify_all()
 
                 if self.killed:
                     self.log.debug(f"Reader finds {self.name} killed")
@@ -388,6 +386,9 @@ class Mailbox:
                        and (min(self._subscribers_have_read)
                             >= self._lowest_msg_number)):
                     heapq.heappop(self._mailbox)
+
+                if self.lazy and self._can_fetch():
+                    self._fetch_new_condition.notify_all()
                 self._write_condition.notify_all()
 
             for msg_number, msg in to_yield:
