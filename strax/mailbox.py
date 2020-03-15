@@ -76,6 +76,7 @@ class Mailbox:
     def __init__(self,
                  name='mailbox',
                  timeout=None,
+                 lazy=False,
                  max_messages=None):
         self.name = name
         if timeout is None:
@@ -84,6 +85,10 @@ class Mailbox:
         if max_messages is None:
             max_messages = self.DEFAULT_MAX_MESSAGES
         self.max_messages = max_messages
+        self.lazy = lazy
+
+        if self.lazy:
+            self.max_messages = float('inf')
 
         self.closed = False
         self.force_killed = False
@@ -92,11 +97,27 @@ class Mailbox:
 
         self._mailbox = []
         self._subscribers_have_read = []
+        self._subscriber_waiting_for = []
+        self._subscriber_can_drive = []
         self._n_sent = 0
         self._threads = []
         self._lock = threading.RLock()
+
+        # Conditions to wait on
+        # Do NOT call notify_all when the condition is False!
+        # We use wait_for, which also returns False when the timeout is broken
+        # (Is this an odd design decision in the standard library
+        #  or am I misunderstanding something?)
+        
+        # If you're waiting to read a new message that hasn't yet arrived:
         self._read_condition = threading.Condition(lock=self._lock)
+
+        # If you're waiting to write a new message because the mailbox is full
         self._write_condition = threading.Condition(lock=self._lock)
+
+        # If you're waiting to fetch a new element because the subscribers
+        # stil have other things to do
+        self._fetch_new_condition = threading.Condition(lock=self._lock)
 
         self.log = logging.getLogger(self.name)
         self.log.debug("Initialized")
@@ -115,29 +136,32 @@ class Mailbox:
                              args=(source,))
         self._threads.append(t)
 
-    def add_reader(self, subscriber, name=None, **kwargs):
+    def add_reader(self, subscriber, name=None, can_drive=True, **kwargs):
         """Subscribe a function to the mailbox.
 
-        Function should accept the generator over messages as first argument.
-        kwargs will be passed to function.
-
+        :param subscriber: Function which accepts a generator over messages
+        as the first argument. Any kwargs will also be passed to the function.
         :param name: Name of the thread in which the function will run.
             Defaults to read_<number>:<mailbox_name>
+        :param can_drive: Whether this reader can cause new messages to be
+        generated when in lazy mode.
         """
         if name is None:
             name = f'read_{self._n_subscribers}:{self.name}'
         t = threading.Thread(target=subscriber,
                              name=name,
-                             args=(self.subscribe(),),
+                             args=(self.subscribe(can_drive=can_drive),),
                              kwargs=kwargs)
         self._threads.append(t)
 
-    def subscribe(self):
+    def subscribe(self, can_drive=True):
         """Return generator over messages in the mailbox
         """
         with self._lock:
             subscriber_i = self._n_subscribers
+            self._subscriber_can_drive.append(can_drive)
             self._subscribers_have_read.append(-1)
+            self._subscriber_waiting_for.append(None)
             self.log.debug(f"Added subscriber {subscriber_i}")
             return self._read(subscriber_i=subscriber_i)
 
@@ -173,6 +197,7 @@ class Mailbox:
             self.killed_because = reason
             self._read_condition.notify_all()
             self._write_condition.notify_all()
+            self._fetch_new_condition.notify_all()
 
     def cleanup(self):
         for t in self._threads:
@@ -180,13 +205,59 @@ class Mailbox:
             if t.is_alive():
                 raise RuntimeError("Thread %s did not terminate!" % t.name)
 
+    def _can_fetch(self):
+        """Return if we can fetch then send the next element from the source.
+        
+        If not, it returns None (to distinguish from False, which means the
+        timeout was broken)"""
+        assert self.lazy
+
+        # The .send() knows how to handle the exception properly
+        # (if we raise here we will likely duplicate the exception)
+        if self.killed:
+            return True
+
+        # If someone is still waiting for a message we already have
+        # (so they just haven't woken up yet), don't fetch a new message.
+        if (len(self._mailbox)
+                and any([x is not None and x <= self._lowest_msg_number
+                         for x in self._subscriber_waiting_for])):
+            return False
+
+        # Everyone is waiting for the new chunk or not at all.
+        # Fetch only if a driver is waiting.
+        for _i, waiting_for in enumerate(self._subscriber_waiting_for):
+            if self._subscriber_can_drive[_i] and waiting_for is not None:
+                return True
+        return False
+
     def _send_from(self, iterable):
         """Send to mailbox from iterable, exiting appropriately if an
         exception is thrown
         """
         try:
-            for x in iterable:
+            i = 0
+            while True:
+                if self.lazy:
+                    with self._lock:
+                        if not self._can_fetch():
+                            self.log.debug(f"Waiting to fetch {i}, "
+                                           f"{self._subscriber_waiting_for}, "
+                                           f"{self._subscriber_can_drive}")
+                            if not self._fetch_new_condition.wait_for(
+                                    self._can_fetch, timeout=self.timeout):
+                                raise MailboxReadTimeout(
+                                    f"{self} could not progress beyond {i}, "
+                                    f"no driving subscriber requested it.")
+
+                try:
+                    x = next(iterable)
+                except StopIteration:
+                    # No need to send this yet, close will do that
+                    break
                 self.send(x)
+                i += 1
+
         except Exception as e:
             self.kill_from_exception(e)
         else:
@@ -229,17 +300,16 @@ class Mailbox:
                     f'subscribers already read {read_until}.')
 
             def can_write():
-                return (len(self._mailbox) < self.max_messages or self.killed)
+                return len(self._mailbox) < self.max_messages or self.killed
+
             if not can_write():
                 self.log.debug("Subscribers have read: "
                                + str(self._subscribers_have_read))
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
-            if not self._write_condition.wait_for(can_write,
-                                                  timeout=self.timeout):
-                raise MailboxFullTimeout(
-                    f"Mailbox buffer for {self.name} emptied too slow. "
-                    "This is likely caused by a deadlock in the processing; "
-                    "try SLIGHTLY increasing max_messages.")
+                if not self._write_condition.wait_for(can_write,
+                                                      timeout=self.timeout):
+                    raise MailboxFullTimeout(
+                        f"Mailbox buffer for {self.name} emptied too slow.")
 
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
@@ -279,12 +349,16 @@ class Mailbox:
                     return self._has_msg(next_number) or self.killed
                 if not next_ready():
                     self.log.debug(f"Checking/waiting for {next_number}")
-                if not self._read_condition.wait_for(next_ready,
-                                                     self.timeout):
-                    raise MailboxReadTimeout(
-                        f"{self.name} did not get {next_number} in time. "
-                        "This is likely caused by a deadlock in the processing;"
-                        " try SLIGHTLY increasing max_messages.")
+                    self._subscriber_waiting_for[subscriber_i] = next_number
+                    if self.lazy and self._can_fetch():
+                        self._fetch_new_condition.notify_all()
+                    if not self._read_condition.wait_for(next_ready,
+                                                         self.timeout):
+                        raise MailboxReadTimeout(
+                            f"{self.name} did not get {next_number} in time.")
+                self._subscriber_waiting_for[subscriber_i] = None
+                if self.lazy and self._can_fetch():
+                    self._fetch_new_condition.notify_all()
 
                 if self.killed:
                     self.log.debug(f"Reader finds {self.name} killed")
@@ -301,9 +375,11 @@ class Mailbox:
                     next_number += 1
 
                 if len(to_yield) > 1:
-                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}  in subscriber {subscriber_i}")
+                    self.log.debug(f"Read {to_yield[0][0]}-{to_yield[-1][0]}"
+                                   f" in subscriber {subscriber_i}")
                 else:
-                    self.log.debug(f"Read {to_yield[0][0]} in subscriber {subscriber_i}")
+                    self.log.debug(f"Read {to_yield[0][0]} "
+                                   f"in subscriber {subscriber_i}")
 
                 self._subscribers_have_read[subscriber_i] = next_number - 1
 
