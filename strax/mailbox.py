@@ -447,7 +447,11 @@ class Mailbox:
 
 
 @export
-def divide_outputs(source, mailboxes, outputs=None):
+def divide_outputs(source,
+                   mailboxes: typing.Dict[str, Mailbox],
+                   lazy=False,
+                   flow_freely=tuple(),
+                   outputs=None):
     """This code is a 'mail sorter' which gets dicts of arrays from source
     and sends the right array to the right mailbox.
     """
@@ -457,10 +461,37 @@ def divide_outputs(source, mailboxes, outputs=None):
     mbs_to_kill = [mailboxes[d] for d in outputs]
     # TODO: this code duplicates exception handling and cleanup
     # from Mailbox.send_from! Can we avoid that somehow?
+    i = 0
     try:
-        for result in source:
+        while True:
+            for d in outputs:
+                if d in flow_freely:
+                    # Do not block on account of these guys
+                    continue
+
+                m = mailboxes[d]
+                if lazy:
+                    with m._lock:
+                        if not m._can_fetch():
+                            m.log.debug(f"Waiting to fetch {i}, "
+                                        f"{m._subscriber_waiting_for}, "
+                                        f"{m._subscriber_can_drive}")
+                            if not m._fetch_new_condition.wait_for(
+                                    m._can_fetch, timeout=m.timeout):
+                                raise MailboxReadTimeout(
+                                    f"{m} could not progress beyond {i}, "
+                                    f"no driving subscriber requested it.")
+
+            try:
+                result = next(source)
+            except StopIteration:
+                # No need to send this yet, close will do that
+                break
+
             for d, x in result.items():
                 mailboxes[d].send(x)
+            i += 1
+
     except Exception as e:
         for m in mbs_to_kill:
             m.kill_from_exception(e, reraise=False)
