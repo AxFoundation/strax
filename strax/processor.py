@@ -2,11 +2,8 @@ from concurrent import futures
 from functools import partial
 import logging
 import typing as ty
-import psutil
 import os
-import signal
 import sys
-import time
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -102,6 +99,19 @@ class ThreadedMailboxProcessor:
             else:
                 self.process_executor = self.thread_executor
 
+        # Figure which ouputs
+        #  - we should exclude from the flow control in lazy mode,
+        #    because they are produced but not required.
+        #  - we should discard (produced but neither required not saved)
+        produced = set(components.loaders)
+        required = set(components.targets)
+        saved = set(components.savers.keys())
+        for p in components.plugins.values():
+            produced.update(p.provides)
+            required.update(p.depends_on)
+        to_flow_freely = produced - required
+        to_discard = to_flow_freely - saved
+
         self.mailboxes = MailboxDict(lazy=lazy)
 
         for d, loader in components.loaders.items():
@@ -139,7 +149,9 @@ class ThreadedMailboxProcessor:
 
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
+                            lazy=lazy,
                             mailboxes=self.mailboxes,
+                            flow_freely=to_flow_freely,
                             outputs=p.provides))
 
             else:
@@ -183,13 +195,9 @@ class ThreadedMailboxProcessor:
         def discarder(source):
             for _ in source:
                 pass
-
-        for p in multi_output_seen:
-            for d in p.provides:
-                if d in components.targets or self.mailboxes[d]._n_subscribers:
-                    continue
-                self.mailboxes[d].add_reader(
-                    discarder, name=f'discard_{d}')
+        for d in to_discard:
+            self.mailboxes[d].add_reader(
+                discarder, name=f'discard_{d}')
 
         # Set to preferred number of maximum messages
         # TODO: may not work if plugins are inlined??
