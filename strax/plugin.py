@@ -237,13 +237,8 @@ class Plugin:
         """
         pending_futures = []
         last_input_received = time.time()
-
         self.input_buffer = {d: None
                              for d in self.depends_on}
-        if len(self.depends_on):
-            pacemaker = self.depends_on[0]
-        else:
-            pacemaker = None
 
         def _fetch_chunk(d, hope_to_see=None):
             try:
@@ -261,6 +256,16 @@ class Plugin:
                         f"Tried to get data until {hope_to_see}, but {d} "
                         f"ended prematurely at {self.input_buffer[d].end}")
                 return False
+
+        # Fetch chunks from all inputs. Whoever is the slowest becomes the
+        # pacemaker
+        pacemaker = None
+        _end = float('inf')
+        for d in self.depends_on:
+            _fetch_chunk(d)
+            if self.input_buffer[d].end < _end:
+                pacemaker = d
+                _end = self.input_buffer[d].end
 
         for chunk_i in itertools.count():
 
@@ -286,19 +291,21 @@ class Plugin:
             if pacemaker is None:
                 inputs_merged = dict()
             else:
-                # Fetch the pacemaker, to figure out when this chunk ends
-                if not _fetch_chunk(pacemaker):
-                    # Source is exhausted. The other sources should also be
-                    # exhausted. This (a) checks this, and (b) ensures that
-                    # the content of all sources are requested all the way to
-                    # the end -- which lazy-mode processing requires
-                    for d in self.depends_on:
-                        if _fetch_chunk(d):
-                            raise RuntimeError(
-                                f"{self} sees that {pacemaker} is exhausted "
-                                f"before other dependency {d}!")
-                    self.cleanup(wait_for=pending_futures)
-                    return
+                if chunk_i != 0:
+                    # Fetch the pacemaker, to figure out when this chunk ends
+                    # (don't do it for chunk 0, for which we already fetched)
+                    if not _fetch_chunk(pacemaker):
+                        # Source is exhausted. The other sources should also be
+                        # exhausted. This (a) checks this, and (b) ensures that
+                        # the content of all sources are requested all the way
+                        # to the end -- which lazy-mode processing requires
+                        for d in self.depends_on:
+                            if _fetch_chunk(d):
+                                raise RuntimeError(
+                                    f"{self} sees that {pacemaker} is exhausted "
+                                    f"before other dependency {d}!")
+                        self.cleanup(wait_for=pending_futures)
+                        return
                 this_chunk_end = self.input_buffer[pacemaker].end
 
                 inputs = dict()
