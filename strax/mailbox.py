@@ -424,8 +424,7 @@ class Mailbox:
         for msg_number, msg in self._mailbox:
             if msg_number == number:
                 return msg
-        else:
-            raise RuntimeError(f"Could not find message {number}")
+        raise RuntimeError(f"Could not find message {number}")
 
     def _has_msg(self, number):
         """Return if mailbox has message number.
