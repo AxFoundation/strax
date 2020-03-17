@@ -706,7 +706,7 @@ class ParallelSourcePlugin(Plugin):
         # Inline savers that do not require rechunking
         savers = components.savers
         sub_savers = dict()
-        for p in sub_plugins.items():
+        for p in sub_plugins.values():
             for d in p.provides:
                 if d not in savers:
                     continue
@@ -727,7 +727,7 @@ class ParallelSourcePlugin(Plugin):
                     s.is_forked = True
                     sub_savers[d].append(s)
                 savers[d] = remaining_savers
-    
+
                 if not len(savers[d]):
                     del savers[d]
 
