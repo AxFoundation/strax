@@ -706,30 +706,30 @@ class ParallelSourcePlugin(Plugin):
         # Inline savers that do not require rechunking
         savers = components.savers
         sub_savers = dict()
-        for d, p in sub_plugins.items():
-
-            if d not in savers:
-                continue
-            if p.rechunk_on_save:
-                # Case 3. has a saver we can't inline (this is checked later)
-                outputs_to_send.add(d)
-                continue
-
-            remaining_savers = []
-            for s_i, s in enumerate(savers[d]):
-                if not s.allow_fork:
-                    # Case 3 again, cannot inline saver
-                    outputs_to_send.add(d)
-                    remaining_savers.append(s)
+        for p in sub_plugins.items():
+            for d in p.provides:
+                if d not in savers:
                     continue
-                if d not in sub_savers:
-                    sub_savers[d] = []
-                s.is_forked = True
-                sub_savers[d].append(s)
-            savers[d] = remaining_savers
+                if p.rechunk_on_save:
+                    # Case 3. has a saver we can't inline
+                    outputs_to_send.add(d)
+                    continue
 
-            if not len(savers[d]):
-                del savers[d]
+                remaining_savers = []
+                for s_i, s in enumerate(savers[d]):
+                    if not s.allow_fork:
+                        # Case 3 again, cannot inline saver
+                        outputs_to_send.add(d)
+                        remaining_savers.append(s)
+                        continue
+                    if d not in sub_savers:
+                        sub_savers[d] = []
+                    s.is_forked = True
+                    sub_savers[d].append(s)
+                savers[d] = remaining_savers
+    
+                if not len(savers[d]):
+                    del savers[d]
 
         p = cls(depends_on=sub_plugins[start_from].depends_on)
         p.sub_plugins = sub_plugins
