@@ -58,7 +58,12 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       "Too low = likely deadlocks."),
     strax.Option(name='timeout', default=60,
                  help="Terminate processing if any one mailbox receives "
-                      "no result for more than this many seconds"))
+                      "no result for more than this many seconds"),
+    strax.Option(name='use_per_run_defaults', default=False,
+                 help='Scan the run db for per-run defaults. '
+                      'This is an experimental strax feature that will '
+                      'possibly be removed, see issue #246')
+)
 @export
 class Context:
     """Context for strax analysis.
@@ -925,6 +930,8 @@ class Context:
         This will only call the rundb once for each run while the context is
         in existence; further calls to this will return a cached value.
         """
+        if not self.context_config['use_per_run_defaults']:
+            return dict()
         if run_id in self._run_defaults_cache:
             return self._run_defaults_cache[run_id]
         try:
