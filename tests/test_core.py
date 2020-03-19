@@ -320,7 +320,8 @@ def test_run_defaults():
         sf = strax.DataDirectory(path=temp_dir)
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
-        st = strax.Context(storage=sf, register=[Records, Peaks])
+        st = strax.Context(storage=sf, register=[Records, Peaks],
+                           use_per_run_defaults=True)
 
         # The run defaults get used
         peaks = st.get_array('0', 'peaks')
