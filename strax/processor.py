@@ -2,11 +2,8 @@ from concurrent import futures
 from functools import partial
 import logging
 import typing as ty
-import psutil
 import os
-import signal
 import sys
-import time
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -34,8 +31,13 @@ class ProcessorComponents(ty.NamedTuple):
 
 
 class MailboxDict(dict):
+    def __init__(self, *args, lazy=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lazy = lazy
+
     def __missing__(self, key):
-        res = self[key] = strax.Mailbox(name=key + '_mailbox')
+        res = self[key] = strax.Mailbox(name=key + '_mailbox',
+                                        lazy=self.lazy)
         return res
 
 
@@ -47,12 +49,12 @@ class ThreadedMailboxProcessor:
                  components: ProcessorComponents,
                  allow_rechunk=True, allow_shm=False,
                  allow_multiprocess=False,
+                 allow_lazy=True,
                  max_workers=None,
                  max_messages=4,
                  timeout=60):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
-        self.mailboxes = MailboxDict()
 
         self.log.debug("Processor components are: " + str(components))
 
@@ -65,14 +67,16 @@ class ThreadedMailboxProcessor:
             # Disable the executors: work in one process.
             # Each plugin works completely in its own thread.
             self.process_executor = self.thread_executor = None
+            lazy = allow_lazy
         else:
+            lazy = False
             # Use executors for parallelization of computations.
             self.thread_executor = futures.ThreadPoolExecutor(
                 max_workers=max_workers)
 
             mp_plugins = {d: p for d, p in components.plugins.items()
                           if p.parallel == 'process'}
-            if (allow_multiprocess and len(mp_plugins)):
+            if allow_multiprocess and len(mp_plugins):
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
                     if SHMExecutor is None:
@@ -94,6 +98,21 @@ class ThreadedMailboxProcessor:
                                + str(components))
             else:
                 self.process_executor = self.thread_executor
+
+        # Figure which ouputs
+        #  - we should exclude from the flow control in lazy mode,
+        #    because they are produced but not required.
+        #  - we should discard (produced but neither required not saved)
+        produced = set(components.loaders)
+        required = set(components.targets)
+        saved = set(components.savers.keys())
+        for p in components.plugins.values():
+            produced.update(p.provides)
+            required.update(p.depends_on)
+        to_flow_freely = produced - required
+        to_discard = to_flow_freely - saved
+
+        self.mailboxes = MailboxDict(lazy=lazy)
 
         for d, loader in components.loaders.items():
             assert d not in components.plugins
@@ -130,7 +149,9 @@ class ThreadedMailboxProcessor:
 
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
+                            lazy=lazy,
                             mailboxes=self.mailboxes,
+                            flow_freely=to_flow_freely,
                             outputs=p.provides))
 
             else:
@@ -141,16 +162,20 @@ class ThreadedMailboxProcessor:
                         executor=executor),
                     name=f'build:{d}')
 
+        dtypes_built = {d: p
+                        for p in components.plugins.values()
+                        for d in p.provides}
         for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
-                if d in components.plugins:
-                    rechunk = components.plugins[d].rechunk_on_save
+                if d in dtypes_built:
+                    can_drive = not lazy
+                    rechunk = (dtypes_built[d].rechunk_on_save
+                               and allow_rechunk)
                 else:
                     # This is storage conversion mode
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
-                    rechunk = False
-                if not allow_rechunk:
+                    can_drive = True
                     rechunk = False
 
                 self.mailboxes[d].add_reader(
@@ -160,6 +185,7 @@ class ThreadedMailboxProcessor:
                             # the compressor releases the gil,
                             # and we have a lot of data transfer to do
                             executor=self.thread_executor),
+                    can_drive=can_drive,
                     name=f'save_{s_i}:{d}')
 
         # For multi-output plugins, an output may be neither saved nor
@@ -169,13 +195,9 @@ class ThreadedMailboxProcessor:
         def discarder(source):
             for _ in source:
                 pass
-
-        for p in multi_output_seen:
-            for d in p.provides:
-                if d in components.targets or self.mailboxes[d]._n_subscribers:
-                    continue
-                self.mailboxes[d].add_reader(
-                    discarder, name=f'discard_{d}')
+        for d in to_discard:
+            self.mailboxes[d].add_reader(
+                discarder, name=f'discard_{d}')
 
         # Set to preferred number of maximum messages
         # TODO: may not work if plugins are inlined??
