@@ -58,7 +58,7 @@ def baseline(records, baseline_samples=40, flip=True,
             bl, rms = last_bl_in[d['channel']]
             if not seen_first[d['channel']]:
                 if not allow_sloppy_chunking:
-#                     print(d.time, d.channel, d.record_i)
+                    print(d.time, d.channel, d.record_i)
                     raise RuntimeError("Cannot baseline, missing 0th fragment!")
                 bl = last_bl_in[d['channel']] = fallback_baseline
                 rms = np.nan
