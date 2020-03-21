@@ -536,6 +536,10 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
                         f"available, but {d} for {run_id} is not.")
+                if '*' in self.context_config['forbid_creation_of']:
+                    raise strax.DataNotAvailable(
+                        f"{d} for {run_id} not found in any storage, and "
+                        "your context specifies no new data can be created.")
                 if d in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
