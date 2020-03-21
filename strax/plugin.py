@@ -654,10 +654,11 @@ class MergeOnlyPlugin(Plugin):
 
 @export
 class ParallelSourcePlugin(Plugin):
-    """An plugin that inlines the computation of other plugins and saving
-    of their results.
+    """An plugin that inlines the computations of other plugins
+    and the saving of their results.
 
-    This evades data transfer (pickling and/or memory copy) penalties.
+    This evades data transfer (pickling and/or memory copy) penalties
+    while multiprocessing.
     """
     parallel = 'process'
 
@@ -771,10 +772,7 @@ class ParallelSourcePlugin(Plugin):
             for output_name, p in self.sub_plugins.items():
                 if output_name in results:
                     continue
-                # Sorting deps since otherwise input field order depends on
-                # order in which computation happened, which might be bad?
-                deps = sorted(p.depends_on)
-                if any([d not in results for d in deps]):
+                if any([d not in results for d in p.depends_on]):
                     continue
                 compute_kwargs = dict(chunk_i=chunk_i)
 
