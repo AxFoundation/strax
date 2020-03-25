@@ -237,13 +237,8 @@ class Plugin:
         """
         pending_futures = []
         last_input_received = time.time()
-
         self.input_buffer = {d: None
                              for d in self.depends_on}
-        if len(self.depends_on):
-            pacemaker = self.depends_on[0]
-        else:
-            pacemaker = None
 
         def _fetch_chunk(d, hope_to_see=None):
             try:
@@ -261,6 +256,16 @@ class Plugin:
                         f"Tried to get data until {hope_to_see}, but {d} "
                         f"ended prematurely at {self.input_buffer[d].end}")
                 return False
+
+        # Fetch chunks from all inputs. Whoever is the slowest becomes the
+        # pacemaker
+        pacemaker = None
+        _end = float('inf')
+        for d in self.depends_on:
+            _fetch_chunk(d)
+            if self.input_buffer[d].end < _end:
+                pacemaker = d
+                _end = self.input_buffer[d].end
 
         for chunk_i in itertools.count():
 
@@ -286,10 +291,21 @@ class Plugin:
             if pacemaker is None:
                 inputs_merged = dict()
             else:
-                # Fetch the pacemaker, to figure out when this chunk ends
-                if not _fetch_chunk(pacemaker):
-                    self.cleanup(wait_for=pending_futures)
-                    return
+                if chunk_i != 0:
+                    # Fetch the pacemaker, to figure out when this chunk ends
+                    # (don't do it for chunk 0, for which we already fetched)
+                    if not _fetch_chunk(pacemaker):
+                        # Source is exhausted. The other sources should also be
+                        # exhausted. This (a) checks this, and (b) ensures that
+                        # the content of all sources are requested all the way
+                        # to the end -- which lazy-mode processing requires
+                        for d in self.depends_on:
+                            if _fetch_chunk(d):
+                                raise RuntimeError(
+                                    f"{self} sees that {pacemaker} is exhausted "
+                                    f"before other dependency {d}!")
+                        self.cleanup(wait_for=pending_futures)
+                        return
                 this_chunk_end = self.input_buffer[pacemaker].end
 
                 inputs = dict()
@@ -495,18 +511,11 @@ class OverlapWindowPlugin(Plugin):
         raise NotImplementedError
 
     def iter(self, iters, executor=None):
-        # Keep one chunk in reserve, since we have to do something special
-        # if we see the last chunk.
-        last_result = None
-        for x in super().iter(iters, executor=executor):
-            if last_result is not None:
-                yield last_result
-            last_result = x
+        yield from super().iter(iters, executor=executor)
 
-        if self.cached_results is not None and last_result is not None:
-            # Note we do this even if the cached_result is only emptiness,
-            # to make sure our final result ends at the right time.
-            yield strax.Chunk.concatenate([last_result, self.cached_results])
+        # Yield final results, kept at bay in fear of a new chunk
+        if self.cached_results is not None:
+            yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
@@ -645,10 +654,11 @@ class MergeOnlyPlugin(Plugin):
 
 @export
 class ParallelSourcePlugin(Plugin):
-    """An plugin that inlines the computation of other plugins and saving
-    of their results.
+    """An plugin that inlines the computations of other plugins
+    and the saving of their results.
 
-    This evades data transfer (pickling and/or memory copy) penalties.
+    This evades data transfer (pickling and/or memory copy) penalties
+    while multiprocessing.
     """
     parallel = 'process'
 
@@ -697,30 +707,30 @@ class ParallelSourcePlugin(Plugin):
         # Inline savers that do not require rechunking
         savers = components.savers
         sub_savers = dict()
-        for d, p in sub_plugins.items():
-
-            if d not in savers:
-                continue
-            if p.rechunk_on_save:
-                # Case 3. has a saver we can't inline (this is checked later)
-                outputs_to_send.add(d)
-                continue
-
-            remaining_savers = []
-            for s_i, s in enumerate(savers[d]):
-                if not s.allow_fork:
-                    # Case 3 again, cannot inline saver
-                    outputs_to_send.add(d)
-                    remaining_savers.append(s)
+        for p in sub_plugins.values():
+            for d in p.provides:
+                if d not in savers:
                     continue
-                if d not in sub_savers:
-                    sub_savers[d] = []
-                s.is_forked = True
-                sub_savers[d].append(s)
-            savers[d] = remaining_savers
+                if p.rechunk_on_save:
+                    # Case 3. has a saver we can't inline
+                    outputs_to_send.add(d)
+                    continue
 
-            if not len(savers[d]):
-                del savers[d]
+                remaining_savers = []
+                for s_i, s in enumerate(savers[d]):
+                    if not s.allow_fork:
+                        # Case 3 again, cannot inline saver
+                        outputs_to_send.add(d)
+                        remaining_savers.append(s)
+                        continue
+                    if d not in sub_savers:
+                        sub_savers[d] = []
+                    s.is_forked = True
+                    sub_savers[d].append(s)
+                savers[d] = remaining_savers
+
+                if not len(savers[d]):
+                    del savers[d]
 
         p = cls(depends_on=sub_plugins[start_from].depends_on)
         p.sub_plugins = sub_plugins
@@ -762,10 +772,7 @@ class ParallelSourcePlugin(Plugin):
             for output_name, p in self.sub_plugins.items():
                 if output_name in results:
                     continue
-                # Sorting deps since otherwise input field order depends on
-                # order in which computation happened, which might be bad?
-                deps = sorted(p.depends_on)
-                if any([d not in results for d in deps]):
+                if any([d not in results for d in p.depends_on]):
                     continue
                 compute_kwargs = dict(chunk_i=chunk_i)
 
