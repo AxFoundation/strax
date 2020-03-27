@@ -101,7 +101,7 @@ class DataDirectory(StorageFrontend):
                 raise strax.DataExistsError(at=dirname)
             return bk
 
-        if allow_incomplete:
+        if allow_incomplete and not exists:
             # Check for incomplete data (only exact matching for now)
             if fuzzy_for or fuzzy_for_options:
                 raise NotImplementedError(
