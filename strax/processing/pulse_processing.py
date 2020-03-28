@@ -65,9 +65,8 @@ def baseline(records, baseline_samples=40, flip=True,
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
-        last = min(samples_per_record,
-                   d['pulse_length'] - d['record_i'] * samples_per_record)
-        d['data'][:last] = (-1 * flip) * (d['data'][:last] - int(bl))
+        d['data'][:d['length']] = (
+            (-1 * flip) * (d['data'][:d['length']] - int(bl)))
         d['baseline'] = bl
         d['baseline_rms'] = rms
 
@@ -114,9 +113,8 @@ def zero_out_of_bounds(records):
     samples_per_record = len(records[0]['data'])
 
     for r in records:
-        end = r['pulse_length'] - r['record_i'] * samples_per_record
-        if end < samples_per_record:
-            r['data'][end:] = 0
+        if r['length'] < samples_per_record:
+            r['data'][r['length']:] = 0
 
 
 @export
@@ -125,16 +123,12 @@ def integrate(records):
     """Integrate records in-place"""
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
     for i, r in enumerate(records):
-        n_real_samples = min(
-            samples_per_record,
-            r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
             r['data'].sum()
             # Add floating part of baseline * number of samples
             # int(round()) the result since the area field is an int
-            + int(round((r['baseline'] % 1) * n_real_samples)))
+            + int(round((r['baseline'] % 1) * r['length'])))
 
 
 @export
