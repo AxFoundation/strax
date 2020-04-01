@@ -101,7 +101,7 @@ class DataDirectory(StorageFrontend):
                 raise strax.DataExistsError(at=dirname)
             return bk
 
-        if allow_incomplete:
+        if allow_incomplete and not exists:
             # Check for incomplete data (only exact matching for now)
             if fuzzy_for or fuzzy_for_options:
                 raise NotImplementedError(
@@ -189,6 +189,7 @@ class DataDirectory(StorageFrontend):
 @export
 def dirname_to_prefix(dirname):
     """Return filename prefix from dirname"""
+    dirname = dirname.replace('_temp', '')
     return os.path.basename(dirname.strip('/').rstrip('\\')).split("-", maxsplit=1)[1]
 
 
@@ -291,14 +292,23 @@ class FileSaver(strax.Saver):
                 strax.save_file, fn, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):
-        if self.is_forked:
+        is_first = chunk_info['chunk_i'] == 0
+        if is_first:
+            self.md['start'] = chunk_info['start']
+
+        if self.is_forked and not is_first:
+            # Do not write to the main metadata file to avoid race conditions
+            # Instead, write a separate metadata.json file for this chunk,
+            # to be collected later.
+
             # We might not have a filename yet:
             # the chunk is not saved when it is empty
             filename = self._chunk_filename(chunk_info)
-            # Write a separate metadata.json file for each chunk
+
             fn = f'{self.tempdirname}/metadata_{filename}.json'
             with open(fn, mode='w') as f:
                 f.write(json.dumps(chunk_info, **self.json_options))
+
         else:
             # Just append and flush the metadata
             # (maybe not super-efficient to write the json everytime...
@@ -320,12 +330,6 @@ class FileSaver(strax.Saver):
             with open(fn, mode='r') as f:
                 self.md['chunks'].append(json.load(f))
             os.remove(fn)
-
-        if self.md['chunks']:
-            self.md['start'] = min([x['start'] for x in self.md['chunks']])
-            self.md['end'] = max([x['end'] for x in self.md['chunks']])
-        # If there were no chunks, we are certainly crashing.
-        # Don't throw another exception
 
         self._flush_metadata()
 
