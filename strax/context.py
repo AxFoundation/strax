@@ -1,4 +1,5 @@
 import collections
+import datetime
 import logging
 import fnmatch
 from functools import partial
@@ -655,6 +656,7 @@ class Context:
             # Use run metadata, if it is available, to get
             # the run start time (floored to seconds)
             t0 = self.run_metadata(run_id, 'start')['start']
+            t0 = t0.replace(tzinfo=datetime.timezone.utc)
             return int(t0.timestamp()) * int(1e9)
         except (strax.RunMetadataNotAvailable, KeyError):
             pass
