@@ -296,7 +296,7 @@ class FileSaver(strax.Saver):
         if is_first:
             self.md['start'] = chunk_info['start']
 
-        if self.is_forked and not is_first:
+        if self.is_forked:
             # Do not write to the main metadata file to avoid race conditions
             # Instead, write a separate metadata.json file for this chunk,
             # to be collected later.
@@ -309,7 +309,12 @@ class FileSaver(strax.Saver):
             with open(fn, mode='w') as f:
                 f.write(json.dumps(chunk_info, **self.json_options))
 
-        else:
+        # To ensure we have some metadata to load with allow_incomplete,
+        # modify the metadata immediately for the first chunk.
+        # If we are forked, modifying self.md is harmless since
+        # we're in a different process.
+
+        if not self.is_forked or is_first:
             # Just append and flush the metadata
             # (maybe not super-efficient to write the json everytime...
             # just don't use thousands of chunks)
