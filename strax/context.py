@@ -1,4 +1,5 @@
 import collections
+import datetime
 import logging
 import fnmatch
 from functools import partial
@@ -58,7 +59,12 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       "Too low = likely deadlocks."),
     strax.Option(name='timeout', default=60,
                  help="Terminate processing if any one mailbox receives "
-                      "no result for more than this many seconds"))
+                      "no result for more than this many seconds"),
+    strax.Option(name='use_per_run_defaults', default=False,
+                 help='Scan the run db for per-run defaults. '
+                      'This is an experimental strax feature that will '
+                      'possibly be removed, see issue #246')
+)
 @export
 class Context:
     """Context for strax analysis.
@@ -531,6 +537,10 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
                         f"available, but {d} for {run_id} is not.")
+                if '*' in self.context_config['forbid_creation_of']:
+                    raise strax.DataNotAvailable(
+                        f"{d} for {run_id} not found in any storage, and "
+                        "your context specifies no new data can be created.")
                 if d in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
@@ -646,22 +656,22 @@ class Context:
             # Use run metadata, if it is available, to get
             # the run start time (floored to seconds)
             t0 = self.run_metadata(run_id, 'start')['start']
-            t0 = int(t0.timestamp()) * int(1e9)
-        except strax.RunMetadataNotAvailable:
-            if not targets:
-                warnings.warn(
-                    "Could not estimate run start time from "
-                    "run metadata: assuming it is 0",
-                    UserWarning)
-                return 0
-            # Get an approx start from the data itself,
-            # then floor it to seconds for consistency
-            t = strax.to_str_tuple(targets)[0]
-            # Get an approx start from the data itself,
-            # then floor it to seconds for consistency
-            t0 = self.get_meta(run_id, t)['chunks'][0]['first_time']
-            t0 = (int(t0) // int(1e9)) * int(1e9)
-        return t0
+            t0 = t0.replace(tzinfo=datetime.timezone.utc)
+            return int(t0.timestamp()) * int(1e9)
+        except (strax.RunMetadataNotAvailable, KeyError):
+            pass
+        # We only get here if there was an exception
+        if not targets:
+            warnings.warn(
+                "Could not estimate run start time from "
+                "run metadata: assuming it is 0",
+                UserWarning)
+            return 0
+        # Get an approx start from the data itself,
+        # then floor it to seconds for consistency
+        t = strax.to_str_tuple(targets)[0]
+        t0 = self.get_meta(run_id, t)['chunks'][0]['start']
+        return (int(t0) // int(1e9)) * int(1e9)
 
     def to_absolute_time_range(self, run_id, targets, time_range=None,
                                seconds_range=None, time_within=None):
@@ -926,6 +936,8 @@ class Context:
         This will only call the rundb once for each run while the context is
         in existence; further calls to this will return a cached value.
         """
+        if not self.context_config['use_per_run_defaults']:
+            return dict()
         if run_id in self._run_defaults_cache:
             return self._run_defaults_cache[run_id]
         try:

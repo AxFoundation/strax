@@ -50,26 +50,26 @@ def baseline(records, baseline_samples=40, flip=True,
 
         # Compute the baseline if we're the first record of the pulse,
         # otherwise take the last baseline we've seen in the channel
-        if d.record_i == 0:
-            seen_first[d.channel] = True
-            w = d.data[:baseline_samples]
-            last_bl_in[d.channel] = bl, rms = w.mean(), w.std()
+        if d['record_i'] == 0:
+            seen_first[d['channel']] = True
+            w = d['data'][:baseline_samples]
+            last_bl_in[d['channel']] = bl, rms = w.mean(), w.std()
         else:
-            bl, rms = last_bl_in[d.channel]
-            if not seen_first[d.channel]:
+            bl, rms = last_bl_in[d['channel']]
+            if not seen_first[d['channel']]:
                 if not allow_sloppy_chunking:
                     print(d.time, d.channel, d.record_i)
                     raise RuntimeError("Cannot baseline, missing 0th fragment!")
-                bl = last_bl_in[d.channel] = fallback_baseline
+                bl = last_bl_in[d['channel']] = fallback_baseline
                 rms = np.nan
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
         last = min(samples_per_record,
-                   d.pulse_length - d.record_i * samples_per_record)
-        d.data[:last] = (-1 * flip) * (d.data[:last] - int(bl))
-        d.baseline = bl
-        d.baseline_rms = rms
+                   d['pulse_length'] - d['record_i'] * samples_per_record)
+        d['data'][:last] = (-1 * flip) * (d['data'][:last] - int(bl))
+        d['baseline'] = bl
+        d['baseline_rms'] = rms
 
 
 @export

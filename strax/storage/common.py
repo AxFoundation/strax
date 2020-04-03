@@ -628,6 +628,13 @@ class Saver:
         if exc_info:
             self.md['exception'] = exc_info
 
+        if self.md['chunks']:
+            # Update to precise start and end values
+            self.md['start'] = self.md['chunks'][0]['start']
+            self.md['end'] = self.md['chunks'][-1]['end']
+        # If there were no chunks, we are certainly crashing.
+        # Don't throw another exception
+
         self.md['writing_ended'] = time.time()
 
         self._close()
