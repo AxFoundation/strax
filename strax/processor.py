@@ -218,42 +218,51 @@ class ThreadedMailboxProcessor:
             m.start()
 
         self.log.debug(f"Yielding {target}")
-        traceback = None
-        exc = None
+        traceback, exc, reason = None, None, None
 
         try:
             yield from final_generator
 
-        except Exception as e:
-            self.log.debug(f"Target Mailbox ({target}) killed, exception {e}")
+        # GeneratorExit results from exception in caller
+        # (on garbage collection, .close() is called, see PEP342)
+        except (Exception, GeneratorExit) as e:
+            self.log.fatal(f"Target Mailbox ({target}) killed, "
+                           f"exception {type(e)}, message {e}")
+            if isinstance(e, strax.MailboxKilled):
+                _, exc, traceback = reason = e.args[0]
+            else:
+                exc = e
+                reason = (e.__class__, e, sys.exc_info()[2])
+                traceback = reason[2]
+
+            # We will reraise it in just a moment...
+
+        if exc is not None:
+            if isinstance(exc, GeneratorExit):
+                print("Main generator exited irregularly?!")
+                reason[2] = (
+                    "Hm, interesting. Most likely an exception was thrown "
+                    "outside strax, but we did not handle it properly.")
+
+            # Kill the mailboxes
             for m in self.mailboxes.values():
                 if m != target:
                     self.log.debug(f"Killing {m}")
-                    if isinstance(e, strax.MailboxKilled):
-                        _, exc, traceback = reason = e.args[0]
-                    else:
-                        exc = e
-                        reason = (e.__class__, e, sys.exc_info()[2])
-                        traceback = reason[2]
-
                     m.kill(upstream=True, reason=reason)
-            # We will reraise it in just a moment...
 
-        finally:
-            self.log.debug("Closing threads")
-            for m in self.mailboxes.values():
-                m.cleanup()
-            self.log.debug("Closing threads completed")
+        self.log.debug("Closing threads")
+        for m in self.mailboxes.values():
+            m.cleanup()
+        self.log.debug("Closing threads completed")
 
-            # It would be great if python had a timeout for Executor.shutdown!
-            self.log.debug("Closing executors")
-            if self.thread_executor is not None:
-                self.thread_executor.shutdown(wait=True)
-            if self.process_executor not in [None, self.thread_executor]:
-                self.process_executor.shutdown(wait=True)
-            self.log.debug("Closing executors completed")
+        self.log.debug("Closing executors")
+        if self.thread_executor is not None:
+            self.thread_executor.shutdown(wait=True)
+        if self.process_executor not in [None, self.thread_executor]:
+            self.process_executor.shutdown(wait=True)
+        self.log.debug("Closing executors completed")
 
-        if traceback is not None:
+        if exc is not None:
             # Reraise exception. This is outside the except block
             # to avoid the 'during handling of this exception, another
             # exception occurred' stuff from confusing the traceback
