@@ -710,6 +710,7 @@ class Context:
                  time_within=None,
                  time_selection='fully_contained',
                  selection_str=None,
+                 keep_columns=None,
                  _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -771,8 +772,12 @@ class Context:
             if not isinstance(result, strax.Chunk):
                 raise ValueError(f"Got type {type(result)} rather than a strax "
                                  f"Chunk from the processor!")
-            result.data = self.apply_selection(result.data, selection_str,
-                                               time_range, time_selection)
+            result.data = self.apply_selection(
+                result.data,
+                selection_str=selection_str,
+                keep_columns=keep_columns,
+                time_range=time_range,
+                time_selection=time_selection)
             yield result
         if not seen_a_chunk:
             if time_range is None:
@@ -780,7 +785,9 @@ class Context:
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
 
-    def apply_selection(self, x, selection_str=None,
+    def apply_selection(self, x,
+                        selection_str=None,
+                        keep_columns=None,
                         time_range=None,
                         time_selection='fully_contained'):
         """Return x after applying selections
@@ -810,7 +817,6 @@ class Context:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
         if selection_str:
-
             if isinstance(selection_str, (list, tuple)):
                 selection_str = ' & '.join(f'({x})' for x in selection_str)
 
@@ -818,6 +824,25 @@ class Context:
                 fn: x[fn]
                 for fn in x.dtype.names})
             x = x[mask]
+
+        if keep_columns:
+            keep_columns = strax.to_str_tuple(keep_columns)
+
+            # Construct the new dtype
+            new_dtype = []
+            for unpacked_dtype in strax.unpack_dtype(x.dtype):
+                field_name = unpacked_dtype[0]
+                if isinstance(field_name, tuple):
+                    field_name = field_name[1]
+                if field_name in keep_columns:
+                    new_dtype.append(unpacked_dtype)
+
+            # Copy over the data
+            x2 = np.zeros(len(x), dtype=new_dtype)
+            for field_name in keep_columns:
+                x2[field_name] = x[field_name]
+            x = x2
+            del x2
 
         return x
 
