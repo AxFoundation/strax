@@ -240,11 +240,15 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
     if not len(records):
         return
     offset = 0
+    n_channels = len(min_amplitude)
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+        if r['channel'] >= n_channels:
+            print(r['channel'], n_channels)
+            raise ValueError("Too few channel thresholds specified")
 
         area = height = 0
         threshold = max(

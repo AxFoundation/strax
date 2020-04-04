@@ -759,7 +759,7 @@ class Context:
                 del self._plugin_class_registry[k]
 
         seen_a_chunk = False
-        for result in strax.continuity_check(strax.ThreadedMailboxProcessor(
+        generator = strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
@@ -767,18 +767,31 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()):
-            seen_a_chunk = True
-            if not isinstance(result, strax.Chunk):
-                raise ValueError(f"Got type {type(result)} rather than a strax "
-                                 f"Chunk from the processor!")
-            result.data = self.apply_selection(
-                result.data,
+                timeout=self.context_config['timeout']).iter()
+
+        try:
+            for result in strax.continuity_check(generator):
+                seen_a_chunk = True
+                if not isinstance(result, strax.Chunk):
+                    raise ValueError(f"Got type {type(result)} rather than "
+                                     f"a strax Chunk from the processor!")
+                result.data = self.apply_selection(
+                    result.data, 
                 selection_str=selection_str,
                 keep_columns=keep_columns,
                 time_range=time_range,
                 time_selection=time_selection)
-            yield result
+                yield result
+
+        except GeneratorExit:
+            generator.throw(OutsideException(
+                "Terminating due to an exception originating from outside "
+                "strax's get_iter (which we cannot retrieve)."))
+
+        except Exception as e:
+            generator.throw(e)
+            raise
+
         if not seen_a_chunk:
             if time_range is None:
                 raise strax.DataCorrupted("No data returned!")
@@ -1037,3 +1050,8 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
+
+
+@export
+class OutsideException(Exception):
+    pass
