@@ -1,3 +1,14 @@
+0.10.2 / 2020-04-06
+--------------------
+- Fix loading of incomplete data (#251)
+- Fx exception handling (#252)
+- Fix hitfinder buffer overrun if too few thresholds specified (bc2c2b)
+- keep_columns selection option (4e2550)
+- Assume all run metadata is in UTC (4e223e)
+- Can now specify `*` in forbid_creation_of (86552f)
+- Simplify length computations (#250)
+
+
 0.10.1 / 2020-03-18
 --------------------
 - Even lazier processing (#248)
