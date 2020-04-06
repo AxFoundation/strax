@@ -39,7 +39,7 @@ def cut_baseline(records, n_before=48, n_after=30):
             d.data[:n_before] = 0
 
         clear_from = d.pulse_length - n_after
-        clear_from -= d.record_i * samples_per_record
+        clear_from -= d.record_i.astype(np.int32) * samples_per_record
         clear_from = max(0, clear_from)
         if clear_from < samples_per_record:
             d.data[clear_from:] = 0
@@ -120,28 +120,3 @@ def _cut_outside_hits(records, hits, new_recs,
                 b_next = end_keep - samples_per_record
                 new_recs[next_ri]['data'][:b_next] = \
                     records[next_ri]['data'][:b_next]
-
-
-@export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def replace_with_spike(records, also_for_multirecord_pulses=False):
-    """Replaces the waveform in each record with a spike of the same integral
-    :param also_for_multirecord_pulses: if True, does this even if the pulse
-    spans multiple records (so you'll get more than one spike...)
-    """
-    if not len(records):
-        return
-    samples_per_record = len(records[0]['data'])
-
-    for i, d in enumerate(records):
-        if not (d.record_i == 0 or also_for_multirecord_pulses):
-            continue
-        # What is the center of this record? It's nontrivial since
-        # some records have parts that do not represent data at the end
-        center = int(min(d.total_length - samples_per_record * d.record_i,
-                         samples_per_record) // 2)
-        integral = d.data.sum()
-        d.data[:] = 0
-        d.data[center] = integral
-
-    records.reduction_level[:] = ReductionLevel.WAVEFORM_REPLACED
