@@ -17,7 +17,8 @@ NO_RECORD_LINK = -1
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def baseline(records, baseline_samples=40, flip=True):
+def baseline(records, baseline_samples=40, flip=True,
+             allow_sloppy_chunking=False, fallback_baseline=16000):
     """Determine baseline as the average of the first baseline_samples
     of each pulse. Subtract the pulse data from int(baseline),
     and store the baseline mean and rms.
@@ -25,6 +26,9 @@ def baseline(records, baseline_samples=40, flip=True):
     :param baseline_samples: number of samples at start of pulse to average
     to determine the baseline.
     :param flip: If true, flip sign of data
+    :param allow_sloppy_chunking: Allow use of the fallback_baseline in case
+    the 0th fragment of a pulse is missing
+    :param fallback_baseline: Fallback baseline (ADC counts)
 
     Assumes records are sorted in time (or at least by channel, then time).
 
@@ -38,25 +42,33 @@ def baseline(records, baseline_samples=40, flip=True):
     # Array for looking up last baseline (mean, rms) seen in channel
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
-    last_bl_in = np.zeros((records['channel'].max() + 1, 2), dtype=np.int16)
+    n_channels = records['channel'].max() + 1
+    last_bl_in = np.zeros((n_channels, 2), dtype=np.int16)
+    seen_first = np.zeros(n_channels, dtype=np.bool_)
 
     for d_i, d in enumerate(records):
 
         # Compute the baseline if we're the first record of the pulse,
         # otherwise take the last baseline we've seen in the channel
-        if d.record_i == 0:
-            w = d.data[:baseline_samples]
-            last_bl_in[d.channel] = bl, rms = w.mean(), w.std()
+        if d['record_i'] == 0:
+            seen_first[d['channel']] = True
+            w = d['data'][:baseline_samples]
+            last_bl_in[d['channel']] = bl, rms = w.mean(), w.std()
         else:
-            bl, rms = last_bl_in[d.channel]
+            bl, rms = last_bl_in[d['channel']]
+            if not seen_first[d['channel']]:
+                if not allow_sloppy_chunking:
+                    print(d.time, d.channel, d.record_i)
+                    raise RuntimeError("Cannot baseline, missing 0th fragment!")
+                bl = last_bl_in[d['channel']] = fallback_baseline
+                rms = np.nan
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
-        last = min(samples_per_record,
-                   d.pulse_length - d.record_i * samples_per_record)
-        d.data[:last] = (-1 * flip) * (d.data[:last] - int(bl))
-        d.baseline = bl
-        d.baseline_rms = rms
+        d['data'][:d['length']] = (
+            (-1 * flip) * (d['data'][:d['length']] - int(bl)))
+        d['baseline'] = bl
+        d['baseline_rms'] = rms
 
 
 @export
@@ -101,9 +113,8 @@ def zero_out_of_bounds(records):
     samples_per_record = len(records[0]['data'])
 
     for r in records:
-        end = r['pulse_length'] - r['record_i'] * samples_per_record
-        if end < samples_per_record:
-            r['data'][end:] = 0
+        if r['length'] < samples_per_record:
+            r['data'][r['length']:] = 0
 
 
 @export
@@ -112,16 +123,12 @@ def integrate(records):
     """Integrate records in-place"""
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
     for i, r in enumerate(records):
-        n_real_samples = min(
-            samples_per_record,
-            r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
             r['data'].sum()
             # Add floating part of baseline * number of samples
             # int(round()) the result since the area field is an int
-            + int(round((r['baseline'] % 1) * n_real_samples)))
+            + int(round((r['baseline'] % 1) * r['length'])))
 
 
 @export
@@ -227,11 +234,15 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
     if not len(records):
         return
     offset = 0
+    n_channels = len(min_amplitude)
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+        if r['channel'] >= n_channels:
+            print(r['channel'], n_channels)
+            raise ValueError("Too few channel thresholds specified")
 
         area = height = 0
         threshold = max(
