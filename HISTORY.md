@@ -1,3 +1,31 @@
+0.10.2 / 2020-04-06
+--------------------
+- Fix loading of incomplete data (#251)
+- Fx exception handling (#252)
+- Fix hitfinder buffer overrun if too few thresholds specified (bc2c2b)
+- keep_columns selection option (4e2550)
+- Assume all run metadata is in UTC (4e223e)
+- Can now specify `*` in forbid_creation_of (86552f)
+- Simplify length computations (#250)
+
+
+0.10.1 / 2020-03-18
+--------------------
+- Even lazier processing (#248)
+- Fix multiprocessing bug for multi-output plugins (0f1b1d, 1e388a)
+- Make baselining work in non-jitted mode (8f1f23)
+- Better exception handling in estimate_run_start (9e2f88, #249)
+- Disable run defaults by default (c1f094)
+
+
+0.10.0 / 2020-03-15
+------------------
+- Lazy mailbox for processing (#241)
+- Baselining checks for nonzero first fragment (#243)
+- Add `size_mb` context method
+- Force time range to be integer
+- Update messages and exceptions (#244, #245)
+
 0.9.1 / 2020-03-08
 ------------------
 - Fix bug in input synchronization

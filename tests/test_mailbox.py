@@ -23,6 +23,7 @@ def reader(source, reader_sleeps=0, name=''):
 
 def mailbox_tester(messages,
                    numbers=None,
+                   lazy=False,
                    reader_sleeps=0.,
                    max_messages=100,
                    expected_result=None,
@@ -34,7 +35,9 @@ def mailbox_tester(messages,
         messages = np.asarray(messages)
         expected_result = messages[np.argsort(numbers)]
 
-    mb = strax.Mailbox(max_messages=max_messages, timeout=timeout)
+    mb = strax.Mailbox(max_messages=max_messages,
+                       timeout=timeout,
+                       lazy=lazy)
 
     n_readers = 2
 
@@ -58,21 +61,24 @@ def mailbox_tester(messages,
 
 def test_highlevel():
     """Test highlevel mailbox API"""
-    mb = strax.Mailbox()
-    mb.add_sender(range(10))
+    for lazy in [False, True]:
+        print(f"Lazy mode: {lazy}")
 
-    def test_reader(source):
-        test_reader.got = r = []
-        for s in source:
-            r.append(s)
+        mb = strax.Mailbox(lazy=lazy)
+        mb.add_sender(iter(list(range(10))))
 
-    mb.add_reader(test_reader)
-    mb.start()
-    time.sleep(SHORT_TIMEOUT)
-    assert hasattr(test_reader, 'got')
-    assert test_reader.got == list(range(10))
-    mb.cleanup()
-    assert len(threading.enumerate()) == 1, "Not all threads died"
+        def test_reader(source):
+            test_reader.got = r = []
+            for s in source:
+                r.append(s)
+
+        mb.add_reader(test_reader)
+        mb.start()
+        time.sleep(SHORT_TIMEOUT)
+        assert hasattr(test_reader, 'got')
+        assert test_reader.got == list(range(10))
+        mb.cleanup()
+        assert len(threading.enumerate()) == 1, "Not all threads died"
 
 
 def test_result_timeout():
@@ -101,11 +107,13 @@ def test_write_timeout():
 
 def test_reversed():
     """Mailbox sorts messages properly"""
-    mailbox_tester(np.arange(10), numbers=np.arange(10)[::-1])
+    mailbox_tester(np.arange(10),
+                   numbers=np.arange(10)[::-1])
 
 
 def test_deadlock_regression():
     """A reader thread may start after the first message is processed"""
+    # Test cannot run in lazy mode, cannot send without active subscriber
     mb = strax.Mailbox(timeout=SHORT_TIMEOUT)
     mb.send(0)
 
