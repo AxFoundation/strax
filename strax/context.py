@@ -904,6 +904,41 @@ class Context:
             results = [x.data for x in source]
         return np.concatenate(results)
 
+    def get_accum_array(self,
+                        run_id: str,
+                        targets,
+                        fields,
+                        **kwargs):
+        """
+        Computes targets for run_id and accumulated result for specified
+        fields.
+
+        :param fields: Column names of the data which should be
+            accumulated.
+        """
+        ind = 0
+        for chunk in self.get_iter(run_id, targets, **kwargs):
+            data = chunk.data
+            chunk_start = chunk.start
+            chunk_end = chunk.end
+
+            if not ind:
+                # Initiate result and put common values:
+                res = np.zeros(1, dtype=data.dtype)
+                for name in data.dtype.names:
+                    if not name in fields:
+                        res[name] = data[0][name]  # # Take static values from very first chunk.
+                        # previous chunks
+                res['time'] = chunk_start  # Easier to simply overwrite value.
+
+            # Now accumulate other values:
+            for name in fields:
+                res[name] = np.sum(data[name], axis=0)
+
+        # Setting the correct endtime:
+        res['endtime'] = chunk_end
+        return res[0]
+
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
                **kwargs) -> pd.DataFrame:
