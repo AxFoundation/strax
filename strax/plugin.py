@@ -228,6 +228,30 @@ class Plugin:
         # Don't raise NotImplementedError, IDE complains
         raise RuntimeError("source_finished called on a regular plugin")
 
+    def _fetch_chunk(self, d, iters, check_end_not_before=None):
+        """Add a chunk of the datatype d to the input buffer.
+        Return True if this succeeded, False if the source is exhausted.
+        :param d: data type to fetch
+        :param iters: iterators that produce data
+        :param check_end_not_before: Raise a runtimeError if the source 
+        is exhausted, but the input buffer ends before this time.
+        """
+        try:
+            # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
+            self.input_buffer[d] = strax.Chunk.concatenate(
+                [self.input_buffer[d], next(iters[d])])
+            # print(f"Fetched {d} in {self}, "
+            #      f"now have {self.input_buffer[d]}")
+            return True
+        except StopIteration:
+            # print(f"Got StopIteration while fetching for {d} in {self}")
+            if (check_end_not_before is not None
+                    and self.input_buffer[d].end < check_end_not_before):
+                raise RuntimeError(
+                    f"Tried to get data until {check_end_not_before}, but {d} "
+                    f"ended prematurely at {self.input_buffer[d].end}")
+            return False
+
     def iter(self, iters, executor=None):
         """Iterate over dependencies and yield results
 
@@ -240,29 +264,12 @@ class Plugin:
         self.input_buffer = {d: None
                              for d in self.depends_on}
 
-        def _fetch_chunk(d, hope_to_see=None):
-            try:
-                # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
-                self.input_buffer[d] = strax.Chunk.concatenate(
-                    [self.input_buffer[d], next(iters[d])])
-                # print(f"Fetched {d} in {self}, "
-                #      f"now have {self.input_buffer[d]}")
-                return True
-            except StopIteration:
-                # print(f"Got StopIteration while fetching for {d} in {self}")
-                if (hope_to_see is not None
-                        and self.input_buffer[d].end < hope_to_see):
-                    raise RuntimeError(
-                        f"Tried to get data until {hope_to_see}, but {d} "
-                        f"ended prematurely at {self.input_buffer[d].end}")
-                return False
-
         # Fetch chunks from all inputs. Whoever is the slowest becomes the
         # pacemaker
         pacemaker = None
         _end = float('inf')
         for d in self.depends_on:
-            _fetch_chunk(d)
+            self._fetch_chunk(d, iters)
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end
@@ -274,7 +281,7 @@ class Plugin:
                 if self.source_finished():
                     # Chunk_i does not exist. We are done.
                     print("Source finished!")
-                    self.cleanup(wait_for=pending_futures)
+                    self.cleanup(iters, wait_for=pending_futures)
                     return
 
                 if time.time() > last_input_received + self.input_timeout:
@@ -294,17 +301,17 @@ class Plugin:
                 if chunk_i != 0:
                     # Fetch the pacemaker, to figure out when this chunk ends
                     # (don't do it for chunk 0, for which we already fetched)
-                    if not _fetch_chunk(pacemaker):
+                    if not self._fetch_chunk(pacemaker, iters):
                         # Source is exhausted. The other sources should also be
                         # exhausted. This (a) checks this, and (b) ensures that
                         # the content of all sources are requested all the way
                         # to the end -- which lazy-mode processing requires
                         for d in self.depends_on:
-                            if _fetch_chunk(d):
+                            if self._fetch_chunk(d, iters):
                                 raise RuntimeError(
                                     f"{self} sees that {pacemaker} is exhausted "
                                     f"before other dependency {d}!")
-                        self.cleanup(wait_for=pending_futures)
+                        self.cleanup(iters, wait_for=pending_futures)
                         return
                 this_chunk_end = self.input_buffer[pacemaker].end
 
@@ -314,7 +321,9 @@ class Plugin:
                     if d != pacemaker:
                         while (self.input_buffer[d] is None
                                or self.input_buffer[d].end < this_chunk_end):
-                            _fetch_chunk(d, hope_to_see=this_chunk_end)
+                            self._fetch_chunk(
+                                d, iters,
+                                check_end_not_before=this_chunk_end)
                     inputs[d], self.input_buffer[d] = \
                         self.input_buffer[d].split(
                             t=this_chunk_end,
@@ -364,9 +373,20 @@ class Plugin:
 
         raise RuntimeError("This cannot happen.")
 
-    def cleanup(self, wait_for):
-        # By default we do NOT wait for the computation futures to complete;
-        # there is nothing to specific to be done when a plugin exits.
+    def cleanup(self,
+                iters: typing.Dict[str, typing.Iterable],
+                wait_for):
+        # The wait_for option is only used in child classes;
+        # A standard plugin doesn't need to do anything with the computation
+        # future results.
+
+        # Check all sources are exhausted
+        for d in iters.keys():
+            if self._fetch_chunk(d, iters):
+                raise RuntimeError(
+                    f"Plugin {d} terminated without fetching last {d}!")
+
+        # Check the input buffer is empty
         for d, buffer in self.input_buffer.items():
             if buffer is not None and len(buffer):
                 raise RuntimeError(
@@ -818,10 +838,10 @@ class ParallelSourcePlugin(Plugin):
 
         return self._fix_output(results, start=r0.start, end=r0.end)
 
-    def cleanup(self, wait_for):
+    def cleanup(self, iters, wait_for):
         print(f"{self.__class__.__name__} exhausted. "
               f"Waiting for {len(wait_for)} pending futures.")
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=wait_for)
-        super().cleanup(wait_for)
+        super().cleanup(iters, wait_for)
