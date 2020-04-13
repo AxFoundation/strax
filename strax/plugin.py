@@ -302,15 +302,7 @@ class Plugin:
                     # Fetch the pacemaker, to figure out when this chunk ends
                     # (don't do it for chunk 0, for which we already fetched)
                     if not self._fetch_chunk(pacemaker, iters):
-                        # Source is exhausted. The other sources should also be
-                        # exhausted. This (a) checks this, and (b) ensures that
-                        # the content of all sources are requested all the way
-                        # to the end -- which lazy-mode processing requires
-                        for d in self.depends_on:
-                            if self._fetch_chunk(d, iters):
-                                raise RuntimeError(
-                                    f"{self} sees that {pacemaker} is exhausted "
-                                    f"before other dependency {d}!")
+                        # Source exhausted. Cleanup will do final checks.
                         self.cleanup(iters, wait_for=pending_futures)
                         return
                 this_chunk_end = self.input_buffer[pacemaker].end
@@ -380,7 +372,10 @@ class Plugin:
         # A standard plugin doesn't need to do anything with the computation
         # future results.
 
-        # Check all sources are exhausted
+        # Check all sources are exhausted.
+        # This is more than a check though -- it ensure the content of
+        # all sources are requested all the way (including the final
+        # Stopiteration), as required by lazy-mode processing requires
         for d in iters.keys():
             if self._fetch_chunk(d, iters):
                 raise RuntimeError(
