@@ -63,7 +63,10 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
-                      'possibly be removed, see issue #246')
+                      'possibly be removed, see issue #246'),
+    strax.Option(name='free_options', default=tuple(),
+                 help='Do not warn if any of these options are passed, '
+                      'even when no registered plugin takes them.')
 )
 @export
 class Context:
@@ -366,7 +369,7 @@ class Context:
             pc.takes_config.keys()
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
-            if k not in all_opts:
+            if not (k in all_opts or k in self.config['free_options']):
                 warnings.warn(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
