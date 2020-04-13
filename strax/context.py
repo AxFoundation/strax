@@ -369,7 +369,7 @@ class Context:
             pc.takes_config.keys()
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
-            if not (k in all_opts or k in self.config['free_options']):
+            if not (k in all_opts or k in self.context_config['free_options']):
                 warnings.warn(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
