@@ -11,7 +11,7 @@ import logging
 import time
 import typing
 
-from frozendict import frozendict
+from immutabledict import immutabledict
 import numpy as np
 
 import strax
@@ -46,9 +46,9 @@ class Plugin:
     """
     __version__ = '0.0.0'
 
-    # For multi-output plugins these should be (frozen)dicts
-    data_kind: typing.Union[str, frozendict, dict]
-    dtype: typing.Union[tuple, np.dtype, frozendict, dict]
+    # For multi-output plugins these should be (immutable)dicts
+    data_kind: typing.Union[str, immutabledict, dict]
+    dtype: typing.Union[tuple, np.dtype, immutabledict, dict]
 
     depends_on: tuple
     provides: tuple
@@ -78,7 +78,7 @@ class Plugin:
     # Do not specify attributes below
 
     # Set using the takes_config decorator
-    takes_config = frozendict()
+    takes_config = immutabledict()
 
     # These are set on plugin initialization, which is done in the core
     run_id: str
@@ -120,7 +120,7 @@ class Plugin:
         if self.multi_output:
             # Convert to a dict of numpy dtypes
             if (not hasattr(self, 'data_kind')
-                    or not isinstance(self.data_kind, (dict, frozendict))):
+                    or not isinstance(self.data_kind, (dict, immutabledict))):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs and "
                     "must declare its data kind as a dict: "
