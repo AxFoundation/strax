@@ -57,13 +57,16 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=60,
+    strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
-                      'possibly be removed, see issue #246')
+                      'possibly be removed, see issue #246'),
+    strax.Option(name='free_options', default=tuple(),
+                 help='Do not warn if any of these options are passed, '
+                      'even when no registered plugin takes them.')
 )
 @export
 class Context:
@@ -366,7 +369,7 @@ class Context:
             pc.takes_config.keys()
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
-            if k not in all_opts:
+            if not (k in all_opts or k in self.context_config['free_options']):
                 warnings.warn(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
