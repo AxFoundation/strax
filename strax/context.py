@@ -904,40 +904,54 @@ class Context:
             results = [x.data for x in source]
         return np.concatenate(results)
 
-    def get_accum_array(self,
-                        run_id: str,
-                        targets,
-                        fields,
-                        **kwargs):
+    def get_accumulate(self,
+                       run_id: str,
+                       targets,
+                       function,
+                       fields,
+                       **kwargs):
         """
         Computes targets for run_id and accumulated result for specified
-        fields.
+        fields over all chunks.
 
+        Treats every not specified fields as static parameters for
+        which the values of the very first entry of the very first
+        chunk are returned.
+
+        :param function: Function which shall be used to accumulate
+            the results. The function has to take two arguments. The
+            first one has to be the data which we read in, the second
+            argument must be the fields which should be accumlated. See
+            also the Example for more information.
         :param fields: Column names of the data which should be
             accumulated.
+
+        :returns dictionary: Dictionary with the keys of the specified
+            target fields.
+
+        Example:
         """
-        ind = 0
+        init_reult = True
         for chunk in self.get_iter(run_id, targets, **kwargs):
             data = chunk.data
             chunk_start = chunk.start
             chunk_end = chunk.end
 
-            if not ind:
+            if init_reult:
                 # Initiate result and put common values:
-                res = np.zeros(1, dtype=data.dtype)
+                res = {}
                 for name in data.dtype.names:
                     if not name in fields:
-                        res[name] = data[0][name]  # # Take static values from very first chunk.
-                        # previous chunks
+                        res[name] = data[0][name]  # Take static values from very first chunk.
                 res['time'] = chunk_start  # Easier to simply overwrite value.
 
             # Now accumulate other values:
             for name in fields:
-                res[name] = np.sum(data[name], axis=0)
+                res[name] = function(data, name)
 
         # Setting the correct endtime:
         res['endtime'] = chunk_end
-        return res[0]
+        return res
 
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
