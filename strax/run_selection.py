@@ -113,7 +113,10 @@ def scan_runs(self: strax.Context,
                     ~np.in1d(new_docs['name'], docs['name'])]],
                 sort=False)
 
-    # Make sure name is in front
+    # Rearrange columns
+    if (not self.context_config['use_per_run_defaults']
+        and strax.RUN_DEFAULTS_KEY in docs.columns):
+        del docs[strax.RUN_DEFAULTS_KEY]
     docs = docs[['name'] + [x for x in docs.columns.tolist()
                             if x != 'name']]
     self.runs = docs
