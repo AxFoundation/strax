@@ -72,7 +72,7 @@ def scan_runs(self: strax.Context,
                 doc['number'] = int(doc['name'])
 
             # If there is no name, make one from the number
-            doc.setdefault('name', str(doc['number']))
+            doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
