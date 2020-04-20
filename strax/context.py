@@ -914,30 +914,33 @@ class Context:
         Computes targets for run_id and accumulated result for specified
         fields over all chunks.
 
-        Treats every not specified fields as static parameters for
+        Treats every not specified fields as a static parameter for
         which the values of the very first entry of the very first
         chunk are returned.
 
         :param function: Function which shall be used to accumulate
             the results. The function has to take two arguments. The
             first one has to be the data which we read in, the second
-            argument must be the fields which should be accumlated. See
+            argument must be the fields which should be accumulated. See
             also the Example for more information.
         :param fields: Column names of the data which should be
             accumulated.
 
         :returns dictionary: Dictionary with the keys of the specified
-            target fields.
+            target and additional fields returned by the specified
+            function. Also added an additional field nchunks, which stores
+            the number of chunks.
 
         Example:
+
         """
-        init_reult = True
+        nchunks = 0
         for chunk in self.get_iter(run_id, targets, **kwargs):
             data = chunk.data
             chunk_start = chunk.start
             chunk_end = chunk.end
 
-            if init_reult:
+            if not nchunks:
                 # Initiate result and put common values:
                 res = {}
                 for name in data.dtype.names:
@@ -946,10 +949,16 @@ class Context:
                 res['time'] = chunk_start  # Easier to simply overwrite value.
 
             # Now accumulate other values:
-            for name in fields:
-                res[name] = function(data[name])
+            chunk_res = function(data, fields)
+            for key, value in chunk_res.items():
+                if not nchunks:
+                    res[key] = value
+                else:
+                    res[key] += value
+            nchunks += 1
 
-        # Setting the correct endtime:
+        # Setting the correct endtime and save number of chunks
+        res['nchunks'] = nchunks
         res['endtime'] = chunk_end
         return res
 
