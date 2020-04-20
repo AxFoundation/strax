@@ -113,6 +113,9 @@ def scan_runs(self: strax.Context,
                     ~np.in1d(new_docs['name'], docs['name'])]],
                 sort=False)
 
+    # Make sure name is in front
+    docs = docs[['name'] + [x for x in docs.columns.tolist()
+                            if x != 'name']]
     self.runs = docs
 
     for d in tqdm(check_available,
