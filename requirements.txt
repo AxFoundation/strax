@@ -1,6 +1,6 @@
 numpy
 pandas
-numba>=0.43.1
+numba>=0.43.1,<=0.48
 blosc
 zstd
 tqdm
