@@ -947,7 +947,7 @@ class Context:
 
             # Now accumulate other values:
             for name in fields:
-                res[name] = function(data, name)
+                res[name] = function(data[name])
 
         # Setting the correct endtime:
         res['endtime'] = chunk_end
