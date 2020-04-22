@@ -1,4 +1,5 @@
 import collections
+import datetime
 import logging
 import fnmatch
 from functools import partial
@@ -56,13 +57,16 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=60,
+    strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
-                      'possibly be removed, see issue #246')
+                      'possibly be removed, see issue #246'),
+    strax.Option(name='free_options', default=tuple(),
+                 help='Do not warn if any of these options are passed, '
+                      'even when no registered plugin takes them.')
 )
 @export
 class Context:
@@ -365,7 +369,7 @@ class Context:
             pc.takes_config.keys()
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
-            if k not in all_opts:
+            if not (k in all_opts or k in self.context_config['free_options']):
                 warnings.warn(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
@@ -536,6 +540,10 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
                         f"available, but {d} for {run_id} is not.")
+                if '*' in self.context_config['forbid_creation_of']:
+                    raise strax.DataNotAvailable(
+                        f"{d} for {run_id} not found in any storage, and "
+                        "your context specifies no new data can be created.")
                 if d in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
@@ -651,6 +659,7 @@ class Context:
             # Use run metadata, if it is available, to get
             # the run start time (floored to seconds)
             t0 = self.run_metadata(run_id, 'start')['start']
+            t0 = t0.replace(tzinfo=datetime.timezone.utc)
             return int(t0.timestamp()) * int(1e9)
         except (strax.RunMetadataNotAvailable, KeyError):
             pass
@@ -704,6 +713,7 @@ class Context:
                  time_within=None,
                  time_selection='fully_contained',
                  selection_str=None,
+                 keep_columns=None,
                  _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -752,7 +762,7 @@ class Context:
                 del self._plugin_class_registry[k]
 
         seen_a_chunk = False
-        for result in strax.continuity_check(strax.ThreadedMailboxProcessor(
+        generator = strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
@@ -760,21 +770,40 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()):
-            seen_a_chunk = True
-            if not isinstance(result, strax.Chunk):
-                raise ValueError(f"Got type {type(result)} rather than a strax "
-                                 f"Chunk from the processor!")
-            result.data = self.apply_selection(result.data, selection_str,
-                                               time_range, time_selection)
-            yield result
+                timeout=self.context_config['timeout']).iter()
+
+        try:
+            for result in strax.continuity_check(generator):
+                seen_a_chunk = True
+                if not isinstance(result, strax.Chunk):
+                    raise ValueError(f"Got type {type(result)} rather than "
+                                     f"a strax Chunk from the processor!")
+                result.data = self.apply_selection(
+                    result.data, 
+                selection_str=selection_str,
+                keep_columns=keep_columns,
+                time_range=time_range,
+                time_selection=time_selection)
+                yield result
+
+        except GeneratorExit:
+            generator.throw(OutsideException(
+                "Terminating due to an exception originating from outside "
+                "strax's get_iter (which we cannot retrieve)."))
+
+        except Exception as e:
+            generator.throw(e)
+            raise
+
         if not seen_a_chunk:
             if time_range is None:
                 raise strax.DataCorrupted("No data returned!")
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
 
-    def apply_selection(self, x, selection_str=None,
+    def apply_selection(self, x,
+                        selection_str=None,
+                        keep_columns=None,
                         time_range=None,
                         time_selection='fully_contained'):
         """Return x after applying selections
@@ -804,7 +833,6 @@ class Context:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
         if selection_str:
-
             if isinstance(selection_str, (list, tuple)):
                 selection_str = ' & '.join(f'({x})' for x in selection_str)
 
@@ -812,6 +840,25 @@ class Context:
                 fn: x[fn]
                 for fn in x.dtype.names})
             x = x[mask]
+
+        if keep_columns:
+            keep_columns = strax.to_str_tuple(keep_columns)
+
+            # Construct the new dtype
+            new_dtype = []
+            for unpacked_dtype in strax.unpack_dtype(x.dtype):
+                field_name = unpacked_dtype[0]
+                if isinstance(field_name, tuple):
+                    field_name = field_name[1]
+                if field_name in keep_columns:
+                    new_dtype.append(unpacked_dtype)
+
+            # Copy over the data
+            x2 = np.zeros(len(x), dtype=new_dtype)
+            for field_name in keep_columns:
+                x2[field_name] = x[field_name]
+            x = x2
+            del x2
 
         return x
 
@@ -1006,3 +1053,8 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
+
+
+@export
+class OutsideException(Exception):
+    pass
