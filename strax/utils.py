@@ -357,7 +357,7 @@ def flatten_dict(d, separator=':', _parent_key='', keep=tuple()):
     items = []
     for k, v in d.items():
         new_key = _parent_key + separator + k if _parent_key else k
-        if isinstance(v, collections.MutableMapping) and not k in keep:
+        if isinstance(v, collections.abc.MutableMapping) and not k in keep:
             items.extend(flatten_dict(v,
                                       separator=separator,
                                       _parent_key=new_key).items())
