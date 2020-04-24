@@ -186,6 +186,7 @@ def sum_waveform(peaks, records, adc_to_pe):
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
+            multiplier = 2**r['amplitude_bit_shift']
             assert p['dt'] == r['dt'], "Records and peaks must have same dt"
 
             shift = (p['time'] - r['time']) // dt
@@ -207,13 +208,14 @@ def sum_waveform(peaks, records, adc_to_pe):
                 r['time'] // dt, n_r,
                 p['time'] // dt, n_p)
 
-            max_in_record = r['data'][r_start:r_end].max()
-            p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
+            max_in_record = r['data'][r_start:r_end].max() * multiplier
+            p['saturated_channel'][ch] |= int(max_in_record >= r['baseline'])
 
             bl_fpart = r['baseline'] % 1
             # TODO: check numba does casting correctly here!
             pe_waveform = adc_to_pe[ch] * (
-                    r['data'][r_start:r_end] + bl_fpart)
+                    multiplier * r['data'][r_start:r_end]
+                    + bl_fpart)
 
             swv_buffer[p_start:p_end] += pe_waveform
 
