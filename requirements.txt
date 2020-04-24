@@ -12,3 +12,4 @@ scipy
 pymongo
 lz4
 immutabledict
+packaging
