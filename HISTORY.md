@@ -1,3 +1,9 @@
+0.10.3 / 2020-04-13
+-------------------
+- Disable timeout / make it 24 hours (#255)
+- Minor fixes for warning messages
+
+
 0.10.2 / 2020-04-06
 --------------------
 - Fix loading of incomplete data (#251)

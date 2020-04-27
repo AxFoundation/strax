@@ -1,7 +1,7 @@
 import builtins
 import typing as ty
 
-from frozendict import frozendict
+from immutabledict import immutabledict
 
 import strax
 export, __all__ = strax.exporter()
@@ -40,10 +40,10 @@ def takes_config(*options):
                 if opt.name in plugin_class.takes_config:
                     raise RuntimeError(
                         f"Attempt to specify option {opt.name} twice")
-            plugin_class.takes_config = frozendict({
+            plugin_class.takes_config = immutabledict({
                 **plugin_class.takes_config, **result})
         else:
-            plugin_class.takes_config = frozendict(result)
+            plugin_class.takes_config = immutabledict(result)
         return plugin_class
 
     return wrapped
