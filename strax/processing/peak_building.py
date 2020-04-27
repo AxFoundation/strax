@@ -265,8 +265,6 @@ def _find_hit_integration_bounds(
     """"Return (start, end) times of integration bounds for lone hits
 
     save_outside_hits: in ns!!
-
-    TODO: needs tests!
     """
     result = np.zeros((len(lone_hits), 2), dtype=np.int64)
     if not len(lone_hits):
