@@ -253,3 +253,90 @@ def find_peak_groups(peaks, gap_threshold,
         left_extension=left_extension, right_extension=right_extension,
         min_channels=1, min_area=0)
     return fake_peaks['time'], strax.endtime(fake_peaks)
+
+
+##
+# Lone hit integration
+##
+
+@numba.njit(nogil=True, cache=True)
+def _find_hit_integration_bounds(
+        lone_hits, peaks, save_outside_hits, n_channels):
+    """"Return (start, end) times of integration bounds for lone hits
+
+    save_outside_hits: in ns!!
+
+    TODO: needs tests!
+    """
+    result = np.zeros((len(lone_hits), 2), dtype=np.int64)
+    if not len(lone_hits):
+        return result
+
+    # By default, use save_outside_hits to determine bounds
+    result[:, 0] = lone_hits['time'] - save_outside_hits[0]
+    result[:, 1] = strax.endtime(lone_hits) + save_outside_hits[1]
+
+    NO_EARLIER_HIT = -1
+    last_hit_index = np.ones(n_channels, dtype=np.int32) * NO_EARLIER_HIT
+
+    n_peaks = len(peaks)
+    FAR_AWAY = 9223372036_854775807   # np.iinfo(np.int64).max, April 2262
+    peak_i = 0
+
+    for hit_i, h in enumerate(lone_hits):
+        ch = h['channel']
+
+        # Find end of previous peak and start of next peak
+        # (note peaks are disjoint from any lone hit, even though
+        # lone hits may not be disjoint from each other)
+        while peak_i < n_peaks and peaks[peak_i]['time'] < h['time']:
+            peak_i += 1
+        prev_p_end = strax.endtime(peaks[peak_i - 1]) if peak_i != 0 else 0
+        next_p_start = peaks[peak_i]['time'] if peak_i != n_peaks else FAR_AWAY
+
+        # Ensure we do not integrate parts of peaks
+        result[hit_i][0] = max(prev_p_end, result[hit_i][0])
+        result[hit_i][1] = min(next_p_start, result[hit_i][1])
+
+        if last_hit_index[ch] != NO_EARLIER_HIT:
+            # Ensure previous hit does not integrate the over-threshold region
+            # of this hit
+            result[last_hit_index[ch]][1] = min(result[last_hit_index[ch]][1],
+                                             h['time'])
+            # Ensure this hit doesn't integrate anything the previous hit
+            # already integrated
+            result[hit_i][0] = max(result[last_hit_index[ch]][1],
+                                   result[hit_i][0])
+
+        last_hit_index[ch] = hit_i
+
+    return result
+
+
+@export
+@numba.njit(nogil=True, cache=True)
+def integrate_lone_hits(
+        lone_hits, records, peaks, save_outside_hits, n_channels):
+    """Update the area of lone_hits to the integral in ADCcounts x samples
+
+    :param lone_hits: Hits outside of peaks
+    :param records: Records in which hits and peaks were found
+    :param peaks: Peaks
+    :param save_outside_hits: (left, right) *TIME* with wich we should extend
+    the integration window of hits
+    the integration region
+    :param n_channels: number of channels
+
+    TODO: this doesn't extend the integration range beyond record boundaries
+    """
+    bounds = _find_hit_integration_bounds(lone_hits, peaks, save_outside_hits,
+                                          n_channels)
+    for hit_i, h in enumerate(lone_hits):
+        r = records[h['record_i']]
+        # Note end is exclusive, as always
+        start = max(0, (bounds[hit_i][0] - r['time']) // r['dt'])
+        end = min(r['length'], (bounds[hit_i][1] - r['time']) // r['dt'])
+        # TODO: when we add amplitude multiplier, adjust this too!
+        h['area'] = (
+                r['data'][start:end].sum()
+                + (r['baseline'] % 1) * (end - start))
