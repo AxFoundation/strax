@@ -72,7 +72,7 @@ def scan_runs(self: strax.Context,
                 doc['number'] = int(doc['name'])
 
             # If there is no name, make one from the number
-            doc.setdefault('name', str(doc['number']))
+            doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
@@ -113,6 +113,12 @@ def scan_runs(self: strax.Context,
                     ~np.in1d(new_docs['name'], docs['name'])]],
                 sort=False)
 
+    # Rearrange columns
+    if (not self.context_config['use_per_run_defaults']
+        and strax.RUN_DEFAULTS_KEY in docs.columns):
+        del docs[strax.RUN_DEFAULTS_KEY]
+    docs = docs[['name'] + [x for x in docs.columns.tolist()
+                            if x != 'name']]
     self.runs = docs
 
     for d in tqdm(check_available,
