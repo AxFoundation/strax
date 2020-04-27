@@ -221,7 +221,7 @@ def profile_threaded(filename):
 @export
 def to_str_tuple(x) -> ty.Tuple[str]:
     if isinstance(x, str):
-        return x,
+        return (x,)
     elif isinstance(x, list):
         return tuple(x)
     elif isinstance(x, tuple):
