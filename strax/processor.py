@@ -18,7 +18,6 @@ try:
 except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
-    pass
 
 
 @export
