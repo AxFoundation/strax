@@ -907,14 +907,14 @@ class Context:
             results = [x.data for x in source]
         return np.concatenate(results)
 
-    def get_accumulated(self,
-                        run_id: ty.Union[str, tuple, list],
-                        targets,
-                        fields=None,
-                        function=None,
-                        store_first_for_others=True,
-                        function_takes_fields=False,
-                        **kwargs):
+    def accumulate(self,
+                   run_id: ty.Union[str, tuple, list],
+                   targets,
+                   fields=None,
+                   function=None,
+                   store_first_for_others=True,
+                   function_takes_fields=False,
+                   **kwargs):
         """Return a dictionary with the sum of the result of get_array.
 
         :param function: Apply this function to the array before summing the
