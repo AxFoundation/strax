@@ -75,6 +75,8 @@ def record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
           'baseline'), np.float32),
         (('Baseline RMS in ADC counts. data = baseline - data_orig',
           'baseline_rms'), np.float32),
+        (('Multiply data by 2**(this number). Baseline is unaffected.',
+          'amplitude_bit_shift'), np.int16),
         (('Waveform data in raw counts above integer part of baseline',
           'data'), np.int16, samples_per_record),
     ]
