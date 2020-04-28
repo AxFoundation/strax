@@ -3,25 +3,36 @@ import numba
 
 import strax
 export, __all__ = strax.exporter()
-__all__ = 'compute_widths'.split()
 
 
+@export
 @numba.njit(cache=True, nogil=True)
 def index_of_fraction(peaks, fractions_desired):
-    # nopython does not allow this dynamic allocation:
+    """Return the (fractional) indices at which the peaks reach
+    fractions_desired of their area
+    :param peaks: strax peak(let)s or other data-bearing dtype
+    :param fractions_desired: array of floats between 0 and 1
+    :returns: (len(peaks), len(fractions_desired)) array of floats
+    """
     results = np.zeros((len(peaks), len(fractions_desired)), dtype=np.float32)
 
     for p_i, p in enumerate(peaks):
-        area_tot = p['area']
-        if area_tot <= 0:
+        if p['area'] <= 0:
             continue  # TODO: These occur a lot. Investigate!
-        r = results[p_i]
-        compute_index_of_fraction(p, area_tot, fractions_desired, r)
+        compute_index_of_fraction(p, fractions_desired, results[p_i])
     return results
+
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def compute_index_of_fraction(peak, area_tot, fractions_desired, result):
+def compute_index_of_fraction(peak, fractions_desired, result):
+    """Store the (fractional) indices at which peak reaches
+    fractions_desired of their area in result
+    :param peak: single strax peak(let) or other data-bearing dtype
+    :param fractions_desired: array of floats between 0 and 1
+    :returns: len(fractions_desired) array of floats
+    """
+    area_tot = peak['area']
     fraction_seen = 0
     current_fraction_index = 0
     needed_fraction = fractions_desired[current_fraction_index]
@@ -56,6 +67,7 @@ def compute_index_of_fraction(peak, area_tot, fractions_desired, result):
         result[-1] = peak['length']
 
 
+@export
 def compute_widths(peaks):
     """Compute widths in ns at desired area fractions for peaks
     returns (n_peaks, n_widths) array
