@@ -125,7 +125,7 @@ def integrate(records):
         return
     for i, r in enumerate(records):
         records[i]['area'] = (
-            r['data'].sum()
+            r['data'].sum() * 2**r['amplitude_bit_shift']
             # Add floating part of baseline * number of samples
             # int(round()) the result since the area field is an int
             + int(round((r['baseline'] % 1) * r['length'])))
@@ -228,8 +228,10 @@ def find_hits(records,
 # else copying buffers / switching context dominates over actual computation
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
+# TODO: this ignores amplitude_bit_shift, since this function also
+# has to support raw_records, which don't have that field.
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _find_hits(records, min_amplitude, min_height_over_noise,
                _result_buffer=None):
     buffer = _result_buffer
