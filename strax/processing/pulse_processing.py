@@ -226,8 +226,10 @@ def find_hits(records,
 # else copying buffers / switching context dominates over actual computation
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
+# TODO: this ignores amplitude_bit_shift, since this function also
+# has to support raw_records, which don't have that field.
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _find_hits(records, min_amplitude, min_height_over_noise,
                _result_buffer=None):
     buffer = _result_buffer
@@ -249,7 +251,6 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             min_amplitude[r['channel']],
             r['baseline_rms'] * min_height_over_noise[r['channel']])
         n_samples = r['length']
-        multiplier = 2**r['amplitude_bit_shift']
 
         # If someone passes a length > n_samples record,
         # and we don't abort here, numba will happily overrun the buffer!
@@ -259,7 +260,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
             # TODO: file issue?
-            x = r['data'][i] * multiplier
+            x = r['data'][i]
 
             satisfy_threshold = x >= threshold
             # print(x, satisfy_threshold, in_interval, hit_start)
