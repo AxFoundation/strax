@@ -125,7 +125,7 @@ def integrate(records):
         return
     for i, r in enumerate(records):
         records[i]['area'] = (
-            r['data'].sum()
+            r['data'].sum() * 2**r['amplitude_bit_shift']
             # Add floating part of baseline * number of samples
             # int(round()) the result since the area field is an int
             + int(round((r['baseline'] % 1) * r['length'])))
@@ -249,6 +249,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             min_amplitude[r['channel']],
             r['baseline_rms'] * min_height_over_noise[r['channel']])
         n_samples = r['length']
+        multiplier = 2**r['amplitude_bit_shift']
 
         # If someone passes a length > n_samples record,
         # and we don't abort here, numba will happily overrun the buffer!
@@ -258,7 +259,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
             # TODO: file issue?
-            x = r['data'][i]
+            x = r['data'][i] * multiplier
 
             satisfy_threshold = x >= threshold
             # print(x, satisfy_threshold, in_interval, hit_start)
