@@ -192,6 +192,8 @@ def find_hits(records,
 
     NB: returned hits are NOT sorted yet!
     """
+    if not len(records):
+        return np.zeros(0, dtype=strax.hit_dtype)
     if isinstance(min_amplitude, (tuple, list)):
         min_amplitude = np.array(min_amplitude)
     if isinstance(min_height_over_noise, (tuple, list)):
