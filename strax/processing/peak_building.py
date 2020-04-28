@@ -261,8 +261,8 @@ def find_peak_groups(peaks, gap_threshold,
 
 @numba.njit(nogil=True, cache=True)
 def _find_hit_integration_bounds(
-        lone_hits, peaks, save_outside_hits, n_channels):
-    """"Return (start, end) times of integration bounds for lone hits
+        lone_hits, peaks, records, save_outside_hits, n_channels):
+    """"Update lone hits to include integration bounds
 
     save_outside_hits: in ns!!
     """
@@ -292,15 +292,22 @@ def _find_hit_integration_bounds(
         prev_p_end = strax.endtime(peaks[peak_i - 1]) if peak_i != 0 else 0
         next_p_start = peaks[peak_i]['time'] if peak_i != n_peaks else FAR_AWAY
 
+
         # Ensure we do not integrate parts of peaks
-        result[hit_i][0] = max(prev_p_end, result[hit_i][0])
-        result[hit_i][1] = min(next_p_start, result[hit_i][1])
+        # or (at least for now) beyond the record in which the hit was found
+        r = records[h['record_i']]
+        result[hit_i][0] = max(prev_p_end,
+                               r['time'],
+                               result[hit_i][0])
+        result[hit_i][1] = min(next_p_start,
+                               strax.endtime(r),
+                               result[hit_i][1])
 
         if last_hit_index[ch] != NO_EARLIER_HIT:
             # Ensure previous hit does not integrate the over-threshold region
             # of this hit
             result[last_hit_index[ch]][1] = min(result[last_hit_index[ch]][1],
-                                             h['time'])
+                                                h['time'])
             # Ensure this hit doesn't integrate anything the previous hit
             # already integrated
             result[hit_i][0] = max(result[last_hit_index[ch]][1],
@@ -308,7 +315,12 @@ def _find_hit_integration_bounds(
 
         last_hit_index[ch] = hit_i
 
-    return result
+    # Convert to index in record and store
+    t0 = records[lone_hits['record_i']]['time']
+    dt = records[lone_hits['record_i']]['dt']
+    for hit_i, h in enumerate(lone_hits):
+        h['left_integration'] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
+        h['right_integration'] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
 
 
 @export
@@ -327,13 +339,11 @@ def integrate_lone_hits(
 
     TODO: this doesn't extend the integration range beyond record boundaries
     """
-    bounds = _find_hit_integration_bounds(lone_hits, peaks, save_outside_hits,
-                                          n_channels)
+    _find_hit_integration_bounds(
+        lone_hits, peaks, records, save_outside_hits, n_channels)
     for hit_i, h in enumerate(lone_hits):
         r = records[h['record_i']]
-        # Note end is exclusive, as always
-        start = max(0, (bounds[hit_i][0] - r['time']) // r['dt'])
-        end = min(r['length'], (bounds[hit_i][1] - r['time']) // r['dt'])
+        start, end = h['left_integration'], h['right_integration']
         # TODO: when we add amplitude multiplier, adjust this too!
         h['area'] = (
                 r['data'][start:end].sum()
