@@ -907,63 +907,105 @@ class Context:
             results = [x.data for x in source]
         return np.concatenate(results)
 
-    def get_accumulate(self,
-                       run_id: str,
-                       targets,
-                       function,
-                       fields,
-                       **kwargs):
+    def accumulate(self,
+                   run_id: ty.Union[str, tuple, list],
+                   targets,
+                   fields=None,
+                   function=None,
+                   store_first_for_others=True,
+                   function_takes_fields=False,
+                   **kwargs):
+        """Return a dictionary with the sum of the result of get_array.
+
+        :param function: Apply this function to the array before summing the
+            results. Will be called as function(array), where array is
+            a chunk of the get_array result.
+            Should return either:
+               * A scalar or 1d array -> accumulated result saved under 'result'
+               * A record array or dict -> fields accumulated individually
+               * None -> nothing accumulated
+            If not provided, the identify function is used.
+
+        :param fields: Fields of the function output to accumulate.
+            If not provided, all output fields will be accumulated.
+
+        :param store_first_for_others: if True (default), for fields included
+            in the data but not fields, store the first value seen in the data
+            (if any value is seen).
+
+        :param function_takes_fields: If True, function will be called as
+            function(data, fields) instead of function(data).
+
+        All other options are as for get_iter.
+
+        :returns dictionary: Dictionary with the accumulated result;
+            see function and store_first_for_others arguments.
+            Four fields are always added:
+                start: start time of the first processed chunk
+                end: end time of the last processed chunk
+                n_chunks: number of chunks in run
+                n_rows: number of data entries in run
         """
-        Computes targets for run_id and accumulated result for specified
-        fields over all chunks.
+        n_chunks = 0
+        seen_data = False
+        result = {'n_rows': 0}
+        if fields is not None:
+            fields = strax.to_str_tuple(fields)
+        if function is None:
+            def function(arr):
+                return arr
+            function_takes_fields = False
 
-        Treats every not specified fields as a static parameter for
-        which the values of the very first entry of the very first
-        chunk are returned.
-
-        :param function: Function which shall be used to accumulate
-            the results. The function has to take two arguments. The
-            first one has to be the data which we read in, the second
-            argument must be the fields which should be accumulated. See
-            also the Example for more information.
-        :param fields: Column names of the data which should be
-            accumulated.
-
-        :returns dictionary: Dictionary with the keys of the specified
-            target and additional fields returned by the specified
-            function. Also added an additional field nchunks, which stores
-            the number of chunks.
-
-        Example:
-
-        """
-        nchunks = 0
         for chunk in self.get_iter(run_id, targets, **kwargs):
             data = chunk.data
-            chunk_start = chunk.start
-            chunk_end = chunk.end
 
-            if not nchunks:
-                # Initiate result and put common values:
-                res = {}
+            if n_chunks == 0:
+                result['start'] = chunk.start
+                if fields is None:
+                    # Sum all fields except time and endtime
+                    fields = [x for x in data.dtype.names
+                              if x not in ('time', 'endtime')]
+
+            if store_first_for_others and not seen_data and len(data):
+                # Store the first value we see for the non-accumulated fields
                 for name in data.dtype.names:
-                    if not name in fields:
-                        res[name] = data[0][name]  # Take static values from very first chunk.
-                res['time'] = chunk_start  # Easier to simply overwrite value.
+                    if name in fields:
+                        result[name] = data[0][name]
+                seen_data = True
+            result['end'] = chunk.end
+            result['n_rows'] += len(data)
 
-            # Now accumulate other values:
-            chunk_res = function(data, fields)
-            for key, value in chunk_res.items():
-                if not nchunks:
-                    res[key] = value
-                else:
-                    res[key] += value
-            nchunks += 1
+            # Run the function
+            if function_takes_fields:
+                data = function(data, fields)
+            else:
+                data = function(data)
 
-        # Setting the correct endtime and save number of chunks
-        res['nchunks'] = nchunks
-        res['endtime'] = chunk_end
-        return res
+            # Accumulate the result
+            # Don't try to be clever here,
+            #   += doesn't work on readonly array fields;
+            #   .sum() doesn't work on scalars
+            if data is None:
+                pass
+
+            elif (isinstance(data, dict)
+                  or (isinstance(data, np.ndarray)
+                      and data.dtype.fields is not None)):
+                # Function returned record array or dict
+                for field in fields:
+                    result[field] = (
+                        result.get(field, 0)
+                        + np.sum(data[field], axis=0))
+            else:
+                # Function returned a scalar or flat array
+                result['result'] = (
+                        np.sum(data, axis=0)
+                        + result.get('result', 0))
+
+            n_chunks += 1
+
+        result['n_chunks'] = n_chunks
+        return result
 
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
