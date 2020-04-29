@@ -19,7 +19,11 @@ import pandas as pd
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
 # Otherwise we get strange errors while caching the @growing_result functions
-numba.caching.pickle = dill
+try:
+    numba.core.caching.pickle = dill
+except AttributeError:
+    # Numba < 0.49
+    numba.caching.pickle = dill
 
 
 def exporter(export_self=False):
@@ -221,7 +225,7 @@ def profile_threaded(filename):
 @export
 def to_str_tuple(x) -> ty.Tuple[str]:
     if isinstance(x, str):
-        return x,
+        return (x,)
     elif isinstance(x, list):
         return tuple(x)
     elif isinstance(x, tuple):
