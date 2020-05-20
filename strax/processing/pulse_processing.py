@@ -37,7 +37,6 @@ def baseline(records, baseline_samples=40, flip=True,
     """
     if not len(records):
         return records
-    samples_per_record = len(records[0]['data'])
 
     # Array for looking up last baseline (mean, rms) seen in channel
     # We only care about the channels in this set of records; a single .max()
