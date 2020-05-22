@@ -65,7 +65,7 @@ def baseline(records, baseline_samples=40, flip=True,
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
         d['data'][:d['length']] = (
-            np.where(flip, -1, 1) * (d['data'][:d['length']] - int(bl)))
+            (-1 if flip else 1) * (d['data'][:d['length']] - int(bl)))
         d['baseline'] = bl
         d['baseline_rms'] = rms
 
