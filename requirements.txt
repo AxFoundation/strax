@@ -1,6 +1,6 @@
 numpy
 pandas
-numba>=0.43.1,<=0.48
+numba>=0.43.1
 blosc
 zstd
 tqdm
@@ -12,3 +12,4 @@ scipy
 pymongo
 lz4
 immutabledict
+packaging

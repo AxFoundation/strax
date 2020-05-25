@@ -186,6 +186,7 @@ def sum_waveform(peaks, records, adc_to_pe):
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
             ch = r['channel']
+            multiplier = 2**r['amplitude_bit_shift']
             assert p['dt'] == r['dt'], "Records and peaks must have same dt"
 
             shift = (p['time'] - r['time']) // dt
@@ -207,13 +208,14 @@ def sum_waveform(peaks, records, adc_to_pe):
                 r['time'] // dt, n_r,
                 p['time'] // dt, n_p)
 
-            max_in_record = r['data'][r_start:r_end].max()
-            p['saturated_channel'][ch] = int(max_in_record >= r['baseline'])
+            max_in_record = r['data'][r_start:r_end].max() * multiplier
+            p['saturated_channel'][ch] |= int(max_in_record >= r['baseline'])
 
             bl_fpart = r['baseline'] % 1
             # TODO: check numba does casting correctly here!
             pe_waveform = adc_to_pe[ch] * (
-                    r['data'][r_start:r_end] + bl_fpart)
+                    multiplier * r['data'][r_start:r_end]
+                    + bl_fpart)
 
             swv_buffer[p_start:p_end] += pe_waveform
 
@@ -253,3 +255,98 @@ def find_peak_groups(peaks, gap_threshold,
         left_extension=left_extension, right_extension=right_extension,
         min_channels=1, min_area=0)
     return fake_peaks['time'], strax.endtime(fake_peaks)
+
+
+##
+# Lone hit integration
+##
+
+@numba.njit(nogil=True, cache=True)
+def _find_hit_integration_bounds(
+        lone_hits, peaks, records, save_outside_hits, n_channels):
+    """"Update lone hits to include integration bounds
+
+    save_outside_hits: in ns!!
+    """
+    result = np.zeros((len(lone_hits), 2), dtype=np.int64)
+    if not len(lone_hits):
+        return result
+
+    # By default, use save_outside_hits to determine bounds
+    result[:, 0] = lone_hits['time'] - save_outside_hits[0]
+    result[:, 1] = strax.endtime(lone_hits) + save_outside_hits[1]
+
+    NO_EARLIER_HIT = -1
+    last_hit_index = np.ones(n_channels, dtype=np.int32) * NO_EARLIER_HIT
+
+    n_peaks = len(peaks)
+    FAR_AWAY = 9223372036_854775807   # np.iinfo(np.int64).max, April 2262
+    peak_i = 0
+
+    for hit_i, h in enumerate(lone_hits):
+        ch = h['channel']
+
+        # Find end of previous peak and start of next peak
+        # (note peaks are disjoint from any lone hit, even though
+        # lone hits may not be disjoint from each other)
+        while peak_i < n_peaks and peaks[peak_i]['time'] < h['time']:
+            peak_i += 1
+        prev_p_end = strax.endtime(peaks[peak_i - 1]) if peak_i != 0 else 0
+        next_p_start = peaks[peak_i]['time'] if peak_i != n_peaks else FAR_AWAY
+
+
+        # Ensure we do not integrate parts of peaks
+        # or (at least for now) beyond the record in which the hit was found
+        r = records[h['record_i']]
+        result[hit_i][0] = max(prev_p_end,
+                               r['time'],
+                               result[hit_i][0])
+        result[hit_i][1] = min(next_p_start,
+                               strax.endtime(r),
+                               result[hit_i][1])
+
+        if last_hit_index[ch] != NO_EARLIER_HIT:
+            # Ensure previous hit does not integrate the over-threshold region
+            # of this hit
+            result[last_hit_index[ch]][1] = min(result[last_hit_index[ch]][1],
+                                                h['time'])
+            # Ensure this hit doesn't integrate anything the previous hit
+            # already integrated
+            result[hit_i][0] = max(result[last_hit_index[ch]][1],
+                                   result[hit_i][0])
+
+        last_hit_index[ch] = hit_i
+
+    # Convert to index in record and store
+    t0 = records[lone_hits['record_i']]['time']
+    dt = records[lone_hits['record_i']]['dt']
+    for hit_i, h in enumerate(lone_hits):
+        h['left_integration'] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
+        h['right_integration'] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
+
+
+@export
+@numba.njit(nogil=True, cache=True)
+def integrate_lone_hits(
+        lone_hits, records, peaks, save_outside_hits, n_channels):
+    """Update the area of lone_hits to the integral in ADCcounts x samples
+
+    :param lone_hits: Hits outside of peaks
+    :param records: Records in which hits and peaks were found
+    :param peaks: Peaks
+    :param save_outside_hits: (left, right) *TIME* with wich we should extend
+    the integration window of hits
+    the integration region
+    :param n_channels: number of channels
+
+    TODO: this doesn't extend the integration range beyond record boundaries
+    """
+    _find_hit_integration_bounds(
+        lone_hits, peaks, records, save_outside_hits, n_channels)
+    for hit_i, h in enumerate(lone_hits):
+        r = records[h['record_i']]
+        start, end = h['left_integration'], h['right_integration']
+        # TODO: when we add amplitude multiplier, adjust this too!
+        h['area'] = (
+                r['data'][start:end].sum()
+                + (r['baseline'] % 1) * (end - start))
