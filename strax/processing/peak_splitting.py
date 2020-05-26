@@ -27,6 +27,14 @@ NO_MORE_SPLITS = -9999999
 
 
 class PeakSplitter:
+    """Split peaks into more peaks based on arbitrary algorithm.
+
+    The function find_split_points(), implemented in each subclass
+    defines the algorithm, which takes in a peak's waveform and
+    returns the index to split the peak at, if a split point is
+    found. Otherwise NO_MORE_SPLITS is returned and the peak is
+    left as is.
+    """
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe,
@@ -84,6 +92,9 @@ class PeakSplitter:
     def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
                     args_options,
                     _result_buffer=None, result_dtype=None):
+        """Loop over peaks, pass waveforms to algorithm, construct
+        new peaks if and where a split occurs.
+        """
         # TODO NEEDS TESTS!
         new_peaks = _result_buffer
         offset = 0
@@ -195,9 +206,9 @@ class NaturalBreaksSplitter(PeakSplitter):
        1 - (f(left) + f(right))/f(unsplit)
      - normalize: if True, f is the variance. Otherwise, it is the
        sum squared difference from the mean (i.e. unnormalized variance)
-     - split_low: if True, multiply the goodness of split value by the ratio
-       between the waveform at the split point and the maximum in the waveform.
-       This prevent splits at high density points.
+     - split_low: if True, multiply the goodness of split value by one minus
+       the ratio between the waveform at the split point and the maximum in
+       the waveform. This prevent splits at high density points.
      - filter_wing_width: if > 0, do a moving average filter (without shift)
        on the waveform before the split_low computation.
        The window will include the sample itself, plus filter_wing_width (or as
