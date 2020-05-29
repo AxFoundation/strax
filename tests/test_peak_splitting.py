@@ -25,11 +25,11 @@ def test_LocalMinimumSplitter():
         assert len(my_splits) >= 1
         # get left and right from found splits
         split_checks = [(int(split - 1), int(split + 1), int(split))
-                        for split in my_splits[:-1, 0]]
+                        for split in my_splits[:, 0]]
 
         # discard last two split-entries if they exist
         # they are len(w) and NO_MORE_SPLITS --> nothing to test
-        split_checks = [split_check for split_check in split_checks[:-2]]
+        split_checks = split_checks[:-2]
 
         # check if left and right from split index value is bigger or equal
         for left, right, split in split_checks:
