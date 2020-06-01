@@ -51,7 +51,7 @@ class DataKey:
         # this property
         if self._lineage_hash == '':
             self._lineage_hash = strax.deterministic_hash(self.lineage)
-        return strax.deterministic_hash(self.lineage)
+        return self._lineage_hash
 
 
 @export
