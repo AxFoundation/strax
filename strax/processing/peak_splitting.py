@@ -28,6 +28,12 @@ NO_MORE_SPLITS = -9999999
 
 class PeakSplitter:
     """Split peaks into more peaks based on arbitrary algorithm.
+    :param peaks: Original peaks. Sum waveform must have been built
+    and properties must have been computed (if you use them).
+    :param records: Records from which peaks were built.
+    :param to_pe: ADC to PE conversion factor array (of n_channels).
+    :param do_iterations: maximum number of times peaks are recursively split.
+    :param min_area: Minimum area to do split. Smaller peaks are not split.
 
     The function find_split_points(), implemented in each subclass
     defines the algorithm, which takes in a peak's waveform and
@@ -62,7 +68,7 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        new_peaks = self.split_peaks(
+        new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
             peaks=peaks,
@@ -75,6 +81,7 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             strax.sum_waveform(new_peaks, records, to_pe)
+            # Needed for NaturalBreaksSplitter
             strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
@@ -89,9 +96,9 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                    args_options,
-                    _result_buffer=None, result_dtype=None):
+    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+                     args_options,
+                     _result_buffer=None, result_dtype=None):
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
@@ -141,6 +148,8 @@ class PeakSplitter:
 
     @staticmethod
     def find_split_points(w, *args_options):
+        """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
+        bare PeakSplitter class is not implemented"""
         raise NotImplementedError
 
 
