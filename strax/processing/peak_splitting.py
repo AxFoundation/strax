@@ -6,7 +6,7 @@ export, __all__ = strax.exporter()
 
 
 @export
-def split_peaks(peaks, records, to_pe, algorithm='local_minimum', **kwargs):
+def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='peaks', **kwargs):
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
 
@@ -15,12 +15,18 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', **kwargs):
     :param records: Records from which peaks were built
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
+    :param data_type: 'peaks' or 'hits'. Specifies whether to use  
+        sum_wavefrom or get_hitlets_data to compute the waveform of
+        the new split peaks/hitlets.
 
     Any other options are passed to the algorithm.
     """
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
-    return splitter(peaks, records, to_pe, **kwargs)
+    data_and_area = dict(peaks=strax.sum_waveform, 
+                         hits=strax.get_hitlets_data
+                        )[data_type]
+    return splitter(peaks, records, to_pe, data_and_area, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -29,7 +35,7 @@ NO_MORE_SPLITS = -9999999
 class PeakSplitter:
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe,
+    def __call__(self, peaks, records, to_pe, data_and_area,
                  do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
@@ -66,11 +72,11 @@ class PeakSplitter:
 
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
-            strax.sum_waveform(new_peaks, records, to_pe)
+            data_and_area(new_peaks, records, to_pe)
             strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe,
+            new_peaks = self(new_peaks, records, to_pe, data_and_area,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
@@ -110,6 +116,7 @@ class PeakSplitter:
                 # this may change when the sum waveform of the new peak
                 # is computed
                 r['dt'] = orig_dt
+                r['record_i'] = p['record_i'] #TODO change this line since not needed by peaks
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
 
                 r['max_gap'] = -1    # Too lazy to compute this
