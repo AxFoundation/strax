@@ -350,3 +350,224 @@ def integrate_lone_hits(
         h['area'] = (
                 r['data'][start:end].sum()
                 + (r['baseline'] % 1) * (end - start))
+
+
+@export       
+def concat_overlapping_hits(hits, extensions, pmt_channels):
+    """
+    Function which concatenates hits which may overlap after left and 
+    right hit extension. 
+    
+    Note: 
+        This function only updates time, length and record_i of the hit.
+        (record_i is set according to the first hit)
+    
+    :param hits: Hits in records.
+    :param extensions: Tuple of the left and right hit extension.
+    :param pmt_channels: Tuple of the detectors first and last PMT
+    """
+    # Getting channel map and compute the number of channels:
+    first_channel, last_channel = pmt_channels
+    nchannels = last_channel - first_channel + 1
+
+    # Buffer for concat_overlapping_hits, if specified in 
+    # _concat_overlapping_hits numba crashes.
+    last_hit_in_channel = np.zeros(nchannels, 
+                                   dtype=(strax.hit_dtype 
+                                          + [(('End time of the interval (ns since unix epoch)',
+                                               'endtime'), np.int64)
+                                            ]))
+    
+    
+    hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel)
+    return hits
+
+
+@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
+@numba.njit(nogil=True, cache=True)
+def _concat_overlapping_hits(hits,
+                            extensions,
+                            first_channel,
+                            last_hit_in_channel,
+                            _result_buffer=None):
+    buffer = _result_buffer
+    offset = 0
+
+    le, re = extensions
+    dt = hits['dt'] [0]
+    assert np.all(hits['dt'] == dt), 'All hits must have the same dt!'
+    
+    for h in hits:
+        st = h['time'] - int(le * h['dt'])
+        et = h['time'] + int((h['length'] + re) * h['dt'])
+        hc = h['channel']
+        r_i = h['record_i']
+
+        lhc = last_hit_in_channel[hc - first_channel]
+        # Have not found any hit in this channel yet:
+        if lhc['time'] == 0:
+            lhc['time'] = st
+            lhc['endtime'] = et
+            lhc['channel'] = hc
+            lhc['record_i'] = h['record_i']
+            lhc['dt'] = dt
+
+        # Checking if events overlap:
+        else:
+            if lhc['endtime'] >= st:
+                # Yes, so we have to update only the end_time:
+                lhc['endtime'] = et
+            else:
+                # No, this means we have to save the previous data and update lhc:
+                res = buffer[offset]
+                res['time'] = lhc['time']
+                res['length'] = (lhc['endtime'] - lhc['time'])//lhc['dt']
+                res['channel'] = lhc['channel']
+                res['record_i'] = lhc['record_i']
+                res['dt'] = lhc['dt']
+                offset += 1
+                if offset == len(buffer):
+                    yield offset
+                    offset = 0
+
+                # Updating current last hit:
+                lhc['time'] = st
+                lhc['endtime'] = et
+                lhc['channel'] = hc
+                lhc['record_i'] = r_i
+
+    # We went through so now we have to save all remaining hits:
+    mask = last_hit_in_channel['time'] != 0
+    for lhc in last_hit_in_channel[mask]:
+        res = buffer[offset]
+        res['time'] = lhc['time']
+        res['channel'] = lhc['channel']
+        res['length'] = (lhc['endtime'] - lhc['time'])//lhc['dt']
+        res['record_i'] = lhc['record_i']
+        res['dt'] = lhc['dt']
+        offset += 1
+        if offset == len(buffer):
+            yield offset
+            offset = 0
+    yield offset
+
+    
+@export
+@numba.njit(nogil = True, cache=True)
+def get_hitlets_data(hitlets, records, to_pe):
+    '''
+    Function which searches for every hitlet in a given chunk the 
+    corresponding records data.
+    
+    :param hitlets: Hitlets found in a chunk of records.
+    :param records: Records of the chunk.
+    :param to_pe: Array with area conversion factors from adc/sample to 
+        pe/sample
+    
+    The function updates the hitlet fields time, length (if necessary 
+    e.g. hit was extended in regions of now records) and area
+    according to the found data.
+    '''
+    rlink = strax.record_links(records)
+    for h in hitlets:
+        data, start_time = _get_hitlet_data(h, records, *rlink)
+        h['length'] = len(data)
+        h['data'][:len(data)] = data * to_pe[h['channel']]  
+        h['time'] = start_time                              
+        h['area'] = np.sum(data * to_pe[h['channel']])      
+            
+        
+@numba.njit(nogil = True, cache=True)
+def _get_hitlet_data(hitlet, records, prev_r, next_r):
+    temp_data = np.zeros(hitlet['length'], dtype=np.float64)
+    
+    # Lets get the starting record and the corresponding data:
+    r_i = hitlet['record_i']
+    r = records[r_i]
+    data, (p_start_i, p_end_i) = _get_thing_data(hitlet, r)
+    temp_data[p_start_i:p_end_i] = data
+    
+    # We have to store the first and last index of the so far found data 
+    data_start = p_start_i
+    data_end = p_end_i
+    
+    if not (p_end_i - p_start_i == hitlet['length']):
+        # We have not found the entire data yet....
+        # Starting with data before our current record:
+        trial_counter = 0
+        prev_r_i = r_i
+        while  p_start_i:
+            # We are still searching for data in a previous record.
+            temp_prev_r_i = prev_r[prev_r_i] 
+            if temp_prev_r_i == -1:
+                # There is no (more) previous record. So stop here and keep
+                # last pre_r_i
+                p_start_i = 0
+                break
+            prev_r_i = temp_prev_r_i
+
+            # There is a previous record:
+            r = records[prev_r_i]
+            data, (p_start_i, end) = _get_thing_data(hitlet, r)
+            if not end:
+                raise ValueError('This is odd found previous record, but no'
+                                 ' overlapping indicies.')
+            temp_data[p_start_i:data_start] = data
+            data_start = p_start_i
+
+            if trial_counter > 100:
+                raise RuntimeError('Tried too hard. There are more than'
+                                   '100 successive records. This is odd...')
+            trial_counter +=1
+
+
+        # Now we have to do the very same for records in the future:
+        # Almost the same code as above sorry...
+        trial_counter = 0
+        next_r_i = r_i
+        while  hitlet['length'] - p_end_i:
+            # We are still searching for data in a next record.
+            temp_next_r_i = next_r[next_r_i] 
+            if temp_next_r_i == -1:
+                # There is no (more) previous record. So stop here and keep
+                # last next_r_i
+                break
+            next_r_i = temp_next_r_i
+            # There is a next record:
+            r = records[next_r_i]
+            data, (start, p_end_i) = _get_thing_data(hitlet, r)
+            if not start:
+                raise ValueError('This is odd found the next record, but no'
+                                 ' overlapping indicies.')
+            temp_data[data_end:p_end_i] = data
+            data_end = p_end_i
+
+            if trial_counter > 100:
+                raise RuntimeError('Tried too hard. There are more than'
+                                   '100 successive records. This is odd...')
+            trial_counter +=1
+    
+  
+    # In some cases it might have happend that due to the left and right hit extension
+    # we extended our hitlet into regions without any data so we have to chop
+    # "time" acoording to the data we found....
+    time = hitlet['time'] + data_start * hitlet['dt']
+    temp_data = temp_data[data_start:data_end] + r['baseline']%1
+    return temp_data, time
+            
+        
+@numba.njit(nogil=True, cache=True)      
+def _get_thing_data(thing, container):
+    '''
+    Function which returns data for some overlapping indicies of a thing 
+    in a container. 
+    
+    Note:
+        Thing must be of the interval dtype kind.
+    '''
+    overlap_hit_i, overlap_record_i = strax.overlap_indices(thing['time']//thing['dt'], 
+                                                            thing['length'], 
+                                                            container['time']//container['dt'], 
+                                                            container['length'])
+    data = container['data'][overlap_record_i[0]:overlap_record_i[1]]
+    return data, overlap_hit_i
