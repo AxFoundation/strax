@@ -390,11 +390,11 @@ def peak_saturation_correction(records, peaks, to_pe,
         mask &= peaks['type'] == 2
     peak_list = np.where(mask)[0]
     # Look up records that touch each peak
-    record_ranges = touching_windows(records['time'],
+    record_ranges = touching_windows(
+        records['time'],
         strax.endtime(records),
         peaks[peak_list]['time'],
         strax.endtime(peaks[peak_list]))
-
 
     # Create temporary arrays for calculation
     dt = records[0]['dt']
@@ -408,7 +408,6 @@ def peak_saturation_correction(records, peaks, to_pe,
     b_pulse = np.zeros((n_channels, len_buffer), dtype=np.int16)
     # Buff the corresponding record index of saturated channels
     b_index = np.zeros((n_channels, len_buffer), dtype=np.int32)
-
 
     # Main
     for ix, peak_i in enumerate(peak_list):
@@ -430,10 +429,13 @@ def peak_saturation_correction(records, peaks, to_pe,
                 b_pulse[ch, slice(*b_slice)] += r['data'][slice(*r_slice)]
                 b_index[ch, np.argmin(b_index[ch])] = record_i
             else:
-                b_sumwf[slice(*b_slice)] += r['data'][slice(*r_slice)] * to_pe[ch]
+                b_sumwf[slice(*b_slice)] += r['data'][slice(*r_slice)] \
+                    * to_pe[ch]
 
-        _peak_saturation_correction_inner(channel_saturated, records, p,
-            b_sumwf, b_pulse, b_index, reference_length, min_reference_length)
+        _peak_saturation_correction_inner(
+            channel_saturated, records, p,
+            b_sumwf, b_pulse, b_index,
+            reference_length, min_reference_length)
 
         # Back track sum wf downsampling
         peaks[peak_i]['length'] = p['length'] * p['dt'] / dt
@@ -465,9 +467,9 @@ def _peak_saturation_correction_inner(channel_saturated, records, p,
         b = b_pulse[ch]
         r0 = records[b_index[ch][0]]
         saturated_index0 = s0 = np.argmax(b >= r0['baseline'])
-        ref = slice(max(0, s0-reference_length), s0) # 100 Sample reference
+        ref = slice(max(0, s0-reference_length), s0)
 
-        # Continue if the length of reference region is shorter than minimum length
+        # Continue if the length of ref is shorter than minimum length
         if s0 < min_reference_length:
             continue
 
@@ -479,7 +481,7 @@ def _peak_saturation_correction_inner(channel_saturated, records, p,
                 r['time'] // dt, r['length'],
                 p['time'] // dt + s0,  p['length'] * p['dt'] // dt - s0)
 
-            if r_slice[1] == r_slice[0]: # This record proceeds saturation
+            if r_slice[1] == r_slice[0]:  # This record proceeds saturation
                 continue
             b_slice = b_slice[0] + s0, b_slice[1] + s0
             apax = scale * max(b_sumwf[slice(*b_slice)])
