@@ -4,6 +4,7 @@ import numba
 import strax
 from strax import utils
 from strax.dtypes import peak_dtype, DIGITAL_SUM_WAVEFORM_CHANNEL
+from strax.processing.general import _touching_windows as touching_windows
 export, __all__ = strax.exporter()
 
 
@@ -137,15 +138,21 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe):
+def sum_waveform(peaks, records, adc_to_pe,
+                 peak_list=np.array([-3, -14])):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
+
+    :keyword peak_list: Indicies of the peaks for partial processing
+    In the form of np.array([np.int])
 
     Assumes all peaks AND pulses have the same dt!
     """
     if not len(records):
         return
     if not len(peaks):
+        return
+    if not len(peak_list):
         return
     dt = records[0]['dt']
 
@@ -160,7 +167,13 @@ def sum_waveform(peaks, records, adc_to_pe):
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
 
-    for peak_i, p in enumerate(peaks):
+    # If peak list is the default fill it with all peak indicies
+    # Hope it never is [-3, -14] for real
+    if np.sum(peak_list) == -17 and np.prod(peak_list) == 42:
+        peak_list = np.arange(len(peaks))
+
+    for peak_i in peak_list:
+        p = peaks[peak_i]
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
@@ -227,6 +240,7 @@ def sum_waveform(peaks, records, adc_to_pe):
 
         p['n_saturated_channels'] = p['saturated_channel'].sum()
         p['area_per_channel'][:] = area_per_channel
+
 
 @export
 def find_peak_groups(peaks, gap_threshold,
@@ -350,3 +364,135 @@ def integrate_lone_hits(
         h['area'] = (
                 r['data'][start:end].sum()
                 + (r['baseline'] % 1) * (end - start))
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
+def peak_saturation_correction(records, peaks, to_pe,
+                               reference_length=100,
+                               min_reference_length=20,
+                               use_classification=False,
+                               ):
+    """Correct the area and per pmt area of peaks from saturation
+
+    :param records: Records
+    :param peaks: Peaklets / Peaks
+    :param reference_length: Maximum number of reference sample used
+    to correct saturated samples
+    :param min_reference_length: Minimum number of reference sample used
+    to correct saturated samples
+    :param use_classification: Choice to use peak type
+    """
+
+    # Search for peaks with saturated channels
+    mask = peaks['n_saturated_channels'] > 0
+    if use_classification:
+        mask &= peaks['type'] == 2
+    peak_list = np.where(mask)[0]
+    # Look up records that touch each peak
+    record_ranges = touching_windows(records['time'],
+        strax.endtime(records),
+        peaks[peak_list]['time'],
+        strax.endtime(peaks[peak_list]))
+
+
+    # Create temporary arrays for calculation
+    dt = records[0]['dt']
+    n_channels = len(peaks[0]['saturated_channel'])
+    len_buffer = np.max(peaks['length'] * peaks['dt']) // dt
+    max_nrecord = len_buffer // strax.DEFAULT_RECORD_LENGTH + 1
+
+    # Buff the sum wf [pe] of non-saturated channels
+    b_sumwf = np.zeros(len_buffer, dtype=np.float32)
+    # Buff the records data [ADC] in saturated channels
+    b_pulse = np.zeros((n_channels, len_buffer), dtype=np.int16)
+    # Buff the corresponding record index of saturated channels
+    b_index = np.zeros((n_channels, len_buffer), dtype=np.int32)
+
+
+    # Main
+    for ix, peak_i in enumerate(peak_list):
+        b_sumwf[:] = 0
+        b_pulse[:] = 0
+        b_index[:] = -1
+
+        p = peaks[peak_i]
+        channel_saturated = p['saturated_channel'] > 0
+
+        for record_i in range(record_ranges[ix][0], record_ranges[ix][1]):
+            r = records[record_i]
+            r_slice, b_slice = strax.overlap_indices(
+                r['time'] // dt, r['length'],
+                p['time'] // dt, p['length'] * p['dt'] // dt)
+
+            ch = r['channel']
+            if channel_saturated[ch]:
+                b_pulse[ch, slice(*b_slice)] += r['data'][slice(*r_slice)]
+                b_index[ch, np.argmin(b_index[ch])] = record_i
+            else:
+                b_sumwf[slice(*b_slice)] += r['data'][slice(*r_slice)] * to_pe[ch]
+
+        _peak_saturation_correction_inner(channel_saturated, records, p,
+            b_sumwf, b_pulse, b_index, reference_length, min_reference_length)
+
+        # Back track sum wf downsampling
+        peaks[peak_i]['length'] = p['length'] * p['dt'] / dt
+        peaks[peak_i]['dt'] = dt
+
+    sum_waveform(peaks, records, to_pe, peak_list=peak_list)
+    return peak_list
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _peak_saturation_correction_inner(channel_saturated, records, p,
+                                      b_sumwf, b_pulse, b_index,
+                                      reference_length=100,
+                                      min_reference_length=20,
+                                      ):
+    """Would be the thrid level loop in peak_saturation_correction
+    Its not ideal for numba, thus this function
+
+    :param channel_saturated: (bool, n_channels)
+    :param p: One peak/peaklet
+    :param b_sumwf, b_pulse, b_index: Filled buffers
+    """
+    dt = records['dt'][0]
+    n_channels = len(channel_saturated)
+
+    for ch in range(n_channels):
+        if not channel_saturated[ch]:
+            continue
+        b = b_pulse[ch]
+        r0 = records[b_index[ch][0]]
+        saturated_index0 = s0 = np.argmax(b >= r0['baseline'])
+        ref = slice(max(0, s0-reference_length), s0) # 100 Sample reference
+
+        # Continue if the length of reference region is shorter than minimum length
+        if s0 < min_reference_length:
+            continue
+
+        scale = np.sum(b[ref]) / np.sum(b_sumwf[ref])
+
+        for record_i in b_index[ch]:
+            r = records[record_i]
+            r_slice, b_slice = strax.overlap_indices(
+                r['time'] // dt, r['length'],
+                p['time'] // dt + s0,  p['length'] * p['dt'] // dt - s0)
+
+            if r_slice[1] == r_slice[0]: # This record proceeds saturation
+                continue
+            b_slice = b_slice[0] + s0, b_slice[1] + s0
+            apax = scale * max(b_sumwf[slice(*b_slice)])
+
+            if np.int32(apax) >= 2**15:  # int16(2**15) is -2**15
+                bshift = int(np.floor(np.log2(apax) - 14))
+
+                tmp = r['data'].astype(np.int32)
+                tmp[slice(*r_slice)] = b_sumwf[slice(*b_slice)] * scale
+
+                r['area'] = np.sum(tmp)  # Auto covert to int64
+                r['data'][:] = np.right_shift(tmp, bshift)
+                r['amplitude_bit_shift'] += bshift
+            else:
+                r['data'][slice(*r_slice)] = b_sumwf[slice(*b_slice)] * scale
+                r['area'] = np.sum(r['data'])
