@@ -262,7 +262,7 @@ class Context:
                                            f' for the same option. The option',
                                            f' "{new_option}" in "{plugin.__name__}" takes',
                                            f' as a default "{default}"  while in',
-                                           f' {plugin_class.__name__} the default value'
+                                           f' "{plugin_class.__name__}" the default value'
                                            f' is set to "{new_default}". Please change'
                                            ' one of the defaults.'
                                            ))
