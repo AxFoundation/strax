@@ -240,7 +240,7 @@ class Context:
             self._plugin_class_registry[p] = plugin_class
 
         already_seen = []
-        for provides, plugin in self._plugin_class_registry.items():
+        for provides, plugin in self._plugin_class_registry.values():
 
             if plugin in already_seen:
                 continue
@@ -253,19 +253,19 @@ class Context:
                     for new_option, new_items in plugin_class.takes_config.items():
                         if not new_option == option:
                             continue
-                        default = items.get_default('1')  # Have to pass will be changed.
-                        new_default = new_items.get_default('1')
+                        default = items.get_default('0')  # Have to pass will be changed.
+                        new_default = new_items.get_default('0')
                         if default == new_default:
                             continue
                         else:
-                            mes = ''.join((f'Two plugins have a different default value',
-                                           f' for the same option. The option',
-                                           f' "{new_option}" in "{plugin.__name__}" takes',
-                                           f' as a default "{default}"  while in',
-                                           f' "{plugin_class.__name__}" the default value'
-                                           f' is set to "{new_default}". Please change'
-                                           ' one of the defaults.'
-                                           ))
+                            mes = (f'Two plugins have a different default value'
+                                   f' for the same option. The option'
+                                   f' "{new_option}" in "{plugin.__name__}" takes'
+                                   f' as a default "{default}"  while in'
+                                   f' "{plugin_class.__name__}" the default value'
+                                   f' is set to "{new_default}". Please change'
+                                   ' one of the defaults.'
+                                   )
                             raise ValueError(mes)
 
                 except strax.InvalidConfiguration:
