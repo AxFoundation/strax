@@ -649,7 +649,7 @@ class Context:
             savers=dict(savers),
             targets=targets)
 
-    def estimate_run_start(self, run_id, targets):
+    def estimate_run_start(self, run_id, targets=None):
         """Return run start time in ns since epoch.
 
         This fetches from run metadata, and if this fails, it
@@ -663,18 +663,21 @@ class Context:
             return int(t0.timestamp()) * int(1e9)
         except (strax.RunMetadataNotAvailable, KeyError):
             pass
-        # We only get here if there was an exception
-        if not targets:
-            warnings.warn(
-                "Could not estimate run start time from "
-                "run metadata: assuming it is 0",
-                UserWarning)
-            return 0
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
-        t = strax.to_str_tuple(targets)[0]
-        t0 = self.get_meta(run_id, t)['chunks'][0]['start']
-        return (int(t0) // int(1e9)) * int(1e9)
+        if targets:
+            for t in strax.to_str_tuple(targets):
+                try:
+                    t0 = self.get_meta(run_id, t)['chunks'][0]['start']
+                    return (int(t0) // int(1e9)) * int(1e9)
+                except strax.DataNotAvailable:
+                    pass
+        warnings.warn(
+            "Could not estimate run start time from "
+            "run metadata: assuming it is 0",
+            UserWarning)
+        return 0
+
 
     def to_absolute_time_range(self, run_id, targets, time_range=None,
                                seconds_range=None, time_within=None):
