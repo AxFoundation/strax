@@ -251,7 +251,7 @@ class Context:
                     # Looping over the options of the new plugin and check if
                     # they can be found in the already registered plugins:
                     for new_option, new_items in plugin_class.takes_config.items():
-                        if not (new_option in option):
+                        if not new_option == option:
                             continue
                         default = items.get_default('1')  # Have to pass will be changed.
                         new_default = new_items.get_default('1')
