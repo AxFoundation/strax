@@ -25,9 +25,9 @@ class DataDirectory(StorageFrontend):
     """
 
     can_define_runs = True
-    provide_run_metadata = True
+    provide_run_metadata = False
 
-    def __init__(self, path='.', *args, deep_scan=True, **kwargs):
+    def __init__(self, path='.', *args, deep_scan=False, **kwargs):
         """
         :param path: Path to folder with data subfolders.
         :param deep_scan: Let scan_runs scan over folders,

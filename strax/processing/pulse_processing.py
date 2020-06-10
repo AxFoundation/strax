@@ -65,9 +65,8 @@ def baseline(records, baseline_samples=40, flip=True,
 
         # Subtract baseline from all data samples in the record
         # (any additional zeros should be kept at zero)
-        last = min(samples_per_record,
-                   d['pulse_length'] - d['record_i'] * samples_per_record)
-        d['data'][:last] = (-1 * flip) * (d['data'][:last] - int(bl))
+        d['data'][:d['length']] = (
+            (-1 * flip) * (d['data'][:d['length']] - int(bl)))
         d['baseline'] = bl
         d['baseline_rms'] = rms
 
@@ -114,9 +113,8 @@ def zero_out_of_bounds(records):
     samples_per_record = len(records[0]['data'])
 
     for r in records:
-        end = r['pulse_length'] - r['record_i'] * samples_per_record
-        if end < samples_per_record:
-            r['data'][end:] = 0
+        if r['length'] < samples_per_record:
+            r['data'][r['length']:] = 0
 
 
 @export
@@ -125,16 +123,12 @@ def integrate(records):
     """Integrate records in-place"""
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
     for i, r in enumerate(records):
-        n_real_samples = min(
-            samples_per_record,
-            r['pulse_length'] - r['record_i'] * samples_per_record)
         records[i]['area'] = (
-            r['data'].sum()
+            r['data'].sum() * 2**r['amplitude_bit_shift']
             # Add floating part of baseline * number of samples
             # int(round()) the result since the area field is an int
-            + int(round((r['baseline'] % 1) * n_real_samples)))
+            + int(round((r['baseline'] % 1) * r['length'])))
 
 
 @export
@@ -198,6 +192,8 @@ def find_hits(records,
 
     NB: returned hits are NOT sorted yet!
     """
+    if not len(records):
+        return np.zeros(0, dtype=strax.hit_dtype)
     if isinstance(min_amplitude, (tuple, list)):
         min_amplitude = np.array(min_amplitude)
     if isinstance(min_height_over_noise, (tuple, list)):
@@ -232,19 +228,25 @@ def find_hits(records,
 # else copying buffers / switching context dominates over actual computation
 # No max_duration argument: hits terminate at record boundaries, and
 # anyone insane enough to try O(sec) long records deserves to be punished
+# TODO: this ignores amplitude_bit_shift, since this function also
+# has to support raw_records, which don't have that field.
 @strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _find_hits(records, min_amplitude, min_height_over_noise,
                _result_buffer=None):
     buffer = _result_buffer
     if not len(records):
         return
     offset = 0
+    n_channels = len(min_amplitude)
 
     for record_i, r in enumerate(records):
         # print("Starting record ', record_i)
         in_interval = False
         hit_start = -1
+        if r['channel'] >= n_channels:
+            print(r['channel'], n_channels)
+            raise ValueError("Too few channel thresholds specified")
 
         area = height = 0
         threshold = max(

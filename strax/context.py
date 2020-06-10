@@ -57,13 +57,16 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=60,
+    strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
-                      'possibly be removed, see issue #246')
+                      'possibly be removed, see issue #246'),
+    strax.Option(name='free_options', default=tuple(),
+                 help='Do not warn if any of these options are passed, '
+                      'even when no registered plugin takes them.')
 )
 @export
 class Context:
@@ -366,7 +369,7 @@ class Context:
             pc.takes_config.keys()
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
-            if k not in all_opts:
+            if not (k in all_opts or k in self.context_config['free_options']):
                 warnings.warn(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
@@ -646,7 +649,7 @@ class Context:
             savers=dict(savers),
             targets=targets)
 
-    def estimate_run_start(self, run_id, targets):
+    def estimate_run_start(self, run_id, targets=None):
         """Return run start time in ns since epoch.
 
         This fetches from run metadata, and if this fails, it
@@ -660,18 +663,21 @@ class Context:
             return int(t0.timestamp()) * int(1e9)
         except (strax.RunMetadataNotAvailable, KeyError):
             pass
-        # We only get here if there was an exception
-        if not targets:
-            warnings.warn(
-                "Could not estimate run start time from "
-                "run metadata: assuming it is 0",
-                UserWarning)
-            return 0
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
-        t = strax.to_str_tuple(targets)[0]
-        t0 = self.get_meta(run_id, t)['chunks'][0]['start']
-        return (int(t0) // int(1e9)) * int(1e9)
+        if targets:
+            for t in strax.to_str_tuple(targets):
+                try:
+                    t0 = self.get_meta(run_id, t)['chunks'][0]['start']
+                    return (int(t0) // int(1e9)) * int(1e9)
+                except strax.DataNotAvailable:
+                    pass
+        warnings.warn(
+            "Could not estimate run start time from "
+            "run metadata: assuming it is 0",
+            UserWarning)
+        return 0
+
 
     def to_absolute_time_range(self, run_id, targets, time_range=None,
                                seconds_range=None, time_within=None):
@@ -710,6 +716,7 @@ class Context:
                  time_within=None,
                  time_selection='fully_contained',
                  selection_str=None,
+                 keep_columns=None,
                  _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -758,7 +765,7 @@ class Context:
                 del self._plugin_class_registry[k]
 
         seen_a_chunk = False
-        for result in strax.continuity_check(strax.ThreadedMailboxProcessor(
+        generator = strax.ThreadedMailboxProcessor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
@@ -766,21 +773,40 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()):
-            seen_a_chunk = True
-            if not isinstance(result, strax.Chunk):
-                raise ValueError(f"Got type {type(result)} rather than a strax "
-                                 f"Chunk from the processor!")
-            result.data = self.apply_selection(result.data, selection_str,
-                                               time_range, time_selection)
-            yield result
+                timeout=self.context_config['timeout']).iter()
+
+        try:
+            for result in strax.continuity_check(generator):
+                seen_a_chunk = True
+                if not isinstance(result, strax.Chunk):
+                    raise ValueError(f"Got type {type(result)} rather than "
+                                     f"a strax Chunk from the processor!")
+                result.data = self.apply_selection(
+                    result.data, 
+                selection_str=selection_str,
+                keep_columns=keep_columns,
+                time_range=time_range,
+                time_selection=time_selection)
+                yield result
+
+        except GeneratorExit:
+            generator.throw(OutsideException(
+                "Terminating due to an exception originating from outside "
+                "strax's get_iter (which we cannot retrieve)."))
+
+        except Exception as e:
+            generator.throw(e)
+            raise
+
         if not seen_a_chunk:
             if time_range is None:
                 raise strax.DataCorrupted("No data returned!")
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
 
-    def apply_selection(self, x, selection_str=None,
+    def apply_selection(self, x,
+                        selection_str=None,
+                        keep_columns=None,
                         time_range=None,
                         time_selection='fully_contained'):
         """Return x after applying selections
@@ -810,7 +836,6 @@ class Context:
             raise ValueError(f"Unknown time_selection {time_selection}")
 
         if selection_str:
-
             if isinstance(selection_str, (list, tuple)):
                 selection_str = ' & '.join(f'({x})' for x in selection_str)
 
@@ -818,6 +843,25 @@ class Context:
                 fn: x[fn]
                 for fn in x.dtype.names})
             x = x[mask]
+
+        if keep_columns:
+            keep_columns = strax.to_str_tuple(keep_columns)
+
+            # Construct the new dtype
+            new_dtype = []
+            for unpacked_dtype in strax.unpack_dtype(x.dtype):
+                field_name = unpacked_dtype[0]
+                if isinstance(field_name, tuple):
+                    field_name = field_name[1]
+                if field_name in keep_columns:
+                    new_dtype.append(unpacked_dtype)
+
+            # Copy over the data
+            x2 = np.zeros(len(x), dtype=new_dtype)
+            for field_name in keep_columns:
+                x2[field_name] = x[field_name]
+            x = x2
+            del x2
 
         return x
 
@@ -865,6 +909,106 @@ class Context:
                 **kwargs)
             results = [x.data for x in source]
         return np.concatenate(results)
+
+    def accumulate(self,
+                   run_id: ty.Union[str, tuple, list],
+                   targets,
+                   fields=None,
+                   function=None,
+                   store_first_for_others=True,
+                   function_takes_fields=False,
+                   **kwargs):
+        """Return a dictionary with the sum of the result of get_array.
+
+        :param function: Apply this function to the array before summing the
+            results. Will be called as function(array), where array is
+            a chunk of the get_array result.
+            Should return either:
+               * A scalar or 1d array -> accumulated result saved under 'result'
+               * A record array or dict -> fields accumulated individually
+               * None -> nothing accumulated
+            If not provided, the identify function is used.
+
+        :param fields: Fields of the function output to accumulate.
+            If not provided, all output fields will be accumulated.
+
+        :param store_first_for_others: if True (default), for fields included
+            in the data but not fields, store the first value seen in the data
+            (if any value is seen).
+
+        :param function_takes_fields: If True, function will be called as
+            function(data, fields) instead of function(data).
+
+        All other options are as for get_iter.
+
+        :returns dictionary: Dictionary with the accumulated result;
+            see function and store_first_for_others arguments.
+            Four fields are always added:
+                start: start time of the first processed chunk
+                end: end time of the last processed chunk
+                n_chunks: number of chunks in run
+                n_rows: number of data entries in run
+        """
+        n_chunks = 0
+        seen_data = False
+        result = {'n_rows': 0}
+        if fields is not None:
+            fields = strax.to_str_tuple(fields)
+        if function is None:
+            def function(arr):
+                return arr
+            function_takes_fields = False
+
+        for chunk in self.get_iter(run_id, targets, **kwargs):
+            data = chunk.data
+
+            if n_chunks == 0:
+                result['start'] = chunk.start
+                if fields is None:
+                    # Sum all fields except time and endtime
+                    fields = [x for x in data.dtype.names
+                              if x not in ('time', 'endtime')]
+
+            if store_first_for_others and not seen_data and len(data):
+                # Store the first value we see for the non-accumulated fields
+                for name in data.dtype.names:
+                    if name in fields:
+                        result[name] = data[0][name]
+                seen_data = True
+            result['end'] = chunk.end
+            result['n_rows'] += len(data)
+
+            # Run the function
+            if function_takes_fields:
+                data = function(data, fields)
+            else:
+                data = function(data)
+
+            # Accumulate the result
+            # Don't try to be clever here,
+            #   += doesn't work on readonly array fields;
+            #   .sum() doesn't work on scalars
+            if data is None:
+                pass
+
+            elif (isinstance(data, dict)
+                  or (isinstance(data, np.ndarray)
+                      and data.dtype.fields is not None)):
+                # Function returned record array or dict
+                for field in fields:
+                    result[field] = (
+                        result.get(field, 0)
+                        + np.sum(data[field], axis=0))
+            else:
+                # Function returned a scalar or flat array
+                result['result'] = (
+                        np.sum(data, axis=0)
+                        + result.get('result', 0))
+
+            n_chunks += 1
+
+        result['n_chunks'] = n_chunks
+        return result
 
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
@@ -1012,3 +1156,8 @@ for attr in dir(Context):
         doc = attr_val.__doc__
         if doc is not None and '{get_docs}' in doc:
             attr_val.__doc__ = doc.format(get_docs=get_docs)
+
+
+@export
+class OutsideException(Exception):
+    pass
