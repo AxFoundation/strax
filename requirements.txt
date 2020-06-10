@@ -11,4 +11,5 @@ boto3
 scipy
 pymongo
 lz4
-frozendict
+immutabledict
+packaging

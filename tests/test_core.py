@@ -36,7 +36,8 @@ def test_multirun():
 
 def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
-        mystrax = strax.Context(storage=strax.DataDirectory(temp_dir),
+        mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                            deep_scan=True),
                                 register=[Records, Peaks])
 
         assert not mystrax.is_stored(run_id, 'peaks')
@@ -96,7 +97,8 @@ def test_datadirectory_deleted():
         data_dir = osp.join(temp_dir, 'bla')
         os.makedirs(data_dir)
 
-        mystrax = strax.Context(storage=strax.DataDirectory(data_dir),
+        mystrax = strax.Context(storage=strax.DataDirectory(data_dir,
+                                                            deep_scan=True),
                                 register=[Records, Peaks])
 
         # Delete directory AFTER context is created
@@ -115,7 +117,8 @@ def test_datadirectory_deleted():
 
 def test_fuzzy_matching():
     with tempfile.TemporaryDirectory() as temp_dir:
-        st = strax.Context(storage=strax.DataDirectory(temp_dir),
+        st = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                       deep_scan=True),
                            register=[Records, Peaks])
 
         st.make(run_id=run_id, targets='peaks')
@@ -156,7 +159,8 @@ def test_storage_converter():
 
         with tempfile.TemporaryDirectory() as temp_dir_2:
             st = strax.Context(
-                storage=[strax.DataDirectory(temp_dir, readonly=True),
+                storage=[strax.DataDirectory(temp_dir,
+                                             readonly=True),
                          strax.DataDirectory(temp_dir_2)],
                 register=[Records, Peaks],
                 storage_converter=True)
@@ -290,7 +294,8 @@ def test_run_selection():
         dict(name='2', mode='nice', tags=[dict(name='interesting')])]
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        sf = strax.DataDirectory(path=temp_dir)
+        sf = strax.DataDirectory(path=temp_dir,
+                                 deep_scan=True, provide_run_metadata=True)
 
         # Write mock runs db
         for d in mock_rundb:
@@ -317,7 +322,9 @@ def test_run_defaults():
     mock_rundb = [{'name': '0', strax.RUN_DEFAULTS_KEY: dict(base_area=43)}]
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        sf = strax.DataDirectory(path=temp_dir)
+        sf = strax.DataDirectory(path=temp_dir,
+                                 deep_scan=True,
+                                 provide_run_metadata=True)
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
         st = strax.Context(storage=sf, register=[Records, Peaks],
@@ -358,7 +365,9 @@ def test_superrun():
 
     with tempfile.TemporaryDirectory() as temp_dir:
         # Test run definition
-        sf = strax.DataDirectory(path=temp_dir)
+        sf = strax.DataDirectory(path=temp_dir,
+                                 provide_run_metadata=True,
+                                 deep_scan=True)
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
 
