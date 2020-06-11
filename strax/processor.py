@@ -168,7 +168,7 @@ class ThreadedMailboxProcessor:
             for s_i, saver in enumerate(savers):
                 if d in dtypes_built:
                     can_drive = not lazy
-                    rechunk = (dtypes_built[d].rechunk_on_save
+                    rechunk = (dtypes_built[d].can_rechunk(d)
                                and allow_rechunk)
                 else:
                     # This is storage conversion mode
