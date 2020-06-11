@@ -240,7 +240,7 @@ class Context:
             self._plugin_class_registry[p] = plugin_class
 
         already_seen = []
-        for provides, plugin in self._plugin_class_registry.values():
+        for plugin in self._plugin_class_registry.values():
 
             if plugin in already_seen:
                 continue
