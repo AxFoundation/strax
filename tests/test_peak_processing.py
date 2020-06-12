@@ -1,4 +1,4 @@
-from strax.testutils import fake_hits, several_fake_records
+from strax.testutils import fake_hits, several_fake_records, single_fake_pulse
 
 import numpy as np
 from hypothesis import given, settings
@@ -84,3 +84,49 @@ def test_sum_waveform(records, peak_left, peak_length):
 
     assert len(sum_wv) == peak_length
     assert np.all(p['data'][:peak_length] == sum_wv)
+
+
+@given(strax.testutils.single_fake_pulse,
+       st.integers(min_value=2, max_value=7),
+      )
+@settings(deadline=None)
+def test_peak_saturation_correction(record, n_ch):
+    # cov_window will be the largest possible value of the pulses
+    threshold = 3
+    cov_window = min(5, record[0]['length'])
+
+    peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200))
+    p = peaks[0]
+    p['time'] = record[0]['time']
+    p['length'] = record[0]['length'] // 4 + 1
+    p['dt'] = record[0]['dt'] * 4
+
+    if record[0]['length'] > 1:
+        d = record['data'][0]
+        d = np.convolve(d, np.ones(cov_window), 'same')
+        d[0] = 1
+    else:
+        d = []
+
+    records = np.concatenate([record for i in range(n_ch)])
+    records['channel'] = np.arange(n_ch)
+    records['baseline'][0] = threshold
+    records['data'][0] = np.clip(d, 0, threshold)
+    for i in range(1, n_ch):
+        records['baseline'][i] = cov_window + 1
+        records['data'][i] = d
+
+    is_sautrated = max(records['data'][0], default=0) == threshold
+    p['saturated_channel'][0] = is_sautrated
+    p['n_saturated_channels'] = is_sautrated
+
+    saturated_peaks = peak_saturation_correction(records, peaks,
+        np.ones(n_ch),
+        reference_length=1,
+        min_reference_length=1)
+
+    assert len(saturated_peaks) == int(is_sautrated)
+    assert (records['data'][0] == records['data'][1]).all()
+
+    if is_sautrated:
+        assert peaks[0]['area'] == records['data'][1].sum() * n_ch
