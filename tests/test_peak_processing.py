@@ -120,7 +120,7 @@ def test_peak_saturation_correction(record, n_ch):
     p['saturated_channel'][0] = is_sautrated
     p['n_saturated_channels'] = is_sautrated
 
-    saturated_peaks = peak_saturation_correction(records, peaks,
+    saturated_peaks = strax.peak_saturation_correction(records, peaks,
         np.ones(n_ch),
         reference_length=1,
         min_reference_length=1)
