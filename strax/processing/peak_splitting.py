@@ -129,7 +129,7 @@ class PeakSplitter:
         yield offset
 
     @staticmethod
-    def find_split_points(w, *args_options):
+    def find_split_points(w, dt, peak_i, *args_options):
         raise NotImplementedError
 
 
