@@ -147,7 +147,7 @@ class PeakSplitter:
         yield offset
 
     @staticmethod
-    def find_split_points(w, *args_options):
+    def find_split_points(w, dt, peak_i, *args_options):
         """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
         bare PeakSplitter class is not implemented"""
         raise NotImplementedError
