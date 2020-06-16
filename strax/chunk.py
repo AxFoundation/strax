@@ -4,7 +4,6 @@ import numpy as np
 import numba
 
 import strax
-
 export, __all__ = strax.exporter()
 
 
