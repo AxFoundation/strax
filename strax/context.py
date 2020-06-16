@@ -463,6 +463,13 @@ class Context:
                     allow_incomplete=self.context_config['allow_incomplete'])
 
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
+        """
+        Get partial loaders to allow loading data later
+        :param key: strax.DataKey
+        :param time_range: time range wherein to look for matching chunks
+        :param chunk_number: number of the chunk for data specified by strax.DataKey
+        :return: partial object
+        """
         for sb_i, sf in enumerate(self.storage):
             try:
                 # Partial is clunky... but allows specifying executor later
@@ -1062,6 +1069,13 @@ class Context:
             raise
 
     def key_for(self, run_id, target):
+        """Get the DataKey for a given run and a given target plugin. The
+        DataKey is inferred from the plugin lineage.
+
+        :param run_id: run id to get
+        :param target: data type to get
+        :return: strax.DataKey of the target
+        """
         p = self._get_plugins((target,), run_id)[target]
         return strax.DataKey(run_id, target, p.lineage)
 
@@ -1141,6 +1155,7 @@ class Context:
         # with a temporary one
         # TODO duplicated code with with get_iter
         if len(kwargs):
+            # Comment below disables pycharm from inspecting the line below it
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
