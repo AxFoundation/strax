@@ -466,8 +466,10 @@ class Context:
         """
         Get partial loaders to allow loading data later
         :param key: strax.DataKey
-        :param time_range: time range wherein to look for matching chunks
-        :param chunk_number: number of the chunk for data specified by strax.DataKey
+        :param time_range: 2-length arraylike of (start, exclusive end) of row
+        numbers to get. Default is None, which means get the entire run.
+        :param chunk_number: number of the chunk for data specified by
+        strax.DataKey. This chunck is loaded exclusively.
         :return: partial object
         """
         for sb_i, sf in enumerate(self.storage):
