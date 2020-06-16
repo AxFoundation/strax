@@ -239,6 +239,39 @@ class Context:
         for p in plugin_class.provides:
             self._plugin_class_registry[p] = plugin_class
 
+        already_seen = []
+        for plugin in self._plugin_class_registry.values():
+
+            if plugin in already_seen:
+                continue
+            already_seen.append(plugin)
+
+            for option, items in plugin.takes_config.items():
+                try:
+                    # Looping over the options of the new plugin and check if
+                    # they can be found in the already registered plugins:
+                    for new_option, new_items in plugin_class.takes_config.items():
+                        if not new_option == option:
+                            continue
+                        default = items.get_default('0')  # Have to pass will be changed.
+                        new_default = new_items.get_default('0')
+                        if default == new_default:
+                            continue
+                        else:
+                            mes = (f'Two plugins have a different default value'
+                                   f' for the same option. The option'
+                                   f' "{new_option}" in "{plugin.__name__}" takes'
+                                   f' as a default "{default}"  while in'
+                                   f' "{plugin_class.__name__}" the default value'
+                                   f' is set to "{new_default}". Please change'
+                                   ' one of the defaults.'
+                                   )
+                            raise ValueError(mes)
+
+                except strax.InvalidConfiguration:
+                    # These are option which are inherited from context options.
+                    pass
+
         return plugin_class
 
     def search_field(self, pattern):
