@@ -15,7 +15,7 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='pea
     :param records: Records from which peaks were built
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
-    :param data_type: 'peaks' or 'hits'. Specifies whether to use  
+    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use  
         sum_wavefrom or get_hitlets_data to compute the waveform of
         the new split peaks/hitlets.
 
@@ -23,10 +23,13 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='pea
     """
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
-    data_and_area = dict(peaks=strax.sum_waveform, 
-                         hits=strax.get_hitlets_data
-                        )[data_type]
-    return splitter(peaks, records, to_pe, data_and_area, **kwargs)
+    
+    if data_type=='hitlets':
+        # This is only needed once.
+        _, next_ri = strax.record_links(records)
+    else:
+        next_ri = None
+    return splitter(peaks, records, to_pe, data_type, next_ri, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -35,7 +38,7 @@ NO_MORE_SPLITS = -9999999
 class PeakSplitter:
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, data_and_area,
+    def __call__(self, peaks, records, to_pe, data_type, next_ri,
                  do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
@@ -72,11 +75,17 @@ class PeakSplitter:
 
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
-            data_and_area(new_peaks, records, to_pe)
+            if data_type == 'peaks':
+                strax.sum_waveform(new_peaks, records, to_pe)
+            elif data_type == 'hitlets':
+                strax._update_new_hitlets(new_peaks, records, next_ri, to_pe)
+            else:
+                raise ValueError(f'Data_type "{data_type}" is not supported.') 
+                
             strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe, data_and_area,
+            new_peaks = self(new_peaks, records, to_pe, data_type, next_ri,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
