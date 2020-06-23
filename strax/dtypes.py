@@ -109,8 +109,7 @@ def hitlet_dtype(n_widths=11, n_sample=0):
     objects.
 
     Note:
-        The hitlet_dtype comes without data field. This field must be
-        add if e.g. strax.get_hitlet_data shall be used.
+        If n_samples is set to zero returns an array without "data"-field.
     """
     hitlet_dtype = interval_dtype + [
         (('Original length of the hit interval in samples',
