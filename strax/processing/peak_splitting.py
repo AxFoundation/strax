@@ -36,6 +36,20 @@ NO_MORE_SPLITS = -9999999
 
 
 class PeakSplitter:
+    """Split peaks into more peaks based on arbitrary algorithm.
+    :param peaks: Original peaks. Sum waveform must have been built
+    and properties must have been computed (if you use them).
+    :param records: Records from which peaks were built.
+    :param to_pe: ADC to PE conversion factor array (of n_channels).
+    :param do_iterations: maximum number of times peaks are recursively split.
+    :param min_area: Minimum area to do split. Smaller peaks are not split.
+
+    The function find_split_points(), implemented in each subclass
+    defines the algorithm, which takes in a peak's waveform and
+    returns the index to split the peak at, if a split point is
+    found. Otherwise NO_MORE_SPLITS is returned and the peak is
+    left as is.
+    """
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe, data_type, next_ri,
@@ -63,7 +77,7 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        new_peaks = self.split_peaks(
+        new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
             peaks=peaks,
@@ -96,9 +110,12 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                    args_options,
-                    _result_buffer=None, result_dtype=None):
+    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+                     args_options,
+                     _result_buffer=None, result_dtype=None):
+        """Loop over peaks, pass waveforms to algorithm, construct
+        new peaks if and where a split occurs.
+        """
         # TODO NEEDS TESTS!
         new_peaks = _result_buffer
         offset = 0
@@ -145,7 +162,9 @@ class PeakSplitter:
         yield offset
 
     @staticmethod
-    def find_split_points(w, *args_options):
+    def find_split_points(w, dt, peak_i, *args_options):
+        """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
+        bare PeakSplitter class is not implemented"""
         raise NotImplementedError
 
 
@@ -211,9 +230,9 @@ class NaturalBreaksSplitter(PeakSplitter):
        1 - (f(left) + f(right))/f(unsplit)
      - normalize: if True, f is the variance. Otherwise, it is the
        sum squared difference from the mean (i.e. unnormalized variance)
-     - split_low: if True, multiply the goodness of split value by the ratio
-       between the waveform at the split point and the maximum in the waveform.
-       This prevent splits at high density points.
+     - split_low: if True, multiply the goodness of split value by one minus
+       the ratio between the waveform at the split point and the maximum in
+       the waveform. This prevent splits at high density points.
      - filter_wing_width: if > 0, do a moving average filter (without shift)
        on the waveform before the split_low computation.
        The window will include the sample itself, plus filter_wing_width (or as

@@ -1,3 +1,14 @@
+0.11.1 / 2020-04-28
+---------------------
+- Per-datatype rechunking control (#272)
+- Check defaults are consistent across plugins (#271)
+- Documentation / comment updates (#269, #268)
+- Peak splitter test (#267)
+- Fix bug in pulse_processing when not flipping waveforms (#266)
+- Fix lineage hash caching (#263)
+- Flexible run start time estimation (905335)
+
+
 0.11.0 / 2020-04-28
 ---------------------
 - `accumulate` method for basic out-of-core processing (#253)
