@@ -63,7 +63,7 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        new_peaks = self.split_peaks(
+        new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
             peaks=peaks,
@@ -80,8 +80,8 @@ class PeakSplitter:
             elif data_type == 'hitlets':
                 strax._update_new_hitlets(new_peaks, records, next_ri, to_pe)
             else:
-                raise ValueError(f'Data_type "{data_type}" is not supported.') 
-                
+                raise ValueError(f'Data_type "{data_type}" is not supported.')
+
             strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
@@ -96,7 +96,7 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
                     data_type, args_options,
                     _result_buffer=None, result_dtype=None):
         # TODO NEEDS TESTS!
