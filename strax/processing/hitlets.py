@@ -108,6 +108,7 @@ def _concat_overlapping_hits(hits,
     yield offset
 
 
+@export
 @numba.njit(nogil=True, cache=True)
 def refresh_hit_to_hitlets(hits, hitlets):
     """
