@@ -11,7 +11,7 @@ export, __all__ = strax.exporter()
 # ----------------------
 # Hitlet building:
 # ----------------------
-@export       
+@export
 def concat_overlapping_hits(hits, extensions, pmt_channels):
     """
     Function which concatenates hits which may overlap after left and 
@@ -31,8 +31,8 @@ def concat_overlapping_hits(hits, extensions, pmt_channels):
 
     # Buffer for concat_overlapping_hits, if specified in 
     # _concat_overlapping_hits numba crashes.
-    last_hit_in_channel = np.zeros(nchannels, 
-                                   dtype=(hit_dtype 
+    last_hit_in_channel = np.zeros(nchannels,
+                                   dtype=(hit_dtype
                                           + [(('End time of the interval (ns since unix epoch)',
                                                'endtime'), np.int64)]))
     hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel)
@@ -42,20 +42,20 @@ def concat_overlapping_hits(hits, extensions, pmt_channels):
 @utils.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.njit(nogil=True, cache=True)
 def _concat_overlapping_hits(hits,
-                            extensions,
-                            first_channel,
-                            last_hit_in_channel,
-                            _result_buffer=None):
+                             extensions,
+                             first_channel,
+                             last_hit_in_channel,
+                             _result_buffer=None):
     buffer = _result_buffer
     offset = 0
 
     le, re = extensions
-    dt = hits['dt'] [0]
+    dt = hits['dt'][0]
     assert np.all(hits['dt'] == dt), 'All hits must have the same dt!'
-    
+
     for h in hits:
         st = h['time'] - int(le * h['dt'])
-        et = h['time'] + int((h['length'] + re) * h['dt'])
+        et = strax.endtime(h)
         hc = h['channel']
         r_i = h['record_i']
 
@@ -106,12 +106,29 @@ def _concat_overlapping_hits(hits,
             yield offset
             offset = 0
     yield offset
-    
-    
+
+
+@numba.njit(nogil=True, cache=True)
+def refresh_hit_to_hitlets(hits, hitlets):
+    """
+    Function which copies basic hit information into a new hitlet array.
+    """
+    for ind in range(len(hits)):
+        h_new = hitlets[ind]
+        h_old = hits[ind]
+
+        h_new['time'] = h_old['time']
+        h_new['length'] = h_old['length']
+        h_new['channel'] = h_old['channel']
+        h_new['area'] = h_old['area']
+        h_new['record_i'] = h_old['record_i']
+        h_new['dt'] = h_old['dt']
+
+
 @export
 @numba.njit(nogil=True, cache=True)
 def get_hitlets_data(hitlets, records, to_pe):
-    '''
+    """
     Function which searches for every hitlet in a given chunk the 
     corresponding records data.
     
@@ -126,44 +143,43 @@ def get_hitlets_data(hitlets, records, to_pe):
     The function updates the hitlet fields time, length (if necessary 
     e.g. hit was extended in regions of now records) and area
     according to the found data.
-    '''
+    """
     # TODO: Add check for requirements of hitlets.
-    
+
     rlink = strax.record_links(records)
     for h in hitlets:
         data, start_time = _get_hitlet_data(h, records, *rlink)
         h['length'] = len(data)
-        h['data'][:len(data)] = data * to_pe[h['channel']]  
-        h['time'] = start_time                              
-        h['area'] = np.sum(data * to_pe[h['channel']])      
-            
-        
+        h['data'][:len(data)] = data * to_pe[h['channel']]
+        h['time'] = start_time
+        h['area'] = np.sum(data * to_pe[h['channel']])
+
+
 @numba.njit(nogil=True, cache=True)
 def _get_hitlet_data(hitlet, records, prev_r, next_r):
     temp_data = np.zeros(hitlet['length'], dtype=np.float64)
-    
+
     # Lets get the starting record and the corresponding data:
     r_i = hitlet['record_i']
     r = records[r_i]
     data, (p_start_i, p_end_i) = _get_thing_data(hitlet, r)
     temp_data[p_start_i:p_end_i] = data
-    
+
     # We have to store the first and last index of the so far found data 
     data_start = p_start_i
     data_end = p_end_i
-    
+
     if not (p_end_i - p_start_i == hitlet['length']):
         # We have not found the entire data yet....
         # Starting with data before our current record:
         trial_counter = 0
         prev_r_i = r_i
-        while  p_start_i:
+        while p_start_i:
             # We are still searching for data in a previous record.
-            temp_prev_r_i = prev_r[prev_r_i] 
+            temp_prev_r_i = prev_r[prev_r_i]
             if temp_prev_r_i == -1:
                 # There is no (more) previous record. So stop here and keep
                 # last pre_r_i
-                p_start_i = 0
                 break
             prev_r_i = temp_prev_r_i
 
@@ -172,23 +188,22 @@ def _get_hitlet_data(hitlet, records, prev_r, next_r):
             data, (p_start_i, end) = _get_thing_data(hitlet, r)
             if not end:
                 raise ValueError('This is odd found previous record, but no'
-                                 ' overlapping indicies.')
+                                 ' overlapping indices.')
             temp_data[p_start_i:data_start] = data
             data_start = p_start_i
 
             if trial_counter > 100:
                 raise RuntimeError('Tried too hard. There are more than'
                                    '100 successive records. This is odd...')
-            trial_counter +=1
-
+            trial_counter += 1
 
         # Now we have to do the very same for records in the future:
         # Almost the same code as above sorry...
         trial_counter = 0
         next_r_i = r_i
-        while  hitlet['length'] - p_end_i:
+        while hitlet['length'] - p_end_i:
             # We are still searching for data in a next record.
-            temp_next_r_i = next_r[next_r_i] 
+            temp_next_r_i = next_r[next_r_i]
             if temp_next_r_i == -1:
                 # There is no (more) previous record. So stop here and keep
                 # last next_r_i
@@ -206,29 +221,28 @@ def _get_hitlet_data(hitlet, records, prev_r, next_r):
             if trial_counter > 100:
                 raise RuntimeError('Tried too hard. There are more than'
                                    '100 successive records. This is odd...')
-            trial_counter +=1
-    
-  
-    # In some cases it might have happend that due to the left and right hit extension
+            trial_counter += 1
+
+    # In some cases it might have happened that due to the left and right hit extension
     # we extended our hitlet into regions without any data so we have to chop
-    # "time" acoording to the data we found....
+    # "time" according to the data we found....
     time = hitlet['time'] + data_start * hitlet['dt']
-    temp_data = temp_data[data_start:data_end] + r['baseline']%1
+    temp_data = temp_data[data_start:data_end] + r['baseline'] % 1
     return temp_data, time
-            
-        
-@numba.njit(nogil=True, cache=True)      
+
+
+@numba.njit(nogil=True, cache=True)
 def _get_thing_data(thing, container):
-    '''
-    Function which returns data for some overlapping indicies of a thing 
+    """
+    Function which returns data for some overlapping indices of a thing
     in a container. 
     
     Note:
         Thing must be of the interval dtype kind.
-    '''
-    overlap_hit_i, overlap_record_i = strax.overlap_indices(thing['time']//thing['dt'], 
-                                                            thing['length'], 
-                                                            container['time']//container['dt'], 
+    """
+    overlap_hit_i, overlap_record_i = strax.overlap_indices(thing['time']//thing['dt'],
+                                                            thing['length'],
+                                                            container['time']//container['dt'],
                                                             container['length'])
     data = container['data'][overlap_record_i[0]:overlap_record_i[1]]
     return data, overlap_hit_i
@@ -236,8 +250,7 @@ def _get_thing_data(thing, container):
 # ----------------------
 # Hitlet splitting:
 # ----------------------
-
-@export   # <-- Required in peak_splitting but not by the user 
+@export   # <-- Required in peak_splitting but not by the user
 def _update_new_hitlets(hitlets, records, next_ri, to_pe):
     """
     Function which computes the hitlet data area and record_i after 
@@ -245,6 +258,7 @@ def _update_new_hitlets(hitlets, records, next_ri, to_pe):
     """
     _update_record_i(hitlets, records, next_ri)
     get_hitlets_data(hitlets, records, to_pe)
+
 
 @numba.njit(cache=True, nogil=True)
 def _update_record_i(new_hitlets, records, next_ri):
@@ -255,7 +269,7 @@ def _update_record_i(new_hitlets, records, next_ri):
         Assumes new_hitlets to be sorted in time.
     """
     for ind, hit in enumerate(new_hitlets):
-        
+
         updated = False
         counter = 0
         last_ri = 0
@@ -264,26 +278,26 @@ def _update_record_i(new_hitlets, records, next_ri):
             if current_ri == -1:
                 print(ind, last_ri)
                 raise ValueError('Was not able to find record_i')
-            
+
             if counter > 100:
                 print(ind, last_ri)
                 raise RuntimeError('Tried too often to find correct record_i.')
-            
+
             r = records[current_ri]
             # Hitlet must only partially be contained in record_i:
             time = hit['time']
             end_time = strax.endtime(hit)
-            start_in = (r['time'] <= time) & (time  < strax.endtime(r))
-            end_in = (r['time'] < end_time) & (end_time  <= strax.endtime(r))
+            start_in = (r['time'] <= time) & (time < strax.endtime(r))
+            end_in = (r['time'] < end_time) & (end_time <= strax.endtime(r))
             if start_in or end_in:
                 hit['record_i'] = current_ri
                 updated = True
-            else: 
+            else:
                 last_ri = current_ri
                 current_ri = next_ri[current_ri]
-                counter +=1
-                
-                
+                counter += 1
+
+
 # ----------------------
 # Hitlet properties:
 # ----------------------
@@ -296,8 +310,6 @@ def get_fwxm(data, index_maximum, percentage=0.5):
     Args:
         data (np.array): Data of the pulse.
         index_maximum (ind): Position of the maximum.
-
-    Keyword Args:
         percentage (float): Level for which the width shall be computed.
 
     Notes:
@@ -340,6 +352,7 @@ def get_fwxm(data, index_maximum, percentage=0.5):
         right_edge = rbi - (max_val - data[rbi - 1]) / m
 
     return left_edge, right_edge
+
 
 @export
 @numba.njit(cache=True, nogil=True)

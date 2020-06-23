@@ -110,12 +110,9 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                     args_options,
-                     _result_buffer=None, result_dtype=None):
-        """Loop over peaks, pass waveforms to algorithm, construct
-        new peaks if and where a split occurs.
-        """
+    def split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+                    data_type, args_options,
+                    _result_buffer=None, result_dtype=None):
         # TODO NEEDS TESTS!
         new_peaks = _result_buffer
         offset = 0
@@ -129,10 +126,18 @@ class PeakSplitter:
 
             for split_i, bonus_output in split_finder(
                     w, p['dt'], p_i, *args_options):
-                if split_i == NO_MORE_SPLITS:
-                    p['max_goodness_of_split'] = bonus_output
-                    # although the iteration will end anyway afterwards:
-                    continue
+
+                # Data_kind specific fields:
+                if data_type == 'peaks':
+                    if split_i == NO_MORE_SPLITS:
+                        p['max_goodness_of_split'] = bonus_output
+                        # although the iteration will end anyway afterwards:
+                        continue
+                    r['max_gap'] = -1  # Too lazy to compute this
+                elif data_type == 'hitlets':
+                    r['record_i'] = p['record_i']
+                else:
+                    raise ValueError(f'Data_type "{data_type}" is not supported.')
 
                 is_split[p_i] = True
                 r = new_peaks[offset]
@@ -142,10 +147,7 @@ class PeakSplitter:
                 # this may change when the sum waveform of the new peak
                 # is computed
                 r['dt'] = orig_dt
-                r['record_i'] = p['record_i'] #TODO change this line since not needed by peaks
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-
-                r['max_gap'] = -1    # Too lazy to compute this
 
                 if r['length'] <= 0:
                     print(p['data'])

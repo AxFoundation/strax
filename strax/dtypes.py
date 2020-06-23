@@ -8,7 +8,7 @@ import numpy as np
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields hitlet_dtype temp_hitlet_dtype').split()
+           'time_fields time_dt_fields hitlet_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -103,44 +103,46 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def hitlet_dtype(n_widths=11):
-    '''
-    Hitlet dtype same as peaklet or peak dtype but 
-    for hit-kind of objects.
-    '''
-    return interval_dtype + [
-        (('Total hit area', 
+def hitlet_dtype(n_widths=11, n_sample=0):
+    """
+    Hitlet dtype same as peaklet or peak dtype but for hit-kind of
+    objects.
+
+    Note:
+        If n_samples is set to zero returns an array without "data"-field.
+    """
+    hitlet_dtype = interval_dtype + [
+        (('Original length of the hit interval in samples',
+          'hit_length'), np.int32),
+        (('Total hit area',
           'area'), np.float32),
-        (('Maximum of the PMT pulse in pe/sample', 
-          'height'), np.float32),
-        (('Position of the maximum in (sample)', 'amp_time'), 
-         np.int16),
-        (('Peak widths in range of central area fraction [ns]', 
+        (('Maximum of the PMT pulse in pe/sample',
+          'amplitude'), np.float32),
+        (('Position of the Amplitude in ns (minus "time")',
+          'time_amplitude'), np.float32),
+        (('Hit entropy',
+          'entropy'), np.float32),
+        (('Peak widths in range of central area fraction [ns]',
           'width'), np.float32, n_widths),
-        (('Peak widths: time between nth and 5th area decile [ns]', 
+        (('Peak widths: time between nth and 5th area decile [ns]',
           'area_decile_from_midpoint'), np.float32, n_widths),
-        (('FWHM of the PMT pulse in ns', 
+        (('FWHM of the PMT pulse in ns',
           'fwhm'), np.float32),
-        (('Left edge of the FWHM in ns (minus time)', 
+        (('Left edge of the FWHM in ns (minus "time")',
           'left'), np.float32),
-        (('FWTM of the PMT pulse in ns', 'fwtm'), 
+        (('FWTM of the PMT pulse in ns', 'fwtm'),
          np.float32),
-        (('Left edge of the FWTM in ns (minus time)', 
+        (('Left edge of the FWTM in ns (minus "time")',
           'low_left'), np.float32),
         (('Fragment index in which hit was found (hitlets can be in more than 1 fragment)',
-          'record_i'), np.int32),
-]
+          'record_i'), np.int32)]
 
-def temp_hitlet_dtype(nsample, n_widths=11):
-    '''
-    Internal temporary hitlet dtype which also stores the waveform in pe per sample
-    as well as other parameters required for split_peaks.
-    '''
-    return hitlet_dtype(n_widths) + [
-            (('Maximum interior goodness of split', 'max_goodness_of_split'), np.float32),
-            (('Largest gap between hits inside peak [ns]', 'max_gap'), np.int32), 
-            (('Internal (temporary) hit data in PE/sample with ZLE (only the first length sample are filled)',
-              'data'), np.float32, nsample)]
+    if n_sample:
+        return hitlet_dtype + [
+            (('Hitlet data in PE/sample with ZLE (only the first length sample are filled)',
+              'data'), np.float32, n_sample)]
+    else:
+        return hitlet_dtype
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
