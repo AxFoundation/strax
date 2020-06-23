@@ -8,7 +8,7 @@ import numpy as np
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields hitlet_dtype temp_hitlet_dtype').split()
+           'time_fields time_dt_fields hitlet_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
