@@ -108,6 +108,23 @@ def _concat_overlapping_hits(hits,
     yield offset
 
 
+@numba.njit(nogil=True, cache=True)
+def refresh_hit_to_hitlets(hits, hitlets):
+    """
+    Function which copies basic hit information into a new hitlet array.
+    """
+    for ind in range(len(hits)):
+        h_new = hitlets[ind]
+        h_old = hits[ind]
+
+        h_new['time'] = h_old['time']
+        h_new['length'] = h_old['length']
+        h_new['channel'] = h_old['channel']
+        h_new['area'] = h_old['area']
+        h_new['record_i'] = h_old['record_i']
+        h_new['dt'] = h_old['dt']
+
+
 @export
 @numba.njit(nogil=True, cache=True)
 def get_hitlets_data(hitlets, records, to_pe):
