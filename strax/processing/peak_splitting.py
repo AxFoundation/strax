@@ -81,21 +81,21 @@ class PeakSplitter:
 
         # data_kind specific_outputs:
         if data_type == 'peaks':
-            def specific_output(p, r, split_i, bonus_output):
+            @numba.njit
+            def specific_output(r, p, split_i, bonus_output):
                 if split_i == NO_MORE_SPLITS:
                     p['max_goodness_of_split'] = bonus_output
                     # although the iteration will end anyway afterwards:
-                    return
                 r['max_gap'] = -1  # Too lazy to compute this
 
         elif data_type == 'hitlets':
-            def specific_output(p, r, split_i, bonus_output):
+            @numba.njit
+            def specific_output(r, p, split_i, bonus_output):
                 if split_i == NO_MORE_SPLITS:
                     return
                 r['record_i'] = p['record_i']
         else:
             raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
-
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
@@ -106,7 +106,7 @@ class PeakSplitter:
             args_options=tuple(args_options),
             specific_output=specific_output,
             result_dtype=peaks.dtype)
-
+        
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
@@ -143,10 +143,13 @@ class PeakSplitter:
 
             prev_split_i = 0
             w = p['data'][:p['length']]
-
             for split_i, bonus_output in split_finder(
                     w, p['dt'], p_i, *args_options):
-
+                
+                # This is a bit odd here. Due tp the specific_outputs we have to get r 
+                # although we may not need it at all, but I do not see any nice way around
+                # this.
+                r = new_peaks[offset]
                 specific_output(r, p, split_i, bonus_output)
                 if split_i == NO_MORE_SPLITS:
                     # No idea if this if-statement can be integrated into
@@ -154,7 +157,6 @@ class PeakSplitter:
                     continue
 
                 is_split[p_i] = True
-                r = new_peaks[offset]
                 r['time'] = p['time'] + prev_split_i * p['dt']
                 r['channel'] = p['channel']
                 # Set the dt to the original (lowest) dt first;
