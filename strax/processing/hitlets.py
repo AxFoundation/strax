@@ -55,7 +55,7 @@ def _concat_overlapping_hits(hits,
 
     for h in hits:
         st = h['time'] - int(le * h['dt'])
-        et = strax.endtime(h)
+        et = strax.endtime(h) + int(re * h['dt'])
         hc = h['channel']
         r_i = h['record_i']
 
@@ -276,14 +276,6 @@ def _update_record_i(new_hitlets, records, next_ri):
         last_ri = 0
         current_ri = hit['record_i']
         while not updated:
-            if current_ri == -1:
-                print(ind, last_ri)
-                raise ValueError('Was not able to find record_i')
-
-            if counter > 100:
-                print(ind, last_ri)
-                raise RuntimeError('Tried too often to find correct record_i.')
-
             r = records[current_ri]
             # Hitlet must only partially be contained in record_i:
             time = hit['time']
@@ -293,10 +285,19 @@ def _update_record_i(new_hitlets, records, next_ri):
             if start_in or end_in:
                 hit['record_i'] = current_ri
                 updated = True
+                break
             else:
                 last_ri = current_ri
                 current_ri = next_ri[current_ri]
                 counter += 1
+                
+            if current_ri == -1:
+                print('Record:\n', r, '\nHit:\n', hit)
+                raise ValueError('Was not able to find record_i')
+
+            if counter > 100:
+                print(ind, last_ri)
+                raise RuntimeError('Tried too often to find correct record_i.')
 
 
 # ----------------------
