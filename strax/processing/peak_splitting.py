@@ -27,8 +27,10 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='pea
     if data_type=='hitlets':
         # This is only needed once.
         _, next_ri = strax.record_links(records)
-    else:
+    elif data_type=='peaks':
         next_ri = None
+    else:
+        raise TypeError(f'Data_type "{data_type}" is not supported.')
     return splitter(peaks, records, to_pe, data_type, next_ri, **kwargs)
 
 
@@ -77,6 +79,23 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
+        # data_kind specific_outputs:
+        if data_type == 'peaks':
+            def specific_output(p, r, split_i, bonus_output):
+                if split_i == NO_MORE_SPLITS:
+                    p['max_goodness_of_split'] = bonus_output
+                    # although the iteration will end anyway afterwards:
+                    return
+                r['max_gap'] = -1  # Too lazy to compute this
+
+        elif data_type == 'hitlets':
+            def specific_output(p, r, split_i, bonus_output):
+                if split_i == NO_MORE_SPLITS:
+                    return
+                r['record_i'] = p['record_i']
+        else:
+            raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
+
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
@@ -85,6 +104,7 @@ class PeakSplitter:
             orig_dt=records[0]['dt'],
             min_area=min_area,
             args_options=tuple(args_options),
+            specific_output=specific_output,
             result_dtype=peaks.dtype)
 
         if is_split.sum() != 0:
@@ -111,7 +131,7 @@ class PeakSplitter:
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
     def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                    data_type, args_options,
+                    specific_output, args_options,
                     _result_buffer=None, result_dtype=None):
         # TODO NEEDS TESTS!
         new_peaks = _result_buffer
@@ -127,17 +147,11 @@ class PeakSplitter:
             for split_i, bonus_output in split_finder(
                     w, p['dt'], p_i, *args_options):
 
-                # Data_kind specific fields:
-                if data_type == 'peaks':
-                    if split_i == NO_MORE_SPLITS:
-                        p['max_goodness_of_split'] = bonus_output
-                        # although the iteration will end anyway afterwards:
-                        continue
-                    r['max_gap'] = -1  # Too lazy to compute this
-                elif data_type == 'hitlets':
-                    r['record_i'] = p['record_i']
-                else:
-                    raise ValueError(f'Data_type "{data_type}" is not supported.')
+                specific_output(r, p, split_i, bonus_output)
+                if split_i == NO_MORE_SPLITS:
+                    # No idea if this if-statement can be integrated into
+                    # specific return
+                    continue
 
                 is_split[p_i] = True
                 r = new_peaks[offset]
