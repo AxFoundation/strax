@@ -133,6 +133,9 @@ class PeakSplitter:
     def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
                     specific_output, args_options,
                     _result_buffer=None, result_dtype=None):
+        """Loop over peaks, pass waveforms to algorithm, construct
+        new peaks if and where a split occurs.
+        """
         # TODO NEEDS TESTS!
         new_peaks = _result_buffer
         offset = 0

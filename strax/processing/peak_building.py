@@ -350,5 +350,3 @@ def integrate_lone_hits(
         h['area'] = (
                 r['data'][start:end].sum()
                 + (r['baseline'] % 1) * (end - start))
-        
-    
