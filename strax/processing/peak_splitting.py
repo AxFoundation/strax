@@ -24,10 +24,10 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='pea
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
     
-    if data_type=='hitlets':
+    if data_type == 'hitlets':
         # This is only needed once.
         _, next_ri = strax.record_links(records)
-    elif data_type=='peaks':
+    elif data_type == 'peaks':
         next_ri = None
     else:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
@@ -131,8 +131,8 @@ class PeakSplitter:
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
     def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                    specific_output, args_options,
-                    _result_buffer=None, result_dtype=None):
+                     specific_output, args_options,
+                     _result_buffer=None, result_dtype=None):
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
