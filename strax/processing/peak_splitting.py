@@ -43,6 +43,11 @@ class PeakSplitter:
     and properties must have been computed (if you use them).
     :param records: Records from which peaks were built.
     :param to_pe: ADC to PE conversion factor array (of n_channels).
+    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
+        sum_waveform or get_hitlets_data to compute the waveform of the
+        new split peaks/hitlets.
+    :param next_ri: Index of next record for current record record_i.
+        None if not needed.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
 
@@ -54,7 +59,7 @@ class PeakSplitter:
     """
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, data_type, next_ri,
+    def __call__(self, peaks, records, to_pe, data_type, next_ri=None,
                  do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
