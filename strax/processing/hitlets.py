@@ -251,11 +251,16 @@ def _get_thing_data(thing, container):
 # ----------------------
 # Hitlet splitting:
 # ----------------------
-@export   # <-- Required in peak_splitting but not by the user
-def _update_new_hitlets(hitlets, records, next_ri, to_pe):
+@export
+def update_new_hitlets(hitlets, records, next_ri, to_pe):
     """
-    Function which computes the hitlet data area and record_i after 
+    Function which computes the hitlet data area and record_i after
     splitting.
+
+    :param hitlets: New hitlets received after splitting.
+    :param records: Records of the chunk.
+    :param next_ri: Index of next record for current record record_i.
+    :param  to_pe: ADC to PE conversion factor array (of n_channels).
     """
     _update_record_i(hitlets, records, next_ri)
     get_hitlets_data(hitlets, records, to_pe)
@@ -273,7 +278,6 @@ def _update_record_i(new_hitlets, records, next_ri):
 
         updated = False
         counter = 0
-        last_ri = 0
         current_ri = hit['record_i']
         while not updated:
             r = records[current_ri]
@@ -284,7 +288,6 @@ def _update_record_i(new_hitlets, records, next_ri):
             end_in = (r['time'] < end_time) & (end_time <= strax.endtime(r))
             if start_in or end_in:
                 hit['record_i'] = current_ri
-                updated = True
                 break
             else:
                 last_ri = current_ri

@@ -117,7 +117,7 @@ class PeakSplitter:
             if data_type == 'peaks':
                 strax.sum_waveform(new_peaks, records, to_pe)
             elif data_type == 'hitlets':
-                strax._update_new_hitlets(new_peaks, records, next_ri, to_pe)
+                strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
             else:
                 raise ValueError(f'Data_type "{data_type}" is not supported.')
 
