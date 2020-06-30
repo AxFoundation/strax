@@ -7,6 +7,7 @@ import random
 import string
 import typing as ty
 import warnings
+from tqdm.notebook import tqdm
 
 import numexpr
 import numpy as np
@@ -809,18 +810,34 @@ class Context:
                 timeout=self.context_config['timeout']).iter()
 
         try:
-            for result in strax.continuity_check(generator):
-                seen_a_chunk = True
-                if not isinstance(result, strax.Chunk):
-                    raise ValueError(f"Got type {type(result)} rather than "
-                                     f"a strax Chunk from the processor!")
-                result.data = self.apply_selection(
-                    result.data, 
-                selection_str=selection_str,
-                keep_columns=keep_columns,
-                time_range=time_range,
-                time_selection=time_selection)
-                yield result
+            if time_range:
+                # user sepecified a time selection
+                start_time, end_time = time_range
+            else:
+                # If no selection is specified we have to get the last end_time:
+                start_time = 0 
+                end_time = float('inf')
+                for t in strax.to_str_tuple(targets):
+                    chunks = self.get_meta(run_id, t)['chunks']  
+                    start_time = max(start_time, chunks[0]['start'])
+                    end_time = min(end_time, chunks[-1]['end'])
+                    
+            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}]"
+            with tqdm(total=100, bar_format=bar_format) as pbar:
+                for result in strax.continuity_check(generator):
+                    seen_a_chunk = True
+                    if not isinstance(result, strax.Chunk):
+                        raise ValueError(f"Got type {type(result)} rather than "
+                                         f"a strax Chunk from the processor!")
+                    result.data = self.apply_selection(
+                        result.data, 
+                    selection_str=selection_str,
+                    keep_columns=keep_columns,
+                    time_range=time_range,
+                    time_selection=time_selection)
+                    pbar.n = (result.end - start_time)/(end_time - start_time)*100
+                    pbar.update(0)
+                    yield result
 
         except GeneratorExit:
             generator.throw(OutsideException(
