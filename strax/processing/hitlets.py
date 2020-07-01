@@ -306,77 +306,7 @@ def _update_record_i(new_hitlets, records, next_ri):
 # ----------------------
 # Hitlet properties:
 # ----------------------
-NO_FWXM = -42
-
 @export
-@numba.njit(cache=True, nogil=True)
-def get_fwxm(data, index_maximum, fraction=0.5):
-    """
-    Estimates the left and right edge of a specific height percentage.
-
-    Args:
-        data (np.array): Data of the pulse.
-        index_maximum (ind): Position of the maximum.
-        fraction (float): Level for which the width shall be computed.
-
-    Notes:
-        The function searches for the last sample below and above the
-        specified height level on the left and right hand side of the
-        maximum. When the samples are found the width is estimated based
-        upon a linear interpolation between the respective samples. In
-        case, that the samples cannot be found for either one of the
-        sides the corresponding outer most bin edges are used: left 0;
-        right last sample + 1.
-
-    Returns:
-        float: left edge [sample]
-        float: right edge [sample]
-    """
-    max_val = data[index_maximum]
-    max_val = max_val * fraction
-
-    pre_max = data[:index_maximum]
-    post_max = data[1 + index_maximum:]
-
-    # First the left edge:
-    lbi, lbs = _get_fwxm_boundary(pre_max, max_val)  # coming from the left
-    if lbi == NO_FWXM:
-        # We have not found any sample below:
-        left_edge = 0.
-    else:
-        # We found a sample below so lets compute
-        # the left edge:
-        m = data[lbi + 1] - lbs  # divided by 1 sample
-        left_edge = lbi + (max_val - lbs) / m
-
-        # Now the right edge:
-    rbi, rbs = _get_fwxm_boundary(post_max[::-1], max_val)  # coming from the right
-    if rbi == NO_FWXM:
-        right_edge = len(data)
-    else:
-        rbi = len(data) - rbi
-        m = data[rbi - 2] - rbs
-        right_edge = rbi - (max_val - data[rbi - 1]) / m
-
-    return left_edge, right_edge
-
-
-@export
-@numba.njit(cache=True, nogil=True)
-def _get_fwxm_boundary(data, max_val):
-    """
-    Returns sample position and height for the last sample which amplitude is below
-    the specified value
-    """
-    i = NO_FWXM
-    s = NO_FWXM
-    for ind, d in enumerate(data):
-        if d < max_val:
-            i = ind
-            s = d
-    return i, s
-
-
 @numba.njit(cache=True, nogil=True)
 def hitlet_properties(hitlets):
     """
@@ -409,3 +339,71 @@ def hitlet_properties(hitlets):
         h['left'] = left_edge
         h['low_left'] = left_edge_low
         h['fwtm'] = width_low
+
+
+NO_FWXM = -42
+@numba.njit(cache=True, nogil=True)
+def get_fwxm(data, index_maximum, percentage=0.5):
+    """
+    Estimates the left and right edge of a specific height percentage.
+
+    Args:
+        data (np.array): Data of the pulse.
+        index_maximum (ind): Position of the maximum.
+        percentage (float): Level for which the width shall be computed.
+
+    Notes:
+        The function searches for the last sample below and above the
+        specified height level on the left and right hand side of the
+        maximum. When the samples are found the width is estimated based
+        upon a linear interpolation between the respective samples. In
+        case, that the samples cannot be found for either one of the
+        sides the corresponding outer most bin edges are used: left 0;
+        right last sample + 1.
+
+    Returns:
+        float: left edge [sample]
+        float: right edge [sample]
+    """
+    max_val = data[index_maximum]
+    max_val = max_val * percentage
+
+    pre_max = data[:index_maximum]
+    post_max = data[1 + index_maximum:]
+
+    # First the left edge:
+    lbi, lbs = _get_fwxm_boundary(pre_max, max_val)  # coming from the left
+    if lbi == NO_FWXM:
+        # We have not found any sample below:
+        left_edge = 0.
+    else:
+        # We found a sample below so lets compute
+        # the left edge:
+        m = data[lbi + 1] - lbs  # divided by 1 sample
+        left_edge = lbi + (max_val - lbs) / m
+
+        # Now the right edge:
+    rbi, rbs = _get_fwxm_boundary(post_max[::-1], max_val)  # coming from the right
+    if rbi == NO_FWXM:
+        right_edge = len(data)
+    else:
+        rbi = len(data) - rbi
+        m = data[rbi - 2] - rbs
+        right_edge = rbi - (max_val - data[rbi - 1]) / m
+
+    return left_edge, right_edge
+
+
+@numba.njit(cache=True, nogil=True)
+def _get_fwxm_boundary(data, max_val):
+    """
+    Returns sample position and height for the last sample which amplitude is below
+    the specified value
+    """
+    i = NO_FWXM
+    s = NO_FWXM
+    for ind, d in enumerate(data):
+        if d < max_val:
+            i = ind
+            s = d
+    return i, s
