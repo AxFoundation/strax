@@ -114,7 +114,7 @@ def hitlet_dtype(n_widths=11, n_sample=0):
     dtype = interval_dtype + [
         (('Original length of the hit interval in samples',
           'hit_length'), np.int32),
-        (('Total hit area',
+        (('Total hit area in pe',
           'area'), np.float32),
         (('Maximum of the PMT pulse in pe/sample',
           'amplitude'), np.float32),
