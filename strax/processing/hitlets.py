@@ -407,3 +407,89 @@ def _get_fwxm_boundary(data, max_val):
             i = ind
             s = d
     return i, s
+
+
+def conditional_entropy(hitlets, template='flat', square_data=False):
+    """
+    Function which estimates the conditional entropy based on the
+    specified template.
+
+    In order to compute the conditional entropy each hitlet will be
+    aligned such that its maximum falls into the same sample. If the
+    maximum is ambiguous the first maximum is taken.
+
+    :param hitlets: Hitlets for which the entropy shall be computed.
+    :param template: Template to compare the data with. Can be either
+        specified as "flat" to use a flat distribution or as a numpy
+        array containing any normalized template.
+    :param square_data: If true data will be squared and normalized
+        before estimating the entropy. Otherwise the data will only be
+        normalized.
+
+    Note:
+        The template has to be normalized such that its total area is 1.
+        Independently of the specified options,only samples for which
+        the content is greater zero are used to compute the entropy.
+    """
+    if not isinstance(template, np.ndarray) and template is not 'flat':
+        raise ValueError('Template input not understood. Must be either a numpy array,\n',
+                         'or "flat".')
+
+    if 'data' not in hitlets.dtype.names:
+        raise ValueError('"hitlets" must have a field "data".')
+
+    if template is 'flat':
+        template = np.empty(0)
+        flat = True
+    else:
+        flat = False
+    res = _conditional_entropy(hitlets, template, flat=flat,
+                               square_data=square_data)
+    return res
+
+
+@numba.njit
+def _conditional_entropy(hitlets, template, flat=False, square_data=False):
+    res = np.zeros(len(hitlets), dtype=np.float32)
+    for ind, h in enumerate(hitlets):
+        hitlet = h['data']
+
+        # Squaring and normalizing:
+        if square_data:
+            hitlet[:] = hitlet * hitlet
+        if np.sum(hitlet):
+            hitlet[:] = hitlet / np.sum(hitlet)
+        else:
+            hitlet[:] = 0
+
+        len_hitlet = len(hitlet)
+        if flat:
+            template = np.ones(len_hitlet)
+            template = template / np.sum(template)
+            # lim x_i --> 0, x_i * log(x_i) --> 0
+            m = hitlet > 0
+            e = - np.sum(hitlet[m] * np.log(hitlet[m] / template[m]))
+        else:
+            # create a buffers to align data and template:
+            len_template = len(template)
+            length = np.max(np.array([len_hitlet, len_template]))
+            length = length * 2 + 1
+            buffer = np.zeros((2, length), dtype=np.float32)
+
+            hitlet = h['data'] / np.sum(h['data'])
+
+            # align data and template and compute entropy:
+            si = length // 2 - np.argmax(hitlet)
+            ei = si + len(hitlet)
+            buffer[0, si:ei] = hitlet[:]
+
+            si = length // 2 - np.argmax(template)
+            ei = si + len(template)
+            buffer[1, si:ei] = template[:]
+
+            m_hit = (buffer[0] > 0)
+            m_temp = (buffer[1] > 0)
+            m = m_hit & m_temp
+            e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
+        res[ind] = e
+    return res
