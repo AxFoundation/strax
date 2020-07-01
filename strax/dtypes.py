@@ -111,7 +111,7 @@ def hitlet_dtype(n_widths=11, n_sample=0):
     Note:
         If n_samples is set to zero returns an array without "data"-field.
     """
-    hitlet_dtype = interval_dtype + [
+    dtype = interval_dtype + [
         (('Original length of the hit interval in samples',
           'hit_length'), np.int32),
         (('Total hit area',
@@ -138,11 +138,10 @@ def hitlet_dtype(n_widths=11, n_sample=0):
           'record_i'), np.int32)]
 
     if n_sample:
-        return hitlet_dtype + [
-            (('Hitlet data in PE/sample with ZLE (only the first length sample are filled)',
-              'data'), np.float32, n_sample)]
+        return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length sample are filled)', 'data'),
+                         np.float32, n_sample)]
     else:
-        return hitlet_dtype
+        return dtype
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
