@@ -408,7 +408,7 @@ def _get_fwxm_boundary(data, max_val):
             s = d
     return i, s
 
-
+@export
 def conditional_entropy(hitlets, template='flat', square_data=False):
     """
     Function which estimates the conditional entropy based on the
