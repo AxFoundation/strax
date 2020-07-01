@@ -375,3 +375,37 @@ def _get_fwxm_boundary(data, max_val):
             i = ind
             s = d
     return i, s
+
+
+@numba.njit(cache=True, nogil=True)
+def hitlet_properties(hitlets):
+    """
+    Computes additional lone hitlet properties.
+    """
+    for h in hitlets:
+
+        dt = h['dt']
+        data = h['data'][:h['length']]
+        # Compute amplitude
+        amp_ind = np.argmax(data)
+        amp_time = int(amp_ind * dt)
+        height = data[amp_ind]
+
+        # Computing FWHM:
+        left_edge, right_edge = get_fwxm(data, amp_ind, 0.5)
+        left_edge = left_edge * dt + dt / 2
+        right_edge = right_edge * dt - dt / 2
+        width = right_edge - left_edge
+
+        # Computing FWTM:
+        left_edge_low, right_edge = get_fwxm(data, amp_ind, 0.1)
+        left_edge_low = left_edge_low * dt + dt / 2
+        right_edge = right_edge * dt - dt / 2
+        width_low = right_edge - left_edge_low
+
+        h['amplitude'] = height
+        h['time_amplitude'] = amp_time
+        h['fwhm'] = width
+        h['left'] = left_edge
+        h['low_left'] = left_edge_low
+        h['fwtm'] = width_low
