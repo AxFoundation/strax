@@ -821,22 +821,38 @@ class Context:
                     chunks = self.get_meta(run_id, t)['chunks']  
                     start_time = max(start_time, chunks[0]['start'])
                     end_time = min(end_time, chunks[-1]['end'])
-                    
-            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}]"
-            with tqdm(total=100, bar_format=bar_format) as pbar:
+
+            # Init nice progressbar:
+            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
+                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk"
+            sec_per_chunk = np.nan  # Have not computed any chunk yet.
+            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk}]
+
+            with tqdm(total=1, postfix=post_fix, bar_format=bar_format) as pbar:
+                last_time = pbar.last_print_t  # Get inital time
                 for result in strax.continuity_check(generator):
                     seen_a_chunk = True
                     if not isinstance(result, strax.Chunk):
                         raise ValueError(f"Got type {type(result)} rather than "
                                          f"a strax Chunk from the processor!")
                     result.data = self.apply_selection(
-                        result.data, 
-                    selection_str=selection_str,
-                    keep_columns=keep_columns,
-                    time_range=time_range,
-                    time_selection=time_selection)
-                    pbar.n = (result.end - start_time)/(end_time - start_time)*100
+                        result.data,
+                        selection_str=selection_str,
+                        keep_columns=keep_columns,
+                        time_range=time_range,
+                        time_selection=time_selection)
+
+                    # Update progressbar:
+                    pbar.n = (result.end - start_time) / (end_time - start_time)
                     pbar.update(0)
+                    # Now get last time printed and refresh seconds_per_chunk:
+                    # This is a small work around since we do not know the
+                    # pacmaker apriori.
+                    sec_per_chunk = pbar.last_print_t - last_time
+                    pbar.postfix[1]['spc'] = sec_per_chunk
+                    pbar.refresh()
+                    last_time = pbar.last_print_t
+
                     yield result
 
         except GeneratorExit:
