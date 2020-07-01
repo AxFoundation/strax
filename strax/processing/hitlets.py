@@ -397,8 +397,8 @@ def get_fwxm(data, index_maximum, percentage=0.5):
 @numba.njit(cache=True, nogil=True)
 def _get_fwxm_boundary(data, max_val):
     """
-    Returns sample position and height for the last sample which amplitude is below
-    the specified value
+    Returns sample position and height for the last sample which
+    amplitude is below the specified value
     """
     i = NO_FWXM
     s = NO_FWXM
@@ -408,7 +408,7 @@ def _get_fwxm_boundary(data, max_val):
             s = d
     return i, s
 
-
+@export
 def conditional_entropy(hitlets, template='flat', square_data=False):
     """
     Function which estimates the conditional entropy based on the
@@ -460,7 +460,8 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
         if np.sum(hitlet):
             hitlet[:] = hitlet / np.sum(hitlet)
         else:
-            hitlet[:] = 0
+            res[ind] = np.nan
+            continue
 
         len_hitlet = len(hitlet)
         if flat:
