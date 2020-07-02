@@ -419,6 +419,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     maximum is ambiguous the first maximum is taken.
 
     :param hitlets: Hitlets for which the entropy shall be computed.
+        Can be any data_kind which offers the fields data and length.
     :param template: Template to compare the data with. Can be either
         specified as "flat" to use a flat distribution or as a numpy
         array containing any normalized template.
@@ -452,8 +453,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
 def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     res = np.zeros(len(hitlets), dtype=np.float32)
     for ind, h in enumerate(hitlets):
-        hitlet = h['data']
-
+        hitlet = h['data'][:h['length']]
         # Squaring and normalizing:
         if square_data:
             hitlet[:] = hitlet * hitlet
