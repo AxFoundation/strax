@@ -431,6 +431,9 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
         The template has to be normalized such that its total area is 1.
         Independently of the specified options,only samples for which
         the content is greater zero are used to compute the entropy.
+
+        In case of the non-squared case negative values are omitted in
+        the calculation.
     """
     if not isinstance(template, np.ndarray) and template is not 'flat':
         raise ValueError('Template input not understood. Must be either a numpy array,\n',
@@ -449,7 +452,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     return res
 
 
-@numba.njit
+@numba.njit(cache=True, nogil=True)
 def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     res = np.zeros(len(hitlets), dtype=np.float32)
     for ind, h in enumerate(hitlets):
@@ -463,21 +466,29 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             res[ind] = np.nan
             continue
 
-        len_hitlet = len(hitlet)
         if flat:
+            # Take out values which are smaller euqal zero since:
+            # lim x_i --> 0, x_i * log(x_i) --> 0
+            # and log not defined for negative values.
+            m = hitlet > 0
+            hitlet = hitlet[m]
+            len_hitlet = len(hitlet)
+
             template = np.ones(len_hitlet)
             template = template / np.sum(template)
-            # lim x_i --> 0, x_i * log(x_i) --> 0
-            m = hitlet > 0
-            e = - np.sum(hitlet[m] * np.log(hitlet[m] / template[m]))
+
+            e = - np.sum(hitlet * np.log(hitlet / template))
         else:
+            # In case of a template we take out zeros and negative values
+            # once we populated the buffer. Otherwise we miss-align
+            # template and buffer.
+
             # create a buffers to align data and template:
+            len_hitlet = len(hitlet)
             len_template = len(template)
             length = np.max(np.array([len_hitlet, len_template]))
             length = length * 2 + 1
             buffer = np.zeros((2, length), dtype=np.float32)
-
-            hitlet = h['data'] / np.sum(h['data'])
 
             # align data and template and compute entropy:
             si = length // 2 - np.argmax(hitlet)
@@ -488,9 +499,11 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             ei = si + len(template)
             buffer[1, si:ei] = template[:]
 
+            # Remove zeros from buffers:
             m_hit = (buffer[0] > 0)
             m_temp = (buffer[1] > 0)
             m = m_hit & m_temp
+
             e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
         res[ind] = e
     return res
