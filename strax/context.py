@@ -8,6 +8,7 @@ import string
 import typing as ty
 import warnings
 from tqdm.notebook import tqdm
+import contextlib
 
 import numexpr
 import numpy as np
@@ -752,6 +753,7 @@ class Context:
                  selection_str=None,
                  keep_columns=None,
                  _chunk_number=None,
+                 progress_bar = True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -808,8 +810,9 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
-
-        try:
+        
+        if progress_bar:
+            # Defining time ranges for the progress bar:
             if time_range:
                 # user sepecified a time selection
                 start_time, end_time = time_range
@@ -818,19 +821,36 @@ class Context:
                 start_time = 0 
                 end_time = float('inf')
                 for t in strax.to_str_tuple(targets):
-                    chunks = self.get_meta(run_id, t)['chunks']  
-                    start_time = max(start_time, chunks[0]['start'])
-                    end_time = min(end_time, chunks[-1]['end'])
-
-            # Init nice progressbar:
+                    try:
+                        # Sometimes some metedata might be missing e.g. during tests.
+                        chunks = self.get_meta(run_id, t)['chunks']  
+                        start_time = max(start_time, chunks[0]['start'])
+                        end_time = min(end_time, chunks[-1]['end'])
+                    except:
+                        progress_bar = False
+            
+        if progress_bar:
+            # Have to check here again in case we cannot find meta data
+            # Define nice progressbar formating:
             bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
-                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk"
+                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
+                         " #chunks processed: {postfix[1][n]}"
             sec_per_chunk = np.nan  # Have not computed any chunk yet.
-            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk}]
+            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
 
-            with tqdm(total=1, postfix=post_fix, bar_format=bar_format) as pbar:
-                last_time = pbar.last_print_t  # Get inital time
-                for result in strax.continuity_check(generator):
+            # init progress bar:
+            tqdm_instance = tqdm(total=1, postfix=post_fix, bar_format=bar_format)
+        else:
+            # nullcontext is a python function and has not to do anything with strax contexts
+            tqdm_instance =  contextlib.nullcontext()
+        
+        try:
+            with tqdm_instance as pbar:
+                if progress_bar: 
+                    # Get inital time
+                    last_time = pbar.last_print_t       
+                
+                for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
                     if not isinstance(result, strax.Chunk):
                         raise ValueError(f"Got type {type(result)} rather than "
@@ -841,17 +861,19 @@ class Context:
                         keep_columns=keep_columns,
                         time_range=time_range,
                         time_selection=time_selection)
-
-                    # Update progressbar:
-                    pbar.n = (result.end - start_time) / (end_time - start_time)
-                    pbar.update(0)
-                    # Now get last time printed and refresh seconds_per_chunk:
-                    # This is a small work around since we do not know the
-                    # pacmaker apriori.
-                    sec_per_chunk = pbar.last_print_t - last_time
-                    pbar.postfix[1]['spc'] = sec_per_chunk
-                    pbar.refresh()
-                    last_time = pbar.last_print_t
+                    
+                    if progress_bar:
+                        # Update progressbar:
+                        pbar.n = (result.end - start_time) / (end_time - start_time)
+                        pbar.update(0)
+                        # Now get last time printed and refresh seconds_per_chunk:
+                        # This is a small work around since we do not know the
+                        # pacmaker here.
+                        sec_per_chunk = pbar.last_print_t - last_time
+                        pbar.postfix[1]['spc'] = sec_per_chunk
+                        pbar.postfix[1]['n'] = n_chunks
+                        pbar.refresh()
+                        last_time = pbar.last_print_t
 
                     yield result
 
@@ -1203,6 +1225,7 @@ the start of the run to load.
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
+:param progress_bar: Display a progress bar if metedata exists.
 """
 
 get_docs = """
