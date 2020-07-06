@@ -842,7 +842,7 @@ class Context:
             tqdm_instance = tqdm(total=1, postfix=post_fix, bar_format=bar_format)
         else:
             # nullcontext is a python function and has not to do anything with strax contexts
-            tqdm_instance =  contextlib.nullcontext()
+            tqdm_instance = contextlib.nullcontext()
         
         try:
             with tqdm_instance as pbar:
