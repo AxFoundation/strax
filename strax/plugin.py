@@ -59,7 +59,7 @@ class Plugin:
     rechunk_on_save = True    # Saver is allowed to rechunk
     # How large (uncompressed) should re-chunked chunks be?
     # Meaningless if rechunk_on_save is False
-    chunk_target_size = strax.default_chunk_size
+    chunk_target_size_mb = strax.default_chunk_size_mb
 
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
@@ -212,7 +212,7 @@ class Plugin:
                 run_id, data_type, self.lineage).lineage_hash,
             compressor=self.compressor,
             lineage=self.lineage,
-            chunk_target_size=self.chunk_target_size)
+            chunk_target_size_mb=self.chunk_target_size_mb)
 
     def dependencies_by_kind(self):
         """Return dependencies grouped by data kind
@@ -503,7 +503,7 @@ class Plugin:
             data_type=data_type,
             dtype=self.dtype_for(data_type),
             data=data,
-            target_size=self.chunk_target_size)
+            target_size_mb=self.chunk_target_size_mb)
 
     def compute(self, **kwargs):
         raise NotImplementedError
