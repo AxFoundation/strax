@@ -5,8 +5,9 @@ import numba
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['default_chunk_size']
 
-@export
+
 default_chunk_size = int(2e8)
 
 @export
