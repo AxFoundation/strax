@@ -33,7 +33,7 @@ def test_conditional_entropy(data, size_template, ind_max_template):
 
         e2 = - np.sum(d[m] * np.log(d[m] / template))
 
-        assert e1 == e2, f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 2.: Arbitrary template:
         template = np.ones(size_template, dtype=np.float32)
