@@ -206,7 +206,7 @@ class Chunk:
             data_type=data_type,
             data_kind=data_kind,
             run_id=run_id,
-            data=data
+            data=data,
             target_size=max([c.target_size for c in chunks]))
 
     @classmethod
