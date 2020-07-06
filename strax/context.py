@@ -836,8 +836,6 @@ class Context:
                     except (strax.DataNotAvailable, KeyError):
                         progress_bar = False
 
-        if progress_bar:
-            # Have to check here again in case we cannot find meta data
             # Define nice progressbar format:
             bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
                          " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
@@ -845,16 +843,11 @@ class Context:
             sec_per_chunk = np.nan  # Have not computed any chunk yet.
             post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
 
-            # init progress bar:
-            tqdm_instance = tqdm(total=1, postfix=post_fix, bar_format=bar_format)
-        else:
-            # nullcontext is a python function and has not to do anything with strax contexts
-            tqdm_instance = contextlib.nullcontext()
-        
         try:
-            with tqdm_instance as pbar:
+            with contextlib.ExitStack() as stack:
                 if progress_bar: 
                     # Get initial time
+                    pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
                     last_time = pbar.last_print_t       
                 
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
