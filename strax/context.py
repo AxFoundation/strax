@@ -753,7 +753,7 @@ class Context:
                  selection_str=None,
                  keep_columns=None,
                  _chunk_number=None,
-                 progress_bar = True,
+                 progress_bar=True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -814,7 +814,7 @@ class Context:
         if progress_bar:
             # Defining time ranges for the progress bar:
             if time_range:
-                # user sepecified a time selection
+                # user specified a time selection
                 start_time, end_time = time_range
             else:
                 # If no selection is specified we have to get the last end_time:
@@ -822,7 +822,7 @@ class Context:
                 end_time = float('inf')
                 for t in strax.to_str_tuple(targets):
                     try:
-                        # Sometimes some metedata might be missing e.g. during tests.
+                        # Sometimes some metadata might be missing e.g. during tests.
                         chunks = self.get_meta(run_id, t)['chunks']  
                         start_time = max(start_time, chunks[0]['start'])
                         end_time = min(end_time, chunks[-1]['end'])
@@ -831,7 +831,7 @@ class Context:
             
         if progress_bar:
             # Have to check here again in case we cannot find meta data
-            # Define nice progressbar formating:
+            # Define nice progressbar format:
             bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
                          " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
                          " #chunks processed: {postfix[1][n]}"
@@ -847,7 +847,7 @@ class Context:
         try:
             with tqdm_instance as pbar:
                 if progress_bar: 
-                    # Get inital time
+                    # Get initial time
                     last_time = pbar.last_print_t       
                 
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
