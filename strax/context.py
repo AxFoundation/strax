@@ -7,8 +7,15 @@ import random
 import string
 import typing as ty
 import warnings
-from tqdm.notebook import tqdm
+
 import contextlib
+import sys
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm import tqdm_notebook as tqdm
+else:
+    from tqdm import tqdm
 
 import numexpr
 import numpy as np
@@ -810,7 +817,7 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
-        
+
         if progress_bar:
             # Defining time ranges for the progress bar:
             if time_range:
@@ -826,9 +833,9 @@ class Context:
                         chunks = self.get_meta(run_id, t)['chunks']  
                         start_time = max(start_time, chunks[0]['start'])
                         end_time = min(end_time, chunks[-1]['end'])
-                    except:
+                    except (strax.DataNotAvailable, KeyError):
                         progress_bar = False
-            
+
         if progress_bar:
             # Have to check here again in case we cannot find meta data
             # Define nice progressbar format:
