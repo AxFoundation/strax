@@ -59,7 +59,7 @@ class Plugin:
     rechunk_on_save = True    # Saver is allowed to rechunk
     # How large (uncompressed) should re-chunked chunks be?
     # Meaningless if rechunk_on_save is False
-    chunk_target_size = int(2e8)
+    chunk_target_size = strax.default_chunk_size
 
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
