@@ -463,6 +463,7 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
         if np.sum(hitlet):
             hitlet[:] = hitlet / np.sum(hitlet)
         else:
+            # If there is no area we cannot normalize
             res[ind] = np.nan
             continue
 
