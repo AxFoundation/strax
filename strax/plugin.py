@@ -57,6 +57,10 @@ class Plugin:
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
+    # How large (uncompressed) should re-chunked chunks be?
+    # Meaningless if rechunk_on_save is False
+    chunk_target_size = int(2e8)
+
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -85,7 +89,7 @@ class Plugin:
     run_i: int
     config: typing.Dict
     deps: typing.Dict       # Dictionary of dependency plugin instances
-    
+
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
@@ -207,7 +211,8 @@ class Plugin:
             lineage_hash=strax.DataKey(
                 run_id, data_type, self.lineage).lineage_hash,
             compressor=self.compressor,
-            lineage=self.lineage)
+            lineage=self.lineage,
+            chunk_target_size=self.chunk_target_size)
 
     def dependencies_by_kind(self):
         """Return dependencies grouped by data kind
@@ -497,7 +502,8 @@ class Plugin:
             data_kind=self.data_kind_for(data_type),
             data_type=data_type,
             dtype=self.dtype_for(data_type),
-            data=data)
+            data=data,
+            target_size=self.chunk_target_size)
 
     def compute(self, **kwargs):
         raise NotImplementedError

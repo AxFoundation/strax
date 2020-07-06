@@ -6,6 +6,8 @@ import numba
 import strax
 export, __all__ = strax.exporter()
 
+@export
+default_chunk_size = int(2e8)
 
 @export
 class Chunk:
@@ -22,6 +24,7 @@ class Chunk:
     end: int
 
     data: np.ndarray
+    target_size: int
 
     def __init__(self,
                  *,
@@ -31,7 +34,8 @@ class Chunk:
                  run_id,
                  start,
                  end,
-                 data):
+                 data,
+                 target_size=default_chunk_size):
         self.data_type = data_type
         self.data_kind = data_kind
         self.dtype = np.dtype(dtype)
@@ -41,6 +45,7 @@ class Chunk:
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
+        self.target_size = target_size
 
         if not (isinstance(self.start, (int, np.integer))
                 and isinstance(self.end, (int, np.integer))):
@@ -133,7 +138,8 @@ class Chunk:
             run_id=self.run_id,
             dtype=self.dtype,
             data_type=self.data_type,
-            data_kind=self.data_kind)
+            data_kind=self.data_kind,
+            target_size=self.target_size)
 
         c1 = strax.Chunk(
             start=self.start,
@@ -199,7 +205,8 @@ class Chunk:
             data_type=data_type,
             data_kind=data_kind,
             run_id=run_id,
-            data=data)
+            data=data
+            target_size=max([c.target_size for c in chunks]))
 
     @classmethod
     def concatenate(cls, chunks):
@@ -240,7 +247,8 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
-            data=np.concatenate([c.data for c in chunks]))
+            data=np.concatenate([c.data for c in chunks]),
+            target_size=max([c.target_size for c in chunks]))
 
 
 @export
