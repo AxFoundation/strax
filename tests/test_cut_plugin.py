@@ -30,7 +30,7 @@ def get_some_array():
     sorted_intervals = testutils.sorted_bounds().map(bounds_to_intervals)
     return sorted_intervals
 
-@given(get_some_array().filter(lambda x: len(x) > 0),
+@given(get_some_array().filter(lambda x: len(x) >= 0),
        strategies.integers(min_value=-10, max_value=10))
 @settings(deadline=None)
 # Examples for readability
@@ -71,8 +71,8 @@ def test_cut_plugin(input_peaks, cut_threshold):
             data = chunks[chunk_i]
             return self.chunk(
                 data=data,
-                start=int(data[0]['time']),
-                end=int(strax.endtime(data[-1])))
+                start=int(data[0]['time']) if len(data) else np.arange(len(chunks))[chunk_i],
+                end=int(strax.endtime(data[-1])) if len(data) else np.arange(1, len(chunks)+1)[chunk_i])
 
         # Hack to make peak output stop after a few chunks
         def is_ready(self, chunk_i):
