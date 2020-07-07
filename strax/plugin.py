@@ -692,6 +692,7 @@ class CutPlugin(Plugin):
         # This should be provided by the user making a CutPlugin
         raise NotImplementedError()
 
+
 ##
 # "Plugins" for internal use
 # These do not actually do computations, but do other tasks
