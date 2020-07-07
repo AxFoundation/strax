@@ -871,7 +871,7 @@ class CutPlugin(Plugin):
             self.cut_description = _description
 
     def infer_dtype(self):
-        dtype = [(self.cut_name, np.bool, self.cut_description)]
+        dtype = [(self.cut_name, np.bool_, self.cut_description)]
         dtype = dtype + strax.time_fields
         return dtype
 
@@ -887,7 +887,7 @@ class CutPlugin(Plugin):
         # Generate result buffer
         r = np.zeros(len(buff), self.dtype)
         r['time'] = buff['time']
-        r['endtime'] = buff['endtime']
+        r['endtime'] = strax.endtime(buff)
         r[self.cut_name] = cut_by(**kwargs)
         return r
 
