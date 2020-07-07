@@ -507,7 +507,6 @@ class Context:
 
         plugins = self._get_plugins(targets, run_id)
         target = targets[0]  # See above, already restricted to one target
-        targetp = plugins[target]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -600,7 +599,7 @@ class Context:
                 return
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
-                    raise ValueError("Plugin forbids saving of {d}")
+                    raise ValueError(f"Plugin forbids saving of {d}")
                 return
             elif p.save_when == strax.SaveWhen.TARGET:
                 if d not in targets:
@@ -677,7 +676,7 @@ class Context:
 
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
-            raise RuntimeError("{intersec} both computed and loaded?!")
+            raise RuntimeError(f"{intersec} both computed and loaded?!")
 
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
