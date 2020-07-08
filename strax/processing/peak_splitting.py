@@ -6,7 +6,8 @@ export, __all__ = strax.exporter()
 
 
 @export
-def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='peaks', **kwargs):
+def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
+                data_type='peaks', **kwargs):
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
 
@@ -18,6 +19,7 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum', data_type='pea
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use  
         sum_wavefrom or get_hitlets_data to compute the waveform of
         the new split peaks/hitlets.
+    :param result_dtype: dtype of the result.
 
     Any other options are passed to the algorithm.
     """
@@ -59,8 +61,8 @@ class PeakSplitter:
     """
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, data_type, next_ri=None,
-                 do_iterations=1, min_area=0, **kwargs):
+    def __call__(self, peaks, records, to_pe, data_type,
+                 next_ri=None, do_iterations=1, min_area=0,  **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
