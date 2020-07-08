@@ -15,6 +15,7 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
        size_template_and_ind_max_template=st.lists(elements=st.integers(min_value=0, max_value=10),
                                                   min_size=2, max_size=2).filter(lambda x: x[0] != x[1])
       )
+@settings(deadline=None)
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
     Test for conditional entropy. For the template larger int value defines
