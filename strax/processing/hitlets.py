@@ -443,7 +443,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
         raise ValueError('"hitlets" must have a field "data".')
 
     if template is 'flat':
-        template = np.empty(0)
+        template = np.empty(0, dtype=np.float32)
         flat = True
     else:
         flat = False
@@ -463,6 +463,7 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
         if np.sum(hitlet):
             hitlet[:] = hitlet / np.sum(hitlet)
         else:
+            # If there is no area we cannot normalize
             res[ind] = np.nan
             continue
 
@@ -474,7 +475,7 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             hitlet = hitlet[m]
             len_hitlet = len(hitlet)
 
-            template = np.ones(len_hitlet)
+            template = np.ones(len_hitlet, dtype=np.float32)
             template = template / np.sum(template)
 
             e = - np.sum(hitlet * np.log(hitlet / template))
@@ -503,7 +504,6 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             m_hit = (buffer[0] > 0)
             m_temp = (buffer[1] > 0)
             m = m_hit & m_temp
-
             e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
         res[ind] = e
     return res
