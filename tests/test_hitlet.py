@@ -32,46 +32,46 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
 
     # Test 1.: Flat template and no data:
     e1 = strax.conditional_entropy(hitlet, 'flat')[0]
-    # if np.sum(data):
-    #     d = data
-    #     d = d / np.sum(d)
-    #     m = d > 0
-    #
-    #     template = np.ones(np.sum(m), dtype=np.float32)
-    #     template = template / np.sum(template)
-    #
-    #     e2 = - np.sum(d[m] * np.log(d[m] / template))
-    #     assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
-    #
-    #     # Test 2.: Arbitrary template:
-    #     template = np.ones(size_template, dtype=np.float32)
-    #     template[ind_max_template] = 2
-    #     template /= np.sum(template)
-    #
-    #     # Aligning data in a slightly different way as in the function
-    #     # itself:
-    #     e2 = _align_compute_entropy(d, template)
-    #
-    #     e1 = strax.conditional_entropy(hitlet, template)[0]
-    #     assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
-    #
-    #     # Test 3.: Squared waveform:
-    #     # Same as before but this time we square the template and the
-    #     # data.
-    #     template = np.ones(size_template, dtype=np.float32)
-    #     template[ind_max_template] = 2
-    #     template = template * template
-    #     template /= np.sum(template)
-    #
-    #     d = data * data
-    #     d = d / np.sum(d)
-    #
-    #     e2 = _align_compute_entropy(d, template)
-    #
-    #     e1 = strax.conditional_entropy(hitlet, template, square_data=True)[0]
-    #     assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
-    # else:
-    #     assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
+    if np.sum(data):
+        d = data
+        d = d / np.sum(d)
+        m = d > 0
+
+        template = np.ones(np.sum(m), dtype=np.float32)
+        template = template / np.sum(template)
+
+        e2 = - np.sum(d[m] * np.log(d[m] / template))
+        assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
+
+        # Test 2.: Arbitrary template:
+        template = np.ones(size_template, dtype=np.float32)
+        template[ind_max_template] = 2
+        template /= np.sum(template)
+
+        # Aligning data in a slightly different way as in the function
+        # itself:
+        e2 = _align_compute_entropy(d, template)
+
+        e1 = strax.conditional_entropy(hitlet, template)[0]
+        assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
+
+        # Test 3.: Squared waveform:
+        # Same as before but this time we square the template and the
+        # data.
+        template = np.ones(size_template, dtype=np.float32)
+        template[ind_max_template] = 2
+        template = template * template
+        template /= np.sum(template)
+
+        d = data * data
+        d = d / np.sum(d)
+
+        e2 = _align_compute_entropy(d, template)
+
+        e1 = strax.conditional_entropy(hitlet, template, square_data=True)[0]
+        assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
+    else:
+        assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
 
 
 def _align_compute_entropy(data, template):
