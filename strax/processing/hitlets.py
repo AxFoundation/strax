@@ -421,6 +421,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     :param square_data: If true data will be squared and normalized
         before estimating the entropy. Otherwise the data will only be
         normalized.
+    :returns: Array containing the entropy values for each hitlet.
 
     Note:
         The template has to be normalized such that its total area is 1.
