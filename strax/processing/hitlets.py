@@ -6,8 +6,6 @@ from strax import utils
 from strax.dtypes import hit_dtype
 export, __all__ = strax.exporter()
 
-# TODO: Unify docsting style.
-
 # ----------------------
 # Hitlet building:
 # ----------------------
@@ -114,7 +112,8 @@ def refresh_hit_to_hitlets(hits, hitlets):
     """
     Function which copies basic hit information into a new hitlet array.
     """
-    for ind in range(len(hits)):
+    nhits = len(hits)
+    for ind in range(nhits):
         h_new = hitlets[ind]
         h_old = hits[ind]
 
@@ -310,7 +309,7 @@ def _update_record_i(new_hitlets, records, next_ri):
 @numba.njit(cache=True, nogil=True)
 def hitlet_properties(hitlets):
     """
-    Computes additional lone hitlet properties.
+    Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
     for h in hitlets:
 
@@ -347,10 +346,10 @@ def get_fwxm(data, index_maximum, percentage=0.5):
     """
     Estimates the left and right edge of a specific height percentage.
 
-    Args:
-        data (np.array): Data of the pulse.
-        index_maximum (ind): Position of the maximum.
-        percentage (float): Level for which the width shall be computed.
+    :param data: data of the hitlet
+    :param index_maximum: Position of the maximum.
+    :param percentage: Level for which the width shall be computed.
+    :returns:Two floats, left edge and right edge in sample
 
     Notes:
         The function searches for the last sample below and above the
@@ -360,10 +359,6 @@ def get_fwxm(data, index_maximum, percentage=0.5):
         case, that the samples cannot be found for either one of the
         sides the corresponding outer most bin edges are used: left 0;
         right last sample + 1.
-
-    Returns:
-        float: left edge [sample]
-        float: right edge [sample]
     """
     max_val = data[index_maximum]
     max_val = max_val * percentage
@@ -435,14 +430,14 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
         In case of the non-squared case negative samples are omitted in
         the calculation.
     """
-    if not isinstance(template, np.ndarray) and template is not 'flat':
+    if not isinstance(template, np.ndarray) and template != 'flat':
         raise ValueError('Template input not understood. Must be either a numpy array,\n',
                          'or "flat".')
 
     if 'data' not in hitlets.dtype.names:
         raise ValueError('"hitlets" must have a field "data".')
 
-    if template is 'flat':
+    if template == 'flat':
         template = np.empty(0, dtype=np.float32)
         flat = True
     else:
