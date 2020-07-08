@@ -415,8 +415,8 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     specified template.
 
     In order to compute the conditional entropy each hitlet will be
-    aligned such that its maximum falls into the same sample. If the
-    maximum is ambiguous the first maximum is taken.
+    aligned such that its maximum falls into the same sample as for the
+    template. If the maximum is ambiguous the first maximum is taken.
 
     :param hitlets: Hitlets for which the entropy shall be computed.
         Can be any data_kind which offers the fields data and length.
@@ -429,10 +429,10 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
 
     Note:
         The template has to be normalized such that its total area is 1.
-        Independently of the specified options,only samples for which
+        Independently of the specified options, only samples for which
         the content is greater zero are used to compute the entropy.
 
-        In case of the non-squared case negative values are omitted in
+        In case of the non-squared case negative samples are omitted in
         the calculation.
     """
     if not isinstance(template, np.ndarray) and template is not 'flat':
