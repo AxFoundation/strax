@@ -65,7 +65,7 @@ class Chunk:
 
         if len(self.data):
             data_starts_at = self.data[0]['time']
-            data_ends_at = strax.endtime(self.data[-1])
+            data_ends_at = strax.endtime(self.data).max()
 
             if data_starts_at < self.start:
                 raise ValueError(f"Attempt to create chunk {self} "
