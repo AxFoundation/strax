@@ -14,20 +14,33 @@ export, __all__ = strax.exporter()
 
 blosc.set_releasegil(True)
 
+BASE_CONDITIONS = [
+    lambda x: isinstance(x, np.ndarray),
+    lambda x: len(x)>0,
+]
+BLOSC_CONDITIONS = BASE_CONDITIONS + [lambda x: x.nbytes<2**31]
 
 COMPRESSORS = dict(
     bz2=dict(
         compress=bz2.compress,
-        decompress=bz2.decompress),
+        decompress=bz2.decompress,
+        conditions=BASE_CONDITIONS),
     zstd=dict(
         compress=zstd.compress,
-        decompress=zstd.decompress),
+        decompress=zstd.decompress,
+        conditions=BASE_CONDITIONS),
     blosc=dict(
         compress=partial(blosc.compress, shuffle=False),
-        decompress=blosc.decompress),
-    lz4=dict(compress=lz4.compress, decompress=lz4.decompress)
+        decompress=blosc.decompress,
+        conditions=BLOSC_CONDITIONS),
+    lz4=dict(compress=lz4.compress,
+     decompress=lz4.decompress, 
+     conditions=BASE_CONDITIONS)
 )
 
+@export
+def can_compress(compressor, data):
+    return all([condition(data) for condition in COMPRESSORS[compressor]["conditions"]])
 
 @export
 def load_file(f, compressor, dtype):
@@ -50,7 +63,7 @@ def _load_file(f, compressor, dtype):
         data = f.read()
         if not len(data):
             return np.zeros(0, dtype=dtype)
-
+        
         data = COMPRESSORS[compressor]['decompress'](data)
         try:
             return np.frombuffer(data, dtype=dtype)

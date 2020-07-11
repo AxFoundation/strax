@@ -281,14 +281,20 @@ class FileSaver(strax.Saver):
 
     def _save_chunk(self, data, chunk_info, executor=None):
         filename = self._chunk_filename(chunk_info)
-
         fn = os.path.join(self.tempdirname, filename)
-        kwargs = dict(data=data, compressor=self.md['compressor'])
+        
+        for compressor in strax.to_str_tuple(self.md['compressor']):
+            if strax.can_compress(compressor, data):
+                break
+        else:
+            raise strax.CannotCompress(f"None of the compression options can be preformed on chunk {chunk_info['chunk_i']}")
+ 
+        kwargs = dict(data=data, compressor=compressor)
         if executor is None:
             filesize = strax.save_file(fn, **kwargs)
-            return dict(filename=filename, filesize=filesize), None
+            return dict(filename=filename, filesize=filesize, compressor=compressor), None
         else:
-            return dict(filename=filename), executor.submit(
+            return dict(filename=filename, compressor=compressor), executor.submit(
                 strax.save_file, fn, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):

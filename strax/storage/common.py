@@ -59,7 +59,10 @@ class DataNotAvailable(Exception):
     """Raised when requested data is not available"""
     pass
 
-
+@export
+class CannotCompress(Exception):
+    """Raised when requested compression type cannot be performed."""
+    
 @export
 class EmptyDataWarning(UserWarning):
     pass
