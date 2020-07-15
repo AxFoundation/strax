@@ -834,7 +834,9 @@ class Context:
                         start_time = max(start_time, chunks[0]['start'])
                         end_time = min(end_time, chunks[-1]['end'])
                     except (strax.DataNotAvailable, KeyError):
-                        progress_bar = False
+                        # Maybe at least one target had some metadata.
+                        start_time = max(start_time, 0)
+                        end_time = min(end_time, float('inf'))
 
             # Define nice progressbar format:
             bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
@@ -845,7 +847,7 @@ class Context:
 
         try:
             with contextlib.ExitStack() as stack:
-                if progress_bar: 
+                if start_time != 0 and end_time != float('inf'):
                     # Get initial time
                     pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
                     last_time = pbar.last_print_t       
@@ -868,7 +870,8 @@ class Context:
                         pbar.update(0)
                         # Now get last time printed and refresh seconds_per_chunk:
                         # This is a small work around since we do not know the
-                        # pacmaker here.
+                        # pacemaker here and therefore we do not know the number of
+                        # chunks.
                         sec_per_chunk = pbar.last_print_t - last_time
                         pbar.postfix[1]['spc'] = sec_per_chunk
                         pbar.postfix[1]['n'] = n_chunks
