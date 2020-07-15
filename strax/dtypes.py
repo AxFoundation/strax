@@ -128,7 +128,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Peak widths: time between nth and 5th area decile [ns]',
           'area_decile_from_midpoint'), np.float32, n_widths),
         (('Does the channel reach ADC saturation?',
-          'saturated_channel'), np.int16, n_channels),
+          'saturated_channel'), np.bool_, n_channels),
         (('Total number of saturated channels',
           'n_saturated_channels'), np.int16),
         (('Hits within tight range of mean',
