@@ -239,6 +239,39 @@ class Context:
         for p in plugin_class.provides:
             self._plugin_class_registry[p] = plugin_class
 
+        already_seen = []
+        for plugin in self._plugin_class_registry.values():
+
+            if plugin in already_seen:
+                continue
+            already_seen.append(plugin)
+
+            for option, items in plugin.takes_config.items():
+                try:
+                    # Looping over the options of the new plugin and check if
+                    # they can be found in the already registered plugins:
+                    for new_option, new_items in plugin_class.takes_config.items():
+                        if not new_option == option:
+                            continue
+                        default = items.get_default('0')  # Have to pass will be changed.
+                        new_default = new_items.get_default('0')
+                        if default == new_default:
+                            continue
+                        else:
+                            mes = (f'Two plugins have a different default value'
+                                   f' for the same option. The option'
+                                   f' "{new_option}" in "{plugin.__name__}" takes'
+                                   f' as a default "{default}"  while in'
+                                   f' "{plugin_class.__name__}" the default value'
+                                   f' is set to "{new_default}". Please change'
+                                   ' one of the defaults.'
+                                   )
+                            raise ValueError(mes)
+
+                except strax.InvalidConfiguration:
+                    # These are option which are inherited from context options.
+                    pass
+
         return plugin_class
 
     def search_field(self, pattern):
@@ -465,7 +498,6 @@ class Context:
 
         plugins = self._get_plugins(targets, run_id)
         target = targets[0]  # See above, already restricted to one target
-        targetp = plugins[target]
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -558,7 +590,7 @@ class Context:
                 return
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
-                    raise ValueError("Plugin forbids saving of {d}")
+                    raise ValueError(f"Plugin forbids saving of {d}")
                 return
             elif p.save_when == strax.SaveWhen.TARGET:
                 if d not in targets:
@@ -635,7 +667,7 @@ class Context:
 
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
-            raise RuntimeError("{intersec} both computed and loaded?!")
+            raise RuntimeError(f"{intersec} both computed and loaded?!")
 
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
