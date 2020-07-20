@@ -564,6 +564,7 @@ class Context:
                 del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
+                self._check_forbidden()
                 if (time_range is not None
                         and plugins[d].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
@@ -1151,7 +1152,17 @@ class Context:
             except strax.DataNotAvailable:
                 continue
         return False
-
+    
+    def _check_forbidden(self):
+        """Check that the forbid_creaction_of config is of tuple type.
+        Otherwise, try to make it a tuple"""
+        forbid_creation_of = self.context_config['forbid_creation_of']
+        if not type(forbid_creation_of) == tuple:
+            if not type(forbid_creation_of) == str:
+                raise ValueError(f'forbid_creation_of should be of type tuple not'
+                                 f'{type(forbid_creation_of)}')
+            self.context_config['forbid_creation_of'] = ((forbid_creation_of), )
+            
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method"""
