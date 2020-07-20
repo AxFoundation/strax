@@ -28,7 +28,7 @@ Incoming data
 -------------
 From the perspective of a plugin, all incoming data is time-synchronized and merged by kind. Specifically:
 
-* Data of the same kind is merged into a single array. If you depend on `events`, `peaks` and `peak_basics`, you will get two arrays: `events` and `peaks`. The first will be the merged array of `peaks` and `peak_basics`.
+* Data of the same kind is merged into a single array. If you depend on `events`, `peaks` and `peak_basics`, you will get two arrays: `events` and `peaks`. The second will be the merged array of `peaks` and `peak_basics`.
 * Data of different kinds are synchronized by time. Strax will fetch a chunks of the first kind (`events`), then fetch as much as needed from the second kind (`peaks`) until you have all peaks that end before or at exactly the same time as the last event.
 
 This example is a bit odd: when loading data of multiple kinds that are contained in each other, e.g. events and peaks, you very often want to use a `LoopPlugin` rather than a straight-up Plugin.
