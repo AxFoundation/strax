@@ -1154,14 +1154,10 @@ class Context:
         return False
 
     def _check_forbidden(self):
-        """Check that the forbid_creaction_of config is of tuple type.
+        """Check that the forbid_creation_of config is of tuple type.
         Otherwise, try to make it a tuple"""
-        forbid_creation_of = self.context_config['forbid_creation_of']
-        if not isinstance(forbid_creation_of, tuple):
-            if not isinstance(forbid_creation_of, str):
-                raise ValueError(f'forbid_creation_of should be of type tuple not'
-                                 f'{type(forbid_creation_of)}')
-            self.context_config['forbid_creation_of'] = ((forbid_creation_of), )
+        self.context_config['forbid_creation_of'] = strax.to_str_tuple(
+            self.context_config['forbid_creation_of'])
 
     @classmethod
     def add_method(cls, f):
