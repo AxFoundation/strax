@@ -424,6 +424,8 @@ class Context:
                 raise KeyError(f"No plugin class registered that provides {data_kind}")
 
             p = self._plugin_class_registry[data_kind]()
+
+            d_provides = None  # just to make codefactor happy
             for d_provides in p.provides:
                 plugins[d_provides] = p
 
