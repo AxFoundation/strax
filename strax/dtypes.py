@@ -118,8 +118,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'area'), np.float32),
         (('Integral per channel [PE]',
           'area_per_channel'), np.float32, n_channels),
-        (("Number of hits from which peak was constructed "
-          "(currently zero if peak is split afterwards)",
+        (("Number of hits contributing at least one sample to the peak ",
           'n_hits'), np.int32),
         (('Waveform data in PE/sample (not PE/ns!)',
           'data'), np.float32, n_sum_wv_samples),
@@ -128,7 +127,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Peak widths: time between nth and 5th area decile [ns]',
           'area_decile_from_midpoint'), np.float32, n_widths),
         (('Does the channel reach ADC saturation?',
-          'saturated_channel'), np.int16, n_channels),
+          'saturated_channel'), np.int8, n_channels),
         (('Total number of saturated channels',
           'n_saturated_channels'), np.int16),
         (('Hits within tight range of mean',
