@@ -417,15 +417,15 @@ class Context:
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
-        def get_plugin(d):
+        def get_plugin(data_kind):
             nonlocal plugins
 
-            if d not in self._plugin_class_registry:
-                raise KeyError(f"No plugin class registered that provides {d}")
+            if data_kind not in self._plugin_class_registry:
+                raise KeyError(f"No plugin class registered that provides {data_kind}")
 
-            p = self._plugin_class_registry[d]()
-            for d in p.provides:
-                plugins[d] = p
+            p = self._plugin_class_registry[data_kind]()
+            for d_provides in p.provides:
+                plugins[d_provides] = p
 
             p.run_id = run_id
 
@@ -433,14 +433,14 @@ class Context:
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, run_id, tolerant=True)
 
-            p.deps = {d: get_plugin(d) for d in p.depends_on}
+            p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
-            p.lineage = {d: (p.__class__.__name__,
+            p.lineage = {d_provides: (p.__class__.__name__,
                              p.version(run_id),
                              {q: v for q, v in p.config.items()
                               if p.takes_config[q].track})}
-            for d in p.depends_on:
-                p.lineage.update(p.deps[d].lineage)
+            for d_depends in p.depends_on:
+                p.lineage.update(p.deps[d_depends].lineage)
 
             if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
