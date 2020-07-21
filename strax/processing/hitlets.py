@@ -438,7 +438,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     if 'data' not in hitlets.dtype.names:
         raise ValueError('"hitlets" must have a field "data".')
 
-    if template is 'flat':
+    if template == 'flat':
         template = np.empty(0, dtype=np.float32)
         flat = True
     else:
