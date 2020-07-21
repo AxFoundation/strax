@@ -321,13 +321,13 @@ def hitlet_properties(hitlets):
         height = data[amp_ind]
 
         # Computing FWHM:
-        left_edge, right_edge = get_fwxm(data, amp_ind, 0.5)
+        left_edge, right_edge = get_fwxm(data, 0.5)
         left_edge = left_edge * dt + dt / 2
         right_edge = right_edge * dt - dt / 2
         width = right_edge - left_edge
 
         # Computing FWTM:
-        left_edge_low, right_edge = get_fwxm(data, amp_ind, 0.1)
+        left_edge_low, right_edge = get_fwxm(data, 0.1)
         left_edge_low = left_edge_low * dt + dt / 2
         right_edge = right_edge * dt - dt / 2
         width_low = right_edge - left_edge_low
@@ -342,13 +342,12 @@ def hitlet_properties(hitlets):
 
 NO_FWXM = -42
 @numba.njit(cache=True, nogil=True)
-def get_fwxm(data, index_maximum, percentage=0.5):
+def get_fwxm(data, fraction=0.5):
     """
     Estimates the left and right edge of a specific height percentage.
 
     :param data: data of the hitlet
-    :param index_maximum: Position of the maximum.
-    :param percentage: Level for which the width shall be computed.
+    :param fraction: Level for which the width shall be computed.
     :returns:Two floats, left edge and right edge in sample
 
     Notes:
@@ -360,8 +359,9 @@ def get_fwxm(data, index_maximum, percentage=0.5):
         sides the corresponding outer most bin edges are used: left 0;
         right last sample + 1.
     """
+    index_maximum = np.argmax(data)
     max_val = data[index_maximum]
-    max_val = max_val * percentage
+    max_val = max_val * fraction
 
     pre_max = data[:index_maximum]
     post_max = data[1 + index_maximum:]
