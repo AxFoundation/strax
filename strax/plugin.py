@@ -177,6 +177,13 @@ class Plugin:
             return self.dtype[data_type]
         return self.dtype
 
+    def can_rechunk(self, data_type):
+        if isinstance(self.rechunk_on_save, bool):
+            return self.rechunk_on_save
+        if isinstance(self.rechunk_on_save, (dict, immutabledict)):
+            return self.rechunk_on_save[data_type]
+        raise ValueError("rechunk_on_save must be a bool or an immutabledict")
+
     def empty_result(self):
         if self.multi_output:
             return {d: np.empty(0, self.dtype_for(d))
@@ -726,7 +733,7 @@ class ParallelSourcePlugin(Plugin):
             for d in p.provides:
                 if d not in savers:
                     continue
-                if p.rechunk_on_save:
+                if p.can_rechunk(d):
                     # Case 3. has a saver we can't inline
                     outputs_to_send.add(d)
                     continue
