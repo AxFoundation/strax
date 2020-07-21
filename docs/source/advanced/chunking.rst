@@ -39,6 +39,8 @@ Plugins can chunk their output as they wish, including withholding some data unt
 
 Savers, too, are free to chunk their data as they like; for example, to create files of convenient sizes. This affects the chunks you get when loading or reprocessing data. If you don't want this, e.g. if the next plugin in line assumes a particular kind of chunking you want to preserve, set the attribute `rechunk_on_save = False`.
 
+In cases where rechunking is permitted, a plugin can also specify a desired minimum uncompressed chunk size in bytes via the `chunk_target_size` attribute, with 200 MB as the default value. Chunks are concatenated until this desired size is exceeded, or all chunks have been combined, whereupon the data is compressed and written to disk.
+
 
 Sorted output requirement
 --------------------------
