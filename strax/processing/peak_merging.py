@@ -73,7 +73,11 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         # Use the tight coincidence of the peak with the highest amplitude
         new_p['tight_coincidence'] = old_peaks['tight_coincidence'][
             old_peaks['data'].max(axis=1).argmax()]
-
+        
+        # If the endtime was in the peaks we have to recompute it here 
+        # because otherwise it will stay set to zero due to the buffer
+        if 'endtime' in new_p.dtype.names:
+            new_p['endtime'] = strax.endtime(last_peak)
     return new_peaks
 
 
