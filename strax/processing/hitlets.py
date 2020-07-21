@@ -13,7 +13,7 @@ export, __all__ = strax.exporter()
 def concat_overlapping_hits(hits, extensions, pmt_channels):
     """
     Function which concatenates hits which may overlap after left and 
-    right hit extension. Assumes that this are sorted correctly.
+    right hit extension. Assumes that hits are sorted correctly.
     
     Note: 
         This function only updates time, length and record_i of the hit.

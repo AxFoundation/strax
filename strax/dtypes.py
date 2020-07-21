@@ -135,7 +135,7 @@ def hitlet_dtype(n_widths=11):
           'record_i'), np.int32)]
     return dtype
 
-def hitlet_with_data_dtype(n_samples, n_widths=11)
+def hitlet_with_data_dtype(n_samples, n_widths=11):
     """
     Hitlet dtype with data field. Required within the plugins to compute
     hitlet properties. 
