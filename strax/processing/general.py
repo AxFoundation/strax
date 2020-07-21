@@ -189,6 +189,7 @@ def overlap_indices(a1, n_a, b1, n_b):
     b_start = max(0, s)
     b_end = min(n_b, s + n_a)
     if b_start >= b_end:
+        # B is completely left of a
         return (0, 0), (0, 0)
 
     # Range of a that overlaps with b
