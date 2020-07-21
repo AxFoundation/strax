@@ -446,8 +446,11 @@ class Context:
             p.fix_dtype()
 
             return p
-
-        plugins = {t: get_plugin(t) for t in targets}
+        
+        plugins = {}
+        for t in targets: 
+            p = get_plugin(t)
+            plugins[t] = p
         
         return plugins
 
