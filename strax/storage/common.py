@@ -404,7 +404,9 @@ class StorageBackend:
         chunk_kwargs = dict(
             data_type=metadata['data_type'],
             data_kind=metadata['data_kind'],
-            dtype=dtype)
+            dtype=dtype,
+            target_size_mb=metadata.get('chunk_target_size_mb',
+                                        strax.default_chunk_size_mb))
 
         required_chunk_metadata_fields = 'start end run_id'.split()
 
@@ -540,7 +542,8 @@ class Saver:
                 chunk = None
                 try:
                     if rechunk and self.allow_rechunk:
-                        while chunk is None or chunk.data.nbytes < 1e8:
+                        while (chunk is None or
+                                chunk.data.nbytes < chunk.target_size_mb*1e6):
                             chunk = strax.Chunk.concatenate(
                                 [chunk, next(source)])
                     else:
