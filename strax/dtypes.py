@@ -8,7 +8,7 @@ import numpy as np
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields hitlet_dtype').split()
+           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -103,13 +103,10 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def hitlet_dtype(n_widths=11, n_sample=0):
+def hitlet_dtype(n_widths=11):
     """
     Hitlet dtype same as peaklet or peak dtype but for hit-kind of
     objects.
-
-    Note:
-        If n_samples is set to zero returns an array without "data"-field.
     """
     dtype = interval_dtype + [
         (('Original length of the hit interval in samples',
@@ -136,12 +133,21 @@ def hitlet_dtype(n_widths=11, n_sample=0):
           'low_left'), np.float32),
         (('Fragment index in which hit was found (hitlets can be in more than 1 fragment)',
           'record_i'), np.int32)]
+    return dtype
 
-    if n_sample:
-        return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length sample are filled)', 'data'),
-                         np.float32, n_sample)]
-    else:
-        return dtype
+def hitlet_with_data_dtype(n_samples, n_widths=11)
+    """
+    Hitlet dtype with data field. Required within the plugins to compute
+    hitlet properties. 
+    
+    :param n_samples: Buffer length of the data field. Make sure it can
+        hold the longest hitlet.
+    :param n_widths: Number of area deciles width.  
+    """
+    dtype = hitlet_dtype(n_widths)
+
+    return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
+                         np.float32, n_samples)]
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
