@@ -488,7 +488,7 @@ class Context:
         targets = strax.to_str_tuple(targets)
 
         # Although targets is a tuple, we only support one target at the moment
-        # TODO: just make it a string!
+        # we could just make it a string!
         assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
         if len(targets[0]) == 1:
             raise ValueError(
@@ -562,6 +562,7 @@ class Context:
                 del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
+                self._check_forbidden()
                 if (time_range is not None
                         and plugins[d].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
@@ -1149,6 +1150,12 @@ class Context:
             except strax.DataNotAvailable:
                 continue
         return False
+
+    def _check_forbidden(self):
+        """Check that the forbid_creation_of config is of tuple type.
+        Otherwise, try to make it a tuple"""
+        self.context_config['forbid_creation_of'] = strax.to_str_tuple(
+            self.context_config['forbid_creation_of'])
 
     @classmethod
     def add_method(cls, f):
