@@ -435,7 +435,8 @@ class Context:
 
             p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
-            p.lineage = {d_provides: (p.__class__.__name__,
+            last_provide = d_provides
+            p.lineage = {last_provide: (p.__class__.__name__,
                              p.version(run_id),
                              {q: v for q, v in p.config.items()
                               if p.takes_config[q].track})}
