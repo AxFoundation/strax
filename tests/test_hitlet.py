@@ -5,7 +5,71 @@ import strax
 from hypothesis import given, settings
 import hypothesis.extra.numpy
 import hypothesis.strategies as st
+from strax.testutils import fake_hits
 
+
+# -----------------------
+# Concatenated overlapping hits:
+# -----------------------
+@given(fake_hits,
+       fake_hits,
+       hypothesis.strategies.integers(min_value=0, max_value=10),
+       hypothesis.strategies.integers(min_value=0, max_value=10))
+@settings(deadline=None)
+def test_concat_overlapping_hits(hits0, hits1, le, re):
+    # combining fake hits of the two channels:
+    hits1['channel'] = 1
+    hits = np.concatenate([hits0, hits1])
+
+    if not len(hits):
+        # In case there are no hitlets there is not much to do:
+        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1))
+        assert not len(concat_hits), 'Concatenated hits not empty although hits are empty'
+
+    else:
+        hits = strax.sort_by_time(hits)
+
+        # Additional offset to time since le > hits['time'].min() does not
+        # make sense:
+        hits['time'] += 100
+
+        # Now we are ready for the tests:
+        # Creating for each channel a dummy array.
+        tmax = strax.endtime(hits).max()  # Since dt is one this is the last sample
+        tmax += re
+
+        dummy_array = np.zeros((2, tmax), np.int)
+        for h in hits:
+            # Filling samples with 1 if inside a hit:
+            st = h['time'] - le
+            et = strax.endtime(h) + re
+            dummy_array[h['channel'], st:et] = 1
+
+        # Now we concatenate the hits and check whether their length matches
+        # with the total sum of our dummy arrays.
+        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1))
+
+        assert len(concat_hits) <= len(hits), 'Somehow we have more hits than before ?!?'
+
+        for ch in [0, 1]:
+            dummy_sum = np.sum(dummy_array[ch])
+
+            # Computing total length of concatenated hits:
+            diff = strax.endtime(concat_hits) - concat_hits['time']
+            m = concat_hits['channel'] == ch
+            concat_sum = np.sum(diff[m])
+
+            assert concat_sum == dummy_sum, f'Total length of concatenated hits deviates from hits for channel {ch}'
+
+            if len(concat_hits[m]) > 1:
+                # Checking if new hits do not overlapp or touch anymore:
+                mask = strax.endtime(concat_hits[m])[:-1] - concat_hits[m]['time'][1:]
+                assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
+
+
+# ------------------------
+# Entropy test
+# ------------------------
 
 data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
 @given(data=hypothesis.extra.numpy.arrays(np.float32,
@@ -22,7 +86,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     size of the tempalte, smaller int value position of the maximum.
     """
     
-    hitlet = np.zeros(1, dtype=strax.hitlet_dtype(n_sample=10))
+    hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
     ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
     
     # Make dummy hitlet:
