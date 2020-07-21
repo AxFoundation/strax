@@ -459,11 +459,9 @@ class Context:
 
             return p
 
-        plugins = collections.defaultdict(get_plugin)
-        for t in targets:
+        plugins = {}
+        for t in targets: 
             p = get_plugin(t)
-            # This assignment is actually unnecessary due to defaultdict,
-            # but just for clarity:
             plugins[t] = p
 
         return plugins
