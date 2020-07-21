@@ -8,6 +8,15 @@ import string
 import typing as ty
 import warnings
 
+import contextlib
+import sys
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm import tqdm_notebook as tqdm
+else:
+    from tqdm import tqdm
+
 import numexpr
 import numpy as np
 import pandas as pd
@@ -408,15 +417,17 @@ class Context:
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
-        def get_plugin(d):
+        def get_plugin(data_kind):
             nonlocal plugins
 
-            if d not in self._plugin_class_registry:
-                raise KeyError(f"No plugin class registered that provides {d}")
+            if data_kind not in self._plugin_class_registry:
+                raise KeyError(f"No plugin class registered that provides {data_kind}")
 
-            p = self._plugin_class_registry[d]()
-            for d in p.provides:
-                plugins[d] = p
+            p = self._plugin_class_registry[data_kind]()
+
+            d_provides = None  # just to make codefactor happy
+            for d_provides in p.provides:
+                plugins[d_provides] = p
 
             p.run_id = run_id
 
@@ -424,14 +435,15 @@ class Context:
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, run_id, tolerant=True)
 
-            p.deps = {d: get_plugin(d) for d in p.depends_on}
+            p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
-            p.lineage = {d: (p.__class__.__name__,
+            last_provide = d_provides
+            p.lineage = {last_provide: (p.__class__.__name__,
                              p.version(run_id),
                              {q: v for q, v in p.config.items()
                               if p.takes_config[q].track})}
-            for d in p.depends_on:
-                p.lineage.update(p.deps[d].lineage)
+            for d_depends in p.depends_on:
+                p.lineage.update(p.deps[d_depends].lineage)
 
             if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
@@ -751,6 +763,7 @@ class Context:
                  selection_str=None,
                  keep_columns=None,
                  _chunk_number=None,
+                 progress_bar=True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -808,19 +821,69 @@ class Context:
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
 
+        if progress_bar:
+            # Defining time ranges for the progress bar:
+            if time_range:
+                # user specified a time selection
+                start_time, end_time = time_range
+            else:
+                # If no selection is specified we have to get the last end_time:
+                start_time = 0 
+                end_time = float('inf')
+                for t in strax.to_str_tuple(targets):
+                    try:
+                        # Sometimes some metadata might be missing e.g. during tests.
+                        chunks = self.get_meta(run_id, t)['chunks']  
+                        start_time = max(start_time, chunks[0]['start'])
+                        end_time = min(end_time, chunks[-1]['end'])
+                    except (strax.DataNotAvailable, KeyError):
+                        # Maybe at least one target had some metadata.
+                        start_time = max(start_time, 0)
+                        end_time = min(end_time, float('inf'))
+
+            # Define nice progressbar format:
+            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
+                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
+                         " #chunks processed: {postfix[1][n]}"
+            sec_per_chunk = np.nan  # Have not computed any chunk yet.
+            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
+
         try:
-            for result in strax.continuity_check(generator):
-                seen_a_chunk = True
-                if not isinstance(result, strax.Chunk):
-                    raise ValueError(f"Got type {type(result)} rather than "
-                                     f"a strax Chunk from the processor!")
-                result.data = self.apply_selection(
-                    result.data, 
-                selection_str=selection_str,
-                keep_columns=keep_columns,
-                time_range=time_range,
-                time_selection=time_selection)
-                yield result
+            with contextlib.ExitStack() as stack:
+                if start_time != 0 and end_time != float('inf'):
+                    # Get initial time
+                    pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
+                    last_time = pbar.last_print_t
+                else:
+                    progress_bar = False
+                
+                for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
+                    seen_a_chunk = True
+                    if not isinstance(result, strax.Chunk):
+                        raise ValueError(f"Got type {type(result)} rather than "
+                                         f"a strax Chunk from the processor!")
+                    result.data = self.apply_selection(
+                        result.data,
+                        selection_str=selection_str,
+                        keep_columns=keep_columns,
+                        time_range=time_range,
+                        time_selection=time_selection)
+                    
+                    if progress_bar:
+                        # Update progressbar:
+                        pbar.n = (result.end - start_time) / (end_time - start_time)
+                        pbar.update(0)
+                        # Now get last time printed and refresh seconds_per_chunk:
+                        # This is a small work around since we do not know the
+                        # pacemaker here and therefore we do not know the number of
+                        # chunks.
+                        sec_per_chunk = pbar.last_print_t - last_time
+                        pbar.postfix[1]['spc'] = sec_per_chunk
+                        pbar.postfix[1]['n'] = n_chunks
+                        pbar.refresh()
+                        last_time = pbar.last_print_t
+
+                    yield result
 
         except GeneratorExit:
             generator.throw(OutsideException(
@@ -1176,6 +1239,7 @@ the start of the run to load.
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
+:param progress_bar: Display a progress bar if metedata exists.
 """
 
 get_docs = """
