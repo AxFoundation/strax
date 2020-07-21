@@ -502,7 +502,7 @@ class Context:
         targets = strax.to_str_tuple(targets)
 
         # Although targets is a tuple, we only support one target at the moment
-        # TODO: just make it a string!
+        # we could just make it a string!
         assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
         if len(targets[0]) == 1:
             raise ValueError(
