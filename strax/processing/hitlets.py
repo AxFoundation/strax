@@ -33,7 +33,9 @@ def concat_overlapping_hits(hits, extensions, pmt_channels):
                                    dtype=(hit_dtype
                                           + [(('End time of the interval (ns since unix epoch)',
                                                'endtime'), np.int64)]))
-    hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel)
+
+    if len(hits):
+        hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel)
     return hits
 
 
