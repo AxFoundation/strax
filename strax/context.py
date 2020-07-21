@@ -446,12 +446,12 @@ class Context:
             p.fix_dtype()
 
             return p
-        
+
         plugins = {}
         for t in targets: 
             p = get_plugin(t)
             plugins[t] = p
-        
+
         return plugins
 
     @property
