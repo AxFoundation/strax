@@ -398,7 +398,7 @@ def _get_fwxm_boundary(data, max_val):
     i = NO_FWXM
     s = NO_FWXM
     for ind, d in enumerate(data):
-        if d < max_val:
+        if d <= max_val:
             i = ind
             s = d
     return i, s
