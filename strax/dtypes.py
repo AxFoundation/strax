@@ -116,7 +116,7 @@ def hitlet_dtype(n_widths=11):
         (('Maximum of the PMT pulse in pe/sample',
           'amplitude'), np.float32),
         (('Position of the Amplitude in ns (minus "time")',
-          'time_amplitude'), np.float32),
+          'time_amplitude'), np.int16),
         (('Hit entropy',
           'entropy'), np.float32),
         (('Peak widths in range of central area fraction in ns',
