@@ -72,7 +72,6 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
 # This test includes the fwxm and
 # refresh_hit_to_hitlets.
 # -----------------------------
-
 @hypothesis.strategies.composite
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
@@ -94,6 +93,13 @@ def hits_n_data(draw, strategy):
 @given(hits_n_data=hits_n_data(fake_hits))
 @settings(deadline=None)
 def test_hitlet_properties(hits_n_data):
+    """
+    Function which tests refresh_hit_to_hitlets, hitlet_with_data_dtype,
+    and hitlet_properties.
+
+    :param hits_n_data:
+    :return:
+    """
     hits, data = hits_n_data
 
     hits['time'] += 100
@@ -113,7 +119,8 @@ def test_hitlet_properties(hits_n_data):
     # Tetsing interval fields:
     dummy = np.zeros(0, dtype=strax.interval_dtype)
     for name in dummy.dtype.names:
-        assert np.all(hitlets[name] == hits[name]), f'The entry of the field {name} did not match between hit and hitlets'
+        assert np.all(hitlets[name] == hits[name]), f'The entry of the field {name} did not match between hit and ' \
+                                                    f'hitlets '
 
     # Step 2.: Add to each hit(let) some data
     for ind, d in enumerate(data):
@@ -146,7 +153,7 @@ def test_hitlet_properties(hits_n_data):
 
             re = np.argwhere(d[pos_max:] <= amplitude * f)
 
-            if len(re) and re[0,0] != 0:
+            if len(re) and re[0, 0] != 0:
                 re = re[0, 0] + pos_max
                 m = d[re] - d[re - 1]
                 re = re + 0.5 + (amplitude * f - d[re]) / m
@@ -167,8 +174,9 @@ def test_hitlet_properties(hits_n_data):
 # ------------------------
 # Entropy test
 # ------------------------
-
 data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
+
+
 @given(data=hypothesis.extra.numpy.arrays(np.float32,
                                           shape=hypothesis.strategies.integers(min_value=1, max_value=10),
                                           elements=hypothesis.strategies.floats(min_value=-10, max_value=10,
