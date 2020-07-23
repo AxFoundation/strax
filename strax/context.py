@@ -857,7 +857,7 @@ class Context:
 
         try:
             with contextlib.ExitStack() as stack:
-                if start_time != 0 and end_time != float('inf'):
+                if progress_bar and (start_time != 0 and end_time != float('inf')):
                     # Get initial time
                     pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
                     last_time = pbar.last_print_t
