@@ -67,6 +67,103 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
                 assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
 
 
+# -----------------------------
+# Test for hitlet_pproperties.
+# This test includes the fwxm and
+# refresh_hit_to_hitlets.
+# -----------------------------
+
+@hypothesis.strategies.composite
+def hits_n_data(draw, strategy):
+    hits = draw(strategy)
+
+    data_list = []
+    for i in range(len(hits)):
+        length = hits[i]['length']
+        data = draw(hypothesis.extra.numpy.arrays(
+            shape=int(hits['length'].max()),
+            dtype=np.float32,
+            elements=hypothesis.strategies.floats(min_value=-2, max_value=10, width=32),
+            fill=hypothesis.strategies.nothing()).filter(lambda x: np.sum(x[:length]) >= 0.01))
+        data_list.append(data)
+    data = np.array(data_list)
+    hd = (hits, data)
+    return hd
+
+
+@given(hits_n_data=hits_n_data(fake_hits))
+@settings(deadline=None)
+def test_hitlet_properties(hits_n_data):
+    hits, data = hits_n_data
+
+    hits['time'] += 100
+    # Step 1.: Produce fake hits and convert them into hitlets:
+    if len(hits) >= 1:
+        nsamples = hits['length'].max()
+    else:
+        nsamples = 2
+
+    hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
+    if len(hitlets):
+        assert hitlets['data'].shape[1] >= 2, 'Data buffer is not at least 2 samples long.'
+    strax.refresh_hit_to_hitlets(hits, hitlets)
+
+    # Testing refresh_hit_to_hitlets for free:
+    assert len(hits) == len(hitlets), 'Somehow hitlets and hits have different sizes'
+    # Tetsing interval fields:
+    dummy = np.zeros(0, dtype=strax.interval_dtype)
+    for name in dummy.dtype.names:
+        assert np.all(hitlets[name] == hits[name]), f'The entry of the field {name} did not match between hit and hitlets'
+
+    # Step 2.: Add to each hit(let) some data
+    for ind, d in enumerate(data):
+        h = hitlets[ind]
+        h['data'][:h['length']] = d[:h['length']]
+
+    strax.hitlet_properties(hitlets)
+
+    # Step 4.: Apply tests.
+    for ind, d in enumerate(data):
+        h = hitlets[ind]
+        d = d[:h['length']]
+        pos_max = np.argmax(d)
+
+        # Checking amplitude things:
+        assert pos_max == h['time_amplitude'], 'Wrong amplitude position found!'
+        assert d[pos_max] == h['amplitude'], 'Wrong amplitude value found!'
+
+        # Checking FHWM and FWTM:
+        fractions = [0.1, 0.5]
+        for f in fractions:
+            amplitude = np.max(d)
+            le = np.argwhere(d[:pos_max] <= amplitude * f)
+            if len(le):
+                le = le[-1, 0]
+                m = d[le + 1] - d[le]
+                le = le + 0.5 + (amplitude * f - d[le]) / m
+            else:
+                le = 0
+
+            re = np.argwhere(d[pos_max:] <= amplitude * f)
+
+            if len(re) and re[0,0] != 0:
+                re = re[0, 0] + pos_max
+                m = d[re] - d[re - 1]
+                re = re + 0.5 + (amplitude * f - d[re]) / m
+            else:
+                re = len(d)
+
+            if f == 0.5:
+                left = 'left'
+                fwxm = 'fwhm'
+            else:
+                left = 'low_left'
+                fwxm = 'fwtm'
+
+            assert math.isclose(le, h[left], rel_tol=10**-4, abs_tol=10**-4), f'Left edge does not match for fraction {f}'
+            assert math.isclose(re - le, h[fwxm], rel_tol=10**-4, abs_tol=10**-4), f'FWHM does not match for {f}'
+
+
 # ------------------------
 # Entropy test
 # ------------------------
