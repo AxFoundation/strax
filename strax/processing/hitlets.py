@@ -322,6 +322,9 @@ def hitlet_properties(hitlets):
         amp_time = int(amp_ind * dt)
         height = data[amp_ind]
 
+        h['amplitude'] = height
+        h['time_amplitude'] = amp_time
+
         # Computing FWHM:
         left_edge, right_edge = get_fwxm(h, 0.5)
         width = right_edge - left_edge
@@ -330,8 +333,6 @@ def hitlet_properties(hitlets):
         left_edge_low, right_edge = get_fwxm(h, 0.1)
         width_low = right_edge - left_edge_low
 
-        h['amplitude'] = height
-        h['time_amplitude'] = amp_time
         h['fwhm'] = width
         h['left'] = left_edge
         h['low_left'] = left_edge_low
@@ -438,7 +439,7 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
     if 'data' not in hitlets.dtype.names:
         raise ValueError('"hitlets" must have a field "data".')
 
-    if template == 'flat':
+    if isinstance(template, str) and template == 'flat':
         template = np.empty(0, dtype=np.float32)
         flat = True
     else:
