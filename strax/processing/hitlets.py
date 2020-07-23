@@ -146,7 +146,7 @@ def get_hitlets_data(hitlets, records, to_pe):
     e.g. hit was extended in regions of now records) and area
     according to the found data.
     """
-    # TODO: Add check for requirements of hitlets.
+    assert 'data' in hitlets.dtype.names, 'Hitlets has to have the field "data" in which the waveform will be stored.'
 
     rlink = strax.record_links(records)
     for h in hitlets:
@@ -200,7 +200,7 @@ def _get_hitlet_data(hitlet, records, prev_r, next_r):
             trial_counter += 1
 
         # Now we have to do the very same for records in the future:
-        # Almost the same code as above sorry...
+        # Almost the same code as above can I change this?
         trial_counter = 0
         next_r_i = r_i
         while hitlet['length'] - p_end_i:
