@@ -142,10 +142,13 @@ def hitlet_with_data_dtype(n_samples, n_widths=11):
     
     :param n_samples: Buffer length of the data field. Make sure it can
         hold the longest hitlet.
-    :param n_widths: Number of area deciles width.  
+    :param n_widths: Number of area deciles width.
+
+    Note:
+        The data buffer will be at least 2 samples long
     """
     dtype = hitlet_dtype(n_widths)
-
+    n_samples = max(n_samples, 2)
     return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                          np.float32, n_samples)]
 
