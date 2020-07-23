@@ -843,7 +843,9 @@ class Context:
                         chunks = self.get_meta(run_id, t)['chunks']  
                         start_time = max(start_time, chunks[0]['start'])
                         end_time = min(end_time, chunks[-1]['end'])
-                    except (strax.DataNotAvailable, KeyError):
+                    except (strax.storage.common.DataCorrupted,
+                            strax.DataNotAvailable, 
+                            KeyError):
                         # Maybe at least one target had some metadata.
                         start_time = max(start_time, 0)
                         end_time = min(end_time, float('inf'))
@@ -980,9 +982,12 @@ class Context:
         if len(run_ids) == 0:
             raise ValueError("Cannot build empty list of runs")
         if len(run_ids) > 1:
+            if 'progress_bar' in kwargs:
+                del kwargs['progress_bar']
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True,
+                progress_bar=False,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
