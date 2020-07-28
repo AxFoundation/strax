@@ -394,8 +394,18 @@ class Context:
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
+
         p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
+
+        if p.child_ends_with:
+            # This plugin is a child of another plugin and has some different
+            # options to pass. So update parent config according to child:
+            for k, opt in p.takes_config.items():
+                if opt.child_plugin and k.endswith(p.child_ends_with):
+                    v = opt.default
+                    kparent = k[:-len(p.child_ends_with)]
+                    p.config[kparent] = v
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -438,10 +448,24 @@ class Context:
             p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
             last_provide = d_provides
-            p.lineage = {last_provide: (p.__class__.__name__,
-                             p.version(run_id),
-                             {q: v for q, v in p.config.items()
-                              if p.takes_config[q].track})}
+
+            if p.child_ends_with:
+                # Plugin is a child of another plugin, hence we have to
+                # drop the parents config from the lineage
+                for q, v in p.config.items():
+                    configs = {}
+                    if q + p.child_ends_with in p.takes_config:
+                        continue
+                    elif p.takes_config[q].track:
+                        configs[q] = v
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 configs)}
+            else:
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 {q: v for q, v in p.config.items()
+                                  if p.takes_config[q].track})}
             for d_depends in p.depends_on:
                 p.lineage.update(p.deps[d_depends].lineage)
 
