@@ -53,6 +53,7 @@ class Plugin:
     depends_on: tuple
     provides: tuple
     input_buffer: typing.Dict[str, strax.Chunk]
+    child_ends_with = None  # Needed for plugins which are inherited from an already eliciting plugin.
 
     compressor = 'blosc'
 
