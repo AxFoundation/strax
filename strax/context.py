@@ -465,7 +465,8 @@ class Context:
                     elif p.takes_config[q].track:
                         configs[q] = v
                 # Adding parent information to the lineage:
-                configs[p.parent_name] = p.parent_version
+                parent_class = p.__class__.__bases__[0]
+                configs[parent_class.__name__] = parent_class.__version__
                         
                 p.lineage = {last_provide: (p.__class__.__name__,
                                  p.version(run_id),
