@@ -402,10 +402,16 @@ class Context:
             # This plugin is a child of another plugin and has some different
             # options to pass. So update parent config according to child:
             for k, opt in p.takes_config.items():
-                if opt.child_plugin and k.endswith(p.child_ends_with):
-                    v = opt.default
-                    kparent = k[:-len(p.child_ends_with)]
-                    p.config[kparent] = v
+                if k.endswith(p.child_ends_with):
+                    if opt.child_option:
+                        v = opt.default
+                        kparent = k[:-len(p.child_ends_with)]
+                        p.config[kparent] = v
+                    else:
+                        warnings.warn(f'You specified plugin {p.__class__} as a child plugin.'
+                                      f' Found the option {k} with the ending {p.child_ends_with}'
+                                      ' which was not specified as a child option.' 
+                                      ' Was this intended?')
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -452,12 +458,13 @@ class Context:
             if p.child_ends_with:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
+                configs = {}
                 for q, v in p.config.items():
-                    configs = {}
                     if q + p.child_ends_with in p.takes_config:
                         continue
                     elif p.takes_config[q].track:
                         configs[q] = v
+                        
                 p.lineage = {last_provide: (p.__class__.__name__,
                                  p.version(run_id),
                                  configs)}
