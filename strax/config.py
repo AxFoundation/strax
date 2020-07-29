@@ -60,7 +60,7 @@ class Option:
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
                  default_by_run=OMITTED,
-                 child_plugin: bool = False,
+                 child_option: bool = False,
                  track: bool = True,
                  help: str = ''):
         """
@@ -72,7 +72,7 @@ class Option:
          - Callable. Will be called with run_id, must return value for run.
          - List [(start_run_id, value), ..,] for values specified by range of
            runs.
-        :param child_plugin: If true option is marked as a child_option. In case of
+        :param child_option: If true option is marked as a child_option. In case of
             plugin which is inherited from an already existing plugin we only store the
             child options in the lineage of the plugin.
         :param track: If True (default), option value becomes part of plugin
@@ -86,7 +86,7 @@ class Option:
         self.default_factory = default_factory
         self.track = track
         self.help = help
-        self.child_plugin = child_plugin
+        self.child_option = child_option
 
         # if self.default_by_run is not OMITTED:
         #     warnings.warn(f"The {self.name} option uses default_by_run,"
