@@ -53,8 +53,12 @@ class Plugin:
     depends_on: tuple
     provides: tuple
     input_buffer: typing.Dict[str, strax.Chunk]
-    child_ends_with = None  # Needed for plugins which are inherited from an already eliciting plugin.
-
+    
+    # Needed for plugins which are inherited from an already eliciting plugin:
+    child_ends_with = None  
+    parent_name = None
+    parent_version = None
+    
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk

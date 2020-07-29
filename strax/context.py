@@ -404,7 +404,7 @@ class Context:
             for k, opt in p.takes_config.items():
                 if k.endswith(p.child_ends_with):
                     if opt.child_option:
-                        v = opt.default
+                        v = config[k]
                         kparent = k[:-len(p.child_ends_with)]
                         p.config[kparent] = v
                     else:
@@ -464,6 +464,8 @@ class Context:
                         continue
                     elif p.takes_config[q].track:
                         configs[q] = v
+                # Adding parent information to the lineage:
+                configs[p.parent_name] = p.parent_version
                         
                 p.lineage = {last_provide: (p.__class__.__name__,
                                  p.version(run_id),
