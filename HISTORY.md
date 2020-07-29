@@ -1,3 +1,8 @@
+0.11.3 / 2020-07-29
+---------------------
+- bugfix in new progressbar feature (#296)
+
+
 0.11.2 / 2020-07-21
 ---------------------
 - new plugin type: CutPlugin (#274)
