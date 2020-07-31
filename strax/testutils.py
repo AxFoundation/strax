@@ -245,14 +245,18 @@ class ParentPlugin(strax.Plugin):
         res['time'] = peaks['time']
         res['dt'] = peaks['dt']
         res['length'] = peaks['length']
+        res['max_gap'] = self.config['parent_unique_option']
 
         # Properties we will modify via changed options:
         res['channel'] = peaks['channel'] + self.config['more_special_context_option']['tpc'][1]
         res['area'] = self.config['by_child_overwrite_option']
 
         # Shape which we will change for child:
-        res['area_per_channel'] = self.config['parent_unique_option']
+        start, end = self.config['more_special_context_option']['tpc']
+        res['area_per_channel'][:, start:end] = 1
+
         return res
+
 
 # Child:
 @strax.takes_config(
@@ -277,7 +281,7 @@ class ChildPlugin(ParentPlugin):
     child_ends_with = '_child'
 
     def infer_dtype(self):
-        # Loading here another config which will be different for he:
+        # Loading here another config which will be different for child:
         self.dtype = strax.peak_dtype(n_channels=self.config['context_option_child'])
         return self.dtype
 
@@ -291,6 +295,7 @@ class ChildPlugin(ParentPlugin):
         peaks_child['time'] = res['time']
         peaks_child['dt'] = res['dt']
         peaks_child['length'] = res['length']
+        peaks_child['max_gap'] = res['max_gap']
 
         # Things which should be different:
         peaks_child['area'] = res['area']
@@ -299,6 +304,6 @@ class ChildPlugin(ParentPlugin):
 
         # Test if we can change shape of child:
         start, end = self.config['more_special_context_option_child']['tpc']
-        peaks_child['area_per_channel'][:, :self.config['child_exclusive_option']] = res['area_per_channel'][:, start:end]
+        peaks_child['area_per_channel'][:, :] = res['area_per_channel'][:, :]
 
         return peaks_child
