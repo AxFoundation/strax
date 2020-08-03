@@ -67,4 +67,103 @@ def test_child_plugin_config():
     # TODO Checking if set_config() changes are propagated correctly.
 
 def test_child_plugin_lienage():
-    pass
+    """
+    Similar test as above, but this time week check the lineage/hash of
+    the child and parent.
+    """
+    mystrax = strax.Context(storage=[],
+                            config={'context_option': 4,
+                                    'more_special_context_option': immutabledict(tpc=(0, 4))
+                                    },
+                            register=[Records, Peaks, ParentPlugin, ChildPlugin],
+                            allow_multiprocess=True)
+
+    def _get_hashes():
+        hash_child = mystrax.key_for('0', 'peaks_child').lineage_hash
+        hash_parent = mystrax.key_for('0', 'peaks_parent').lineage_hash
+        return hash_parent, hash_child
+
+    def _check_hash(name, hash_parent, hash_child, changes_parent, changes_child):
+        hp, hc = _get_hashes()
+        if changes_parent:
+            assert hp != hash_parent, f'{name} did not changed lineage of the parent!'
+        else:
+            assert hp == hash_parent, f'{name} changed lineage of the parent!'
+
+        if changes_child:
+            assert hc != hash_child, f'{name} did not changed lineage of the parent!'
+        else:
+            assert hc == hash_child, f'{name} changed lineage of the parent!'
+
+        return hp, hc
+
+    # -----------------------------
+    # Checking if lineage of child and
+    # parent are correct for defaults:
+    # -----------------------------
+    # Parent:
+    lineage_parent = mystrax.key_for('0', 'peaks_parent').lineage['peaks_parent']
+    true_config_parent = {'context_option': 4,
+                          'by_child_overwrite_option': 2,
+                          'parent_unique_option': 10}
+
+    parent_name, parent_version, config = lineage_parent
+    assert parent_name == 'ParentPlugin', 'Wrong parent name'
+    assert parent_version == '0.0.5', 'Wrong parent version'
+    for k, v in true_config_parent.items():
+        assert config[k] == v, f'Parent has a wrong value for context_option {k}'
+
+    # Child:
+    lineage_child = mystrax.key_for('0', 'peaks_child').lineage['peaks_child']
+    true_config_child = {'parent_unique_option': 10,
+                         'by_child_overwrite_option_child': 4,
+                         'context_option_child': 10,
+                         'child_exclusive_option': 6,
+                         '2nd_child_exclusive_option_child': 2,
+                         'ParentPlugin': '0.0.5'}
+
+    child_name, child_version, config = lineage_child
+    assert child_name == 'ChildPlugin', 'Wrong child name'
+    assert child_version == '0.0.1', 'Wrong child version'
+    for k, v in true_config_child.items():
+        assert config[k] == v, f'Parent has a wrong value for context_option {k}'
+
+    # -----------------------------
+    # Last test, checking if set_config
+    # changes the hash as expected:
+    # -----------------------------
+    # Child exclusive option:
+    hp, hc = _get_hashes()
+    mystrax.set_config({'child_exclusive_option': 8})
+    hp, hc = _check_hash('child_exclusive_option',
+                         hp, hc,
+                         False, True
+                         )
+
+    # Parent exclusive option:
+    mystrax.set_config({'by_child_overwrite_option': 42})
+    hp, hc = _check_hash('parent_exclusive_option',
+                         hp, hc,
+                         True, False
+                         )
+
+    # Parent unique option (shared by child and arent):
+    mystrax.set_config({'parent_unique_option': 33})
+    hp, hc = _check_hash('child_exclusive_option',
+                         hp, hc,
+                         True, True
+                         )
+
+    # Context option parent:
+    mystrax.set_config({'context_option': 33})
+    hp, hc = _check_hash('child_exclusive_option',
+                         hp, hc,
+                         True, False
+                         )
+
+    # Context option child:
+    mystrax.set_config({'context_option_child': 17})
+    hp, hc = _check_hash('child_exclusive_option',
+                         hp, hc,
+                         False, True
+                         )
