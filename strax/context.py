@@ -1121,7 +1121,7 @@ class Context:
             if store_first_for_others and not seen_data and len(data):
                 # Store the first value we see for the non-accumulated fields
                 for name in data.dtype.names:
-                    if name in fields:
+                    if name not in fields:
                         result[name] = data[0][name]
                 seen_data = True
             result['end'] = chunk.end
