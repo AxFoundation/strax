@@ -14,6 +14,8 @@ from .storage.files import *
 from .storage.mongo import *
 from .storage.s3 import *
 from .storage.zipfiles import *
+from .corrections.cmt_DB_interface import *
+from .corrections.cmt_services import *
 
 from .config import *
 from .plugin import *
@@ -21,7 +23,6 @@ from .mailbox import *
 from .processor import *
 from .context import *
 from .run_selection import *
-
 from .io import *
 
 from strax.processing.data_reduction import *
@@ -30,3 +31,5 @@ from strax.processing.peak_building import *
 from strax.processing.peak_merging import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
+
+
