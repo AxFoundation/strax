@@ -31,5 +31,3 @@ from strax.processing.peak_building import *
 from strax.processing.peak_merging import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
-
-
