@@ -22,7 +22,6 @@ class rucio(strax.StorageBackend):
             return json.loads(f.read())
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
-        #print('yes')
         fn = rucio_path(chunk_info['filename'], dirname)
         return strax.load_file(fn, dtype=dtype, compressor=compressor)
 
