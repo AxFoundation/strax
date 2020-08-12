@@ -216,12 +216,21 @@ run_id = '0'
 # Some test plugins to check
 # inheritance of "child"-plugins.
 ##
+DEFAULT_CONFIG_TEST = {'area_parent': 2, 'area_child': 4,
+                        'nhits_parent':0, 'nhits_child': 6,
+                        'area_per_channel_both': 1,
+                        'max_gap_both': 10,
+                        'area_per_channel_shape_parent': (4,),
+                        'area_per_channel_shape_child': (10,),
+                        'channel_map_parent': (0, 4),
+                       'channel_map_child': (4, 10)
+                       }
 
 # Parent:
 @strax.takes_config(
-    strax.Option('by_child_overwrite_option', default=2,
+    strax.Option('by_child_overwrite_option', default=DEFAULT_CONFIG_TEST['area_parent'],
                  help="Option we will overwrite in our child plugin"),
-    strax.Option('parent_unique_option', type=int, default=10,
+    strax.Option('parent_unique_option', type=int, default=DEFAULT_CONFIG_TEST['max_gap_both'],
                  help='Option which is not touched by the child and '
                       'therefore the same for parent and child'),
     strax.Option('context_option', type=int,
@@ -260,18 +269,18 @@ class ParentPlugin(strax.Plugin):
 
 # Child:
 @strax.takes_config(
-    strax.Option('by_child_overwrite_option_child', default=4, child_option=True,
+    strax.Option('by_child_overwrite_option_child',
+                 default=DEFAULT_CONFIG_TEST['area_child'], child_option=True,
                  help="Option we will overwrite in our child plugin"),
-    strax.Option('context_option_child', type=int, default=10, child_option=True,
+    strax.Option('context_option_child', type=int,
+                 default=DEFAULT_CONFIG_TEST['area_per_channel_shape_child'][0], child_option=True,
                  help='Tracked context option e.g. n_pmts_tpc.'),
-    strax.Option('child_exclusive_option', type=int, default=6,
+    strax.Option('child_exclusive_option', type=int, default=DEFAULT_CONFIG_TEST['nhits_child'],
                  help='Option which is exclusive for the child.'),
-    strax.Option('2nd_child_exclusive_option_child', default=2,
-                 help='Same as before but end with _child'),
     strax.Option('more_special_context_option_child', child_option=True,
                  track=False,
-                 default=immutabledict(tpc=(4, 10)), type=immutabledict,
-                 help="iSpecial context option which is not tacked e.g. channel_map")
+                 default=immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_child']), type=immutabledict,
+                 help="Special context option which is not tacked e.g. channel_map")
 )
 class ChildPlugin(ParentPlugin):
     provides = 'peaks_child'
@@ -300,9 +309,10 @@ class ChildPlugin(ParentPlugin):
         # Things which should be different:
         peaks_child['area'] = res['area']
         peaks_child['channel'] = res['channel']
-        peaks_child['n_hits'] = self.config['2nd_child_exclusive_option_child']
+        peaks_child['n_hits'] = self.config['child_exclusive_option']
 
         # Test if we can change shape of child:
+        #TODO Check me tomorrow:
         start, end = self.config['more_special_context_option_child']['tpc']
         peaks_child['area_per_channel'][:, :] = res['area_per_channel'][:, :]
 
