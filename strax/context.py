@@ -75,7 +75,10 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       'possibly be removed, see issue #246'),
     strax.Option(name='free_options', default=tuple(),
                  help='Do not warn if any of these options are passed, '
-                      'even when no registered plugin takes them.')
+                      'even when no registered plugin takes them.'),
+    strax.Option(name='apply_data_function', default=tuple(),
+                 help='Apply a function to the data prior to returning the'
+                      'data.')
 )
 @export
 class Context:
@@ -1014,7 +1017,17 @@ class Context:
                 max_workers=max_workers,
                 **kwargs)
             results = [x.data for x in source]
-        return np.concatenate(results)
+        
+        result = np.concatenate(results)
+        
+        for function in self.context_config['apply_data_function']:
+            if not hasattr(function, '__call__'):
+                raise TypeError(f'apply_data_function in the context_config got '
+                                f'{function} but expected callable function with')
+            # Make sure that the function takes single argument data (or set other 
+            # arguments as kwargs)
+            result = function(result)
+        return result
 
     def accumulate(self,
                    run_id: ty.Union[str, tuple, list],
