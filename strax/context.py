@@ -417,10 +417,10 @@ class Context:
 
                         p.config[kparent] = v
                     else:
-                        warnings.warn(f'You specified plugin {p.__class__.__name__} as a child plugin.'
-                                      f' Found the option {k} with the ending {p.child_ends_with}'
-                                      ' which was not specified as a child option.'
-                                      ' Was this intended?')
+                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
+                                         f' Found the option {k} with the ending {p.child_ends_with}'
+                                         ' which was not specified as a child option.'
+                                         ' Was this intended? If yes, please change the ending')
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
