@@ -205,7 +205,6 @@ def profile_threaded(filename):
         monitoring_gil = True
     except (RuntimeError, ImportError):
         monitoring_gil = False
-        pass
 
     yappi.start()
     yield
