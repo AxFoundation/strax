@@ -78,7 +78,8 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       'even when no registered plugin takes them.'),
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
-                      'data.')
+                      'data. The function should take two positional arguments: '
+                      'func(<data>, <targets>).')
 )
 @export
 class Context:
@@ -1026,7 +1027,7 @@ class Context:
                                 f'{function} but expected callable function with')
             # Make sure that the function takes single argument data (or set other 
             # arguments as kwargs)
-            result = function(result)
+            result = function(result, targets)
         return result
 
     def accumulate(self,
