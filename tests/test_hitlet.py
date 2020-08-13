@@ -3,7 +3,7 @@ import numpy as np
 
 import strax
 from hypothesis import given, settings
-import hypothesis.extra.numpy
+import hypothesis.extra.numpy as hnp
 import hypothesis.strategies as st
 from strax.testutils import fake_hits
 
@@ -13,8 +13,8 @@ from strax.testutils import fake_hits
 # -----------------------
 @given(fake_hits,
        fake_hits,
-       hypothesis.strategies.integers(min_value=0, max_value=10),
-       hypothesis.strategies.integers(min_value=0, max_value=10))
+       st.integers(min_value=0, max_value=10),
+       st.integers(min_value=0, max_value=10))
 @settings(deadline=None)
 def test_concat_overlapping_hits(hits0, hits1, le, re):
     # combining fake hits of the two channels:
@@ -66,24 +66,122 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
                 mask = strax.endtime(concat_hits[m])[:-1] - concat_hits[m]['time'][1:]
                 assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
 
+# -----------------------------
+# Test for get_hitlets_data.
+# This test is done with some predefined
+# records.
+# -----------------------------
+
+def test_get_hitlets_data():
+    dummy_records = [  # Contains Hitlet #:
+        [[1, 3, 2, 1, 0, 0], ],  # 0
+        [[0, 0, 0, 0, 1, 3],  # 1
+         [2, 1, 0, 0, 0, 0]],  #
+        [[0, 0, 0, 0, 1, 3],  # 2
+         [2, 1, 0, 1, 3, 2], ],  # 3
+        [[0, 0, 0, 0, 1, 2],  # 4
+         [2, 2, 2, 2, 2, 2],
+         [2, 1, 0, 0, 0, 0]],
+        [[2, 1, 0, 1, 3, 2]],  # 5, 6
+        [[2, 2, 2, 2, 2, 2]]  # 7
+    ]
+
+    # Defining the true parameters of the hitlets:
+    true_area = [7, 7, 7, 6, 18, 3, 6, 12]
+    true_time = [10, 28, 46, 51, 68, 88, 91, 104]
+    true_waveform = [[1, 3, 2, 1],
+                     [1, 3, 2, 1],
+                     [1, 3, 2, 1],
+                     [1, 3, 2],
+                     [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                     [2, 1],
+                     [1, 3, 2],
+                     [2, 2, 2, 2, 2, 2]
+                     ]
+
+    records = _make_fake_records(dummy_records)
+    hits = strax.find_hits(records, min_amplitude=2)
+    hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1))
+    hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=np.max(hits['length'])))
+    strax.refresh_hit_to_hitlets(hits, hitlets)
+    strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
+
+    for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
+        h = hitlets[i]
+        assert h['area'] == a, f'Hitlet {i} has the wrong area'
+        assert np.all(h['data'][:h['length']] == wf), f'Hitlet {i} has the wrong waveform'
+        assert h['time'] == t, f'Hitlet {i} has the wrong starttime'
+
+
+def _make_fake_records(dummy_records):
+    """
+    Creates some specific records to test get_hitlet_data.
+    """
+    nfragments = [len(f) for f in dummy_records]
+    records = np.zeros(np.sum(nfragments), strax.record_dtype(6))
+    records['dt'] = 1
+    time_offset = 10  # Need some start time to avoid negative times
+
+    fragment_ind = 0
+    for dr, nf in zip(dummy_records, nfragments):
+        for ind, f in enumerate(dr):
+            r = records[fragment_ind]
+            r['time'] = time_offset
+            if ind != (nf - 1):
+                r['length'] = len(f)
+            else:
+                r['length'] = len(f) - _count(f)
+            r['data'] = f
+            r['record_i'] = ind
+
+            if ind == (nf - 1):
+                time_offset += r['length'] + 10  # +10 to ensure non-overlap
+            else:
+                time_offset += r['length']
+
+            fragment_ind += 1
+
+    pnf = 0
+    for nf in nfragments:
+        records['pulse_length'][pnf:nf + pnf] = np.sum(records['length'][pnf:nf + pnf])
+        pnf += nf
+    return records
+
+
+def _count(data):
+    """
+    Function which returns number of ZLE samples.
+    """
+    data = data[::-1]
+    ZLE = True
+    i = 0
+    while ZLE:
+        if (not data[i] == 0) or (i == len(data)):
+            break
+        i += 1
+    return i
+
+
+
+
 
 # -----------------------------
-# Test for hitlet_pproperties.
+# Test for hitlet_properties.
 # This test includes the fwxm and
 # refresh_hit_to_hitlets.
 # -----------------------------
-@hypothesis.strategies.composite
+@st.composite
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
 
     data_list = []
     for i in range(len(hits)):
         length = hits[i]['length']
-        data = draw(hypothesis.extra.numpy.arrays(
+        data = draw(hnp.arrays(
             shape=int(hits['length'].max()),
             dtype=np.float32,
-            elements=hypothesis.strategies.floats(min_value=-2, max_value=10, width=32),
-            fill=hypothesis.strategies.nothing()).filter(lambda x: np.sum(x[:length]) >= 0.01))
+            elements=st.floats(min_value=-2, max_value=10, width=32),
+            fill=st.nothing()).filter(lambda x: np.sum(x[:length]) >= 0.01))
         data_list.append(data)
     data = np.array(data_list)
     hd = (hits, data)
@@ -177,13 +275,11 @@ def test_hitlet_properties(hits_n_data):
 data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
 
 
-@given(data=hypothesis.extra.numpy.arrays(np.float32,
-                                          shape=hypothesis.strategies.integers(min_value=1, max_value=10),
-                                          elements=hypothesis.strategies.floats(min_value=-10, max_value=10,
-                                                                                width=32)).filter(data_filter),
-       size_template_and_ind_max_template=st.lists(elements=st.integers(min_value=0, max_value=10),
-                                                  min_size=2, max_size=2).filter(lambda x: x[0] != x[1])
-      )
+@given(data=hnp.arrays(np.float32,
+                       shape=st.integers(min_value=1, max_value=10),
+                       elements=st.floats(min_value=-10, max_value=10, width=32)).filter(data_filter),
+       size_template_and_ind_max_template=st.lists(elements=st.integers(min_value=0, max_value=10), min_size=2,
+                                                   max_size=2).filter(lambda x: x[0] != x[1]))
 @settings(deadline=None)
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
