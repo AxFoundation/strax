@@ -171,14 +171,15 @@ def _count(data):
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
 
-    data_list = []
+    data_list = [
+    filter_min_area = lambda x: np.sum(x[:length]) >= 0.1)
     for i, h in enumerate(hits):
         length = hits[i]['length']
         data = draw(hnp.arrays(
             shape=int(hits['length'].max()),
             dtype=np.float32,
             elements=st.floats(min_value=-2, max_value=10, width=32),
-            fill=st.nothing()).filter(lambda x: np.sum(x[:length]) >= 0.01))
+            fill=st.nothing()).filter(filter_min_area))
         data_list.append(data)
     data = np.array(data_list)
     hd = (hits, data)
@@ -276,7 +277,7 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
                        shape=st.integers(min_value=1, max_value=10),
                        elements=st.floats(min_value=-10, max_value=10, width=32)).filter(data_filter),
        size_template_and_ind_max_template=st.lists(elements=st.integers(min_value=0, max_value=10), min_size=2,
-                                                   max_size=2).filter(lambda x: x[0] != x[1]))  # noqa
+                                                   max_size=2).filter(lambda x: x[0] != x[1]))
 @settings(deadline=None)
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
