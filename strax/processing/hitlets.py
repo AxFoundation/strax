@@ -157,6 +157,31 @@ def get_hitlets_data(hitlets, records, to_pe):
         h['area'] = np.sum(data * to_pe[h['channel']])
 
 
+@export
+def get_single_hitlets_data(hitlet, records, prev_r, next_r):
+    """
+    Function which gets the data of a single hit or hitlet according
+    to the specified time and length of the object.
+
+    In case the hit or hitlet is extended into non-recorded regions
+    zeros are returned for the corresponding samples.
+
+    :param hitlet: Hits or hitlets.
+    :param records: Records
+    :param prev_r: Index of the previous record seen from the current
+        record. (Return of strax.record_links)
+    :param next_r: Index of the next record seen by the current record.
+        (Return of strax.record_links)
+    :return:
+    """
+    data, start_time = _get_hitlet_data(hitlet, records, prev_r, next_r)
+    hitlet_data = np.zeros(hitlet['length'], dtye=np.float32)
+    si = (hitlet['time'] - start_time)//hitlet['dt']
+    ei = si + len(data)
+    hitlet_data[si:ei] = data
+    return hitlet_data
+
+TRIAL_COUNTER_NEIGHBORING_RECORDS = 100
 @numba.njit(nogil=True, cache=True)
 def _get_hitlet_data(hitlet, records, prev_r, next_r):
     temp_data = np.zeros(hitlet['length'], dtype=np.float64)
@@ -194,7 +219,7 @@ def _get_hitlet_data(hitlet, records, prev_r, next_r):
             temp_data[p_start_i:data_start] = data
             data_start = p_start_i
 
-            if trial_counter > 100:
+            if trial_counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
                 raise RuntimeError('Tried too hard. There are more than'
                                    '100 successive records. This is odd...')
             trial_counter += 1
@@ -220,7 +245,7 @@ def _get_hitlet_data(hitlet, records, prev_r, next_r):
             temp_data[data_end:p_end_i] = data
             data_end = p_end_i
 
-            if trial_counter > 100:
+            if trial_counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
                 raise RuntimeError('Tried too hard. There are more than'
                                    '100 successive records. This is odd...')
             trial_counter += 1
@@ -299,7 +324,7 @@ def _update_record_i(new_hitlets, records, next_ri):
                 print('Record:\n', r, '\nHit:\n', hit)
                 raise ValueError('Was not able to find record_i')
 
-            if counter > 100:
+            if counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
                 print(ind, last_ri)
                 raise RuntimeError('Tried too often to find correct record_i.')
 
