@@ -253,9 +253,12 @@ def test_random_access():
             st.get_array(run_id, 'peaks')
 
         df = st.get_array(run_id, 'peaks', time_range=(3, 5))
+        # Also test without the progress-bar
+        df_pbar = st.get_array(run_id, 'peaks', time_range=(3, 5), progress_bar = False)
         assert len(df) == 2 * recs_per_chunk
         assert df['time'].min() == 3
         assert df['time'].max() == 4
+        assert np.all(df == df_pbar), 'progress-bar changes the result?!?'
 
         # Try again with unaligned chunks
         df = st.get_array(run_id, ['peaks', 'peak_classification'],

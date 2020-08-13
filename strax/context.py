@@ -410,15 +410,18 @@ class Context:
                     if opt.child_option:
                         v = config[k]
                         kparent = k[:-len(p.child_ends_with)]
+
                         if is_parent_reg:
                             mes = f'Option {kparent} is not taken by parent plugin.'
                             assert kparent in parent_class.takes_config.keys(), mes
+
                         p.config[kparent] = v
                     else:
-                        warnings.warn(f'You specified plugin {p.__class__.__name__} as a child plugin.'
-                                      f' Found the option {k} with the ending {p.child_ends_with}'
-                                      ' which was not specified as a child option.' 
-                                      ' Was this intended?')
+                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
+                                         f' Found the option {k} with the ending {p.child_ends_with}'
+                                         ' which was not specified as a child option.'
+                                         ' Was this intended? If yes, please change the ending')
+
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -868,26 +871,27 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
+        
+        # Defining time ranges for the progress bar:
+        if time_range:
+            # user specified a time selection
+            start_time, end_time = time_range
+        else:
+            # If no selection is specified we have to get the last end_time:
+            start_time = 0
+            end_time = float('inf')
 
         if progress_bar:
-            # Defining time ranges for the progress bar:
-            if time_range:
-                # user specified a time selection
-                start_time, end_time = time_range
-            else:
-                # If no selection is specified we have to get the last end_time:
-                start_time = 0 
-                end_time = float('inf')
-                for t in strax.to_str_tuple(targets):
-                    try:
-                        # Sometimes some metadata might be missing e.g. during tests.
-                        chunks = self.get_meta(run_id, t)['chunks']  
-                        start_time = max(start_time, chunks[0]['start'])
-                        end_time = min(end_time, chunks[-1]['end'])
-                    except (strax.DataNotAvailable, KeyError):
-                        # Maybe at least one target had some metadata.
-                        start_time = max(start_time, 0)
-                        end_time = min(end_time, float('inf'))
+            for t in strax.to_str_tuple(targets):
+                try:
+                    # Sometimes some metadata might be missing e.g. during tests.
+                    chunks = self.get_meta(run_id, t)['chunks']
+                    start_time = max(start_time, chunks[0]['start'])
+                    end_time = min(end_time, chunks[-1]['end'])
+                except (strax.DataNotAvailable, KeyError):
+                    # Maybe at least one target had some metadata.
+                    start_time = max(start_time, 0)
+                    end_time = min(end_time, float('inf'))
 
             # Define nice progressbar format:
             bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
@@ -898,7 +902,7 @@ class Context:
 
         try:
             with contextlib.ExitStack() as stack:
-                if start_time != 0 and end_time != float('inf'):
+                if progress_bar and (start_time != 0 and end_time != float('inf')):
                     # Get initial time
                     pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
                     last_time = pbar.last_print_t
@@ -1011,7 +1015,7 @@ class Context:
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
-             _skip_if_built=True,
+             progress_bar=False, _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
@@ -1024,12 +1028,14 @@ class Context:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True,
+                progress_bar=progress_bar,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets,
+                               progress_bar=progress_bar,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
@@ -1116,7 +1122,7 @@ class Context:
             if store_first_for_others and not seen_data and len(data):
                 # Store the first value we see for the non-accumulated fields
                 for name in data.dtype.names:
-                    if name in fields:
+                    if name not in fields:
                         result[name] = data[0][name]
                 seen_data = True
             result['end'] = chunk.end
