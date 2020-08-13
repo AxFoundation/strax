@@ -171,8 +171,8 @@ def _count(data):
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
 
-    data_list = [
-    filter_min_area = lambda x: np.sum(x[:length]) >= 0.1)
+    data_list = []
+    filter_min_area = lambda x: np.sum(x[:length]) >= 0.1
     for i, h in enumerate(hits):
         length = hits[i]['length']
         data = draw(hnp.arrays(
