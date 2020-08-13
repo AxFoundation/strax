@@ -28,7 +28,7 @@ Incoming data
 -------------
 From the perspective of a plugin, all incoming data is time-synchronized and merged by kind. Specifically:
 
-* Data of the same kind is merged into a single array. If you depend on `events`, `peaks` and `peak_basics`, you will get two arrays: `events` and `peaks`. The first will be the merged array of `peaks` and `peak_basics`.
+* Data of the same kind is merged into a single array. If you depend on `events`, `peaks` and `peak_basics`, you will get two arrays: `events` and `peaks`. The second will be the merged array of `peaks` and `peak_basics`.
 * Data of different kinds are synchronized by time. Strax will fetch a chunks of the first kind (`events`), then fetch as much as needed from the second kind (`peaks`) until you have all peaks that end before or at exactly the same time as the last event.
 
 This example is a bit odd: when loading data of multiple kinds that are contained in each other, e.g. events and peaks, you very often want to use a `LoopPlugin` rather than a straight-up Plugin.
@@ -38,6 +38,8 @@ Outgoing data
 Plugins can chunk their output as they wish, including withholding some data until the next chunk is sent out. Of course this requires keeping state, which means you cannot parallelize: see the chunk boundary handling section later in this documentation.
 
 Savers, too, are free to chunk their data as they like; for example, to create files of convenient sizes. This affects the chunks you get when loading or reprocessing data. If you don't want this, e.g. if the next plugin in line assumes a particular kind of chunking you want to preserve, set the attribute `rechunk_on_save = False`.
+
+In cases where rechunking is permitted, a plugin can also specify a desired minimum uncompressed chunk size in bytes via the `chunk_target_size` attribute, with 200 MB as the default value. Chunks are concatenated until this desired size is exceeded, or all chunks have been combined, whereupon the data is compressed and written to disk.
 
 
 Sorted output requirement
