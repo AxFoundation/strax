@@ -400,15 +400,22 @@ class Context:
 
         if p.child_ends_with:
             # This plugin is a child of another plugin and has some different
+            # Checking if the parent plugin is registered, this does not have to be the case
+            # but enables some useful checks.
+            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
+            is_parent_reg = parent_class in self._plugin_class_registry.values()
             # options to pass. So update parent config according to child:
             for k, opt in p.takes_config.items():
                 if k.endswith(p.child_ends_with):
                     if opt.child_option:
                         v = config[k]
                         kparent = k[:-len(p.child_ends_with)]
+                        if is_parent_reg:
+                            mes = f'Option {kparent} is not taken by parent plugin.'
+                            assert kparent in parent_class.takes_config.keys(), mes
                         p.config[kparent] = v
                     else:
-                        warnings.warn(f'You specified plugin {p.__class__} as a child plugin.'
+                        warnings.warn(f'You specified plugin {p.__class__.__name__} as a child plugin.'
                                       f' Found the option {k} with the ending {p.child_ends_with}'
                                       ' which was not specified as a child option.' 
                                       ' Was this intended?')
