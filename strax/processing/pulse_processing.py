@@ -260,7 +260,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
         for i in range(n_samples):
             # We can't use enumerate over r['data'],
             # numba gives errors if we do.
-            # TODO: file issue?
+            # maybe file an issue?
             x = r['data'][i]
 
             satisfy_threshold = x >= threshold
