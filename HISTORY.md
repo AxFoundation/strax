@@ -1,3 +1,18 @@
+0.11.3 / 2020-07-29
+---------------------
+- bugfix in new progressbar feature (#296)
+
+
+0.11.2 / 2020-07-21
+---------------------
+- new plugin type: CutPlugin (#274)
+- add progressbar (#276)
+- allow for plugin-specific chunk-sizes (#277)
+- broaden scope of endtime check in chunk.py (#281)
+- change dtype of saturated channels (#286)
+- several (bug-)fixes (#289, #288, #284, #278, #273)
+
+
 0.11.1 / 2020-04-28
 ---------------------
 - Per-datatype rechunking control (#272)
