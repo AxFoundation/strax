@@ -16,7 +16,6 @@ from .storage.s3 import *
 from .storage.zipfiles import *
 
 from .corrections.cmt_DB_interface import *
-from .corrections.cmt_services import *
 
 from .config import *
 from .plugin import *
