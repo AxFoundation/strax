@@ -149,22 +149,24 @@ def get_hitlets_data(hitlets, records, to_pe):
 
     rlink = strax.record_links(records)
     for h in hitlets:
-        data, start_time = _get_hitlet_data(h, records, *rlink)
+        data, start_time = get_single_hitlet_data(h, records, *rlink)
         h['length'] = len(data)
         h['data'][:len(data)] = data * to_pe[h['channel']]
         h['time'] = start_time
         h['area'] = np.sum(data * to_pe[h['channel']])
 
 
+TRIAL_COUNTER_NEIGHBORING_RECORDS = 100
 @export
-def get_single_hitlets_data(hitlet, records, prev_r, next_r):
+@numba.njit(nogil=True, cache=True)
+def get_single_hitlet_data(hitlet, records, prev_r, next_r):
     """
     Function which gets the data of a single hit or hitlet according
     to the specified time and length of the object.
 
     In case the hit or hitlet is extended into non-recorded regions
-    zeros are returned for the corresponding samples. The function can
-    be used for plotting purposes.
+    the data gets chopped.
+
 
     :param hitlet: Hits or hitlets.
     :param records: Records
@@ -173,17 +175,10 @@ def get_single_hitlets_data(hitlet, records, prev_r, next_r):
     :param next_r: Index of the next record seen by the current record.
         (Return of strax.record_links)
     :return:
+        np.ndarray: Samples of the hitlet [ADC]
+        int: Start time of the hitlet. (In case data gets chopped on the
+            left)
     """
-    data, start_time = _get_hitlet_data(hitlet, records, prev_r, next_r)
-    hitlet_data = np.zeros(hitlet['length'], dtye=np.float32)
-    si = (hitlet['time'] - start_time)//hitlet['dt']
-    ei = si + len(data)
-    hitlet_data[si:ei] = data
-    return hitlet_data
-
-TRIAL_COUNTER_NEIGHBORING_RECORDS = 100
-@numba.njit(nogil=True, cache=True)
-def _get_hitlet_data(hitlet, records, prev_r, next_r):
     temp_data = np.zeros(hitlet['length'], dtype=np.float64)
 
     # Lets get the starting record and the corresponding data:
