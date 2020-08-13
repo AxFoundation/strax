@@ -69,8 +69,9 @@ def test_child_plugin_config():
 
     mes = ('The channel identfication did not work for the child',
            'This means "more_special_context_option_child" did not work properly')
-    t = np.all(child['area_per_channel'][:, 4:10] == DEFAULT_CONFIG_TEST['area_per_channel_both'])
-    t = t & np.all(child['area_per_channel'][:, :4] == 0)
+    sc, ec = DEFAULT_CONFIG_TEST['channel_map_child']
+    t = np.all(child['area_per_channel'][:, sc: ec] == DEFAULT_CONFIG_TEST['area_per_channel_both'])
+    t = t & np.all(child['area_per_channel'][:, :sc] == 0)
     assert t, mes
     mes = ('Child array does not have the correct shape.'
            ' This means "context_option" was wrong.')
