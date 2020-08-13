@@ -162,9 +162,6 @@ def _count(data):
     return i
 
 
-
-
-
 # -----------------------------
 # Test for hitlet_properties.
 # This test includes the fwxm and
@@ -175,7 +172,7 @@ def hits_n_data(draw, strategy):
     hits = draw(strategy)
 
     data_list = []
-    for i in range(len(hits)):
+    for i, h in enumerate(hits):
         length = hits[i]['length']
         data = draw(hnp.arrays(
             shape=int(hits['length'].max()),
@@ -279,7 +276,7 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
                        shape=st.integers(min_value=1, max_value=10),
                        elements=st.floats(min_value=-10, max_value=10, width=32)).filter(data_filter),
        size_template_and_ind_max_template=st.lists(elements=st.integers(min_value=0, max_value=10), min_size=2,
-                                                   max_size=2).filter(lambda x: x[0] != x[1]))
+                                                   max_size=2).filter(lambda x: x[0] != x[1]))  # noqa
 @settings(deadline=None)
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
