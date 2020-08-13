@@ -146,7 +146,6 @@ def get_hitlets_data(hitlets, records, to_pe):
     e.g. hit was extended in regions of now records) and area
     according to the found data.
     """
-    assert 'data' in hitlets.dtype.names, 'Hitlets has to have the field "data" in which the waveform will be stored.'
 
     rlink = strax.record_links(records)
     for h in hitlets:
@@ -164,7 +163,8 @@ def get_single_hitlets_data(hitlet, records, prev_r, next_r):
     to the specified time and length of the object.
 
     In case the hit or hitlet is extended into non-recorded regions
-    zeros are returned for the corresponding samples.
+    zeros are returned for the corresponding samples. The function can
+    be used for plotting purposes.
 
     :param hitlet: Hits or hitlets.
     :param records: Records
