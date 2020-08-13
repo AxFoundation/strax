@@ -296,24 +296,6 @@ class ChildPlugin(ParentPlugin):
 
     def compute(self, peaks):
         res = super().compute(peaks)
+        res['n_hits'] = self.config['child_exclusive_option']
 
-        # Checking if an array shape can be different for parent and child:
-        peaks_child = np.zeros(len(peaks), dtype=self.dtype)
-
-        # Things which should stay the same:
-        peaks_child['time'] = res['time']
-        peaks_child['dt'] = res['dt']
-        peaks_child['length'] = res['length']
-        peaks_child['max_gap'] = res['max_gap']
-
-        # Things which should be different:
-        peaks_child['area'] = res['area']
-        peaks_child['channel'] = res['channel']
-        peaks_child['n_hits'] = self.config['child_exclusive_option']
-
-        # Test if we can change shape of child:
-        #TODO Check me tomorrow:
-        start, end = self.config['more_special_context_option_child']['tpc']
-        peaks_child['area_per_channel'][:, :] = res['area_per_channel'][:, :]
-
-        return peaks_child
+        return res
