@@ -77,7 +77,7 @@ class Corrections_DB_interface:
         if xenon1t:
             df_global = self.read('global_xenon1t')
         else:
-            df_global = self.read(self,'global')
+            df_global = self.read('global')
     
         context_config = {}
     
