@@ -20,9 +20,11 @@ class rucio(strax.StorageBackend):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         fn = rucio_path(self.root_dir, metadata_json, dirname)
-
-        if not osp.exists(fn):
-            raise strax.DataCorrupted(f"Data in {dirname} has no metadata")
+        folder = osp.join('/', *fn.split('/')[:-1])
+        if not osp.exists(folder):
+            raise strax.DataNotAvailable(f"No folder for matadata at {fn}")
+        elif not osp.exists(fn):
+            raise strax.DataCorrupted(f"Folder exists but no matadata at {fn}")
 
         with open(fn, mode='r') as f:
             return json.loads(f.read())
