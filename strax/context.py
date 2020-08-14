@@ -398,8 +398,34 @@ class Context:
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
+
         p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
+
+        if p.child_ends_with:
+            # This plugin is a child of another plugin and has some different
+            # Checking if the parent plugin is registered, this does not have to be the case
+            # but enables some useful checks.
+            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
+            is_parent_reg = parent_class in self._plugin_class_registry.values()
+            # options to pass. So update parent config according to child:
+            for k, opt in p.takes_config.items():
+                if k.endswith(p.child_ends_with):
+                    if opt.child_option:
+                        v = config[k]
+                        kparent = k[:-len(p.child_ends_with)]
+
+                        if is_parent_reg:
+                            mes = f'Option {kparent} is not taken by parent plugin.'
+                            assert kparent in parent_class.takes_config.keys(), mes
+
+                        p.config[kparent] = v
+                    else:
+                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
+                                         f' Found the option {k} with the ending {p.child_ends_with}'
+                                         ' which was not specified as a child option.'
+                                         ' Was this intended? If yes, please change the ending')
+
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -442,10 +468,28 @@ class Context:
             p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
             last_provide = d_provides
-            p.lineage = {last_provide: (p.__class__.__name__,
-                             p.version(run_id),
-                             {q: v for q, v in p.config.items()
-                              if p.takes_config[q].track})}
+
+            if p.child_ends_with:
+                # Plugin is a child of another plugin, hence we have to
+                # drop the parents config from the lineage
+                configs = {}
+                for q, v in p.config.items():
+                    if q + p.child_ends_with in p.takes_config:
+                        continue
+                    elif p.takes_config[q].track:
+                        configs[q] = v
+                # Adding parent information to the lineage:
+                parent_class = p.__class__.__bases__[0]
+                configs[parent_class.__name__] = parent_class.__version__
+                        
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 configs)}
+            else:
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 {q: v for q, v in p.config.items()
+                                  if p.takes_config[q].track})}
             for d_depends in p.depends_on:
                 p.lineage.update(p.deps[d_depends].lineage)
 
@@ -1090,7 +1134,7 @@ class Context:
             if store_first_for_others and not seen_data and len(data):
                 # Store the first value we see for the non-accumulated fields
                 for name in data.dtype.names:
-                    if name in fields:
+                    if name not in fields:
                         result[name] = data[0][name]
                 seen_data = True
             result['end'] = chunk.end
