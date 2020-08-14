@@ -11,46 +11,51 @@ import strax
 
 export, __all__ = strax.exporter()
 
+'''In any given experiment applying corrections help us to remove detectors effects, 
+therefore, we define a class to manage corrections that are housed in a 
+mongoDB, where the manager can read, write among others functionalities
+'''
 @export
 class Corrections_DB_interface:
 
-    def __init__(self,host=None,username=None,password=None):
+    def __init__(self,host=None,username=None,password=None,database_name=None):
 
         self.host = host
         self.username = username
         self.password = password
         self.client = pymongo.MongoClient(host=self.host,username=self.username,password=self.password)
-        self.DATABASE_NAME= 'corrections' 
-        self.DATABASE=self.client[self.DATABASE_NAME]
+        self.database_name= database_name 
+        self.database=self.client[self.database_name]
 
     def list_corrections(self):
-        """Smart logic to list corrections
-        """
-        return [x['name'] for x in self.DATABASE.list_collections() if not 'global' in x['name']]
+        '''Smart logic to list corrections.
+        '''
+        return [x['name'] for x in self.database.list_collections() if not 'global' in x['name']]
 
 
     def read(self, correction):
-        """Smart logic to read corrections
-        """ 
-        df = pdm.read_mongo(correction, [], self.DATABASE)
+        '''Smart logic to read corrections, 
+        where correction is the name of the DataFrame.
+        ''' 
+        df = pdm.read_mongo(correction, [], self.database)
     
         # No data found
         if df.size == 0:
             return None
         # Delete internal Mongo identifier
         del df['_id']
-
-        # Set UTC
-        #df['time'] = pd.to_datetime(df['time'], utc=True)
     
         return  df.set_index('time')
 
     def interpolate(self, what, when, how='interpolate'):
+        '''Interpolate values of a given correction(what=DataFrame)
+        given a time(when). For information of interpolation methods 
+        see, https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.interpolate.html
+        '''
         df = what
     
-        df_new = pd.DataFrame.from_dict({'Time' : [when],
-                                    # 'This' : [True]
-                                    })
+        df_new = pd.DataFrame.from_dict({'Time' : [when]})
+
         df_new = df_new.set_index('Time')
     
         df_combined = pd.concat([df,
@@ -67,12 +72,12 @@ class Corrections_DB_interface:
         return df_combined
 
     def get_context_config(self, when, global_version = 'v1', xenon1t=False):
-        """Global configuration logic
-        """ 
+        '''Global configuration logic.
+        ''' 
         if xenon1t:
-            df_global = Corrections_DB_interface.read(self,'global_xenon1t')
+            df_global = self.read('global_xenon1t')
         else:
-            df_global = Corrections_DB_interface.read(self,'global')
+            df_global = self.read(self,'global')
     
         context_config = {}
     
@@ -85,16 +90,15 @@ class Corrections_DB_interface:
         return context_config
 
     def write(self, correction, df):
-        """Smart logic to write corrections
-        """
+        '''Smart logic to write corrections
+        where, corrections is the name of the correction(str type) and df is pandas DataFrame.
+        '''
+
         if 'ONLINE' not in df.columns:
             raise ValueError('Must specify ONLINE column')
         if 'v1' not in df.columns:
             raise ValueError('Must specify v1 column')
        
-        # Set UTC
-        #df.index = df.index.tz_localize('UTC')
-    
         # Compare against
         logging.info('Reading old values for comparison')
         df2 = Corrections_DB_interface.read(self,correction)
@@ -102,14 +106,14 @@ class Corrections_DB_interface:
         if df2 is not None:
             logging.info('Checking if columns unchanged in past')
 
-            now = datetime.now()
+            now = datetime.utcnow()
             for column in df2.columns:
-                logging.debug('Checking %s' % column)
+                logging.debug(f'Checking {column}')
                 if not (df2.loc[df2.index < now, column] == df.loc[df.index < now, column]).all():
-                    raise ValueError("%s changed in past, not allowed" % column)
+                    raise ValueError(f'{column} changed in past, not allowed')
 
         df = df.reset_index()
 
         logging.info('Writing')
 
-        return df.to_mongo(correction, self.DATABASE, if_exists='replace')
+        return df.to_mongo(correction, self.database, if_exists='replace')
