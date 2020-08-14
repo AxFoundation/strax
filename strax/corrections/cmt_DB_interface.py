@@ -82,9 +82,9 @@ class Corrections_DB_interface:
         context_config = {}
     
         for correction, version in df_global.iloc[-1][global_version].items():
-            df = Corrections_DB_interface.read(self,correction)
+            df = self.read(correction)
 
-            df = Corrections_DB_interface.interpolate(self,df, when)
+            df = self.interpolate(df, when)
             context_config[correction] = df.loc[df.index == when, version].values[0]
     
         return context_config
@@ -101,7 +101,7 @@ class Corrections_DB_interface:
        
         # Compare against
         logging.info('Reading old values for comparison')
-        df2 = Corrections_DB_interface.read(self,correction)
+        df2 = self.read(correction)
     
         if df2 is not None:
             logging.info('Checking if columns unchanged in past')
