@@ -8,7 +8,7 @@ import numpy as np
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields').split()
+           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -101,6 +101,56 @@ hit_dtype = interval_dtype + [
     (('Maximum amplitude above baseline [ADC counts]',
         'height'), np.float32),
 ]
+
+
+def hitlet_dtype(n_widths=11):
+    """
+    Hitlet dtype same as peaklet or peak dtype but for hit-kind of
+    objects.
+    """
+    dtype = interval_dtype + [
+        (('Original length of the hit interval in samples',
+          'hit_length'), np.int32),
+        (('Total hit area in pe',
+          'area'), np.float32),
+        (('Maximum of the PMT pulse in pe/sample',
+          'amplitude'), np.float32),
+        (('Position of the Amplitude in ns (minus "time")',
+          'time_amplitude'), np.int16),
+        (('Hit entropy',
+          'entropy'), np.float32),
+        (('Peak widths in range of central area fraction in ns',
+          'width'), np.float32, n_widths),
+        (('Peak widths: time between nth and 5th area decile in ns',
+          'area_decile_from_midpoint'), np.float32, n_widths),
+        (('FWHM of the PMT pulse in ns',
+          'fwhm'), np.float32),
+        (('Left edge of the FWHM in ns (minus "time")',
+          'left'), np.float32),
+        (('FWTM of the PMT pulse in ns', 'fwtm'),
+         np.float32),
+        (('Left edge of the FWTM in ns (minus "time")',
+          'low_left'), np.float32),
+        (('Fragment index in which hit was found (hitlets can be in more than 1 fragment)',
+          'record_i'), np.int32)]
+    return dtype
+
+def hitlet_with_data_dtype(n_samples, n_widths=11):
+    """
+    Hitlet dtype with data field. Required within the plugins to compute
+    hitlet properties. 
+    
+    :param n_samples: Buffer length of the data field. Make sure it can
+        hold the longest hitlet.
+    :param n_widths: Number of area deciles width.
+
+    Note:
+        The data buffer will be at least 2 samples long
+    """
+    dtype = hitlet_dtype(n_widths)
+    n_samples = max(n_samples, 2)
+    return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
+                         np.float32, n_samples)]
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
