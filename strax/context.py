@@ -516,7 +516,19 @@ class Context:
 
     @property
     def _find_options(self):
-        return dict(fuzzy_for=self.context_config['fuzzy_for'],
+
+        # The plugin settings in the lineage are stored with the last
+        # plugin provides name as a key. This can be quite confusing
+        # since e.g. to be fuzzy for the peaklets settings the user has
+        # to specify fuzzy_for=('lone_hits'). Here a small work around
+        # to change this and not to reprocess the entire data set.
+        fuzzy_for_keys = strax.to_str_tuple(self.context_config['fuzzy_for'])
+        last_provides = []
+        for key in fuzzy_for_keys:
+            last_provides.append(self._plugin_class_registry(key).provides[-1])
+        last_provides = tuple(last_provides)
+
+        return dict(fuzzy_for=last_provides,
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
