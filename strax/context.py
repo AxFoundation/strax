@@ -33,7 +33,7 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help='If True, save data that is loaded from one frontend '
                       'through all willing other storage frontends.'),
     strax.Option(name='fuzzy_for', default=tuple(),
-                 help='Tuple of plugin names for which no checks for version, '
+                 help='Tuple or string of plugin names for which no checks for version, '
                       'providing plugin, and config will be performed when '
                       'looking for data.'),
     strax.Option(name='fuzzy_for_options', default=tuple(),
@@ -525,7 +525,7 @@ class Context:
         fuzzy_for_keys = strax.to_str_tuple(self.context_config['fuzzy_for'])
         last_provides = []
         for key in fuzzy_for_keys:
-            last_provides.append(self._plugin_class_registry(key).provides[-1])
+            last_provides.append(self._plugin_class_registry[key].provides[-1])
         last_provides = tuple(last_provides)
 
         return dict(fuzzy_for=last_provides,
