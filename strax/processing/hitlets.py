@@ -2,26 +2,33 @@ import numpy as np
 import numba
 
 import strax
-from strax import utils
-from strax.dtypes import hit_dtype
 export, __all__ = strax.exporter()
+
+# Hardcoded numbers:
+TRIAL_COUNTER_NEIGHBORING_RECORDS = 100  # Trial counter when looking for hitlet data.
+NO_FWXM = -42  # Value in case FWXM cannot be found.
 
 # ----------------------
 # Hitlet building:
 # ----------------------
 @export
-def concat_overlapping_hits(hits, extensions, pmt_channels):
+def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     """
     Function which concatenates hits which may overlap after left and 
     right hit extension. Assumes that hits are sorted correctly.
-    
-    Note: 
+
+    Note:
         This function only updates time, length and record_i of the hit.
         (record_i is set according to the first hit)
-    
+
     :param hits: Hits in records.
     :param extensions: Tuple of the left and right hit extension.
     :param pmt_channels: Tuple of the detectors first and last PMT
+    :param start: Startime of the chunk
+    :param end: Endtime of the chunk
+
+    :returns:
+        array with concataneted hits.
     """
     # Getting channel map and compute the number of channels:
     first_channel, last_channel = pmt_channels
@@ -30,21 +37,23 @@ def concat_overlapping_hits(hits, extensions, pmt_channels):
     # Buffer for concat_overlapping_hits, if specified in 
     # _concat_overlapping_hits numba crashes.
     last_hit_in_channel = np.zeros(nchannels,
-                                   dtype=(hit_dtype
+                                   dtype=(strax.hit_dtype
                                           + [(('End time of the interval (ns since unix epoch)',
                                                'endtime'), np.int64)]))
 
     if len(hits):
-        hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel)
+        hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel, start, end)
     return hits
 
 
-@utils.growing_result(strax.hit_dtype, chunk_size=int(1e4))
+@strax.utils.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.njit(nogil=True, cache=True)
 def _concat_overlapping_hits(hits,
                              extensions,
                              first_channel,
                              last_hit_in_channel,
+                             start=0,
+                             end=float('inf'),
                              _result_buffer=None):
     buffer = _result_buffer
     offset = 0
@@ -62,8 +71,8 @@ def _concat_overlapping_hits(hits,
         lhc = last_hit_in_channel[hc - first_channel]
         # Have not found any hit in this channel yet:
         if lhc['time'] == 0:
-            lhc['time'] = st
-            lhc['endtime'] = et
+            lhc['time'] = max(st, start)
+            lhc['endtime'] = min(et, end)
             lhc['channel'] = hc
             lhc['record_i'] = h['record_i']
             lhc['dt'] = dt
@@ -77,7 +86,7 @@ def _concat_overlapping_hits(hits,
                 # No, this means we have to save the previous data and update lhc:
                 res = buffer[offset]
                 res['time'] = lhc['time']
-                res['length'] = (lhc['endtime'] - lhc['time'])//lhc['dt']
+                res['length'] = (lhc['endtime'] - lhc['time']) // lhc['dt']
                 res['channel'] = lhc['channel']
                 res['record_i'] = lhc['record_i']
                 res['dt'] = lhc['dt']
@@ -98,7 +107,7 @@ def _concat_overlapping_hits(hits,
         res = buffer[offset]
         res['time'] = lhc['time']
         res['channel'] = lhc['channel']
-        res['length'] = (lhc['endtime'] - lhc['time'])//lhc['dt']
+        res['length'] = (lhc['endtime'] - lhc['time']) // lhc['dt']
         res['record_i'] = lhc['record_i']
         res['dt'] = lhc['dt']
         offset += 1
@@ -156,13 +165,13 @@ def get_hitlets_data(hitlets, records, to_pe):
         h['area'] = np.sum(data * to_pe[h['channel']])
 
 
-TRIAL_COUNTER_NEIGHBORING_RECORDS = 100
 @export
 @numba.njit(nogil=True, cache=True)
 def get_single_hitlet_data(hitlet, records, prev_r, next_r):
     """
-    Function which gets the data of a single hit or hitlet according
-    to the specified time and length of the object.
+    Function which gets the data of a single hit or hitlet. The data is
+    returned according to the objects time and length (LE/RE is not
+    included in case of a hit.).
 
     In case the hit or hitlet is extended into non-recorded regions
     the data gets chopped.
@@ -359,7 +368,7 @@ def hitlet_properties(hitlets):
         h['fwtm'] = width_low
 
 
-NO_FWXM = -42
+@export
 @numba.njit(cache=True, nogil=True)
 def get_fwxm(hitlet, fraction=0.5):
     """
