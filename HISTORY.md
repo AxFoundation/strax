@@ -5,6 +5,7 @@
 - Apply function to data prior to delivering (#304)
 - Child options for inherited plugins (#297)
 - Introducing a template for pull-requests (#302)
+- Make fuzzy_for option more intuitive (#306)
 
 
 0.11.3 / 2020-07-29
