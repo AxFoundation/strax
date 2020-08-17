@@ -1,3 +1,12 @@
+0.12.0 / 2020-08-17
+---------------------
+- Add backend for rucio (#300)
+- Hitlets data types and utilities (#275)
+- Apply function to data prior to delivering (#304)
+- Child options for inherited plugins (#297)
+- Introducing a template for pull-requests (#302)
+
+
 0.11.3 / 2020-07-29
 ---------------------
 - bugfix in new progressbar feature (#296)
