@@ -23,7 +23,7 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
 
     if not len(hits):
         # In case there are no hitlets there is not much to do:
-        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1))
+        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1), 0, float('inf'))
         assert not len(concat_hits), 'Concatenated hits not empty although hits are empty'
 
     else:
@@ -47,7 +47,7 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
 
         # Now we concatenate the hits and check whether their length matches
         # with the total sum of our dummy arrays.
-        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1))
+        concat_hits = strax.concat_overlapping_hits(hits, (le, re), (0, 1), 0, float('inf'))
 
         assert len(concat_hits) <= len(hits), 'Somehow we have more hits than before ?!?'
 
@@ -101,7 +101,7 @@ def test_get_hitlets_data():
 
     records = _make_fake_records(dummy_records)
     hits = strax.find_hits(records, min_amplitude=2)
-    hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1))
+    hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1), 0, float('inf'))
     hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=np.max(hits['length'])))
     strax.refresh_hit_to_hitlets(hits, hitlets)
     strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
