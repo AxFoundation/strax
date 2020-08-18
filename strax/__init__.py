@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '0.11.3'
+__version__ = '0.12.0'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -11,6 +11,7 @@ from strax.processing.general import *
 
 from .storage.common import *
 from .storage.files import *
+from .storage.rucio import *
 from .storage.mongo import *
 from .storage.s3 import *
 from .storage.zipfiles import *
@@ -30,3 +31,4 @@ from strax.processing.peak_building import *
 from strax.processing.peak_merging import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
+from strax.processing.hitlets import *
