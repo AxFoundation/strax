@@ -16,14 +16,13 @@ from .storage.mongo import *
 from .storage.s3 import *
 from .storage.zipfiles import *
 
-from .corrections.cmt_DB_interface import *
-
 from .config import *
 from .plugin import *
 from .mailbox import *
 from .processor import *
 from .context import *
 from .run_selection import *
+from .corrections import *
 
 from .io import *
 
