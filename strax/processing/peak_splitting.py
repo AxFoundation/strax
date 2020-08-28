@@ -16,7 +16,7 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
     :param records: Records from which peaks were built
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
-    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use  
+    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_wavefrom or get_hitlets_data to compute the waveform of
         the new split peaks/hitlets.
     :param result_dtype: dtype of the result.
@@ -25,7 +25,7 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
     """
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
-    
+
     if data_type == 'hitlets':
         # This is only needed once.
         _, next_ri = strax.record_links(records)
@@ -62,7 +62,7 @@ class PeakSplitter:
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe, data_type,
-                 next_ri=None, do_iterations=1, min_area=0,  **kwargs):
+                 next_ri=None, do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
@@ -86,23 +86,6 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        # data_kind specific_outputs:
-        if data_type == 'peaks':
-            @numba.njit
-            def specific_output(r, p, split_i, bonus_output):
-                if split_i == NO_MORE_SPLITS:
-                    p['max_goodness_of_split'] = bonus_output
-                    # although the iteration will end anyway afterwards:
-                r['max_gap'] = -1  # Too lazy to compute this
-
-        elif data_type == 'hitlets':
-            @numba.njit
-            def specific_output(r, p, split_i, bonus_output):
-                if split_i == NO_MORE_SPLITS:
-                    return
-                r['record_i'] = p['record_i']
-        else:
-            raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
@@ -111,14 +94,14 @@ class PeakSplitter:
             orig_dt=records[0]['dt'],
             min_area=min_area,
             args_options=tuple(args_options),
-            specific_output=specific_output,
             result_dtype=peaks.dtype)
-        
+
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
                 strax.sum_waveform(new_peaks, records, to_pe)
             elif data_type == 'hitlets':
+                # Add record fields here
                 strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
             else:
                 raise ValueError(f'Data_type "{data_type}" is not supported.')
@@ -138,7 +121,7 @@ class PeakSplitter:
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
     def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                     specific_output, args_options,
+                     args_options,
                      _result_buffer=None, result_dtype=None):
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
@@ -155,18 +138,13 @@ class PeakSplitter:
             w = p['data'][:p['length']]
             for split_i, bonus_output in split_finder(
                     w, p['dt'], p_i, *args_options):
-                
-                # This is a bit odd here. Due tp the specific_outputs we have to get r 
-                # although we may not need it at all, but I do not see any nice way around
-                # this.
-                r = new_peaks[offset]
-                specific_output(r, p, split_i, bonus_output)
                 if split_i == NO_MORE_SPLITS:
-                    # No idea if this if-statement can be integrated into
-                    # specific return
+                    p['max_goodness_of_split'] = bonus_output
+                    # although the iteration will end anyway afterwards:
                     continue
 
                 is_split[p_i] = True
+                r = new_peaks[offset]
                 r['time'] = p['time'] + prev_split_i * p['dt']
                 r['channel'] = p['channel']
                 # Set the dt to the original (lowest) dt first;
@@ -174,7 +152,7 @@ class PeakSplitter:
                 # is computed
                 r['dt'] = orig_dt
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-
+                r['max_gap'] = -1  # Too lazy to compute this
                 if r['length'] <= 0:
                     print(p['data'])
                     print(prev_split_i, split_i)
@@ -194,7 +172,6 @@ class PeakSplitter:
         """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
         bare PeakSplitter class is not implemented"""
         raise NotImplementedError
-
 
 class LocalMinimumSplitter(PeakSplitter):
     """Split peaks at significant local minima.
@@ -267,7 +244,7 @@ class NaturalBreaksSplitter(PeakSplitter):
        close as we can get to it given the peaks sampling) on either side.
     """
     find_split_args_defaults = (
-        ('threshold', None),     # will be a numpy array of len(peaks)
+        ('threshold', None),  # will be a numpy array of len(peaks)
         ('normalize', False),
         ('split_low', False),
         ('filter_wing_width', 0))
