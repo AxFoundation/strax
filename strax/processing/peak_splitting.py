@@ -86,7 +86,12 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        new_peaks = self._split_peaks(
+        split_function = {'peaks': self._split_peaks,
+                          'hitlets': self._split_hitlets}
+        if data_type not in split_function:
+            raise ValueError(f'Data_type "{data_type}" is not supported.')
+
+        new_peaks = split_function[data_type](
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
             peaks=peaks,
@@ -103,8 +108,6 @@ class PeakSplitter:
             elif data_type == 'hitlets':
                 # Add record fields here
                 strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
-            else:
-                raise ValueError(f'Data_type "{data_type}" is not supported.')
 
             strax.compute_widths(new_peaks)
 
@@ -168,10 +171,60 @@ class PeakSplitter:
         yield offset
 
     @staticmethod
+    @strax.growing_result(dtype=strax.hitlet_dtype(), chunk_size=int(1e4))
+    @numba.jit(nopython=True, nogil=True)
+    def _split_hitlets(split_finder, hits, orig_dt, is_split, min_area,
+                       args_options,
+                       _result_buffer=None, result_dtype=None):
+        """Loop over peaks, pass waveforms to algorithm, construct
+        new peaks if and where a split occurs.
+        """
+        # TODO NEEDS TESTS!
+        new_hits = _result_buffer
+        offset = 0
+
+        for p_i, p in enumerate(hits):
+            if p['area'] < min_area:
+                continue
+
+            prev_split_i = 0
+            w = p['data'][:p['length']]
+            for split_i, bonus_output in split_finder(
+                    w, p['dt'], p_i, *args_options):
+                if split_i == NO_MORE_SPLITS:
+                    return
+                r['record_i'] = p['record_i']
+
+                is_split[p_i] = True
+                r = new_hits[offset]
+                r['time'] = p['time'] + prev_split_i * p['dt']
+                r['channel'] = p['channel']
+                # Set the dt to the original (lowest) dt first;
+                # this may change when the sum waveform of the new peak
+                # is computed
+                r['dt'] = orig_dt
+                r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+                r['max_gap'] = -1  # Too lazy to compute this
+                if r['length'] <= 0:
+                    print(p['data'])
+                    print(prev_split_i, split_i)
+                    raise ValueError("Attempt to create invalid peak!")
+
+                offset += 1
+                if offset == len(new_hits):
+                    yield offset
+                    offset = 0
+
+                prev_split_i = split_i
+
+        yield offset
+
+    @staticmethod
     def find_split_points(w, dt, peak_i, *args_options):
         """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
         bare PeakSplitter class is not implemented"""
         raise NotImplementedError
+
 
 class LocalMinimumSplitter(PeakSplitter):
     """Split peaks at significant local minima.
