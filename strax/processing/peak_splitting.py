@@ -179,7 +179,6 @@ class PeakSplitter:
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
-        # TODO NEEDS TESTS!
         new_hits = _result_buffer
         offset = 0
 
