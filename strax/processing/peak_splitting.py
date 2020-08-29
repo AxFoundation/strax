@@ -87,10 +87,10 @@ class PeakSplitter:
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
         # data_kind specific_outputs:
-        if data_type not in ('peaks', 'hitlets'):
-            raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
-        else:
+        if data_type in ('peaks', 'hitlets'):
             specific_output = SPECIFIC_OUTPUTS[data_type]
+        else:
+            raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
