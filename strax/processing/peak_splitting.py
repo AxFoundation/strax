@@ -87,22 +87,10 @@ class PeakSplitter:
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
         # data_kind specific_outputs:
-        if data_type == 'peaks':
-            @numba.njit
-            def specific_output(r, p, split_i, bonus_output):
-                if split_i == NO_MORE_SPLITS:
-                    p['max_goodness_of_split'] = bonus_output
-                    # although the iteration will end anyway afterwards:
-                r['max_gap'] = -1  # Too lazy to compute this
-
-        elif data_type == 'hitlets':
-            @numba.njit
-            def specific_output(r, p, split_i, bonus_output):
-                if split_i == NO_MORE_SPLITS:
-                    return
-                r['record_i'] = p['record_i']
-        else:
+        if data_type not in ('peaks', 'hitlets'):
             raise TypeError(f'Unknown data_type. "{data_type}" is not supported.')
+        else:
+            specific_output = SPECIFIC_OUTPUTS[data_type]
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
@@ -370,3 +358,21 @@ def sum_squared_deviations(waveform, normalize=False):
             result[i] /= sum_weights
 
     return result
+
+
+# Datatype specific outputs for PeakSplitter
+@numba.njit
+def _specific_output_peaks(r, p, split_i, bonus_output):
+    if split_i == NO_MORE_SPLITS:
+        p['max_goodness_of_split'] = bonus_output
+        # although the iteration will end anyway afterwards:
+    r['max_gap'] = -1  # Too lazy to compute this
+
+@numba.njit
+def _specific_output_hitlets(r, p, split_i, bonus_output):
+    if split_i == NO_MORE_SPLITS:
+        return
+    r['record_i'] = p['record_i']
+
+SPECIFIC_OUTPUTS = {'peaks': _specific_output_peaks,
+                    'hitlets': _specific_output_hitlets}
