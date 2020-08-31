@@ -175,7 +175,7 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.hitlet_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def _split_hitlets(split_finder, hits, orig_dt, is_split, min_area,
+    def _split_hitlets(split_finder, peaks, orig_dt, is_split, min_area,
                        args_options,
                        _result_buffer=None, result_dtype=None):
         """Loop over hits, pass waveforms to algorithm, construct
@@ -188,7 +188,7 @@ class PeakSplitter:
         new_hits = _result_buffer
         offset = 0
 
-        for h_i, h in enumerate(hits):
+        for h_i, h in enumerate(peaks):
             if h['area'] < min_area:
                 continue
 
@@ -197,7 +197,7 @@ class PeakSplitter:
             for split_i, bonus_output in split_finder(
                     w, h['dt'], h_i, *args_options):
                 if split_i == NO_MORE_SPLITS:
-                    return
+                    continue
 
                 is_split[h_i] = True
                 r = new_hits[offset]
