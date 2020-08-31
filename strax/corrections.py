@@ -17,7 +17,10 @@ export, __all__ = strax.exporter()
 
 @export
 class CorrectionsInterface:
-    '''A class to manage corrections that are stored in a MongoDB.
+    '''A class to manage corrections that are stored in a MongoDB
+    corrections are defined as pandas DataFrame with a DatetimeIndex
+    with the option of a Global configuration, meaning a unique set 
+    of correction maps.
     '''
 
     def __init__(self, host='127.0 0.1', username=None, password=None,
@@ -33,14 +36,13 @@ class CorrectionsInterface:
         self.database = self.client[self.database_name]
 
     def list_corrections(self):
-        '''Smart logic to list corrections.
+        '''Smart logic to list all corrections.
         '''
-        return [x['name'] for x in self.database.list_collections()
-                if 'global' not in x['name']]
+        return [x['name'] for x in self.database.list_collections()]
 
     def read(self, correction):
         '''Smart logic to read corrections,
-        where correction is the name of the DataFrame.
+        :param correction: correction's name (str type).
         '''
         df = pdm.read_mongo(correction, [], self.database)
 
@@ -52,9 +54,12 @@ class CorrectionsInterface:
         return df.set_index('time')
 
     def interpolate(self, what, when, how='interpolate'):
-        '''Interpolate values of a given correction(what=DataFrame)
-        given a time(when). For information of interpolation methods see,
+        '''Interpolate values of a given correction
+        For information of interpolation methods see,
         https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.interpolate.html
+        :param what: what do you want to interpolate, what correction(DataFrame)
+        :param when: date
+        :param how: Interpolation method
         '''
         df = what
 
@@ -70,14 +75,16 @@ class CorrectionsInterface:
         elif how == 'fill':
             df_combined = df_combined.ffill()
         else:
-            raise ValueError('Specify an interpolation method')
+            raise ValueError('Specify an interpolation method, e.g. interpolate or fill')
 
         return df_combined
 
     def get_context_config(self, when, global_config='global',
                            global_version='v1'):
         '''Global configuration logic
-        where when is a datetime.
+        :param when: datetime
+        :param global_config: a map of corrections
+        :param global_version: global configuration's version
         '''
         df_global = self.read(global_config)
 
@@ -93,8 +100,8 @@ class CorrectionsInterface:
 
     def write(self, correction, df):
         '''Smart logic to write corrections
-        where, corrections is the name of the correction(str type)
-        and df is pandas DataFrame.
+        :param correction: corrections' name (str type)
+        :param df: pandas DataFrame.
         '''
         if 'ONLINE' not in df.columns:
             raise ValueError('Must specify ONLINE column')
