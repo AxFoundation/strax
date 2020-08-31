@@ -129,7 +129,9 @@ class PeakSplitter:
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
-        # TODO NEEDS TESTS!
+        # NB: code very similar to _split_hitlets see
+        # github.com/AxFoundation/strax/pull/309 for more info. Keep in mind
+        # that changing one function should also be reflected in the other.
         new_peaks = _result_buffer
         offset = 0
 
@@ -176,38 +178,42 @@ class PeakSplitter:
     def _split_hitlets(split_finder, hits, orig_dt, is_split, min_area,
                        args_options,
                        _result_buffer=None, result_dtype=None):
-        """Loop over peaks, pass waveforms to algorithm, construct
-        new peaks if and where a split occurs.
+        """Loop over hits, pass waveforms to algorithm, construct
+        new hits if and where a split occurs.
         """
+        # TODO NEEDS TESTS!
+        # NB: code very similar to _split_peaks see
+        # github.com/AxFoundation/strax/pull/309 for more info. Keep in mind
+        # that changing one function should also be reflected in the other.
         new_hits = _result_buffer
         offset = 0
 
-        for p_i, p in enumerate(hits):
-            if p['area'] < min_area:
+        for h_i, h in enumerate(hits):
+            if h['area'] < min_area:
                 continue
 
             prev_split_i = 0
-            w = p['data'][:p['length']]
+            w = h['data'][:h['length']]
             for split_i, bonus_output in split_finder(
-                    w, p['dt'], p_i, *args_options):
+                    w, h['dt'], h_i, *args_options):
                 if split_i == NO_MORE_SPLITS:
                     return
-                r['record_i'] = p['record_i']
 
-                is_split[p_i] = True
+                is_split[h_i] = True
                 r = new_hits[offset]
-                r['time'] = p['time'] + prev_split_i * p['dt']
-                r['channel'] = p['channel']
+                r['time'] = h['time'] + prev_split_i * h['dt']
+                r['channel'] = h['channel']
+                # Hitlet specific
+                r['record_i'] = h['record_i']
                 # Set the dt to the original (lowest) dt first;
                 # this may change when the sum waveform of the new peak
                 # is computed
                 r['dt'] = orig_dt
-                r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-                r['max_gap'] = -1  # Too lazy to compute this
+                r['length'] = (split_i - prev_split_i) * h['dt'] / orig_dt
                 if r['length'] <= 0:
-                    print(p['data'])
+                    print(h['data'])
                     print(prev_split_i, split_i)
-                    raise ValueError("Attempt to create invalid peak!")
+                    raise ValueError("Attempt to create invalid hitlet!")
 
                 offset += 1
                 if offset == len(new_hits):
