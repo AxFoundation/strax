@@ -608,9 +608,9 @@ class LoopPlugin(Plugin):
             loop_over = self.loop_over
         else:
             loop_over = self.deps[self.depends_on[0]].data_kind
-            if isinstance(loop_over, dict):
-                loop_over = loop_over[self.depends_on[0]]
-                # We can't have nested dictionaries here, can we?
+            if not isinstance(loop_over, str):
+                raise TypeError("Please add \"loop_over = <base>\""
+                                " to your plugin definition")
 
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
