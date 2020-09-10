@@ -904,7 +904,9 @@ class Context:
                     chunks = self.get_meta(run_id, t)['chunks']
                     start_time = max(start_time, chunks[0]['start'])
                     end_time = min(end_time, chunks[-1]['end'])
-                except (strax.DataNotAvailable, KeyError):
+                except (strax.DataNotAvailable, KeyError, IndexError):
+                    # IndexError caused for only empty chunks when data not
+                    # available.
                     # Maybe at least one target had some metadata.
                     start_time = max(start_time, 0)
                     end_time = min(end_time, float('inf'))
