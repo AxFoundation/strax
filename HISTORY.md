@@ -1,4 +1,4 @@
-0.13.0 / 2020-09-10
+0.12.1 / 2020-09-10
 ---------------------
 - Added the "Corrections Management Tool" (#303)
 - Check of loop dependency for multioutput plugins (#312)
