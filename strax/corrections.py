@@ -47,13 +47,16 @@ class CorrectionsInterface:
         self.database = self.client[self.database_name]
 
     def list_corrections(self):
-        """Smart logic to list all corrections.
+        """
+        Smart logic to list all corrections available in the corrections database
         """
         return [x['name'] for x in self.database.list_collections()]
 
     def read(self, correction):
         """Smart logic to read corrections,
         :param correction: pandas.DataFrame object name in the DB (str type).
+        :return: DataFrame as read from the corrections database with time
+        index or None if an empty DataFrame is read from the database
         """
         df = pdm.read_mongo(correction, [], self.database)
 
@@ -67,17 +70,19 @@ class CorrectionsInterface:
 
         return df.set_index('time')
 
-    @staticmethod
-    def interpolate(what, when, how='interpolate', **kwargs):
-        """Interpolate values of a given correction
-        For information of interpolation methods see,
+    def interpolate(self, what, when, how='interpolate', **kwargs):
+        """
+        Interpolate values of a given quantity ('what') of a given correction.
+        For information of interpolation methods see:
         https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.interpolate.html
         :param what: what do you want to interpolate, what correction(DataFrame)
         :param when: date, e.g. datetime(2020, 8, 12, 21, 4, 32, 7, tzinfo=pytz.utc)
-        :param how: Interpolation method, can be either how='interpolate' or how='fill'
+        :param how: Interpolation method, can be either 'interpolate' or 'fill'
         :param kwargs: are forward to the interpolation
+        :return: DataFrame of the correction with the interpolated time ('when')
         """
-        CorrectionsInterface.check_timezone(when)
+        # Check the user input
+        self.check_timezone(when)
 
         df = what
 
@@ -99,29 +104,34 @@ class CorrectionsInterface:
 
     def get_context_config(self, when, global_config='global',
                            global_version='v1'):
-        """Global configuration logic
+        """
+        Global configuration logic
         :param when: date e.g. datetime(2020, 8, 12, 21, 4, 32, 7, tzinfo=pytz.utc)
         :param global_config: a map of corrections
         :param global_version: global configuration's version
+        :return: configuration (type: dict)
         """
-        CorrectionsInterface.check_timezone(when)
+        # Check the user input
+        self.check_timezone(when)
         df_global = self.read(global_config)
 
         context_config = {}
         # loop over corrections and versions to get a global context
         for correction, version in df_global.iloc[-1][global_version].items():
             df = self.read(correction)
-            df = CorrectionsInterface.interpolate(df, when)
+            df = self.interpolate(df, when)
             context_config[correction] = df.loc[df.index == when,
                                                 version].values[0]
 
         return context_config
 
     def write(self, correction, df, required_columns=('ONLINE', 'v1')):
-        """Smart logic to write corrections
-        :param correction: corrections is a pandas.DataFrame object, corrections name (str type)
+        """
+        Smart logic to write corrections to the corrections database.
+        :param correction: corrections is a pandas.DataFrame object,
+        corrections name (str type)
         :param df: corrections is a pandas.DataFrame object a DatetimeIndex
-        :required_columns: DataFrame must include an online and v1 columns
+        :param required_columns: DataFrame must include an online and v1 columns
         """
         for req in required_columns:
             if req not in df.columns:
@@ -144,11 +154,16 @@ class CorrectionsInterface:
 
         return df.to_mongo(correction, self.database, if_exists='replace')
 
+    @staticmethod
     def check_timezone(date):
-        """Smart logic to check date is given in UTC time zone
+        """
+        Smart logic to check date is given in UTC time zone. Raises ValueError
+        if not.
         :param date: date e.g. datetime(2020, 8, 12, 21, 4, 32, 7, tzinfo=pytz.utc)
+        :return: the inserted date
         """
         if date.tzinfo == pytz.utc:
             return date
         else:
-            raise ValueError(f'{date} must be specify in UTC timezone')
+            raise ValueError(f'{date} must be in UTC timezone. Insert datetime object '
+                             f'like "datetime.datetime.now(tz=datetime.timezone.utc)"')
