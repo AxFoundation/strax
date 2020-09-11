@@ -827,14 +827,13 @@ class Context:
         :param seconds_range: (start, stop) seconds since start of run
         :param time_within: row of strax data (e.g. eent)
         """
-        if ((time_range is None)
-                + (seconds_range is None)
-                + (time_within is None)
-                < 2):
+        
+        selection = ((time_range is None) + (seconds_range is None) + (time_within is None))
+        if selection < 2:
             raise RuntimeError("Pass no more than one one of"
                                " time_range, seconds_range, ot time_within")
         if seconds_range is not None:
-            t0, t1 = self.estimate_run_start_and_end(run_id, targets)
+            t0, _ = self.estimate_run_start_and_end(run_id, targets)
             time_range = (t0 + int(1e9 * seconds_range[0]),
                           t0 + int(1e9 * seconds_range[1]))
         if time_within is not None:
@@ -843,9 +842,10 @@ class Context:
             # Force time range to be integers, since float math on large numbers
             # in not precise
             time_range = tuple([int(x) for x in time_range])
-
-        # If every range option is none return full time range
-        time_range = [t0, t1]
+        
+        if not selection:
+            # If every range option is none return full time range
+            time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
 
     def get_iter(self, run_id: str,
