@@ -769,10 +769,9 @@ class Context:
         """
         warnings.warn('This function is outdated and will be removed in '
                       'one of the feature strax releases. Please use '
-                      '"estimate_run_start_and_end" instead', UserWarning)
+                      '"estimate_run_start_and_end" instead.', UserWarning)
         start, _ = self.estimate_run_start_and_end(run_id, targets=targets)
         return start
-
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
@@ -811,7 +810,6 @@ class Context:
             UserWarning)
         return 0, float('inf')
 
-
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
                                seconds_range=None, time_within=None):
         """Return (start, stop) time in ns since unix epoch corresponding
@@ -820,6 +818,7 @@ class Context:
         If no time range is passed returns start and end time of the
         entire run.
 
+        :param run_id: run id to get
         :param time_range: (start, stop) time in ns since unix epoch.
         Will be returned without modification
         :param targets: data types. Used only if run metadata is unavailable,
