@@ -767,12 +767,29 @@ class Context:
         This fetches from run metadata, and if this fails, it
         estimates it using data metadata from targets.
         """
+        warnings.warn('This function is outdated and will be removed in '
+                      'one of the feature strax releases. Please use '
+                      '"estimate_run_start_and_end" instead', UserWarning)
+        start, _ = self.estimate_run_start_and_end(run_id, targets=targets)
+        return start
+
+
+    def estimate_run_start_and_end(self, run_id, targets=None):
+        """Return run start and end time in ns since epoch.
+
+        This fetches from run metadata, and if this fails, it
+        estimates it using data metadata from targets.
+        """
         try:
-            # Use run metadata, if it is available, to get
-            # the run start time (floored to seconds)
-            t0 = self.run_metadata(run_id, 'start')['start']
-            t0 = t0.replace(tzinfo=datetime.timezone.utc)
-            return int(t0.timestamp()) * int(1e9)
+            res = []
+            for i in ('start', 'end'):
+                # Use run metadata, if it is available, to get
+                # the run start time (floored to seconds)
+                t = self.run_metadata(run_id, i)[i]
+                t = t.replace(tzinfo=datetime.timezone.utc)
+                t = int(t.timestamp()) * int(1e9)
+                res.append(t)
+            return res
         except (strax.RunMetadataNotAvailable, KeyError):
             pass
         # Get an approx start from the data itself,
@@ -781,20 +798,27 @@ class Context:
             for t in strax.to_str_tuple(targets):
                 try:
                     t0 = self.get_meta(run_id, t)['chunks'][0]['start']
-                    return (int(t0) // int(1e9)) * int(1e9)
+                    t0 = (int(t0) // int(1e9)) * int(1e9)
+
+                    t1 = self.get_meta(run_id, t)['chunks'][-1]['end']
+                    t1 = (int(t1) // int(1e9)) * int(1e9)
+                    return t0, t1
                 except strax.DataNotAvailable:
                     pass
         warnings.warn(
-            "Could not estimate run start time from "
-            "run metadata: assuming it is 0",
+            "Could not estimate run start and end time from "
+            "run metadata: assuming it is 0 and inf",
             UserWarning)
-        return 0
+        return 0, float('inf')
 
 
-    def to_absolute_time_range(self, run_id, targets, time_range=None,
+    def to_absolute_time_range(self, run_id, targets=None, time_range=None,
                                seconds_range=None, time_within=None):
         """Return (start, stop) time in ns since unix epoch corresponding
         to time range.
+
+        If no time range is passed returns start and end time of the
+        entire run.
 
         :param time_range: (start, stop) time in ns since unix epoch.
         Will be returned without modification
@@ -810,7 +834,7 @@ class Context:
             raise RuntimeError("Pass no more than one one of"
                                " time_range, seconds_range, ot time_within")
         if seconds_range is not None:
-            t0 = self.estimate_run_start(run_id, targets)
+            t0, t1 = self.estimate_run_start_and_end(run_id, targets)
             time_range = (t0 + int(1e9 * seconds_range[0]),
                           t0 + int(1e9 * seconds_range[1]))
         if time_within is not None:
@@ -819,6 +843,9 @@ class Context:
             # Force time range to be integers, since float math on large numbers
             # in not precise
             time_range = tuple([int(x) for x in time_range])
+
+        # If every range option is none return full time range
+        time_range = [t0, t1]
         return time_range
 
     def get_iter(self, run_id: str,
