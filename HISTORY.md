@@ -1,10 +1,3 @@
-0.12.1 / 2020-09-10
----------------------
-- Added the "Corrections Management Tool" (#303)
-- Check of loop dependency for multioutput plugins (#312)
-- Fix memory leak peaksplitting (#309)
-
-
 0.12.0 / 2020-08-17
 ---------------------
 - Add backend for rucio (#300)

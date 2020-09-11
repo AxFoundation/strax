@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '0.12.1'
+__version__ = '0.12.0'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -22,7 +22,6 @@ from .mailbox import *
 from .processor import *
 from .context import *
 from .run_selection import *
-from .corrections import *
 
 from .io import *
 

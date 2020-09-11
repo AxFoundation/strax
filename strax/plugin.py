@@ -608,9 +608,6 @@ class LoopPlugin(Plugin):
             loop_over = self.loop_over
         else:
             loop_over = self.deps[self.depends_on[0]].data_kind
-        if not isinstance(loop_over, str):
-            raise TypeError("Please add \"loop_over = <base>\""
-                            " to your plugin definition")
 
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
