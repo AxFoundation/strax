@@ -841,8 +841,8 @@ class Context:
             # Force time range to be integers, since float math on large numbers
             # in not precise
             time_range = tuple([int(x) for x in time_range])
-        
-        if not selection:
+            
+        if selection==3:
             # If every range option is none return full time range
             time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
