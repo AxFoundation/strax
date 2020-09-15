@@ -811,12 +811,10 @@ class Context:
         return 0, float('inf')
 
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
-                               seconds_range=None, time_within=None):
+                               seconds_range=None, time_within=None,
+                               full_range=None):
         """Return (start, stop) time in ns since unix epoch corresponding
         to time range.
-
-        If no time range is passed returns start and end time of the
-        entire run.
 
         :param run_id: run id to get
         :param time_range: (start, stop) time in ns since unix epoch.
@@ -825,9 +823,13 @@ class Context:
         so run start time has to be estimated from data.
         :param seconds_range: (start, stop) seconds since start of run
         :param time_within: row of strax data (e.g. eent)
+        :param full_range: If True returns full time_range of the run.
         """
         
-        selection = ((time_range is None) + (seconds_range is None) + (time_within is None))
+        selection = ((time_range is None) +
+                     (seconds_range is None) +
+                     (time_within is None) +
+                     (full_range is None))
         if selection < 2:
             raise RuntimeError("Pass no more than one one of"
                                " time_range, seconds_range, ot time_within")
@@ -842,8 +844,7 @@ class Context:
             # in not precise
             time_range = tuple([int(x) for x in time_range])
             
-        if selection==3:
-            # If every range option is none return full time range
+        if full_range:
             time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
 
