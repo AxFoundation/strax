@@ -19,19 +19,17 @@ export, __all__ = strax.exporter()
 @export
 class MongoBackend(StorageBackend):
     """Mongo storage backend"""
-    def __init__(self, uri, database, col_n=None):
+    def __init__(self, uri, database, col_name=None):
         """
         Backend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
         :param database: name of database (str)
-        :param col_n: collection name (str) to look for data
+        :param col_name: collection name (str) to look for data
         """
-        if MongoClient is None:
-            raise ImportError("Pymongo did not import: "
-                              "cannot use MongoDBStore")
+
         self.client = MongoClient(uri)
         self.db = self.client[database]
-        self.col_name = col_n
+        self.col_name = col_name
 
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         """See strax.Backend"""
@@ -40,15 +38,16 @@ class MongoBackend(StorageBackend):
         # Query for the chunk and project the chunk info
         doc = self.db[self.col_name].find_one(
             {**query, chunk_name: {"$exists": True}},
-            {f"{chunk_name}.$": 1})
-        doc = doc.get(chunk_name, None)
+            {f"{chunk_name}": 1})
 
-        if doc is None:
+        # Unpack info about this chunk from the query. Return empty if not available.
+        if doc is None or chunk_name not in doc:
             return np.array([], dtype=dtype)
-
+        else:
+            chunk_doc = doc[chunk_name]
         # Convert JSON to numpy
-        result = np.zeros(len(doc), dtype=dtype)
-        for i, d in enumerate(doc):
+        result = np.zeros(len(chunk_doc), dtype=dtype)
+        for i, d in enumerate(chunk_doc):
             for key in np.dtype(dtype).names:
                 result[i][key] = d['data'][key]
         return result
@@ -72,24 +71,21 @@ class MongoBackend(StorageBackend):
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
 
-    def __init__(self, uri, database, col_n=None, *args, **kwargs):
+    def __init__(self, uri, database, col_name=None, *args, **kwargs):
         """
         MongoFrontend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
         :param database: name of database (str)
-        :param col_n: collection name (str) to look for data
+        :param col_name: collection name (str) to look for data
         :param args: init for StorageFrontend
         :param kwargs: init for StorageFrontend
         """
 
         super().__init__(*args, **kwargs)
-        if MongoClient is None:
-            raise ImportError("Pymongo did not import: "
-                              "cannot use MongoDBStore")
         self.client = MongoClient(uri)
         self.db = self.client[database]
-        self.backends = [MongoBackend(uri, database, col_n=col_n)]
-        self.col_name = col_n
+        self.backends = [MongoBackend(uri, database, col_name=col_name)]
+        self.col_name = col_name
 
     def _find(self, key, write, allow_incomplete, fuzzy_for,
               fuzzy_for_options):
@@ -97,7 +93,7 @@ class MongoFrontend(StorageFrontend):
         if write:
             return self.backends[0].__class__.__name__, str(key)
         query = backend_key_to_query(str(key))
-        if self.db[self.col_name].find_one(query):
+        if self.db[self.col_name].count_documents(query):
             self.log.debug(f"{key} is in cache.")
             return self.backends[0].__class__.__name__, str(key)
         self.log.debug(f"{key} is NOT in cache.")
