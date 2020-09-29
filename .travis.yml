@@ -29,7 +29,7 @@ jobs:
     - name: "Python 3.6 (legacy)"
       env: PYTHON=3.6
     - name: "Python 3.8 (beta)"
-      env: PYTHON=3.8  
+      env: PYTHON=3.8
 
 install:
   - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
