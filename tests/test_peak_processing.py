@@ -84,3 +84,6 @@ def test_sum_waveform(records, peak_left, peak_length):
 
     assert len(sum_wv) == peak_length
     assert np.all(p['data'][:peak_length] == sum_wv)
+
+    # Finally check that we also can use a selection of peaks to sum
+    strax.sum_waveform(peaks, records, np.ones(n_ch), select_peaks_indices=np.array([0]))
