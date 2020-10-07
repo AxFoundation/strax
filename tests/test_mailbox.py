@@ -78,7 +78,10 @@ def test_highlevel():
         assert hasattr(test_reader, 'got')
         assert test_reader.got == list(range(10))
         mb.cleanup()
-        assert len(threading.enumerate()) == 1, "Not all threads died"
+        threads = [f'{t.name} is dead: {True^t.is_alive()}'
+                   for t in threading.enumerate()]
+        assert len(threads) == 1, (f"Not all threads died. \n Threads running"
+                                   f" are:{threads}")
 
 
 def test_result_timeout():
