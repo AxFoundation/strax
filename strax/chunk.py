@@ -115,7 +115,7 @@ class Chunk:
             return (self.nbytes / 1e6) / (self.duration / 1e9)
         else:
             # This is strange. We have a zero duration chunk. However, this is
-            # not the right place to raise an error message.
+            # not the right place to raise an error message. Return -1 for now.
             return -1
 
     def split(self,
