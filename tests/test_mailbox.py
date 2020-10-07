@@ -62,6 +62,7 @@ def mailbox_tester(messages,
 def test_highlevel():
     """Test highlevel mailbox API"""
     for lazy in [False, True]:
+        n_threads_start = len(threading.enumerate())
         print(f"Lazy mode: {lazy}")
 
         mb = strax.Mailbox(lazy=lazy)
@@ -80,8 +81,8 @@ def test_highlevel():
         mb.cleanup()
         threads = [f'{t.name} is dead: {True^t.is_alive()}'
                    for t in threading.enumerate()]
-        assert len(threads) == 1, (f"Not all threads died. \n Threads running"
-                                   f" are:{threads}")
+        assert len(threads) == n_threads_start, (
+            f"Not all threads died. \n Threads running are:{threads}")
 
 
 def test_result_timeout():
