@@ -137,12 +137,13 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe, *arg):
+def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
-    :arg peak_list: Indicies of the peaks for partial processing
-    In the form of np.array([np.int])
+    :arg select_peaks_indices: Indices of the peaks for partial
+    processing. In the form of np.array([np.int, np.int, ..]). If
+    None (default), all the peaks are used for the summation.
 
     Assumes all peaks AND pulses have the same dt!
     """
@@ -150,12 +151,11 @@ def sum_waveform(peaks, records, adc_to_pe, *arg):
         return
     if not len(peaks):
         return
-    if len(arg):
-        peak_list = arg[0]
-    else:
-        peak_list = np.arange(len(peaks))
-    if not len(peak_list):
-        return
+    if select_peaks_indices is None:
+        select_peaks_indices = np.arange(len(peaks))
+    elif not len(select_peaks_indices):
+        raise ValueError('select_peaks_indices must either be None (for all '
+                         'indices) or array of indices to store.')
     dt = records[0]['dt']
 
     # Big buffer to hold even largest sum waveforms
@@ -169,7 +169,7 @@ def sum_waveform(peaks, records, adc_to_pe, *arg):
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
 
-    for peak_i in peak_list:
+    for peak_i in select_peaks_indices:
         p = peaks[peak_i]
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
