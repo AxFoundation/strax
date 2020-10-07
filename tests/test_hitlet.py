@@ -311,7 +311,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         template = template / np.sum(template)
 
         e2 = - np.sum(d[m] * np.log(d[m] / template))
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-3), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 2.: Arbitrary template:
         template = np.ones(size_template, dtype=np.float32)
@@ -323,7 +323,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e2 = _align_compute_entropy(d, template)
 
         e1 = strax.conditional_entropy(hitlet, template)[0]
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=5*10**-3), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 3.: Squared waveform:
         # Same as before but this time we square the template and the
