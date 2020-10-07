@@ -153,7 +153,7 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
         return
     if select_peaks_indices is None:
         select_peaks_indices = np.arange(len(peaks))
-    elif not len(select_peaks_indices):
+    if not len(select_peaks_indices):
         return
     dt = records[0]['dt']
 
