@@ -137,12 +137,11 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe,
-                 peak_list=np.array([-3, -14])):
+def sum_waveform(peaks, records, adc_to_pe, *arg):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
-    :keyword peak_list: Indicies of the peaks for partial processing
+    :arg peak_list: Indicies of the peaks for partial processing
     In the form of np.array([np.int])
 
     Assumes all peaks AND pulses have the same dt!
@@ -151,6 +150,10 @@ def sum_waveform(peaks, records, adc_to_pe,
         return
     if not len(peaks):
         return
+    if len(arg):
+        peak_list = arg[0]
+    else:
+        peak_list = np.arange(len(peaks))
     if not len(peak_list):
         return
     dt = records[0]['dt']
@@ -165,11 +168,6 @@ def sum_waveform(peaks, records, adc_to_pe,
 
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
-
-    # If peak list is the default fill it with all peak indicies
-    # Hope it never is [-3, -14] for real
-    if np.sum(peak_list) == -17 and np.prod(peak_list) == 42:
-        peak_list = np.arange(len(peaks))
 
     for peak_i in peak_list:
         p = peaks[peak_i]
