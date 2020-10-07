@@ -154,8 +154,7 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
     if select_peaks_indices is None:
         select_peaks_indices = np.arange(len(peaks))
     elif not len(select_peaks_indices):
-        raise ValueError('select_peaks_indices must either be None (for all '
-                         'indices) or array of indices to store.')
+        return
     dt = records[0]['dt']
 
     # Big buffer to hold even largest sum waveforms
