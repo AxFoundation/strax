@@ -111,7 +111,12 @@ class Chunk:
         return self.end - self.start
 
     def _mbs(self):
-        return (self.nbytes / 1e6) / (self.duration / 1e9)
+        if self.duration:
+            return (self.nbytes / 1e6) / (self.duration / 1e9)
+        else:
+            # This is strange. We have a zero duration chunk. However, this is
+            # not the right place to raise an error message.
+            return -1
 
     def split(self,
               t: ty.Union[int, None],
