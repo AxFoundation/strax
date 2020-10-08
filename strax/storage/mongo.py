@@ -12,6 +12,8 @@ import strax
 import numpy as np
 from pymongo import MongoClient
 from strax import StorageFrontend, StorageBackend, Saver
+from datetime import datetime
+from pytz import utc as py_utc
 
 export, __all__ = strax.exporter()
 
@@ -121,6 +123,16 @@ class MongoSaver(Saver):
                 ('run_id', int), ('data_type', str), ('lineage_hash', str)):
             basic_meta[k.replace('run_id', 'number')] = rep(self.md[k])
         basic_meta['metadata'] = self.md
+        # Add datetime objects as candidates for TTL collections. Either can
+        # be used according to the preference of the user to index.
+        # Two entries can be used:
+        #  1. The time of writing.
+        #  2. The time of data taking.
+        basic_meta['write_time'] = datetime.now(py_utc)
+        # The run_start_time below is a placeholder and will be updated in the
+        # _save_chunk_metadata for the first chunk. Nevertheless we need an
+        # object in case there e.g. is no chunk.
+        basic_meta['run_start_time'] = datetime.now(py_utc)
 
         # Save object id to write other data to
         self.id = self.col.insert_one(basic_meta).inserted_id
@@ -144,6 +156,13 @@ class MongoSaver(Saver):
 
     def _save_chunk_metadata(self, chunk_info):
         """see strax.Saver"""
+        # For the first chunk we update the run_start_time
+        if int(chunk_info['chunk_i']) == 0:
+            t0 = datetime.fromtimestamp(chunk_info['start']/1e9).replace(tzinfo=py_utc)
+            self.col.update_one({'_id': self.id},
+                                {'$set':
+                                     {'run_start_time': t0}})
+
         self.col.update_one({'_id': self.id},
                             {'$addToSet':
                                  {'metadata.chunks': chunk_info}})
