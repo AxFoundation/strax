@@ -34,8 +34,8 @@ COMPRESSORS = dict(
         decompress=blosc.decompress,
         conditions=BLOSC_CONDITIONS),
     lz4=dict(compress=lz4.compress,
-     decompress=lz4.decompress, 
-     conditions=BASE_CONDITIONS)
+        decompress=lz4.decompress, 
+        conditions=BASE_CONDITIONS)
 )
 
 @export
