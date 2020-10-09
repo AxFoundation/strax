@@ -10,6 +10,7 @@ numexpr
 boto3
 scipy
 pymongo
+pdmongo
 lz4
 immutabledict
 packaging

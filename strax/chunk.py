@@ -5,7 +5,10 @@ import numba
 
 import strax
 export, __all__ = strax.exporter()
+__all__ += ['default_chunk_size_mb']
 
+
+default_chunk_size_mb = 200
 
 @export
 class Chunk:
@@ -22,6 +25,7 @@ class Chunk:
     end: int
 
     data: np.ndarray
+    target_size_mb: int
 
     def __init__(self,
                  *,
@@ -31,7 +35,8 @@ class Chunk:
                  run_id,
                  start,
                  end,
-                 data):
+                 data,
+                 target_size_mb=default_chunk_size_mb):
         self.data_type = data_type
         self.data_kind = data_kind
         self.dtype = np.dtype(dtype)
@@ -41,6 +46,7 @@ class Chunk:
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
+        self.target_size_mb = target_size_mb
 
         if not (isinstance(self.start, (int, np.integer))
                 and isinstance(self.end, (int, np.integer))):
@@ -65,7 +71,8 @@ class Chunk:
 
         if len(self.data):
             data_starts_at = self.data[0]['time']
-            data_ends_at = strax.endtime(self.data[-1])
+            # Check the last 500 samples (arbitrary number) as sanity check
+            data_ends_at = strax.endtime(self.data[-500:]).max()
 
             if data_starts_at < self.start:
                 raise ValueError(f"Attempt to create chunk {self} "
@@ -104,7 +111,12 @@ class Chunk:
         return self.end - self.start
 
     def _mbs(self):
-        return (self.nbytes / 1e6) / (self.duration / 1e9)
+        if self.duration:
+            return (self.nbytes / 1e6) / (self.duration / 1e9)
+        else:
+            # This is strange. We have a zero duration chunk. However, this is
+            # not the right place to raise an error message. Return -1 for now.
+            return -1
 
     def split(self,
               t: ty.Union[int, None],
@@ -133,7 +145,8 @@ class Chunk:
             run_id=self.run_id,
             dtype=self.dtype,
             data_type=self.data_type,
-            data_kind=self.data_kind)
+            data_kind=self.data_kind,
+            target_size_mb=self.target_size_mb)
 
         c1 = strax.Chunk(
             start=self.start,
@@ -199,7 +212,8 @@ class Chunk:
             data_type=data_type,
             data_kind=data_kind,
             run_id=run_id,
-            data=data)
+            data=data,
+            target_size_mb=max([c.target_size_mb for c in chunks]))
 
     @classmethod
     def concatenate(cls, chunks):
@@ -240,7 +254,8 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
-            data=np.concatenate([c.data for c in chunks]))
+            data=np.concatenate([c.data for c in chunks]),
+            target_size_mb=max([c.target_size_mb for c in chunks]))
 
 
 @export

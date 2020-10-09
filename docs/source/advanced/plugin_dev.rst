@@ -43,3 +43,14 @@ You can specify defaults in several ways:
 - ``default_per_run``: Specify a list of 2-tuples: ``(start_run, default)``. Here start_run is a numerized run name (e.g 170118_1327; note the underscore is valid in integers since python 3.6) and ``default`` the option that applies from that run onwards.
 - The ``strax_defaults`` dictionary in the run metadata. This overrides any defaults specified in the plugin code, but take care -- if you change a value here, there will be no record anywhere of what value was used previously, so you cannot reproduce your results anymore!
 
+Plugin types
+----------------------
+
+There are several plugin types:
+   * `Plugin`: The general type of plugin. Should contain at least `depends_on = <datakind>`, `provides = <datatype>`, `def compute(self, <datakind>)`, and `dtype = <dtype> ` or `def infer_dtype(): <>`.
+   * `ChildPlugin`: Plugin which is inherited from an already existing `strax.Plugin` (e.g. in order to use the same `compute()` method). This plugin must have `child_ends_with  = str` defined to be recognized as a child plugin. The options of the child plugin are inherited from the parent. The option values of the parent can be changed by specifying new options for the child plugins. These options must obey the following two rules in order to overwrite the parent value: 1. They are tagged as `child_option=True` 2. the option name ends with the same string as in `child_ends_with`. A child plugin can also take additional new options.
+   * `OverlapWindowPlugin`: Allows a plugin to only
+   * `LoopPlugin`: Allows user to loop over a given datakind and find the corresponding data of a lower datakind using for example `def compute_loop(self, events, peaks)` where we loop over events and get the corresponding peaks that are within the time range of the event. Currently the second argument (`peaks`) must be fully contained in the first argument (`events` ).
+   * `CutPlugin`: Plugin type where using `def cut_by(self, <datakind>)` inside the plugin a user can return a boolean array that can be used to select data.
+   * `MergeOnlyPlugin`: This is for internal use and only merges two plugins into a new one. See as an example in straxen the `EventInfo` plugin where the following datatypes are merged `'events', 'event_basics', 'event_positions', 'corrected_areas', 'energy_estimates'`.
+   * `ParallelSourcePlugin`: For internal use only to parallelize the processing of low level plugins. This can be activated using stating `parallel = 'process'` in a plugin.

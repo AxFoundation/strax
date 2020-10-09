@@ -53,10 +53,17 @@ class Plugin:
     depends_on: tuple
     provides: tuple
     input_buffer: typing.Dict[str, strax.Chunk]
-
+    
+    # Needed for plugins which are inherited from an already eliciting plugin:
+    child_ends_with = None
+    
     compressor = 'blosc'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
+    # How large (uncompressed) should re-chunked chunks be?
+    # Meaningless if rechunk_on_save is False
+    chunk_target_size_mb = strax.default_chunk_size_mb
+
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -85,7 +92,7 @@ class Plugin:
     run_i: int
     config: typing.Dict
     deps: typing.Dict       # Dictionary of dependency plugin instances
-    
+
     compute_takes_chunk_i = False    # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
@@ -207,7 +214,8 @@ class Plugin:
             lineage_hash=strax.DataKey(
                 run_id, data_type, self.lineage).lineage_hash,
             compressor=self.compressor,
-            lineage=self.lineage)
+            lineage=self.lineage,
+            chunk_target_size_mb=self.chunk_target_size_mb)
 
     def dependencies_by_kind(self):
         """Return dependencies grouped by data kind
@@ -497,7 +505,8 @@ class Plugin:
             data_kind=self.data_kind_for(data_type),
             data_type=data_type,
             dtype=self.dtype_for(data_type),
-            data=data)
+            data=data,
+            target_size_mb=self.chunk_target_size_mb)
 
     def compute(self, **kwargs):
         raise NotImplementedError
@@ -599,6 +608,9 @@ class LoopPlugin(Plugin):
             loop_over = self.loop_over
         else:
             loop_over = self.deps[self.depends_on[0]].data_kind
+        if not isinstance(loop_over, str):
+            raise TypeError("Please add \"loop_over = <base>\""
+                            " to your plugin definition")
 
         # Group into lists of things (e.g. peaks)
         # contained in the base things (e.g. events)
@@ -643,6 +655,54 @@ class LoopPlugin(Plugin):
 
     def compute_loop(self, *args, **kwargs):
         raise NotImplementedError
+
+
+@export
+class CutPlugin(Plugin):
+    """Generate a plugin that provides a boolean for a given cut specified by 'cut_by'"""
+    save_when = SaveWhen.NEVER
+
+    def __init__(self):
+        super().__init__()
+
+        _name = strax.camel_to_snake(self.__class__.__name__)
+        if not hasattr(self, 'provides'):
+            self.provides = _name
+        if not hasattr(self, 'cut_name'):
+            self.cut_name = _name
+        if not hasattr(self, 'cut_description'):
+            _description = _name
+            if 'cut_' not in _description:
+                _description = 'Cut by ' + _description
+            else:
+                _description = " ".join(_description.split("_"))
+            self.cut_description = _description
+
+    def infer_dtype(self):
+        dtype = [(self.cut_name, np.bool_, self.cut_description)]
+        # Alternatively one could use time_dt_fields for low level plugins.
+        dtype = dtype + strax.time_fields
+        return dtype
+
+    def compute(self, **kwargs):
+        if hasattr(self, 'cut_by'):
+            cut_by = self.cut_by
+        else:
+            raise NotImplementedError(f"{self.cut_name} does not have attribute 'cut_by'")
+
+        # Take shape of the first data_type like in strax.plugin
+        buff = list(kwargs.values())[0]
+
+        # Generate result buffer
+        r = np.zeros(len(buff), self.dtype)
+        r['time'] = buff['time']
+        r['endtime'] = strax.endtime(buff)
+        r[self.cut_name] = cut_by(**kwargs)
+        return r
+
+    def cut_by(self, **kwargs):
+        # This should be provided by the user making a CutPlugin
+        raise NotImplementedError()
 
 
 ##

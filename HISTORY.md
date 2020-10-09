@@ -1,3 +1,35 @@
+0.12.1 / 2020-09-10
+---------------------
+- Added the "Corrections Management Tool" (#303)
+- Check of loop dependency for multioutput plugins (#312)
+- Fix memory leak peaksplitting (#309)
+
+
+0.12.0 / 2020-08-17
+---------------------
+- Add backend for rucio (#300)
+- Hitlets data types and utilities (#275)
+- Apply function to data prior to delivering (#304)
+- Child options for inherited plugins (#297)
+- Introducing a template for pull-requests (#302)
+- Make fuzzy_for option more intuitive (#306)
+
+
+0.11.3 / 2020-07-29
+---------------------
+- bugfix in new progressbar feature (#296)
+
+
+0.11.2 / 2020-07-21
+---------------------
+- new plugin type: CutPlugin (#274)
+- add progressbar (#276)
+- allow for plugin-specific chunk-sizes (#277)
+- broaden scope of endtime check in chunk.py (#281)
+- change dtype of saturated channels (#286)
+- several (bug-)fixes (#289, #288, #284, #278, #273)
+
+
 0.11.1 / 2020-04-28
 ---------------------
 - Per-datatype rechunking control (#272)

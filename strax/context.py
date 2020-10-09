@@ -8,6 +8,15 @@ import string
 import typing as ty
 import warnings
 
+import contextlib
+import sys
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm import tqdm_notebook as tqdm
+else:
+    from tqdm import tqdm
+
 import numexpr
 import numpy as np
 import pandas as pd
@@ -24,7 +33,7 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                  help='If True, save data that is loaded from one frontend '
                       'through all willing other storage frontends.'),
     strax.Option(name='fuzzy_for', default=tuple(),
-                 help='Tuple of plugin names for which no checks for version, '
+                 help='Tuple or string of plugin names for which no checks for version, '
                       'providing plugin, and config will be performed when '
                       'looking for data.'),
     strax.Option(name='fuzzy_for_options', default=tuple(),
@@ -66,7 +75,11 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       'possibly be removed, see issue #246'),
     strax.Option(name='free_options', default=tuple(),
                  help='Do not warn if any of these options are passed, '
-                      'even when no registered plugin takes them.')
+                      'even when no registered plugin takes them.'),
+    strax.Option(name='apply_data_function', default=tuple(),
+                 help='Apply a function to the data prior to returning the'
+                      'data. The function should take two positional arguments: '
+                      'func(<data>, <targets>).')
 )
 @export
 class Context:
@@ -385,8 +398,34 @@ class Context:
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
+
         p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
+
+        if p.child_ends_with:
+            # This plugin is a child of another plugin and has some different
+            # Checking if the parent plugin is registered, this does not have to be the case
+            # but enables some useful checks.
+            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
+            is_parent_reg = parent_class in self._plugin_class_registry.values()
+            # options to pass. So update parent config according to child:
+            for k, opt in p.takes_config.items():
+                if k.endswith(p.child_ends_with):
+                    if opt.child_option:
+                        v = config[k]
+                        kparent = k[:-len(p.child_ends_with)]
+
+                        if is_parent_reg:
+                            mes = f'Option {kparent} is not taken by parent plugin.'
+                            assert kparent in parent_class.takes_config.keys(), mes
+
+                        p.config[kparent] = v
+                    else:
+                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
+                                         f' Found the option {k} with the ending {p.child_ends_with}'
+                                         ' which was not specified as a child option.'
+                                         ' Was this intended? If yes, please change the ending')
+
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -408,15 +447,17 @@ class Context:
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
-        def get_plugin(d):
+        def get_plugin(data_kind):
             nonlocal plugins
 
-            if d not in self._plugin_class_registry:
-                raise KeyError(f"No plugin class registered that provides {d}")
+            if data_kind not in self._plugin_class_registry:
+                raise KeyError(f"No plugin class registered that provides {data_kind}")
 
-            p = self._plugin_class_registry[d]()
-            for d in p.provides:
-                plugins[d] = p
+            p = self._plugin_class_registry[data_kind]()
+
+            d_provides = None  # just to make codefactor happy
+            for d_provides in p.provides:
+                plugins[d_provides] = p
 
             p.run_id = run_id
 
@@ -424,14 +465,33 @@ class Context:
             # but we don't know if we need the plugin yet
             self._set_plugin_config(p, run_id, tolerant=True)
 
-            p.deps = {d: get_plugin(d) for d in p.depends_on}
+            p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
 
-            p.lineage = {d: (p.__class__.__name__,
-                             p.version(run_id),
-                             {q: v for q, v in p.config.items()
-                              if p.takes_config[q].track})}
-            for d in p.depends_on:
-                p.lineage.update(p.deps[d].lineage)
+            last_provide = d_provides
+
+            if p.child_ends_with:
+                # Plugin is a child of another plugin, hence we have to
+                # drop the parents config from the lineage
+                configs = {}
+                for q, v in p.config.items():
+                    if q + p.child_ends_with in p.takes_config:
+                        continue
+                    elif p.takes_config[q].track:
+                        configs[q] = v
+                # Adding parent information to the lineage:
+                parent_class = p.__class__.__bases__[0]
+                configs[parent_class.__name__] = parent_class.__version__
+                        
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 configs)}
+            else:
+                p.lineage = {last_provide: (p.__class__.__name__,
+                                 p.version(run_id),
+                                 {q: v for q, v in p.config.items()
+                                  if p.takes_config[q].track})}
+            for d_depends in p.depends_on:
+                p.lineage.update(p.deps[d_depends].lineage)
 
             if not hasattr(p, 'data_kind') and not p.multi_output:
                 if len(p.depends_on):
@@ -447,22 +507,41 @@ class Context:
 
             return p
 
-        plugins = collections.defaultdict(get_plugin)
-        for t in targets:
+        plugins = {}
+        for t in targets: 
             p = get_plugin(t)
-            # This assignment is actually unnecessary due to defaultdict,
-            # but just for clarity:
             plugins[t] = p
 
         return plugins
 
     @property
     def _find_options(self):
-        return dict(fuzzy_for=self.context_config['fuzzy_for'],
+
+        # The plugin settings in the lineage are stored with the last
+        # plugin provides name as a key. This can be quite confusing
+        # since e.g. to be fuzzy for the peaklets settings the user has
+        # to specify fuzzy_for=('lone_hits'). Here a small work around
+        # to change this and not to reprocess the entire data set.
+        fuzzy_for_keys = strax.to_str_tuple(self.context_config['fuzzy_for'])
+        last_provides = []
+        for key in fuzzy_for_keys:
+            last_provides.append(self._plugin_class_registry[key].provides[-1])
+        last_provides = tuple(last_provides)
+
+        return dict(fuzzy_for=last_provides,
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
+        """
+        Get partial loaders to allow loading data later
+        :param key: strax.DataKey
+        :param time_range: 2-length arraylike of (start, exclusive end) of row
+        numbers to get. Default is None, which means get the entire run.
+        :param chunk_number: number of the chunk for data specified by
+        strax.DataKey. This chunck is loaded exclusively.
+        :return: partial object
+        """
         for sb_i, sf in enumerate(self.storage):
             try:
                 # Partial is clunky... but allows specifying executor later
@@ -490,7 +569,7 @@ class Context:
         targets = strax.to_str_tuple(targets)
 
         # Although targets is a tuple, we only support one target at the moment
-        # TODO: just make it a string!
+        # we could just make it a string!
         assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
         if len(targets[0]) == 1:
             raise ValueError(
@@ -564,6 +643,7 @@ class Context:
                 del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
+                self._check_forbidden()
                 if (time_range is not None
                         and plugins[d].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
@@ -750,6 +830,7 @@ class Context:
                  selection_str=None,
                  keep_columns=None,
                  _chunk_number=None,
+                 progress_bar=True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -806,20 +887,73 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
+        
+        # Defining time ranges for the progress bar:
+        if time_range:
+            # user specified a time selection
+            start_time, end_time = time_range
+        else:
+            # If no selection is specified we have to get the last end_time:
+            start_time = 0
+            end_time = float('inf')
+
+        if progress_bar:
+            for t in strax.to_str_tuple(targets):
+                try:
+                    # Sometimes some metadata might be missing e.g. during tests.
+                    chunks = self.get_meta(run_id, t)['chunks']
+                    start_time = max(start_time, chunks[0]['start'])
+                    end_time = min(end_time, chunks[-1]['end'])
+                except (strax.DataNotAvailable, KeyError, IndexError):
+                    # IndexError caused for only empty chunks when data not
+                    # available.
+                    # Maybe at least one target had some metadata.
+                    start_time = max(start_time, 0)
+                    end_time = min(end_time, float('inf'))
+
+            # Define nice progressbar format:
+            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
+                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
+                         " #chunks processed: {postfix[1][n]}"
+            sec_per_chunk = np.nan  # Have not computed any chunk yet.
+            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
 
         try:
-            for result in strax.continuity_check(generator):
-                seen_a_chunk = True
-                if not isinstance(result, strax.Chunk):
-                    raise ValueError(f"Got type {type(result)} rather than "
-                                     f"a strax Chunk from the processor!")
-                result.data = self.apply_selection(
-                    result.data, 
-                selection_str=selection_str,
-                keep_columns=keep_columns,
-                time_range=time_range,
-                time_selection=time_selection)
-                yield result
+            with contextlib.ExitStack() as stack:
+                if progress_bar and (start_time != 0 and end_time != float('inf')):
+                    # Get initial time
+                    pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
+                    last_time = pbar.last_print_t
+                else:
+                    progress_bar = False
+                
+                for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
+                    seen_a_chunk = True
+                    if not isinstance(result, strax.Chunk):
+                        raise ValueError(f"Got type {type(result)} rather than "
+                                         f"a strax Chunk from the processor!")
+                    result.data = self.apply_selection(
+                        result.data,
+                        selection_str=selection_str,
+                        keep_columns=keep_columns,
+                        time_range=time_range,
+                        time_selection=time_selection)
+                    
+                    if progress_bar:
+                        # Update progressbar:
+                        pbar.n = (result.end - start_time) / (end_time - start_time)
+                        pbar.update(0)
+                        # Now get last time printed and refresh seconds_per_chunk:
+                        # This is a small work around since we do not know the
+                        # pacemaker here and therefore we do not know the number of
+                        # chunks.
+                        sec_per_chunk = pbar.last_print_t - last_time
+                        pbar.postfix[1]['spc'] = sec_per_chunk
+                        pbar.postfix[1]['n'] = n_chunks
+                        pbar.refresh()
+                        last_time = pbar.last_print_t
+
+                    yield result
 
         except GeneratorExit:
             generator.throw(OutsideException(
@@ -899,7 +1033,7 @@ class Context:
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
-             _skip_if_built=True,
+             progress_bar=False, _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
@@ -912,12 +1046,14 @@ class Context:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True,
+                progress_bar=progress_bar,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets,
+                               progress_bar=progress_bar,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
@@ -940,7 +1076,10 @@ class Context:
                 max_workers=max_workers,
                 **kwargs)
             results = [x.data for x in source]
-        return np.concatenate(results)
+
+        results = np.concatenate(results)
+        results = self._apply_function(results, targets)
+        return results
 
     def accumulate(self,
                    run_id: ty.Union[str, tuple, list],
@@ -960,6 +1099,10 @@ class Context:
                * A record array or dict -> fields accumulated individually
                * None -> nothing accumulated
             If not provided, the identify function is used.
+
+            NB: Additionally and independently, if there are any functions registered
+            under context_config['apply_data_function'] these are applied first directly
+            after loading the data.
 
         :param fields: Fields of the function output to accumulate.
             If not provided, all output fields will be accumulated.
@@ -993,6 +1136,7 @@ class Context:
 
         for chunk in self.get_iter(run_id, targets, **kwargs):
             data = chunk.data
+            data = self._apply_function(data, targets)
 
             if n_chunks == 0:
                 result['start'] = chunk.start
@@ -1004,7 +1148,7 @@ class Context:
             if store_first_for_others and not seen_data and len(data):
                 # Store the first value we see for the non-accumulated fields
                 for name in data.dtype.names:
-                    if name in fields:
+                    if name not in fields:
                         result[name] = data[0][name]
                 seen_data = True
             result['end'] = chunk.end
@@ -1061,6 +1205,13 @@ class Context:
             raise
 
     def key_for(self, run_id, target):
+        """Get the DataKey for a given run and a given target plugin. The
+        DataKey is inferred from the plugin lineage.
+
+        :param run_id: run id to get
+        :param target: data type to get
+        :return: strax.DataKey of the target
+        """
         p = self._get_plugins((target,), run_id)[target]
         return strax.DataKey(run_id, target, p.lineage)
 
@@ -1140,6 +1291,7 @@ class Context:
         # with a temporary one
         # TODO duplicated code with with get_iter
         if len(kwargs):
+            # Comment below disables pycharm from inspecting the line below it
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
@@ -1151,6 +1303,35 @@ class Context:
             except strax.DataNotAvailable:
                 continue
         return False
+
+    def _check_forbidden(self):
+        """Check that the forbid_creation_of config is of tuple type.
+        Otherwise, try to make it a tuple"""
+        self.context_config['forbid_creation_of'] = strax.to_str_tuple(
+            self.context_config['forbid_creation_of'])
+    
+    def _apply_function(self, data, targets):
+        """
+        Apply functions stored in the context config to any data that is returned via
+            get_array, get_df or accumulate. Functions stored in
+            context_config['apply_data_function'] should take exactly two positional
+            arguments: data and targets.
+        :param data: Any type of data
+        :param targets: list/tuple of strings of data type names to get
+        :return: the data after applying the function(s)
+        """
+        apply_functions = self.context_config['apply_data_function']
+        if not isinstance(apply_functions, (tuple, list)):
+            raise ValueError(f"apply_data_function in context config should be tuple of "
+                             f"functions. Instead got {apply_functions}")
+        for function in apply_functions:
+            if not hasattr(function, '__call__'):
+                raise TypeError(f'apply_data_function in the context_config got '
+                                f'{function} but expected callable function with two '
+                                f'positional arguments: f(data, targets).')
+            # Make sure that the function takes two arguments (data and targets)
+            data = function(data, targets)
+        return data
 
     @classmethod
     def add_method(cls, f):
@@ -1169,6 +1350,7 @@ the start of the run to load.
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
+:param progress_bar: Display a progress bar if metedata exists.
 """
 
 get_docs = """
