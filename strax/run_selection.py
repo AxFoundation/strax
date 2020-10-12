@@ -57,8 +57,8 @@ def scan_runs(self: strax.Context,
            strax.RUN_DEFAULTS_KEY]
         + list(self.context_config['store_run_fields'])))
     # Replace fields by their subfields if requested only take the most "specific" projection
-    store_fields = [f1 for f1 in store_fields if not any([f2.startswith(f1) and f1 != f2 
-                    for f2 in store_fields])]
+    store_fields = [f1 for f1 in store_fields
+                     if not any([f2.startswith(f1+".") for f2 in store_fields])]
 
     check_available = tuple(set(
         list(strax.to_str_tuple(check_available))
