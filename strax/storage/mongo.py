@@ -194,7 +194,7 @@ def remove_np(dictin):
             result.append(remove_np(k))
     elif isinstance(dictin, np.integer):
         return int(dictin)
-    elif isinstance(dictin, np.float):
+    elif isinstance(dictin, np.floating):
         return float(dictin)
     else:
         return dictin
