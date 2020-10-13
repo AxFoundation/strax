@@ -482,7 +482,11 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
 def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     res = np.zeros(len(hitlets), dtype=np.float32)
     for ind, h in enumerate(hitlets):
-        hitlet = h['data'][:h['length']]
+        # h['data'][:] generates just a view and not a copy of the data
+        # Since the data of hitlets should not be modified we have
+        # to use a copy instead.... See also https://stackoverflow.com/questions/4370745/view-onto-a-numpy-array
+        hitlet = np.copy(h['data'][:h['length']])
+
         # Squaring and normalizing:
         if square_data:
             hitlet[:] = hitlet * hitlet
