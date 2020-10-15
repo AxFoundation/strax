@@ -1,3 +1,10 @@
+0.12.2 / 2020-10-15
+---------------------
+- OnlineMonitor in mongo.py (#315, #323)
+- Several bugfixes (#320, #321, #327, #329, #334)
+- Option to give range to sum_waveform (#322)
+
+
 0.12.1 / 2020-09-10
 ---------------------
 - Added the "Corrections Management Tool" (#303)
