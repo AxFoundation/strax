@@ -188,11 +188,8 @@ class MongoSaver(Saver):
         """see strax.Saver"""
         # For the first chunk we get the run_start_time and update the run-metadata file
         if int(chunk_info['chunk_i']) == 0:
-            self.run_start = t0 = datetime.fromtimestamp(
+            self.run_start = datetime.fromtimestamp(
                 chunk_info['start']/1e9).replace(tzinfo=py_utc)
-            self.col.update_one({'_id': self.id_md},
-                                {'$set':
-                                     {'run_start_time': t0}})
 
         self.col.update_one({'_id': self.id_md},
                             {'$addToSet':
