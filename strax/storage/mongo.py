@@ -39,14 +39,15 @@ class MongoBackend(StorageBackend):
 
         # Query for the chunk and project the chunk info
         doc = self.db[self.col_name].find_one(
-            {**query, chunk_name: {"$exists": True}},
-            {f"{chunk_name}": 1})
+            {**query, "chunk_i": chunk_name},
+            {f"data": 1})
 
         # Unpack info about this chunk from the query. Return empty if not available.
-        if doc is None or chunk_name not in doc:
+        if doc is None:
+            # Did not find the data
             return np.array([], dtype=dtype)
         else:
-            chunk_doc = doc[chunk_name].get('data', None)
+            chunk_doc = doc.get('data', None)
             if chunk_doc is None:
                 raise ValueError(f'Doc for {chunk_name} in wrong format:\n{doc}')
 
@@ -170,12 +171,13 @@ class MongoSaver(Saver):
         chunk_id = self.ids_chunk.get(chunk_name, None)
         if chunk_id is not None:
             self.col.update_one({'_id': chunk_id},
-                                {'$addToSet': {f'chunk_name.data': aggregate_data}})
+                                {'$addToSet': {f'data': aggregate_data}})
         else:
             # Start a new document, update it with the proper information
             doc = self.basic_md.copy()
             doc['write_time'] = datetime.now(py_utc)
-            doc[chunk_name] = {"data": aggregate_data}
+            doc['chunk_i'] = chunk_name
+            doc["data"] = aggregate_data
 
             chunk_id = self.col.insert_one(doc).inserted_id
             self.ids_chunk[chunk_name] = chunk_id
@@ -202,8 +204,9 @@ class MongoSaver(Saver):
         # a TTL index -candidate
         if self.run_start is not None:
             update = {'run_start_time': self.run_start}
-            for chunk_id in self.ids_chunk.keys():
-                self.col.update_one({'_id': chunk_id}, {'$set': update})
+            query = {k: v for k, v in self.basic_md.items()
+                     if k in ('run_id', 'data_type', 'lineage_hash')}
+            self.col.update_many(query, {'$set': update})
 
         # Update the metadata
         update = {f'metadata.{k}': v
