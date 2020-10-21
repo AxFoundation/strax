@@ -35,11 +35,11 @@ class MongoBackend(StorageBackend):
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         """See strax.Backend"""
         query = backend_key_to_query(backend_key)
-        chunk_name = f'chunk_{chunk_info["chunk_i"]}'
+        chunk_i = chunk_info["chunk_i"]
 
         # Query for the chunk and project the chunk info
         doc = self.db[self.col_name].find_one(
-            {**query, "chunk_i": chunk_name},
+            {**query, "chunk_i": chunk_i},
             {f"data": 1})
 
         # Unpack info about this chunk from the query. Return empty if not available.
@@ -49,7 +49,7 @@ class MongoBackend(StorageBackend):
         else:
             chunk_doc = doc.get('data', None)
             if chunk_doc is None:
-                raise ValueError(f'Doc for {chunk_name} in wrong format:\n{doc}')
+                raise ValueError(f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
 
         # Convert JSON to numpy
         chunk_len = len(chunk_doc)
@@ -153,8 +153,7 @@ class MongoSaver(Saver):
 
     def _save_chunk(self, data, chunk_info, executor=None):
         """see strax.Saver"""
-        chunk_number = chunk_info['chunk_i']
-        chunk_name = f'chunk_{chunk_number}'
+        chunk_i = chunk_info['chunk_i']
 
         aggregate_data = []
         # Remove the numpy structures and parse the data. The dtype information
@@ -168,7 +167,7 @@ class MongoSaver(Saver):
 
         # Get the document to update, if none available start a new one for
         # this chunk
-        chunk_id = self.ids_chunk.get(chunk_name, None)
+        chunk_id = self.ids_chunk.get(chunk_i, None)
         if chunk_id is not None:
             self.col.update_one({'_id': chunk_id},
                                 {'$addToSet': {f'data': aggregate_data}})
@@ -176,11 +175,11 @@ class MongoSaver(Saver):
             # Start a new document, update it with the proper information
             doc = self.basic_md.copy()
             doc['write_time'] = datetime.now(py_utc)
-            doc['chunk_i'] = chunk_name
+            doc['chunk_i'] = chunk_i
             doc["data"] = aggregate_data
 
             chunk_id = self.col.insert_one(doc).inserted_id
-            self.ids_chunk[chunk_name] = chunk_id
+            self.ids_chunk[chunk_i] = chunk_id
 
         return dict(), None
 
@@ -202,7 +201,7 @@ class MongoSaver(Saver):
         if self.run_start is not None:
             update = {'run_start_time': self.run_start}
             query = {k: v for k, v in self.basic_md.items()
-                     if k in ('run_id', 'data_type', 'lineage_hash')}
+                     if k in ('number', 'data_type', 'lineage_hash')}
             self.col.update_many(query, {'$set': update})
 
         # Update the metadata
