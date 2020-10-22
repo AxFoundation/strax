@@ -57,9 +57,6 @@ class MongoBackend(StorageBackend):
         for i in range(chunk_len):
             for key in np.dtype(dtype).names:
                 result[i][key] = chunk_doc[i][key]
-
-        # We are done with this chunk.
-        del self.chunks_registry[chunk_i]
         return result
 
     def _saver(self, key, metadata):
