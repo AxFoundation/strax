@@ -41,10 +41,16 @@ class MongoBackend(StorageBackend):
         if self.chunks_registry is None:
             self._build_chunk_registry(backend_key)
 
-        doc = self.chunks_registry.get(chunk_i, None)
-        # Unpack info about this chunk from the query. Return empty if not available.
+        # Unpack info about this chunk from the query. Return empty if
+        # not available. Use a *string* in the registry to lookup the
+        # chunk-data (like we do in _build_chunk_registry).
+        doc = self.chunks_registry.get(str(chunk_i), None)
+
         if doc is None:
-            # Did not find the data
+            # Did not find the data. NB: can be that the query is off in
+            # the _build_chunk_registry. In case you end up here but did
+            # not expect that, double check that self.chunks_registry is
+            # not an empty dict!
             return np.array([], dtype=dtype)
         else:
             chunk_doc = doc.get('data', None)
@@ -87,24 +93,22 @@ class MongoBackend(StorageBackend):
         chunks_registry = self.db[self.col_name].find(
             {**query, **{"chunk_i": {'$exists':True}}},
             {"chunk_i": 1, "data": 1})
-        if chunks_registry is not None:
-            # We are going to convert this to a dictionary as that is
-            # easier to lookup
-            self.chunks_registry = {}
-        else:
-            raise strax.DataNotAvailable(f'Unable find data for {query}')
+
+        # We are going to convert this to a dictionary as that is
+        # easier to lookup
+        self.chunks_registry = {}
 
         for doc in chunks_registry:
             chunk_key = doc.get('chunk_i', None)
             if chunk_key is None:
                 # Should not happen because of the projection in find
-                # but let's double check
+                # but let's double check:
                 raise ValueError(
                     f'Projection failed, got doc with no "chunk_i":\n{doc}')
             # Update our registry with this chunks info. Use chunk_i as
-            # chunk_key
-            self.chunks_registry[chunk_key] = doc.copy()
-
+            # chunk_key. Make it a *string* to avoid potential key-error
+            # issues or json-encoding headaches.
+            self.chunks_registry[str(chunk_key)] = doc.copy()
 
 
 @export
