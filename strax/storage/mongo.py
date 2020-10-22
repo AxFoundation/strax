@@ -31,20 +31,26 @@ class MongoBackend(StorageBackend):
         self.client = MongoClient(uri)
         self.db = self.client[database]
         self.col_name = col_name
+        self.chunks_registry = None
 
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         """See strax.Backend"""
-        query = backend_key_to_query(backend_key)
         chunk_i = chunk_info["chunk_i"]
 
-        # Query for the chunk and project the chunk info
-        doc = self.db[self.col_name].find_one(
-            {**query, "chunk_i": chunk_i},
-            {f"data": 1})
+        # Build the chunk-registry if not done already.
+        if self.chunks_registry is None:
+            self._build_chunk_registry(backend_key)
 
-        # Unpack info about this chunk from the query. Return empty if not available.
+        # Unpack info about this chunk from the query. Return empty if
+        # not available. Use a *string* in the registry to lookup the
+        # chunk-data (like we do in _build_chunk_registry).
+        doc = self.chunks_registry.get(str(chunk_i), None)
+
         if doc is None:
-            # Did not find the data
+            # Did not find the data. NB: can be that the query is off in
+            # the _build_chunk_registry. In case you end up here but did
+            # not expect that, double check that self.chunks_registry is
+            # not an empty dict!
             return np.array([], dtype=dtype)
         else:
             chunk_doc = doc.get('data', None)
@@ -72,6 +78,37 @@ class MongoBackend(StorageBackend):
         if doc and 'metadata' in doc:
             return doc['metadata']
         raise strax.DataNotAvailable
+
+    def _build_chunk_registry(self, backend_key):
+        """
+        :param backend_key: strax.DataKey to query the collection for
+        Build chunk info in a single registry using only one query to
+        the database. This is much faster as one does not have to do
+        n-chunk queries to the database. Just one will do. As the
+        documents-size is limited to 16 MB, it's unlikely that we will
+        run into memory issues (that we otherwise would not run into).
+        """
+
+        query = backend_key_to_query(backend_key)
+        chunks_registry = self.db[self.col_name].find(
+            {**query, **{"chunk_i": {'$exists':True}}},
+            {"chunk_i": 1, "data": 1})
+
+        # We are going to convert this to a dictionary as that is
+        # easier to lookup
+        self.chunks_registry = {}
+
+        for doc in chunks_registry:
+            chunk_key = doc.get('chunk_i', None)
+            if chunk_key is None:
+                # Should not happen because of the projection in find
+                # but let's double check:
+                raise ValueError(
+                    f'Projection failed, got doc with no "chunk_i":\n{doc}')
+            # Update our registry with this chunks info. Use chunk_i as
+            # chunk_key. Make it a *string* to avoid potential key-error
+            # issues or json-encoding headaches.
+            self.chunks_registry[str(chunk_key)] = doc.copy()
 
 
 @export
