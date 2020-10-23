@@ -832,7 +832,8 @@ class Context:
                      (full_range is None))
         if selection < 2:
             raise RuntimeError("Pass no more than one one of"
-                               " time_range, seconds_range, ot time_within")
+                               " time_range, seconds_range, time_within"
+                               ", or full_range")
         if seconds_range is not None:
             t0, _ = self.estimate_run_start_and_end(run_id, targets)
             time_range = (t0 + int(1e9 * seconds_range[0]),
