@@ -1,7 +1,7 @@
 """I/O format for MongoDB
 
 This plugin is designed with data monitoring in mind, to put smaller
-amounds of extracted data into a database for quick access. However
+amounts of extracted data into a database for quick access. However
 it should work with any plugin.
 
 Note that there is no check to make sure the 16MB document size
@@ -37,14 +37,16 @@ class MongoBackend(StorageBackend):
         """See strax.Backend"""
         chunk_i = chunk_info["chunk_i"]
 
-        # Build the chunk-registry if not done already.
-        if self.chunks_registry is None:
+        # Build the chunk-registry if not done already (NB: when asking
+        # for chunk_i==0, reset, otherwise we cannot load data a second
+        # time e.g. with allow_incomplete = True).
+        if self.chunks_registry is None or chunk_i == 0:
             self._build_chunk_registry(backend_key)
 
         # Unpack info about this chunk from the query. Return empty if
         # not available. Use a *string* in the registry to lookup the
         # chunk-data (like we do in _build_chunk_registry).
-        doc = self.chunks_registry.get(str(chunk_i), None)
+        doc = self.chunks_registry.get(backend_key + str(chunk_i), None)
 
         if doc is None:
             # Did not find the data. NB: can be that the query is off in
@@ -55,7 +57,8 @@ class MongoBackend(StorageBackend):
         else:
             chunk_doc = doc.get('data', None)
             if chunk_doc is None:
-                raise ValueError(f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
+                raise ValueError(
+                    f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
 
         # Convert JSON to numpy
         chunk_len = len(chunk_doc)
@@ -91,13 +94,12 @@ class MongoBackend(StorageBackend):
 
         query = backend_key_to_query(backend_key)
         chunks_registry = self.db[self.col_name].find(
-            {**query, **{"chunk_i": {'$exists':True}}},
+            {**query, 'chunk_i': {'$exists': True}},
             {"chunk_i": 1, "data": 1})
 
         # We are going to convert this to a dictionary as that is
         # easier to lookup
         self.chunks_registry = {}
-
         for doc in chunks_registry:
             chunk_key = doc.get('chunk_i', None)
             if chunk_key is None:
@@ -108,7 +110,7 @@ class MongoBackend(StorageBackend):
             # Update our registry with this chunks info. Use chunk_i as
             # chunk_key. Make it a *string* to avoid potential key-error
             # issues or json-encoding headaches.
-            self.chunks_registry[str(chunk_key)] = doc.copy()
+            self.chunks_registry[backend_key + str(chunk_key)] = doc.copy()
 
 
 @export
@@ -158,21 +160,21 @@ class MongoSaver(Saver):
         """
         super().__init__(metadata)
         self.col = col
-        # Parse basic properties for online document by forcing keys in specific
-        # representations (rep)
+        # Parse basic properties for online document by forcing keys in
+        # specific representations (rep)
         basic_meta = {}
         for k, rep in (
                 ('run_id', int), ('data_type', str), ('lineage_hash', str)):
             basic_meta[k.replace('run_id', 'number')] = rep(self.md[k])
-        # Add datetime objects as candidates for TTL collections. Either can
-        # be used according to the preference of the user to index.
+        # Add datetime objects as candidates for TTL collections. Either
+        # can be used according to the preference of the user to index.
         # Two entries can be used:
         #  1. The time of writing.
         #  2. The time of data taking.
         basic_meta['write_time'] = datetime.now(py_utc)
-        # The run_start_time below is a placeholder and will be updated in the
-        # _save_chunk_metadata for the first chunk. Nevertheless we need an
-        # object in case there e.g. is no chunk.
+        # The run_start_time below is a placeholder and will be updated
+        # in the _save_chunk_metadata for the first chunk. Nevertheless
+        # we need an object in case there e.g. is no chunk.
         basic_meta['run_start_time'] = datetime.now(py_utc)
         # If available later update with this value:
         self.run_start = None
@@ -193,8 +195,8 @@ class MongoSaver(Saver):
         chunk_i = chunk_info['chunk_i']
 
         aggregate_data = []
-        # Remove the numpy structures and parse the data. The dtype information
-        # is saved with the metadata so don't worry
+        # Remove the numpy structures and parse the data. The dtype
+        # information is saved with the metadata so don't worry
         for row in data:
             ins = {}
             for key in list(data.dtype.names):
@@ -202,8 +204,8 @@ class MongoSaver(Saver):
             ins = remove_np(ins)
             aggregate_data.append(ins)
 
-        # Get the document to update, if none available start a new one for
-        # this chunk
+        # Get the document to update, if none available start a new one
+        # for this chunk
         chunk_id = self.ids_chunk.get(chunk_i, None)
         if chunk_id is not None:
             self.col.update_one({'_id': chunk_id},
@@ -222,19 +224,19 @@ class MongoSaver(Saver):
 
     def _save_chunk_metadata(self, chunk_info):
         """see strax.Saver"""
-        # For the first chunk we get the run_start_time and update the run-metadata file
+        # For the first chunk we get the run_start_time and update the
+        # run-metadata file
         if int(chunk_info['chunk_i']) == 0:
             self.run_start = datetime.fromtimestamp(
                 chunk_info['start']/1e9).replace(tzinfo=py_utc)
 
         self.col.update_one({'_id': self.id_md},
-                            {'$addToSet':
-                                 {'metadata.chunks': chunk_info}})
+                            {'$addToSet': {'metadata.chunks': chunk_info}})
 
     def _close(self):
         """see strax.Saver"""
-        # First update the run-starts of all of the chunk-documents as this is
-        # a TTL index -candidate
+        # First update the run-starts of all of the chunk-documents as
+        # this is a TTL index-candidate
         if self.run_start is not None:
             update = {'run_start_time': self.run_start}
             query = {k: v for k, v in self.basic_md.items()
