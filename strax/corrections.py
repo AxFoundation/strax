@@ -67,8 +67,9 @@ class CorrectionsInterface:
         del df['_id']
 
         df['time'] = pd.to_datetime(df['time'], utc=True)
-
-        return df.set_index('time')
+        df = df.set_index('time')
+        df = df.sort_index()
+        return df 
 
     def interpolate(self, what, when, how='interpolate', **kwargs):
         """
