@@ -130,7 +130,7 @@ class StorageFrontend:
         # List the relevant attributes ('path' is actually for the
         # strax.DataDirectory but it makes more sense to put it here).
         attributes = ('readonly', 'path', 'exclude', 'take_only')
-        representation = self.__class__.__name__
+        representation = self.__class__.__name__ + '-StorageFrontend'
         for attr in attributes:
             if hasattr(self, attr) and getattr(self, attr):
                 representation += f', {attr}: {getattr(self, attr)}'
