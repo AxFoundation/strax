@@ -213,14 +213,16 @@ class MongoSaver(Saver):
         # Get the document to update, if none available start a new one
         # for this chunk
         chunk_id = self.ids_chunk.get(chunk_i, None)
+
+        # We can fail here if the document is too large to be written
+        # out to mongo. One could do a try: except
+        # pymongo.errors.WriteError: pass, but that potentially leads to
+        # abuse of a Mongo instance going unnoticed.
         if chunk_id is not None:
-            # We can fail here if the document is too large to be
-            # written out to mongo. One could do a try:
-            # except pymongo.errors.WriteError: pass
-            # but that potentially leads to abuse of a Mongo instance
-            # going unnoticed.
+            # In principle this should not end up here as each chunk
+            # should be it's own document unless you re-chunk
             self.col.update_one({'_id': chunk_id},
-                                {'$addToSet': {f'data': aggregate_data}})
+                                {'$push': {f'data': aggregate_data}})
         else:
             # Start a new document, update it with the proper information
             doc = self.basic_md.copy()
