@@ -19,7 +19,7 @@ import tempfile
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
-
+from warnings import warn
 import strax
 from strax import StorageFrontend
 
@@ -57,6 +57,13 @@ class SimpleS3Store(StorageFrontend):
         """
 
         super().__init__(*args, **kwargs)
+
+        # S3 storage will be removed in the near future unless one objects in
+        # https://github.com/AxFoundation/strax/issues/307
+        warn('DeprecationWarning S3 storage is not used in strax and will be '
+             'removed in 2021. If there are objections please refer to '
+             'https://github.com/AxFoundation/strax/issues/307',
+             DeprecationWarning)
 
         # Get S3 protocol credentials
         if s3_access_key_id is None:
