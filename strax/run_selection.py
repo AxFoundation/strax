@@ -209,9 +209,13 @@ def select_runs(self, run_mode=None, run_id=None,
     for d in have_available:
         if not d + '_available' in dsets.columns:
             # Get extra availability info from the run db
-            self.runs[d + '_available'] = np.in1d(
-                self.runs.name.values,
-                self.list_available(d))
+            d_available = np.in1d(self.runs.name.values,
+                                  self.list_available(d))
+            # Save both in the context and for this selection using
+            # available = ('data_type',)
+            self.runs[d + '_available'] = d_available
+            dsets[d + '_available'] = d_available
+    for d in have_available:
         dsets = dsets[dsets[d + '_available']]
 
     return dsets
