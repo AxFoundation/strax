@@ -126,6 +126,19 @@ class StorageFrontend:
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        # List the relevant attributes ('path' is actually for the
+        # strax.DataDirectory but it makes more sense to put it here).
+        attributes = ('readonly', 'path', 'exclude', 'take_only')
+        representation = f'{self.__class__.__module__}.{self.__class__.__name__}'
+        for attr in attributes:
+            if hasattr(self, attr) and getattr(self, attr):
+                representation += f', {attr}: {getattr(self, attr)}'
+        return representation
+
     def loader(self, key: DataKey,
                time_range=None,
                allow_incomplete=False,

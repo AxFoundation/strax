@@ -14,6 +14,7 @@ from pymongo import MongoClient
 from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
+from warnings import warn
 export, __all__ = strax.exporter()
 
 
@@ -194,6 +195,11 @@ class MongoSaver(Saver):
         """see strax.Saver"""
         chunk_i = chunk_info['chunk_i']
 
+        if getattr(data, 'nbytes') > 10_000_000:
+            warn('Inserting documents of size > 10 MB, this is getting '
+                 'close to the 16 MB document size in mongo',
+                 UserWarning)
+
         aggregate_data = []
         # Remove the numpy structures and parse the data. The dtype
         # information is saved with the metadata so don't worry
@@ -207,9 +213,16 @@ class MongoSaver(Saver):
         # Get the document to update, if none available start a new one
         # for this chunk
         chunk_id = self.ids_chunk.get(chunk_i, None)
+
+        # We can fail here if the document is too large to be written
+        # out to mongo. One could do a try: except
+        # pymongo.errors.WriteError: pass, but that potentially leads to
+        # abuse of a Mongo instance going unnoticed.
         if chunk_id is not None:
+            # In principle this should not end up here as each chunk
+            # should be it's own document unless you re-chunk
             self.col.update_one({'_id': chunk_id},
-                                {'$addToSet': {f'data': aggregate_data}})
+                                {'$push': {f'data': aggregate_data}})
         else:
             # Start a new document, update it with the proper information
             doc = self.basic_md.copy()
