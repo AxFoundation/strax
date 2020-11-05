@@ -205,6 +205,11 @@ class FileSytemBackend(strax.StorageBackend):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)
+        
+        if not osp.exists(md_path):
+            # Try to see if we are so fast that there exists a temp folder 
+            # with the metadata we need.
+            md_path = osp.join(dirname+'_temp', metadata_json)
 
         if not osp.exists(md_path):
             # Try old-format metadata
