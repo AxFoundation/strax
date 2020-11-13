@@ -1,3 +1,8 @@
+0.12.4 / 2020-11-13
+---------------------
+- Limit mongo backend memory usage (#349)
+- Small CMT simplification (#347)
+
 0.12.3 / 2020-11-05
 ---------------------
 - Updates to mongo.py (#335, #336 )
