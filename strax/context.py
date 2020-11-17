@@ -1382,15 +1382,8 @@ class Context:
             raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
                              f'we only have {len(self.storage)} frontends!')
 
-        # Figure out which of the frontends has the data
-        source_sf = None
-        for sf in self.storage:
-            if self._is_stored_in_sf(run_id, target, sf):
-                source_sf = sf
-                # We only need a single source
-                break
-        if source_sf is None:
-            raise ValueError('This cannot happen, we just checked that this run is stored?!?')
+        # Figure out which of the frontends has the data. Raise error when none
+        source_sf = self._get_source_sf(run_id, target, raise_error=True)
 
         # Keep frontends that:
         #  1. already have the data; and
@@ -1440,6 +1433,25 @@ class Context:
             return True
         except strax.DataNotAvailable:
             return False
+
+    def _get_source_sf(self, run_id, target, raise_error=False):
+        """
+        Get the source storage frontend for a given run_id and target
+        :param run_id: run_id
+        :param target: target
+        :param raise_error: Raise a ValueError if we cannot find one
+        (e.g. we already checked the data is stored)
+        :return: strax.StorageFrontend or None (when raise_error is
+        """
+        source_sf = None
+        for sf in self.storage:
+            if self._is_stored_in_sf(run_id, target, sf):
+                source_sf = sf
+                # We only need a single source
+                break
+        if source_sf is None and raise_error:
+            raise ValueError('This cannot happen, we just checked that this '
+                             'run should be stored?!?')
 
     @classmethod
     def add_method(cls, f):
