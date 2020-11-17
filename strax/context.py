@@ -1323,13 +1323,10 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        key = self.key_for(run_id, target)
         for sf in self.storage:
-            try:
-                sf.find(key, **self._find_options)
+            if self._is_stored_in_sf(run_id, target, sf):
                 return True
-            except strax.DataNotAvailable:
-                continue
+        # None of the frontends has the data
         return False
 
     def _check_forbidden(self):
@@ -1360,6 +1357,90 @@ class Context:
             # Make sure that the function takes two arguments (data and targets)
             data = function(data, targets)
         return data
+
+    def _copy_to_frontend(self, run_id, target,
+                          target_frontend_id=None, rechunk=False):
+        """
+        Copy data from one frontend to another
+        :param run_id: run_id
+        :param target: target datakind
+        :param target_frontend_id: index of the frontend that the data should go to
+        in context.storage. If no index is specified, try all.
+        :param rechunk: allow re-chunking for saving
+        """
+        if not self.is_stored(run_id, target):
+            raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
+                                         f'does not exist')
+        if len(strax.to_str_tuple(target)) > 1:
+            raise ValueError('_copy_to_frontend only works for ')
+        if target_frontend_id is None:
+            target_sf = self.storage
+        elif len(self.storage) <= target_frontend_id:
+            # only write to selected other frontend
+            target_sf = [self.storage[target_frontend_id]]
+        else:
+            raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
+                             f'we only have {len(self.storage)} frontends!')
+
+        # Figure out which of the frontends has the data
+        source_sf = None
+        for sf in self.storage:
+            if self._is_stored_in_sf(run_id, target, sf):
+                source_sf = sf
+                # We only need a single source
+                break
+        if source_sf is None:
+            raise ValueError('This cannot happen, we just checked that this run is stored?!?')
+
+        # Keep frontends that:
+        #  1. already have the data; and
+        #  2. take the data; and
+        #  3. are readonly
+        target_sf = [t_sf for t_sf in target_sf if
+                     (not self._is_stored_in_sf(run_id, target, t_sf) and
+                      t_sf._we_take(target) and
+                      t_sf.readonly is False)]
+
+        if not len(target_sf):
+            raise ValueError('No frontend to copy to! Perhaps you already stored '
+                             'it or none of the frontends is willing to take it?')
+
+        # Get the info from the source backend (s_be) that we need to fill
+        # the target backend (t_be) with
+        data_key = self.key_for(run_id, target)
+        # This should never fail, we just tried
+        s_be_str, s_be_key = source_sf.find(data_key)
+        s_be = source_sf._get_backend(s_be_str)
+        md = s_be.get_metadata(s_be_key)
+
+        # Loop over the targets. Fill each with the info from the loader
+        for t_sf in target_sf:
+            try:
+                # Need to load a new loader each time since it's a generator
+                # and will be exhausted otherwise.
+                loader = s_be.loader(s_be_key)
+                # Fill the target buffer
+                t_be_str, t_be_key = t_sf.find(data_key, write=True)
+                target_be = t_sf._get_backend(t_be_str)
+                saver = target_be._saver(t_be_key, md)
+                saver.save_from(loader, rechunk=rechunk)
+            except NotImplementedError:
+                # Target is not susceptible
+                continue
+            except strax.DataExistsError:
+                raise strax.DataExistsError(
+                    f'Trying to write {data_key} to {t_sf} which already exists, '
+                    'do you have two storage frontends writing to the same place?')
+
+    def _is_stored_in_sf(self, run_id, target,
+                         storage_frontend):
+        """Copy data from one frontend to another"""
+        key = self.key_for(run_id, target)
+        try:
+            storage_frontend.find(key, **self._find_options)
+            return True
+        except strax.DataNotAvailable:
+            return False
 
     @classmethod
     def add_method(cls, f):
