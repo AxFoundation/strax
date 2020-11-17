@@ -1413,7 +1413,6 @@ class Context:
         s_be = source_sf._get_backend(s_be_str)
         md = s_be.get_metadata(s_be_key)
 
-        # Loop over the targets. Fill each with the info from the loader
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
