@@ -416,7 +416,7 @@ class Context:
                         if p.overwrite_parents_end:
                             mes = ('The plugin property overwrite_parents_end must be a string.'
                                    f' However you specified {p.overwrite_parents_end}.')
-                            assert not isinstance(p.overwrite_parents_end, str), mes
+                            assert isinstance(p.overwrite_parents_end, str), mes
                             kparent = k[:-len(p.child_ends_with)] + p.overwrite_parents_end
                         else:
                             kparent = k[:-len(p.child_ends_with)]
