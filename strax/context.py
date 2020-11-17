@@ -403,7 +403,7 @@ class Context:
                     if k in p.takes_config}
 
         if p.child_ends_with:
-            # This plugin is a child of another plugin and has some different
+            # This plugin is a child of another plugin and has some different option names
             # Checking if the parent plugin is registered, this does not have to be the case
             # but enables some useful checks.
             parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
@@ -413,7 +413,13 @@ class Context:
                 if k.endswith(p.child_ends_with):
                     if opt.child_option:
                         v = config[k]
-                        kparent = k[:-len(p.child_ends_with)]
+                        if p.overwrite_parents_end:
+                            mes = ('The plugin property overwrite_parents_end must be a string.'
+                                   f' However you specified {p.overwrite_parents_end}.')
+                            assert not isinstance(p.overwrite_parents_end, str), mes
+                            kparent = k[:-len(p.child_ends_with)] + p.overwrite_parents_end
+                        else:
+                            kparent = k[:-len(p.child_ends_with)]
 
                         if is_parent_reg:
                             mes = f'Option {kparent} is not taken by parent plugin.'

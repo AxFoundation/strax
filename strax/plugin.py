@@ -56,6 +56,8 @@ class Plugin:
     
     # Needed for plugins which are inherited from an already eliciting plugin:
     child_ends_with = None
+    overwrite_parents_end = None  # String which indicates the parent ending to be overwritten
+                                  # useful for eg _nv -> _mv
     
     compressor = 'blosc'
 
