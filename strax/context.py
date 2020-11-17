@@ -1425,8 +1425,13 @@ class Context:
                     'do you have two storage frontends writing to the same place?')
 
     def _is_stored_in_sf(self, run_id, target,
-                         storage_frontend):
-        """Copy data from one frontend to another"""
+                         storage_frontend: strax.StorageFrontend) -> bool:
+        """
+        :param run_id, target: run_id, target
+        :param storage_frontend: strax.StorageFrontend to check if it has the
+        requested datakey for the run_id and target.
+        :return: if the frontend has the key or not.
+        """
         key = self.key_for(run_id, target)
         try:
             storage_frontend.find(key, **self._find_options)
@@ -1437,11 +1442,11 @@ class Context:
     def _get_source_sf(self, run_id, target, raise_error=False):
         """
         Get the source storage frontend for a given run_id and target
-        :param run_id: run_id
-        :param target: target
+        :param run_id, target: run_id, target
         :param raise_error: Raise a ValueError if we cannot find one
         (e.g. we already checked the data is stored)
         :return: strax.StorageFrontend or None (when raise_error is
+        False)
         """
         source_sf = None
         for sf in self.storage:
