@@ -480,7 +480,18 @@ class Context:
                 # drop the parents config from the lineage
                 configs = {}
                 for q, v in p.config.items():
-                    if q + p.child_ends_with in p.takes_config:
+                    # Looping over all settings, q is either the option name of the 
+                    # parent or the child. In case it is the parent we continue
+                    # and do not add it to the lineage.
+                    if (p.overwrite_parents_end 
+                        and (q[-len(p.overwrite_parents_end):] == p.overwrite_parents_end)):
+                        # In case we overwrite the ending of the parent, the child name
+                        # is a bit different.
+                        child_name = q[:-len(p.overwrite_parents_end)] + p.child_ends_with
+                    else:
+                        child_name = q + p.child_ends_with
+
+                    if child_name in p.takes_config:
                         continue
                     elif p.takes_config[q].track:
                         configs[q] = v
