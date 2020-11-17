@@ -1375,7 +1375,7 @@ class Context:
             raise ValueError('_copy_to_frontend only works for ')
         if target_frontend_id is None:
             target_sf = self.storage
-        elif len(self.storage) <= target_frontend_id:
+        elif len(self.storage) > target_frontend_id:
             # only write to selected other frontend
             target_sf = [self.storage[target_frontend_id]]
         else:
