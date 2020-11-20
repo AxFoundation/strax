@@ -244,6 +244,7 @@ def get_single_hitlet_data(hitlet, records, prev_r, next_r):
             r = records[next_r_i]
             data, (start, p_end_i) = _get_thing_data(hitlet, r)
             if not start:
+                print(data, start, p_end_i)
                 raise ValueError('This is odd found the next record, but no'
                                  ' overlapping indicies.')
             temp_data[data_end:p_end_i] = data
@@ -343,29 +344,31 @@ def hitlet_properties(hitlets):
     Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
     for h in hitlets:
-
+        
         dt = h['dt']
         data = h['data'][:h['length']]
-        # Compute amplitude
-        amp_ind = np.argmax(data)
-        amp_time = int(amp_ind * dt)
-        height = data[amp_ind]
+        
+        if np.any(data):
+            # Compute amplitude
+            amp_ind = np.argmax(data)
+            amp_time = int(amp_ind * dt)
+            height = data[amp_ind]
 
-        h['amplitude'] = height
-        h['time_amplitude'] = amp_time
+            h['amplitude'] = height
+            h['time_amplitude'] = amp_time
 
-        # Computing FWHM:
-        left_edge, right_edge = get_fwxm(h, 0.5)
-        width = right_edge - left_edge
+            # Computing FWHM:
+            left_edge, right_edge = get_fwxm(h, 0.5)
+            width = right_edge - left_edge
 
-        # Computing FWTM:
-        left_edge_low, right_edge = get_fwxm(h, 0.1)
-        width_low = right_edge - left_edge_low
+            # Computing FWTM:
+            left_edge_low, right_edge = get_fwxm(h, 0.1)
+            width_low = right_edge - left_edge_low
 
-        h['fwhm'] = width
-        h['left'] = left_edge
-        h['low_left'] = left_edge_low
-        h['fwtm'] = width_low
+            h['fwhm'] = width
+            h['left'] = left_edge
+            h['low_left'] = left_edge_low
+            h['fwtm'] = width_low
 
 
 @export
