@@ -969,7 +969,12 @@ class Context:
                     
                     if progress_bar:
                         # Update progressbar:
-                        pbar.n = (result.end - start_time) / (end_time - start_time)
+                        if end_time - start_time > 0:
+                            pbar.n = (result.end - start_time) / (end_time - start_time)
+                        else:
+                            # Strange, start and endtime are the same, probably we 
+                            # don't have data yet e.g. allow_incomplete == True.
+                            pbar.n = 0
                         pbar.update(0)
                         # Now get last time printed and refresh seconds_per_chunk:
                         # This is a small work around since we do not know the
