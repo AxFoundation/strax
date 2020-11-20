@@ -442,7 +442,7 @@ class Context:
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
             if not (k in all_opts or k in self.context_config['free_options']):
-                warnings.warn(f"Option {k} not taken by any registered plugin")
+                warnings.warn(f"Option {k} not taken by any registered plugin", UserWarning, 2)
 
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
@@ -1358,8 +1358,8 @@ class Context:
             data = function(data, targets)
         return data
 
-    def _copy_to_frontend(self, run_id, target,
-                          target_frontend_id=None, rechunk=False):
+    def copy_to_frontend(self, run_id, target,
+                         target_frontend_id=None, rechunk=False):
         """
         Copy data from one frontend to another
         :param run_id: run_id
@@ -1372,7 +1372,8 @@ class Context:
             raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
                                          f'does not exist')
         if len(strax.to_str_tuple(target)) > 1:
-            raise ValueError('_copy_to_frontend only works for ')
+            raise ValueError(
+                'copy_to_frontend only works for a single target at the time')
         if target_frontend_id is None:
             target_sf = self.storage
         elif len(self.storage) > target_frontend_id:
@@ -1383,12 +1384,12 @@ class Context:
                              f'we only have {len(self.storage)} frontends!')
 
         # Figure out which of the frontends has the data. Raise error when none
-        source_sf = self._get_source_sf(run_id, target, raise_error=True)
+        source_sf = self._get_source_sf(run_id, target, should_exist=True)
 
         # Keep frontends that:
-        #  1. already have the data; and
+        #  1. don't already have the data; and
         #  2. take the data; and
-        #  3. are readonly
+        #  3. are not readonly
         target_sf = [t_sf for t_sf in target_sf if
                      (not self._is_stored_in_sf(run_id, target, t_sf) and
                       t_sf._we_take(target) and
@@ -1439,22 +1440,19 @@ class Context:
         except strax.DataNotAvailable:
             return False
 
-    def _get_source_sf(self, run_id, target, raise_error=False):
+    def _get_source_sf(self, run_id, target, should_exist=False):
         """
         Get the source storage frontend for a given run_id and target
         :param run_id, target: run_id, target
-        :param raise_error: Raise a ValueError if we cannot find one
+        :param should_exist: Raise a ValueError if we cannot find one
         (e.g. we already checked the data is stored)
         :return: strax.StorageFrontend or None (when raise_error is
         False)
         """
-        source_sf = None
         for sf in self.storage:
             if self._is_stored_in_sf(run_id, target, sf):
-                source_sf = sf
-                # We only need a single source
-                break
-        if source_sf is None and raise_error:
+                return sf
+        if should_exist:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
