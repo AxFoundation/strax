@@ -44,13 +44,13 @@ class CorrectionsInterface:
                                           username=self.username,
                                           password=self.password)
         self.database_name = database_name
-        self.database = self.client[self.database_name]
 
     def list_corrections(self):
         """
         Smart logic to list all corrections available in the corrections database
         """
-        return [x['name'] for x in self.database.list_collections()]
+        database = self.client[self.database_name]
+        return [x['name'] for x in database.list_collections()]
 
     def read(self, correction):
         """Smart logic to read corrections,
@@ -58,7 +58,7 @@ class CorrectionsInterface:
         :return: DataFrame as read from the corrections database with time
         index or None if an empty DataFrame is read from the database
         """
-        df = pdm.read_mongo(correction, [], self.database)
+        df = pdm.read_mongo(correction, [], self.client[self.database_name])
 
         # No data found
         if df.size == 0:
@@ -67,8 +67,9 @@ class CorrectionsInterface:
         del df['_id']
 
         df['time'] = pd.to_datetime(df['time'], utc=True)
-
-        return df.set_index('time')
+        df = df.set_index('time')
+        df = df.sort_index()
+        return df
 
     def interpolate(self, what, when, how='interpolate', **kwargs):
         """
@@ -152,7 +153,8 @@ class CorrectionsInterface:
         df = df.reset_index()
         logging.info('Writing')
 
-        return df.to_mongo(correction, self.database, if_exists='replace')
+        database = self.client[self.database_name]
+        return df.to_mongo(correction, database, if_exists='replace')
 
     @staticmethod
     def check_timezone(date):

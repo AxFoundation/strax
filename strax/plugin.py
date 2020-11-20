@@ -182,8 +182,18 @@ class Plugin:
         return self.__class__.__name__
 
     def dtype_for(self, data_type):
+        """
+        Provide the dtype of one of the provide arguments of the plugin.
+        NB: does not simply provide the dtype of any datatype but must
+        be one of the provide arguments known to the plugin.
+        """
         if self.multi_output:
-            return self.dtype[data_type]
+            if data_type in self.dtype:
+                return self.dtype[data_type]
+            else:
+                raise ValueError(f'dtype_for provides the dtype of one of the '
+                                 f'provide datatypes specified in this plugin '
+                                 f'{data_type} is not provided by this plugin')
         return self.dtype
 
     def can_rechunk(self, data_type):
