@@ -28,21 +28,13 @@ class CorrectionsInterface:
     this means a unique set of correction maps.
     """
 
-    def __init__(self, host='127.0.0.1', username=None, password=None,
-                 database_name='corrections'):
+    def __init__(self, client, database_name='corrections'):
         """
-        :param host: DB host
-        :param username: DB username
-        :param password: DB password
+        :param client: DB pymongo client
         :param database_name: DB name
         """
 
-        self.host = host
-        self.username = username
-        self.password = password
-        self.client = pymongo.MongoClient(host=self.host,
-                                          username=self.username,
-                                          password=self.password)
+        self.client = client
         self.database_name = database_name
 
     def list_corrections(self):
