@@ -648,18 +648,35 @@ class LoopPlugin(Plugin):
                                        f"should be {len(base)}!")
                 kwargs[k] = r
 
-        results = np.zeros(len(base), dtype=self.dtype)
-        deps_by_kind = self.dependencies_by_kind()
+        if not self.multi_output:
+            results = np.zeros(len(base), dtype=self.dtype)
+            deps_by_kind = self.dependencies_by_kind()
 
-        for i in range(len(base)):
-            r = self.compute_loop(base[i],
-                                  **{k: kwargs[k][i]
-                                     for k in deps_by_kind
-                                     if k != loop_over})
+            for i in range(len(base)):
+                r = self.compute_loop(base[i],
+                                      **{k: kwargs[k][i]
+                                         for k in deps_by_kind
+                                         if k != loop_over})
 
-            # Convert from dict to array row:
-            for k, v in r.items():
-                results[i][k] = v
+                # Convert from dict to array row:
+                for k, v in r.items():
+                    results[i][k] = v
+        else:
+            # Just doing the same as above but this time we need to
+            # create a dict for the outputs.
+            results = {k: np.zeros(len(base), dtype=self.dtype[k]) for k in self.provides}
+            deps_by_kind = self.dependencies_by_kind()
+
+            for i in range(len(base)):
+                res = self.compute_loop(base[i],
+                                        **{k: kwargs[k][i]
+                                           for k in deps_by_kind
+                                           if k != loop_over})
+
+                # Convert from dict to array row:
+                for provides, r in res.items():
+                    for k, v in r.items():
+                        results[provides][i][k] = v
 
         return results
 
