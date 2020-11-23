@@ -391,31 +391,36 @@ def get_fwxm(hitlet, fraction=0.5):
         right last sample + 1.
     """
     data = hitlet['data'][:hitlet['length']]
-    max_val = hitlet['amplitude'] * fraction
 
     index_maximum = np.argmax(data)
-    pre_max = data[:index_maximum]
-    post_max = data[1 + index_maximum:]
+    max_val = data[index_maximum] * fraction
+    if np.all(data > max_val) or np.all(data == 0):
+        # In case all samples are larger than there is now FWXM by definition.
+        return np.nan, np.nan
 
-    # First the left edge:
-    lbi, lbs = _get_fwxm_boundary(pre_max, max_val)  # coming from the left
-    if lbi == NO_FWXM:
-        # We have not found any sample below:
-        left_edge = 0.
-    else:
-        # We found a sample below so lets compute
-        # the left edge:
+    pre_max = data[:index_maximum]  # Does not include maximum
+    post_max = data[1 + index_maximum:]  # same
+
+    if len(pre_max) and np.any(pre_max <= max_val):
+        # First the left edge:
+
+        lbi, lbs = _get_fwxm_boundary(pre_max[::-1], max_val)  # Reversing data starting at sample
+        # before maximum and go left
+        lbi = (index_maximum - 1) - lbi  # start sample minus samples we went to the left
         m = data[lbi + 1] - lbs  # divided by 1 sample
-        left_edge = lbi + (max_val - lbs) / m + 0.5  # .5 to start from bin center
-
-        # Now the right edge:
-    rbi, rbs = _get_fwxm_boundary(post_max[::-1], max_val)  # coming from the right
-    if rbi == NO_FWXM:
-        right_edge = len(data)
+        left_edge = lbi + (max_val - lbs) / m + 0.5
     else:
-        rbi = len(data) - rbi
-        m = data[rbi - 2] - rbs
-        right_edge = rbi - (max_val - data[rbi - 1]) / m - 0.5
+        # There is no data before the maximum:
+        left_edge = 0
+
+    if len(post_max) and np.any(post_max <= max_val):
+        # Now the right edge:
+        rbi, rbs = _get_fwxm_boundary(post_max, max_val)  # Starting after maximum and go right
+        rbi += 1 + index_maximum  # sample to the right plus start
+        m = data[rbi - 1] - rbs
+        right_edge = rbi - (max_val - rbs) / m + 0.5
+    else:
+        right_edge = len(data)
 
     left_edge = left_edge * hitlet['dt']
     right_edge = right_edge * hitlet['dt']
@@ -426,15 +431,18 @@ def get_fwxm(hitlet, fraction=0.5):
 def _get_fwxm_boundary(data, max_val):
     """
     Returns sample position and height for the last sample which
-    amplitude is below the specified value
+    amplitude is below the specified value.
+
+    If no sample can be found returns position and value of last sample
+    seen.
+
+    Note:
+        For FWHM we assume that we start at the maximum.
     """
-    i = NO_FWXM
-    s = NO_FWXM
     for ind, d in enumerate(data):
         if d <= max_val:
-            i = ind
-            s = d
-    return i, s
+            return ind, d
+    return ind, d
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):
