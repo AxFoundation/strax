@@ -28,13 +28,43 @@ class CorrectionsInterface:
     this means a unique set of correction maps.
     """
 
-    def __init__(self, client, database_name='corrections'):
+    def __init__(self, client=None,
+                 host=None, username=None, password=None,
+                 database_name='corrections'):
         """
-        :param client: DB pymongo client
+        Start the CorrectionsInterface. To initialize you need either:
+         - a pymongo.MongoClient (add as argument client) OR
+         - the credentials and url to connect to the pymongo instance
+         one wants to be using.
+        :param client: pymongo client, a pymongo.MongoClient object
+        :param host: DB host or IP address e.g. "127.0.0.1"
+        :param username: DB username
+        :param password: DB password
         :param database_name: DB name
         """
+        # Let's see if someone just provided a pymongo.MongoClient
+        if (client is not None) and (
+                host is None and
+                username is None and
+                password is None):
+            if not isinstance(client, pymongo.MongoClient):
+                raise TypeError(f'{client} is not a pymongo.MongoClient.')
+            self.client = client
+        # In this case, let's just initialize a new pymongo.MongoClient
+        elif (client is None) and (
+                host is not None and
+                username is not None
+                and password is not None):
+            self.client = pymongo.MongoClient(host=host,
+                                              username=username,
+                                              password=password)
+        else:
+            # Let's not be flexible with our inputs to prevent later
+            # misunderstandings because someone thought to be handling a
+            # different client than anticipated.
+            raise ValueError('Can only init using *either* the "client" or the '
+                             'combination of "host+username+password", not both')
 
-        self.client = client
         self.database_name = database_name
 
     def list_corrections(self):
