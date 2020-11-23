@@ -238,24 +238,7 @@ def test_hitlet_properties(hits_n_data):
         # Checking FHWM and FWTM:
         fractions = [0.1, 0.5]
         for f in fractions:
-            amplitude = np.max(d)
-            le = np.argwhere(d[:pos_max] <= amplitude * f)
-            if len(le):
-                le = le[-1, 0]
-                m = d[le + 1] - d[le]
-                le = le + 0.5 + (amplitude * f - d[le]) / m
-            else:
-                le = 0
-
-            re = np.argwhere(d[pos_max:] <= amplitude * f)
-
-            if len(re) and re[0, 0] != 0:
-                re = re[0, 0] + pos_max
-                m = d[re] - d[re - 1]
-                re = re + 0.5 + (amplitude * f - d[re]) / m
-            else:
-                re = len(d)
-
+            # Get field names for the correct test:
             if f == 0.5:
                 left = 'left'
                 fwxm = 'fwhm'
@@ -263,8 +246,34 @@ def test_hitlet_properties(hits_n_data):
                 left = 'low_left'
                 fwxm = 'fwtm'
 
-            assert math.isclose(le, h[left], rel_tol=10**-4, abs_tol=10**-4), f'Left edge does not match for fraction {f}'
-            assert math.isclose(re - le, h[fwxm], rel_tol=10**-4, abs_tol=10**-4), f'FWHM does not match for {f}'
+            amplitude = np.max(d)
+            if np.all(d[0] == d) or np.all(d > amplitude*f):
+                # If all samples are either the same or greater than required height FWXM is not defined:
+                mes = 'All samples are the same or larger than require height.'
+                assert np.isnan(h[left]),  mes + f' Left edge for {f} should have been np.nan.'
+                assert np.isnan(h[left]), mes + f' FWXM for X={f} should have been np.nan.'
+            else:
+                le = np.argwhere(d[:pos_max] <= amplitude * f)
+                if len(le):
+                    le = le[-1, 0]
+                    m = d[le + 1] - d[le]
+                    le = le + 0.5 + (amplitude * f - d[le]) / m
+                else:
+                    le = 0
+
+                re = np.argwhere(d[pos_max:] <= amplitude * f)
+
+                if len(re) and re[0, 0] != 0:
+                    re = re[0, 0] + pos_max
+                    m = d[re] - d[re - 1]
+                    re = re + 0.5 + (amplitude * f - d[re]) / m
+                else:
+                    re = len(d)
+
+                assert math.isclose(le, h[left],
+                                    rel_tol=10**-4, abs_tol=10**-4), f'Left edge does not match for fraction {f}'
+                assert math.isclose(re - le, h[fwxm], rel_tol=10**-4,
+                                    abs_tol=10**-4), f'FWHM does not match for {f}'
 
 
 # ------------------------
