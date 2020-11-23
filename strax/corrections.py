@@ -28,19 +28,20 @@ class CorrectionsInterface:
     this means a unique set of correction maps.
     """
 
-    def __init__(self, client=None,
-                 host=None, username=None, password=None,
-                 database_name='corrections'):
+    def __init__(self, database_name='corrections', client=None,
+                 host=None, username=None, password=None,):
         """
         Start the CorrectionsInterface. To initialize you need either:
-         - a pymongo.MongoClient (add as argument client) OR
-         - the credentials and url to connect to the pymongo instance
-         one wants to be using.
+            - a pymongo.MongoClient (add as argument client) OR
+            - the credentials and url to connect to the pymongo instance
+            one wants to be using.
+        :param database_name: Database name
         :param client: pymongo client, a pymongo.MongoClient object
+
+        (optional if client is not provided)
         :param host: DB host or IP address e.g. "127.0.0.1"
-        :param username: DB username
-        :param password: DB password
-        :param database_name: DB name
+        :param username: Database username
+        :param password: Database password
         """
         # Let's see if someone just provided a pymongo.MongoClient
         if (client is not None) and (
