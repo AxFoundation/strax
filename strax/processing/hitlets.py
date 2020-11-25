@@ -446,9 +446,7 @@ def _get_fwxm_boundary(data, max_val):
             ind = i
             s = d
             return ind, s
-    ind = i
-    s = d
-    return ind, s
+    return len(data)-1, data[-1]
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):
