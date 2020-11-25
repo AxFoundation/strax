@@ -479,22 +479,22 @@ class Context:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
                 configs = {}
-                for q, v in p.config.items():
+                for option_name, v in p.config.items():
                     # Looping over all settings, q is either the option name of the 
                     # parent or the child. In case it is the parent we continue
                     # and do not add it to the lineage.
-                    if (p.overwrite_parents_end 
-                        and (q[-len(p.overwrite_parents_end):] == p.overwrite_parents_end)):
+                    if (p.overwrite_parents_end
+                            and option_name.endswith(p.overwrite_parents_end)):
                         # In case we overwrite the ending of the parent, the child name
                         # is a bit different.
-                        child_name = q[:-len(p.overwrite_parents_end)] + p.child_ends_with
+                        child_name = option_name[:-len(p.overwrite_parents_end)] + p.child_ends_with
                     else:
-                        child_name = q + p.child_ends_with
+                        child_name = option_name + p.child_ends_with
 
                     if child_name in p.takes_config:
                         continue
-                    elif p.takes_config[q].track:
-                        configs[q] = v
+                    elif p.takes_config[option_name].track:
+                        configs[option_name] = v
                 # Adding parent information to the lineage:
                 parent_class = p.__class__.__bases__[0]
                 configs[parent_class.__name__] = parent_class.__version__
