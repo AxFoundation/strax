@@ -218,6 +218,13 @@ def get_single_hitlet_data(hitlet, records, prev_r, next_r):
             r = records[prev_r_i]
             data, (p_start_i, end) = _get_thing_data(hitlet, r)
             if not end:
+                # If end is zero this means we have not found any
+                # overlap which should not have happened. In case of an
+                # overlap start and end should reflect the start and end
+                # sample of the hitlet for which we found data.
+                print('Data found for this record:', data,
+                      'Start index', p_start_i,
+                      'End index:', end)
                 raise ValueError('This is odd found previous record, but no'
                                  ' overlapping indices.')
             temp_data[p_start_i:data_start] = data
@@ -244,7 +251,13 @@ def get_single_hitlet_data(hitlet, records, prev_r, next_r):
             r = records[next_r_i]
             data, (start, p_end_i) = _get_thing_data(hitlet, r)
             if not start:
-                print(data, start, p_end_i)
+                # If start is zero this means we have not found any
+                # overlap which should not have happened. In case of an
+                # overlap start and end should reflect the start and end
+                # sample of the hitlet for which we found data.
+                print('Data found for this record:', data,
+                      'Start index', start,
+                      'End index:', p_end_i)
                 raise ValueError('This is odd found the next record, but no'
                                  ' overlapping indicies.')
             temp_data[data_end:p_end_i] = data
@@ -344,7 +357,6 @@ def hitlet_properties(hitlets):
     Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
     for h in hitlets:
-        
         dt = h['dt']
         data = h['data'][:h['length']]
         
