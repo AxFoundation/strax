@@ -439,10 +439,16 @@ def _get_fwxm_boundary(data, max_val):
     Note:
         For FWHM we assume that we start at the maximum.
     """
-    for ind, d in enumerate(data):
+    ind = None
+    s = None
+    for i, d in enumerate(data):
         if d <= max_val:
-            return ind, d
-    return ind, d
+            ind = i
+            s = d
+            return ind, s
+    ind = i
+    s = d
+    return ind, s
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):
