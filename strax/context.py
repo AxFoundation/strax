@@ -488,16 +488,18 @@ class Context:
                 parent_class = p.__class__.__bases__[0]
                 configs = {}
                 for option_name, v in p.config.items():
-                    # Looping over all settings, q is either the option name of the 
+                    # Looping over all settings, option_name is either the option name of the
                     # parent or the child. In case it is the parent we continue
                     # and do not add it to the lineage.
-                    if (p.overwrite_parents_end
-                            and option_name.endswith(p.overwrite_parents_end)):
-                        # In case we overwrite the ending of the parent, the child name
-                        # is a bit different.
-                        child_name = option_name[:-len(p.overwrite_parents_end)] + p.child_ends_with
+                    # In order to do this we have to identify for which option_name we can find
+                    # the corresponding child_option key:
+                    if (parent_class.ends_with
+                            and option_name.endswith(parent_class.ends_with)):
+                        # The parent has also a fixed ending indicated, hence we want
+                        # to overwrite the ending instead of just adding one.
+                        child_name = option_name[:-len(parent_class.ends_with)] + p.ends_with
                     else:
-                        child_name = option_name + p.child_ends_with
+                        child_name = option_name + p.ends_with
 
                     if child_name in p.takes_config:
                         # In case it is just a unique child_option or parent option we can continue
