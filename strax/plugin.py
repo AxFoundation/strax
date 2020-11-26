@@ -295,6 +295,8 @@ class Plugin:
         _end = float('inf')
         for d in self.depends_on:
             self._fetch_chunk(d, iters)
+            if self.input_buffer[d] is None:
+                raise ValueError(f'Cannot work with empty input buffer {self.input_buffer}')
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end

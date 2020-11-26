@@ -2,46 +2,56 @@ from strax import testutils
 import strax
 import numpy as np
 from hypothesis import given, strategies, example, settings
-from .test_cut_plugin import _dtype_name, full_dt_dtype, full_time_dtype, _cut_dtype
-
-# Initialize. We test both dt time-fields and time time-field
-# _dtype_name2 = 'var'
-# _cut_dtype2 = ('variable 0', _dtype_name2)
-# full_dt_dtype2 = [(_cut_dtype2, np.float64)] + strax.time_dt_fields
-# full_time_dtype2 = [(_cut_dtype2, np.float64)] + strax.time_fields
+import tempfile
+# Save some selfs some time, let's import from cut-plugin tests some dummy arrays
+from .test_cut_plugin import _dtype_name, full_dt_dtype, full_time_dtype, get_some_array
 
 
-def do_rechunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
+def rechunk_array_to_arrays(array, n: int):
+    """Yield successive n-sized chunks from array."""
+    for i in range(0, len(array), n):
+        yield array[i:i + n]
 
 
-def get_some_array():
-    # Either 0 or 1
-    take_dt = np.random.choice(2)
+def drop_random(chunks: list) -> list:
+    """
+    Drop some of the data in the chunks
+    :param chunks: list op numpy arrays to modify. Here we will drop some of the fields randomly
+    :return: list of chunks
+    """
+    res = []
+    for chunk in chunks:
+        if len(chunk) > 1:
+            # We are going to keep this many items in this chunk
+            keep_n = np.random.randint(1, len(chunk)+1)
+            # These are the indices we will keep (only keep unique ones)
+            keep_indices = np.random.randint(0, len(chunk)-1, keep_n)
+            keep_indices = np.unique(keep_indices)
+            keep_indices.sort()
 
-    # Stolen from testutils.bounds_to_intervals
-    def bounds_to_intervals(bs, dt=1):
-        the_data = np.zeros(len(bs),
-                     dtype=full_dt_dtype if take_dt else full_time_dtype)
-        the_data['time'] = [x[0] for x in bs]
-        # Remember: exclusive right bound...
-        if take_dt:
-            the_data['length'] = [x[1] - x[0] for x in bs]
-            the_data['dt'] = 1
-        else:
-            the_data['endtime'] = the_data['time'] + ([x[1] - x[0] for x in bs]) * dt
-        return the_data
-
-    # Randomly input either of full_dt_dtype or full_time_dtype
-    sorted_intervals = testutils.sorted_bounds().map(bounds_to_intervals)
-    return sorted_intervals
+            # This chunk will now be reduced using only keep_indices
+            d = chunk[keep_indices]
+            res.append(d)
+    return res
 
 
-# Examples for readability
 @given(get_some_array().filter(lambda x: len(x) >= 0),
-        get_some_array().filter(lambda x: len(x) >= 0),
+       strategies.integers(min_value=1, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [(0, 0, 1, 1),
+         (1, 1, 1, 1),
+         (5, 2, 2, 1),
+         (11, 4, 2, 4)],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_loop_plugin(big_data, nchunks):
+    """Test the loop plugin for random data"""
+    _loop_test_inner(big_data, nchunks)
+
+
+@given(get_some_array().filter(lambda x: len(x) >= 0),
         strategies.integers(min_value=1, max_value=10))
 @settings(deadline=None)
 @example(
@@ -49,45 +59,87 @@ def get_some_array():
         [(0, 0, 1, 1),
          (1, 1, 1, 1),
          (5, 2, 2, 1),
-         (11, 4, 2, 4)
-         ],
-        dtype=full_dt_dtype),
-    small_data=np.array(
-        [(0, 0, 1, 1),
-         (1, 1, 1, 1),
-         (5, 2, 2, 1),
-         (11, 4, 2, 4)
-         ],
+         (11, 4, 2, 4)],
         dtype=full_dt_dtype),
     nchunks=2)
-def test_loop_plugin2(big_data, small_data, nchunks):
+def test_loop_plugin_multi_output(big_data, nchunks,):
     """
+    Test the loop plugin for random data where it should give multiple
+    outputs
     """
-    # Just one chunk will do
+    _loop_test_inner(big_data, nchunks, target='other_combined_things')
 
-    big_chunks = [big_data] # list(do_rechunks(big_data, nchunks))
-    big_dtype = big_data.dtype
 
-    # TODO smarter test
-    small_chunks = [big_data] #list(do_rechunks(big_data, nchunks))
-    small_dtype = small_data.dtype
+@given(get_some_array().filter(lambda x: len(x) == 0),
+       strategies.integers(min_value=2, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_value_error_for_loop_plugin(big_data, nchunks):
+    """Make sure that we are are getting the right ValueError"""
+    try:
+        _loop_test_inner(big_data, nchunks, force_value_error=True)
+        raise RuntimeError(
+            'did not run into ValueError despite the fact we are having '
+            'multiple none-type chunks')
+    except ValueError:
+        # Good we got the ValueError we wanted
+        pass
+
+
+def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=False):
+    """
+    Test loop plugins for random data. For this test we are going to
+    setup to plugins that will be looped over and combined into a loop
+    plugin (depending on the target, this may be a multi output plugin).
+
+    We are going to setup as follows:
+     - setup chunks for a big data plugin (where we will loop over later)
+     - generate some data with similar chunking called 'small data' this
+       we will add to the big data in the loop plugin
+    """
+
+    if len(big_data) or force_value_error:
+        # Generate some random amount of chunks for the big-data
+        big_chunks = list(rechunk_array_to_arrays(big_data, nchunks))
+    else:
+        # If empty, there is no reason to make multiple empty chunks
+        # unless we want to force the ValueError later
+        big_chunks = [big_data]
+
+    _dtype = big_data.dtype
+
+    # TODO smarter test. I want to drop some random data from the
+    #  small_chunks but this does not work yet. Perhaps related to
+    #  https://github.com/AxFoundation/strax/pull/345 (will fix in that
+    #  PR)
+    # small_chunks = drop_random(big_chunks.copy()) # What I want to do
+    small_chunks = big_chunks
 
     class BigThing(strax.Plugin):
-        """Data to be cut with strax.CutPlugin"""
+        """Plugin that provides data for looping over"""
         depends_on = tuple()
-        dtype = big_dtype
+        dtype = _dtype
         provides = 'big_thing'
         data_kind = 'big_kinda_data'
 
         def compute(self, chunk_i):
             data = big_chunks[chunk_i]
-            return self.chunk(
+            chunk = self.chunk(
                 data=data,
-                start=(int(data[0]['time']) if len(data) else np.arange(len(big_chunks))[chunk_i]),
-                end=(int(strax.endtime(data[-1])) if len(data) else np.arange(1, len(big_chunks) + 1)[chunk_i]))
+                start=(
+                    int(data[0]['time']) if len(data)
+                    else np.arange(len(big_chunks))[chunk_i]),
+                end=(
+                    int(strax.endtime(data[-1])) if len(data)
+                    else np.arange(1, len(big_chunks) + 1)[chunk_i]))
+            return chunk
 
-        # Hack to make peak output stop after a few chunks
         def is_ready(self, chunk_i):
+            # Hack to make peak output stop after a few chunks
             return chunk_i < len(big_chunks)
 
         def source_finished(self):
@@ -98,28 +150,38 @@ def test_loop_plugin2(big_data, small_data, nchunks):
         depends_on = tuple()
         provides = 'small_thing'
         data_kind = 'small_kinda_data'
-        dtype = small_dtype
+        dtype = _dtype
 
         def compute(self, chunk_i):
             data = small_chunks[chunk_i]
-            return self.chunk(
+            chunk = self.chunk(
                 data=data,
-                start=(int(data[0]['time']) if len(data) else np.arange(len(small_chunks))[chunk_i]),
-                end=(int(strax.endtime(data[-1])) if len(data) else np.arange(1, len(small_chunks) + 1)[chunk_i]))
+                start=(
+                    int(data[0]['time']) if len(data)
+                    else np.arange(len(small_chunks))[chunk_i]),
+                end=(
+                    int(strax.endtime(data[-1])) if len(data)
+                    else np.arange(1, len(small_chunks) + 1)[chunk_i]))
+            return chunk
 
-        # Hack to make peak output stop after a few chunks
         def is_ready(self, chunk_i):
+            # Hack to make peak output stop after a few chunks
             return chunk_i < len(small_chunks)
 
         def source_finished(self):
             return True
 
     class AddBigToSmall(strax.LoopPlugin):
+        """
+        Test loop plugin by looping big_thing and adding whatever is in small_thing
+        """
         depends_on = 'big_thing', 'small_thing'
-        provides = 'combined_thing'
+        provides = 'added_thing'
+        loop_over = 'big_thing'  # Also just test this feature
 
         def infer_dtype(self):
-             return self.deps['big_thing'].dtype
+            # Get the dtype from the dependency
+            return self.deps['big_thing'].dtype
 
         def compute(self, big_kinda_data, small_kinda_data):
             res = np.zeros(len(big_kinda_data), dtype=self.dtype)
@@ -135,14 +197,16 @@ def test_loop_plugin2(big_data, small_data, nchunks):
 
     class AddBigToSmallMultiOutput(strax.LoopPlugin):
         depends_on = 'big_thing', 'small_thing'
-        provides = 'combined_things', 'second_combined_things'
-        data_kind = {k:k for k in provides}
+        provides = 'some_combined_things', 'other_combined_things'
+        data_kind = {k: k for k in provides}
 
         def infer_dtype(self):
-             return {k: self.deps['big_thing'].dtype for k in self.provides}
+            # Get the dtype from the dependency.
+            # NB! This should be a dict for the kind of provide arguments
+            return {k: self.deps['big_thing'].dtype for k in self.provides}
 
         def compute(self, big_kinda_data, small_kinda_data):
-            res = np.zeros(len(big_kinda_data), big_dtype)
+            res = np.zeros(len(big_kinda_data), _dtype)
             for k in res.dtype.names:
                 if k == _dtype_name:
                     res[k] = big_kinda_data[k]
@@ -153,24 +217,10 @@ def test_loop_plugin2(big_data, small_data, nchunks):
                     res[k] = big_kinda_data[k]
             return {k: res for k in self.provides}
 
-
-    st = strax.Context(storage=[])
-    st.register((BigThing, SmallThing, AddBigToSmall, AddBigToSmallMultiOutput))
-
-    result = st.get_array(run_id='some_run',
-                          targets='combined_thing')
-    result = st.get_array(run_id='some_run',
-                          targets='second_combined_things')
-    assert True
-    # correct_answer = np.sum(input_peaks[_dtype_name] > cut_threshold)
-    # assert len(result) == len(input_peaks), "WTF??"
-    # assert correct_answer == np.sum(result['cut_something']), (
-    #     "Cut plugin does not give boolean arrays correctly")
-    #
-    # if len(input_peaks):
-    #     assert strax.endtime(input_peaks).max() == \
-    #            strax.endtime(result).max(), "last end time got scrambled"
-    #     assert np.all(input_peaks['time'] ==
-    #                   result['time']), "(start) times got scrambled"
-    #     assert np.all(strax.endtime(input_peaks) ==
-    #                   strax.endtime(result)), "Some end times got scrambled"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=[strax.DataDirectory(temp_dir)])
+        st.register((BigThing, SmallThing, AddBigToSmall, AddBigToSmallMultiOutput))
+        result = st.get_array(run_id='some_run', targets=target)
+        assert np.shape(result) == np.shape(big_data), 'Looping over big_data resulted in a different datasize?!'
+        assert np.sum(result[_dtype_name]) >= np.sum(big_data[_dtype_name]), "Result should be at least as big as big_data because we added small_data data"
+        assert isinstance(result, np.ndarray), "Result is not ndarray?"
