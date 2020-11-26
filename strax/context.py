@@ -411,8 +411,6 @@ class Context:
             # Get the parent_class to determine whether the plugin names have a characteristic ending
             # in the name. In case specified we will overwrite this ending with the ending of the child.
             parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
-            if parent_class.ends_with:
-                parent_ending = parent_class.ends_with
             # Checking if the parent plugin is registered, this does not have to be the case
             # but enables some useful checks.
             is_parent_reg = parent_class in self._plugin_class_registry.values()
@@ -420,31 +418,24 @@ class Context:
             # options to pass. So update parent config according to child:
             for k, opt in p.takes_config.items():
                 # Now loop again overall options for this plugin (parent + child)
-                if k.endswith(p.ends_with):
-                    # See if option ending matches ending of child plugin.
-                    if opt.child_option:
-                        # Option is a child option.
-                        v = config[k]
-                        if parent_ending:
-                            # Parent has already an ending so we must exchange the endings
-                            # to overwrite the correct option.
-                            kparent = k[:-len(p.ends_with)] + parent_ending
-                        else:
-                            # Otherwise we just have to remove the childs end:
-                            kparent = k[:-len(p.ends_with)]
-
-                        if is_parent_reg:
-                            #TODO this can also be tested via takes_config?
-                            mes = f'Option {kparent} is not taken by parent plugin.'
-                            assert kparent in parent_class.takes_config.keys(), mes
-
-                        p.config[kparent] = v
+                if k.endswith(p.ends_with) and opt.child_option:
+                    # See if option ending matches ending of child plugin and 
+                    # option is a child option. (Could also be a normal option, but just with 
+                    # the corresponding ending of the plugin.)
+                    v = config[k]
+                    if parent_class.ends_with:
+                        # Parent has already an ending so we must exchange the endings
+                        # to overwrite the correct option.
+                        kparent = k[:-len(p.ends_with)] + parent_class.ends_with
                     else:
-                        #TODO does this still make sense?
-                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
-                                         f' Found the option {k} with the ending {p.child_ends_with}'
-                                         ' which was not specified as a child option.'
-                                         ' Was this intended? If yes, please change the ending')
+                        # Otherwise we just have to remove the childs end:
+                        kparent = k[:-len(p.ends_with)]
+
+                    if is_parent_reg:
+                        mes = f'Option {kparent} is not taken by parent plugin.'
+                        assert kparent in parent_class.takes_config.keys(), mes
+
+                    p.config[kparent] = v
 
 
     def _get_plugins(self,
@@ -500,6 +491,8 @@ class Context:
                     # Looping over all settings, option_name is either the option name of the
                     # parent or the child. In case it is the parent we continue
                     # and do not add it to the lineage.
+                    # In order to do this we have to identify for which option_name we can find
+                    # the corresponding child_option key:
                     if (parent_class.ends_with
                             and option_name.endswith(parent_class.ends_with)):
                         # The parent has also a fixed ending indicated, hence we want
@@ -509,8 +502,7 @@ class Context:
                         child_name = option_name + p.ends_with
 
                     if child_name in p.takes_config:
-                        # TODO: I do not understand this anymore ?!?
-                        # In case it is just the regular child_option we can continue
+                        # In case it is just a unique child_option or parent option we can continue
                         continue
                     elif p.takes_config[option_name].track:
                         configs[option_name] = v
