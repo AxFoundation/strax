@@ -659,8 +659,8 @@ class LoopPlugin(Plugin):
             results = {k: np.zeros(len(base), dtype=self.dtype[k]) for k in self.provides}
             deps_by_kind = self.dependencies_by_kind()
 
-            for i in range(len(base)):
-                res = self.compute_loop(base[i],
+            for i, base_chunk in enumerate(base):
+                res = self.compute_loop(base_chunk,
                                         **{k: kwargs[k][i]
                                            for k in deps_by_kind
                                            if k != loop_over})
@@ -684,8 +684,8 @@ class LoopPlugin(Plugin):
             results = np.zeros(len(base), dtype=self.dtype)
             deps_by_kind = self.dependencies_by_kind()
 
-            for i in range(len(base)):
-                r = self.compute_loop(base[i],
+            for i, base_chunk in enumerate(base):
+                r = self.compute_loop(base_chunk,
                                       **{k: kwargs[k][i]
                                          for k in deps_by_kind
                                          if k != loop_over})
