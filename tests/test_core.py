@@ -405,3 +405,10 @@ def test_superrun():
         np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
         np.testing.assert_array_equal(p2['area'], np.zeros(len(p2)))
         np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
+
+
+def test_main():
+    # test strax.__main__
+    res = os.system('python -m strax')
+    if 'hi' not in res:
+        raise ValueError('No main for strax')
