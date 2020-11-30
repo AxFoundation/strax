@@ -353,15 +353,6 @@ class Plugin:
                 # TODO: can we optimize this, or code it more elegantly?
                 max_passes_left = 10
                 while max_passes_left > 0:
-                    if int(self.save_when) == strax.SaveWhen.NEVER:
-                        # So this is a bit funny, this is the only time we may
-                        # be actually running a plugin that is not saved with
-                        # the time range. This means that we might be asking
-                        # for a time range that is inconsistent with the
-                        # chunking of the inputs. See:
-                        # https://github.com/AxFoundation/strax/issues/247
-                        break
-
                     this_chunk_end = min([x.end for x in inputs.values()]
                                          + [this_chunk_end])
                     if len(set([x.end for x in inputs.values()])) <= 1:
@@ -468,7 +459,7 @@ class Plugin:
 
             # For non-saving plugins, don't be strict, just take whatever
             # endtimes are available and don't check time-consistency
-            if int(self.save_when) != strax.SaveWhen.NEVER:
+            if int(self.save_when) == strax.SaveWhen.NEVER:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     end = max([v.end for v in kwargs.values()])  # Don't delete
