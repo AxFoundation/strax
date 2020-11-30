@@ -28,29 +28,52 @@ class CorrectionsInterface:
     this means a unique set of correction maps.
     """
 
-    def __init__(self, host='127.0.0.1', username=None, password=None,
-                 database_name='corrections'):
+    def __init__(self, client=None, database_name='corrections',
+                 host=None, username=None, password=None,):
         """
-        :param host: DB host
-        :param username: DB username
-        :param password: DB password
-        :param database_name: DB name
-        """
+        Start the CorrectionsInterface. To initialize you need either:
+            - a pymongo.MongoClient (add as argument client) OR
+            - the credentials and url to connect to the pymongo instance
+            one wants to be using.
+        :param client: pymongo client, a pymongo.MongoClient object
+        :param database_name: Database name
 
-        self.host = host
-        self.username = username
-        self.password = password
-        self.client = pymongo.MongoClient(host=self.host,
-                                          username=self.username,
-                                          password=self.password)
+        (optional if client is not provided)
+        :param host: DB host or IP address e.g. "127.0.0.1"
+        :param username: Database username
+        :param password: Database password
+        """
+        # Let's see if someone just provided a pymongo.MongoClient
+        if (client is not None) and (
+                host is None and
+                username is None and
+                password is None):
+            if not isinstance(client, pymongo.MongoClient):
+                raise TypeError(f'{client} is not a pymongo.MongoClient.')
+            self.client = client
+        # In this case, let's just initialize a new pymongo.MongoClient
+        elif (client is None) and (
+                host is not None and
+                username is not None
+                and password is not None):
+            self.client = pymongo.MongoClient(host=host,
+                                              username=username,
+                                              password=password)
+        else:
+            # Let's not be flexible with our inputs to prevent later
+            # misunderstandings because someone thought to be handling a
+            # different client than anticipated.
+            raise ValueError('Can only init using *either* the "client" or the '
+                             'combination of "host+username+password", not both')
+
         self.database_name = database_name
-        self.database = self.client[self.database_name]
 
     def list_corrections(self):
         """
         Smart logic to list all corrections available in the corrections database
         """
-        return [x['name'] for x in self.database.list_collections()]
+        database = self.client[self.database_name]
+        return [x['name'] for x in database.list_collections()]
 
     def read(self, correction):
         """Smart logic to read corrections,
@@ -58,7 +81,7 @@ class CorrectionsInterface:
         :return: DataFrame as read from the corrections database with time
         index or None if an empty DataFrame is read from the database
         """
-        df = pdm.read_mongo(correction, [], self.database)
+        df = pdm.read_mongo(correction, [], self.client[self.database_name])
 
         # No data found
         if df.size == 0:
@@ -69,7 +92,6 @@ class CorrectionsInterface:
         df['time'] = pd.to_datetime(df['time'], utc=True)
         df = df.set_index('time')
         df = df.sort_index()
-                     
         return df
 
     def interpolate(self, what, when, how='interpolate', **kwargs):
@@ -154,7 +176,8 @@ class CorrectionsInterface:
         df = df.reset_index()
         logging.info('Writing')
 
-        return df.to_mongo(correction, self.database, if_exists='replace')
+        database = self.client[self.database_name]
+        return df.to_mongo(correction, database, if_exists='replace')
 
     @staticmethod
     def check_timezone(date):

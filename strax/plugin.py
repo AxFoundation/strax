@@ -295,6 +295,8 @@ class Plugin:
         _end = float('inf')
         for d in self.depends_on:
             self._fetch_chunk(d, iters)
+            if self.input_buffer[d] is None:
+                raise ValueError(f'Cannot work with empty input buffer {self.input_buffer}')
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end
@@ -675,19 +677,49 @@ class LoopPlugin(Plugin):
                                        f"should be {len(base)}!")
                 kwargs[k] = r
 
-        results = np.zeros(len(base), dtype=self.dtype)
-        deps_by_kind = self.dependencies_by_kind()
+        if self.multi_output:
+            # This is the a-typical case. Most of the time you just have
+            # one output. Just doing the same as below but this time we
+            # need to create a dict for the outputs.
+            # NB: both outputs will need to have the same length as the
+            # base!
+            results = {k: np.zeros(len(base), dtype=self.dtype[k]) for k in self.provides}
+            deps_by_kind = self.dependencies_by_kind()
 
-        for i in range(len(base)):
-            r = self.compute_loop(base[i],
-                                  **{k: kwargs[k][i]
-                                     for k in deps_by_kind
-                                     if k != loop_over})
+            for i, base_chunk in enumerate(base):
+                res = self.compute_loop(base_chunk,
+                                        **{k: kwargs[k][i]
+                                           for k in deps_by_kind
+                                           if k != loop_over})
 
-            # Convert from dict to array row:
-            for k, v in r.items():
-                results[i][k] = v
+                # Convert from dict to array row:
+                for provides, r in res.items():
+                    for k, v in r.items():
+                        if len(v) != len(results[provides][i][k]):
+                            # Make sure that the buffer length as
+                            # defined by the base matches the output of
+                            # the compute argument.
+                            raise ValueError(
+                                f'{provides} returned an improper length array '
+                                f'that is not equal to the {loop_over} '
+                                'data-kind! Are you sure a LoopPlugin is the '
+                                'right Plugin for your application?')
+                        results[provides][i][k] = v
+        else:
+            # Normally you end up here were we are going to loop over
+            # base and add the results to the right format.
+            results = np.zeros(len(base), dtype=self.dtype)
+            deps_by_kind = self.dependencies_by_kind()
 
+            for i, base_chunk in enumerate(base):
+                r = self.compute_loop(base_chunk,
+                                      **{k: kwargs[k][i]
+                                         for k in deps_by_kind
+                                         if k != loop_over})
+
+                # Convert from dict to array row:
+                for k, v in r.items():
+                    results[i][k] = v
         return results
 
     def compute_loop(self, *args, **kwargs):

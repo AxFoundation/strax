@@ -1,3 +1,15 @@
+0.12.4 / 2020-11-13
+---------------------
+- Limit mongo backend memory usage (#349)
+- Small CMT simplification (#347)
+
+0.12.3 / 2020-11-05
+---------------------
+- Updates to mongo.py (#335, #336 )
+- Several bug-fixes (#340, #343, #344, #338)
+- Contributions to documentation (#342, #344)
+- Accommodate  scada (#318)
+
 0.12.2 / 2020-10-15
 ---------------------
 - OnlineMonitor in mongo.py (#315, #323)

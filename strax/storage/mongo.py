@@ -15,7 +15,13 @@ from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
 from warnings import warn
+from sys import getsizeof
 export, __all__ = strax.exporter()
+
+# Some data is stored in the buffer. Delete when either of these values
+# are exceeded
+DEFAULT_MONGO_BACKEND_BUFFER_MB = 200
+DEFAULT_MONGO_BACKEND_BUFFER_NRUNS = 5
 
 
 @export
@@ -32,29 +38,37 @@ class MongoBackend(StorageBackend):
         self.client = MongoClient(uri)
         self.db = self.client[database]
         self.col_name = col_name
-        self.chunks_registry = None
+
+        # Attributes for the chunks-buffer
+        self.chunks_registry = {}
+        self._buffered_backend_keys = []
+        self._buff_mb = DEFAULT_MONGO_BACKEND_BUFFER_MB
+        self._buff_nruns = DEFAULT_MONGO_BACKEND_BUFFER_NRUNS
 
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         """See strax.Backend"""
         chunk_i = chunk_info["chunk_i"]
+        registry_key = backend_key + str(chunk_i)
 
-        # Build the chunk-registry if not done already (NB: when asking
-        # for chunk_i==0, reset, otherwise we cannot load data a second
-        # time e.g. with allow_incomplete = True).
-        if self.chunks_registry is None or chunk_i == 0:
+        # Build the chunk-registry if not done already, also rebuild if
+        # the key is not in the registry (will fail below if also not
+        # there on rebuild).
+        if registry_key not in self.chunks_registry.keys():
             self._build_chunk_registry(backend_key)
 
         # Unpack info about this chunk from the query. Return empty if
         # not available. Use a *string* in the registry to lookup the
         # chunk-data (like we do in _build_chunk_registry).
-        doc = self.chunks_registry.get(backend_key + str(chunk_i), None)
+        doc = self.chunks_registry.get(registry_key, None)
 
         if doc is None:
             # Did not find the data. NB: can be that the query is off in
             # the _build_chunk_registry. In case you end up here but did
             # not expect that, double check that self.chunks_registry is
             # not an empty dict!
-            return np.array([], dtype=dtype)
+            raise ValueError(
+                f'Metadata claims chunk{chunk_i} exists but it is unknown to '
+                f'the chunks_registry')
         else:
             chunk_doc = doc.get('data', None)
             if chunk_doc is None:
@@ -100,7 +114,6 @@ class MongoBackend(StorageBackend):
 
         # We are going to convert this to a dictionary as that is
         # easier to lookup
-        self.chunks_registry = {}
         for doc in chunks_registry:
             chunk_key = doc.get('chunk_i', None)
             if chunk_key is None:
@@ -113,6 +126,27 @@ class MongoBackend(StorageBackend):
             # issues or json-encoding headaches.
             self.chunks_registry[backend_key + str(chunk_key)] = doc.copy()
 
+        # Some bookkeeping to make sure we don't buffer too much in this
+        # backend. We still need to return at least one hence the 'and'.
+        # See: https://github.com/AxFoundation/strax/issues/346
+        if backend_key not in self._buffered_backend_keys:
+            self._buffered_backend_keys.append(backend_key)
+        while ((getsizeof(self.chunks_registry) / 1e6 > self._buff_mb
+                and len(self._buffered_backend_keys) > 1)
+               or len(self._buffered_backend_keys) > self._buff_nruns):
+            self._clean_first_key_from_registry()
+
+    def _clean_first_key_from_registry(self):
+        """
+        Remove the first item in the self.buffered_keys and all the
+        associated keys in the self.chunks_registry to limit RAM-usage
+        """
+        # only clean the first entry from the list
+        to_clean = self._buffered_backend_keys[0]
+        for registry_key in list(self.chunks_registry.keys()):
+            if to_clean in registry_key:
+                del self.chunks_registry[registry_key]
+        del self._buffered_backend_keys[0]
 
 @export
 class MongoFrontend(StorageFrontend):
@@ -277,7 +311,7 @@ def remove_np(dictin):
         result = {}
         for k in dictin.keys():
             result[k] = remove_np(dictin[k])
-    elif isinstance(dictin, np.ndarray) or isinstance(dictin, list):
+    elif isinstance(dictin, (np.ndarray, list)):
         result = []
         for k in dictin:
             result.append(remove_np(k))
