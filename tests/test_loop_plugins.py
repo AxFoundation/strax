@@ -35,61 +35,6 @@ def drop_random(chunks: list) -> list:
     return res
 
 
-@given(get_some_array().filter(lambda x: len(x) >= 0),
-       strategies.integers(min_value=1, max_value=10))
-@settings(deadline=None)
-@example(
-    big_data=np.array(
-        [(0, 0, 1, 1),
-         (1, 1, 1, 1),
-         (5, 2, 2, 1),
-         (11, 4, 2, 4)],
-        dtype=full_dt_dtype),
-    nchunks=2)
-def test_loop_plugin(big_data, nchunks):
-    """Test the loop plugin for random data"""
-    _loop_test_inner(big_data, nchunks)
-
-
-@given(get_some_array().filter(lambda x: len(x) >= 0),
-        strategies.integers(min_value=1, max_value=10))
-@settings(deadline=None)
-@example(
-    big_data=np.array(
-        [(0, 0, 1, 1),
-         (1, 1, 1, 1),
-         (5, 2, 2, 1),
-         (11, 4, 2, 4)],
-        dtype=full_dt_dtype),
-    nchunks=2)
-def test_loop_plugin_multi_output(big_data, nchunks,):
-    """
-    Test the loop plugin for random data where it should give multiple
-    outputs
-    """
-    _loop_test_inner(big_data, nchunks, target='other_combined_things')
-
-
-@given(get_some_array().filter(lambda x: len(x) == 0),
-       strategies.integers(min_value=2, max_value=10))
-@settings(deadline=None)
-@example(
-    big_data=np.array(
-        [],
-        dtype=full_dt_dtype),
-    nchunks=2)
-def test_value_error_for_loop_plugin(big_data, nchunks):
-    """Make sure that we are are getting the right ValueError"""
-    try:
-        _loop_test_inner(big_data, nchunks, force_value_error=True)
-        raise RuntimeError(
-            'did not run into ValueError despite the fact we are having '
-            'multiple none-type chunks')
-    except ValueError:
-        # Good we got the ValueError we wanted
-        pass
-
-
 def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=False):
     """
     Test loop plugins for random data. For this test we are going to
@@ -177,20 +122,23 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
         """
         depends_on = 'big_thing', 'small_thing'
         provides = 'added_thing'
-        loop_over = 'big_thing'  # Also just test this feature
+        loop_over = 'big_kinda_data'  # Also just test this feature
 
         def infer_dtype(self):
             # Get the dtype from the dependency
             return self.deps['big_thing'].dtype
 
-        def compute(self, big_kinda_data, small_kinda_data):
-            res = np.zeros(len(big_kinda_data), dtype=self.dtype)
-            for k in res.dtype.names:
+        def compute_loop(self, big_kinda_data, small_kinda_data):
+            res = {}
+            for k in self.dtype.names:
                 if k == _dtype_name:
                     res[k] = big_kinda_data[k]
                     for small_bit in small_kinda_data[k]:
-                        for i in range(len(res[k])):
-                            res[k][i] += small_bit
+                        if np.iterable(res[k]):
+                            for i in range(len(res[k])):
+                                res[k][i] += small_bit
+                        else:
+                            res[k] += small_bit
                 else:
                     res[k] = big_kinda_data[k]
             return res
@@ -205,14 +153,17 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
             # NB! This should be a dict for the kind of provide arguments
             return {k: self.deps['big_thing'].dtype for k in self.provides}
 
-        def compute(self, big_kinda_data, small_kinda_data):
-            res = np.zeros(len(big_kinda_data), _dtype)
-            for k in res.dtype.names:
+        def compute_loop(self, big_kinda_data, small_kinda_data):
+            res = {}
+            for k in self.dtype['some_combined_things'].names:
                 if k == _dtype_name:
                     res[k] = big_kinda_data[k]
                     for small_bit in small_kinda_data[k]:
-                        for i in range(len(res[k])):
-                            res[k][i] += small_bit
+                        if np.iterable(res[k]):
+                            for i in range(len(res[k])):
+                                res[k][i] += small_bit
+                        else:
+                            res[k] += small_bit
                 else:
                     res[k] = big_kinda_data[k]
             return {k: res for k in self.provides}
@@ -224,3 +175,58 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
         assert np.shape(result) == np.shape(big_data), 'Looping over big_data resulted in a different datasize?!'
         assert np.sum(result[_dtype_name]) >= np.sum(big_data[_dtype_name]), "Result should be at least as big as big_data because we added small_data data"
         assert isinstance(result, np.ndarray), "Result is not ndarray?"
+
+
+@given(get_some_array().filter(lambda x: len(x) >= 0),
+       strategies.integers(min_value=1, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [(0, 0, 1, 1),
+         (1, 1, 1, 1),
+         (5, 2, 2, 1),
+         (11, 4, 2, 4)],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_loop_plugin(big_data, nchunks):
+    """Test the loop plugin for random data"""
+    _loop_test_inner(big_data, nchunks)
+
+
+@given(get_some_array().filter(lambda x: len(x) >= 0),
+        strategies.integers(min_value=1, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [(0, 0, 1, 1),
+         (1, 1, 1, 1),
+         (5, 2, 2, 1),
+         (11, 4, 2, 4)],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_loop_plugin_multi_output(big_data, nchunks,):
+    """
+    Test the loop plugin for random data where it should give multiple
+    outputs
+    """
+    _loop_test_inner(big_data, nchunks, target='other_combined_things')
+
+
+@given(get_some_array().filter(lambda x: len(x) == 0),
+       strategies.integers(min_value=2, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_value_error_for_loop_plugin(big_data, nchunks):
+    """Make sure that we are are getting the right ValueError"""
+    try:
+        _loop_test_inner(big_data, nchunks, force_value_error=True)
+        raise RuntimeError(
+            'did not run into ValueError despite the fact we are having '
+            'multiple none-type chunks')
+    except ValueError:
+        # Good we got the ValueError we wanted
+        pass
