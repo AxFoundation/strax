@@ -13,26 +13,24 @@ def rechunk_array_to_arrays(array, n: int):
         yield array[i:i + n]
 
 
-def drop_random(chunks: list) -> list:
+def drop_random(chunk: np.ndarray) -> np.ndarray:
     """
-    Drop some of the data in the chunks
-    :param chunks: list op numpy arrays to modify. Here we will drop some of the fields randomly
-    :return: list of chunks
+    Drop some of the data in the chunk
+    :param chunk: list op numpy arrays to modify. Here we will drop some
+    of the fields randomly
+    :return: random selection of the inpt data
     """
-    res = []
-    for chunk in chunks:
-        if len(chunk) > 1:
-            # We are going to keep this many items in this chunk
-            keep_n = np.random.randint(1, len(chunk)+1)
-            # These are the indices we will keep (only keep unique ones)
-            keep_indices = np.random.randint(0, len(chunk)-1, keep_n)
-            keep_indices = np.unique(keep_indices)
-            keep_indices.sort()
-
-            # This chunk will now be reduced using only keep_indices
-            d = chunk[keep_indices]
-            res.append(d)
-    return res
+    if len(chunk) > 1:
+        # We are going to keep this many items in this chunk
+        keep_n = np.random.randint(1, len(chunk)+1)
+        # These are the indices we will keep (only keep unique ones)
+        keep_indices = list(np.random.randint(0, len(chunk)-1, keep_n))
+        keep_indices = np.unique(keep_indices)
+        keep_indices.sort()
+        # This chunk will now be reduced using only keep_indices
+        return chunk[keep_indices]
+    else:
+        return chunk
 
 
 def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=False):
@@ -57,12 +55,8 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
 
     _dtype = big_data.dtype
 
-    # TODO smarter test. I want to drop some random data from the
-    #  small_chunks but this does not work yet. Perhaps related to
-    #  https://github.com/AxFoundation/strax/pull/345 (will fix in that
-    #  PR)
-    # small_chunks = drop_random(big_chunks.copy()) # What I want to do
-    small_chunks = big_chunks
+    # Keep track fo the chunks seen in BigThing
+    _big_chunks_seen = []
 
     class BigThing(strax.Plugin):
         """Plugin that provides data for looping over"""
@@ -73,14 +67,17 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
 
         def compute(self, chunk_i):
             data = big_chunks[chunk_i]
-            chunk = self.chunk(
-                data=data,
-                start=(
-                    int(data[0]['time']) if len(data)
-                    else np.arange(len(big_chunks))[chunk_i]),
-                end=(
-                    int(strax.endtime(data[-1])) if len(data)
-                    else np.arange(1, len(big_chunks) + 1)[chunk_i]))
+            # First determine start (t0) and stop (t1) times for the chunk
+            if chunk_i == 0:
+                t0 = int(data[0]['time']) if chunk_i > 0 else 0
+                t1 = int(strax.endtime(data[-1])) if len(data) else 1
+            else:
+                # Just take the previous chunk and take that as start time
+                t0 = _big_chunks_seen[chunk_i-1].end
+                t1 = int(strax.endtime(data[-1]) if len(data) else t0 + 1)
+
+            chunk = self.chunk(data=data, start=t0, end=t1)
+            _big_chunks_seen.append(chunk)
             return chunk
 
         def is_ready(self, chunk_i):
@@ -91,30 +88,16 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
             return True
 
     class SmallThing(strax.CutPlugin):
-        """Minimal working example of CutPlugin"""
-        depends_on = tuple()
+        """Throw away some of the data in big_thing"""
+        depends_on = 'big_thing'
         provides = 'small_thing'
         data_kind = 'small_kinda_data'
         dtype = _dtype
+        rechunk_on_save = True
 
-        def compute(self, chunk_i):
-            data = small_chunks[chunk_i]
-            chunk = self.chunk(
-                data=data,
-                start=(
-                    int(data[0]['time']) if len(data)
-                    else np.arange(len(small_chunks))[chunk_i]),
-                end=(
-                    int(strax.endtime(data[-1])) if len(data)
-                    else np.arange(1, len(small_chunks) + 1)[chunk_i]))
-            return chunk
-
-        def is_ready(self, chunk_i):
-            # Hack to make peak output stop after a few chunks
-            return chunk_i < len(small_chunks)
-
-        def source_finished(self):
-            return True
+        def compute(self, big_kinda_data):
+            # Drop some of the data in big_kinda_data
+            return drop_random(big_kinda_data)
 
     class AddBigToSmall(strax.LoopPlugin):
         """
@@ -171,6 +154,11 @@ def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=[strax.DataDirectory(temp_dir)])
         st.register((BigThing, SmallThing, AddBigToSmall, AddBigToSmallMultiOutput))
+
+        # Make small thing in order to allow re-chunking
+        st.make(run_id='some_run', targets='small_thing')
+
+        # Make the loop plugin
         result = st.get_array(run_id='some_run', targets=target)
         assert np.shape(result) == np.shape(big_data), 'Looping over big_data resulted in a different datasize?!'
         assert np.sum(result[_dtype_name]) >= np.sum(big_data[_dtype_name]), "Result should be at least as big as big_data because we added small_data data"
