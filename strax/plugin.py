@@ -10,7 +10,7 @@ import itertools
 import logging
 import time
 import typing
-
+from warnings import warn
 from immutabledict import immutabledict
 import numpy as np
 
@@ -347,7 +347,6 @@ class Plugin:
                         self.input_buffer[d].split(
                             t=this_chunk_end,
                             allow_early_split=True)
-
                 # If any of the inputs were trimmed due to early splits,
                 # trim the others too.
                 # In very hairy cases this can take multiple passes.
@@ -408,11 +407,13 @@ class Plugin:
                 raise RuntimeError(
                     f"Plugin {d} terminated without fetching last {d}!")
 
-        # Check the input buffer is empty
-        for d, buffer in self.input_buffer.items():
-            if buffer is not None and len(buffer):
-                raise RuntimeError(
-                    f"Plugin {d} terminated with leftover {d}: {buffer}")
+        # This can happen especially in time range selections
+        if int(self.save_when) != strax.SaveWhen.NEVER:
+            for d, buffer in self.input_buffer.items():
+                # Check the input buffer is empty
+                if buffer is not None and len(buffer):
+                    raise RuntimeError(
+                        f"Plugin {d} terminated with leftover {d}: {buffer}")
 
     def _check_dtype(self, x, d=None):
         # There is an additional 'last resort' data type check
@@ -454,10 +455,27 @@ class Plugin:
         if len(kwargs):
             # Check inputs describe the same time range
             tranges = {k: (v.start, v.end) for k, v in kwargs.items()}
-            if len(set(tranges.values())) != 1:
-                raise ValueError(f"{self.__class__.__name__} got inconsistent "
-                                 f"time ranges of inputs: {tranges}")
             start, end = list(tranges.values())[0]
+
+            # For non-saving plugins, don't be strict, just take whatever
+            # endtimes are available and don't check time-consistency
+            if int(self.save_when) == strax.SaveWhen.NEVER:
+                # </start>This warning/check will be deleted, see UserWarning
+                if len(set(tranges.values())) != 1:
+                    end = max([v.end for v in kwargs.values()])  # Don't delete
+                    message = (
+                        f"New feature, we are ignoring inconsistent the "
+                        f"possible ValueError in time ranges for "
+                        f"{self.__class__.__name__} of inputs: {tranges}"
+                        f"because this occurred in a save_when.NEVER "
+                        f"plugin. Report any findings in "
+                        f"github.com/AxFoundation/strax/issues/247")
+                    warn(message, UserWarning)
+                # This block will be deleted </end>
+            elif len(set(tranges.values())) != 1:
+                message = (f"{self.__class__.__name__} got inconsistent time "
+                           f"ranges of inputs: {tranges}")
+                raise ValueError(message)
         else:
             # This plugin starts from scratch
             start, end = None, None
