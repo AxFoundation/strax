@@ -13,30 +13,33 @@ def rechunk_array_to_arrays(array, n: int):
         yield array[i:i + n]
 
 
-def drop_random(chunk: np.ndarray) -> np.ndarray:
+def drop_random(input_array: np.ndarray) -> np.ndarray:
     """
-    Drop some of the data in the chunk
-    :param chunk: list op numpy arrays to modify. Here we will drop some
-    of the fields randomly
-    :return: random selection of the inpt data
+    Drop some of the data in the input array
+    :param input_array: numpy array to modify. Here we will drop some
+    of the indices in the array randomly
+    :return: random selection of the input data
     """
-    if len(chunk) > 1:
-        # We are going to keep this many items in this chunk
-        keep_n = np.random.randint(1, len(chunk)+1)
+    if len(input_array) > 1:
+        # We are going to keep this many items in this array
+        keep_n = np.random.randint(1, len(input_array) + 1)
         # These are the indices we will keep (only keep unique ones)
-        keep_indices = list(np.random.randint(0, len(chunk)-1, keep_n))
+        keep_indices = list(np.random.randint(0, len(input_array) - 1, keep_n))
         keep_indices = np.unique(keep_indices)
         keep_indices.sort()
         # This chunk will now be reduced using only keep_indices
-        return chunk[keep_indices]
+        return input_array[keep_indices]
     else:
-        return chunk
+        return input_array
 
 
-def _loop_test_inner(big_data, nchunks, target='added_thing', force_value_error=False):
+def _loop_test_inner(big_data,
+                     nchunks,
+                     target='added_thing',
+                     force_value_error=False):
     """
     Test loop plugins for random data. For this test we are going to
-    setup to plugins that will be looped over and combined into a loop
+    setup two plugins that will be looped over and combined into a loop
     plugin (depending on the target, this may be a multi output plugin).
 
     We are going to setup as follows:

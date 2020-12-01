@@ -46,8 +46,8 @@ def test_local_minimum_splitter(splitter='local_minimum'):
 
         # check if left and right from split index value is bigger or equal
         for left, right, split in split_checks:
-            assert min(w[split], w[left]) == w[split]
-            assert min(w[split], w[right]) == w[split]
+            assert w[left] >= w[split]
+            assert w[right] >= w[split]
 
         assert len(my_splits) <= int(len(w) / 2) + 1
         assert min(my_splits[:, 0]) == NO_MORE_SPLITS
