@@ -407,13 +407,13 @@ class Plugin:
                 raise RuntimeError(
                     f"Plugin {d} terminated without fetching last {d}!")
 
-        # Check the input buffer is empty
-        for d, buffer in self.input_buffer.items():
-            if buffer is not None and len(buffer):
-                # This can happen especially in time range selections
-                if int(self.save_when) != strax.SaveWhen.NEVER:
-                    warn(f"Plugin {d} terminated with leftover {d}: {buffer}",
-                         RuntimeWarning)
+        # This can happen especially in time range selections
+        if int(self.save_when) != strax.SaveWhen.NEVER:
+            for d, buffer in self.input_buffer.items():
+                # Check the input buffer is empty
+                if buffer is not None and len(buffer):
+                    raise RuntimeError(
+                        f"Plugin {d} terminated with leftover {d}: {buffer}")
 
     def _check_dtype(self, x, d=None):
         # There is an additional 'last resort' data type check
