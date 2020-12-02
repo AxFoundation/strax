@@ -13,7 +13,6 @@ from .storage.common import *
 from .storage.files import *
 from .storage.rucio import *
 from .storage.mongo import *
-from .storage.s3 import *
 from .storage.zipfiles import *
 
 from .config import *
