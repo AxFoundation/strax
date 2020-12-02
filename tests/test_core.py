@@ -3,7 +3,6 @@ import shutil
 import tempfile
 import os
 import os.path as osp
-
 import pytest
 
 from strax.testutils import *
