@@ -682,11 +682,13 @@ class LoopPlugin(Plugin):
                                         **{k: kwargs[k][i]
                                            for k in deps_by_kind
                                            if k != loop_over})
-
+                if not isinstance(res, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
                 # Convert from dict to array row:
                 for provides, r in res.items():
                     for k, v in r.items():
-                        if len(v) != len(results[provides][i][k]):
+                        if np.shape(v) != np.shape(results[provides][i][k]):
                             # Make sure that the buffer length as
                             # defined by the base matches the output of
                             # the compute argument.
@@ -707,7 +709,9 @@ class LoopPlugin(Plugin):
                                       **{k: kwargs[k][i]
                                          for k in deps_by_kind
                                          if k != loop_over})
-
+                if not isinstance(r, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
                 # Convert from dict to array row:
                 for k, v in r.items():
                     results[i][k] = v
