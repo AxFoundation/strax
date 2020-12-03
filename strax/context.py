@@ -411,9 +411,6 @@ class Context:
             # Get the parent_class to determine whether the plugin names have a characteristic ending
             # in the name. In case specified we will overwrite this ending with the ending of the child.
             parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
-            # Checking if the parent plugin is registered, this does not have to be the case
-            # but enables some useful checks.
-            is_parent_reg = parent_class in self._plugin_class_registry.values()
 
             # options to pass. So update parent config according to child:
             for k, opt in p.takes_config.items():
@@ -422,7 +419,7 @@ class Context:
                     # See if option ending matches ending of child plugin and 
                     # option is a child option. (Could also be a normal option, but just with 
                     # the corresponding ending of the plugin.)
-                    v = config[k]
+                    option_value = config[k]
                     if parent_class.ends_with:
                         # Parent has already an ending so we must exchange the endings
                         # to overwrite the correct option.
@@ -431,11 +428,13 @@ class Context:
                         # Otherwise we just have to remove the childs end:
                         kparent = k[:-len(p.ends_with)]
 
-                    if is_parent_reg:
-                        mes = f'Option {kparent} is not taken by parent plugin.'
-                        assert kparent in parent_class.takes_config.keys(), mes
-
-                    p.config[kparent] = v
+                    mes = (f'Cannot find {kparent} among the options of the parent.'
+                           f' Either you specified by accident {k} as child option' 
+                           ' or the parent option has the wrong ending. If ends_with '
+                           'is used for both parent and child, all inherited options '
+                           'must share the corresponding endings!')
+                    assert kparent in p.takes_config.keys(), mes
+                    p.config[kparent] = option_value
 
 
     def _get_plugins(self,
