@@ -10,7 +10,7 @@ import itertools
 import logging
 import time
 import typing
-
+from warnings import warn
 from immutabledict import immutabledict
 import numpy as np
 
@@ -297,6 +297,8 @@ class Plugin:
         _end = float('inf')
         for d in self.depends_on:
             self._fetch_chunk(d, iters)
+            if self.input_buffer[d] is None:
+                raise ValueError(f'Cannot work with empty input buffer {self.input_buffer}')
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end
@@ -347,7 +349,6 @@ class Plugin:
                         self.input_buffer[d].split(
                             t=this_chunk_end,
                             allow_early_split=True)
-
                 # If any of the inputs were trimmed due to early splits,
                 # trim the others too.
                 # In very hairy cases this can take multiple passes.
@@ -408,11 +409,13 @@ class Plugin:
                 raise RuntimeError(
                     f"Plugin {d} terminated without fetching last {d}!")
 
-        # Check the input buffer is empty
-        for d, buffer in self.input_buffer.items():
-            if buffer is not None and len(buffer):
-                raise RuntimeError(
-                    f"Plugin {d} terminated with leftover {d}: {buffer}")
+        # This can happen especially in time range selections
+        if int(self.save_when) != strax.SaveWhen.NEVER:
+            for d, buffer in self.input_buffer.items():
+                # Check the input buffer is empty
+                if buffer is not None and len(buffer):
+                    raise RuntimeError(
+                        f"Plugin {d} terminated with leftover {d}: {buffer}")
 
     def _check_dtype(self, x, d=None):
         # There is an additional 'last resort' data type check
@@ -454,10 +457,27 @@ class Plugin:
         if len(kwargs):
             # Check inputs describe the same time range
             tranges = {k: (v.start, v.end) for k, v in kwargs.items()}
-            if len(set(tranges.values())) != 1:
-                raise ValueError(f"{self.__class__.__name__} got inconsistent "
-                                 f"time ranges of inputs: {tranges}")
             start, end = list(tranges.values())[0]
+
+            # For non-saving plugins, don't be strict, just take whatever
+            # endtimes are available and don't check time-consistency
+            if int(self.save_when) == strax.SaveWhen.NEVER:
+                # </start>This warning/check will be deleted, see UserWarning
+                if len(set(tranges.values())) != 1:
+                    end = max([v.end for v in kwargs.values()])  # Don't delete
+                    message = (
+                        f"New feature, we are ignoring inconsistent the "
+                        f"possible ValueError in time ranges for "
+                        f"{self.__class__.__name__} of inputs: {tranges}"
+                        f"because this occurred in a save_when.NEVER "
+                        f"plugin. Report any findings in "
+                        f"github.com/AxFoundation/strax/issues/247")
+                    warn(message, UserWarning)
+                # This block will be deleted </end>
+            elif len(set(tranges.values())) != 1:
+                message = (f"{self.__class__.__name__} got inconsistent time "
+                           f"ranges of inputs: {tranges}")
+                raise ValueError(message)
         else:
             # This plugin starts from scratch
             start, end = None, None
@@ -650,19 +670,53 @@ class LoopPlugin(Plugin):
                                        f"should be {len(base)}!")
                 kwargs[k] = r
 
-        results = np.zeros(len(base), dtype=self.dtype)
-        deps_by_kind = self.dependencies_by_kind()
+        if self.multi_output:
+            # This is the a-typical case. Most of the time you just have
+            # one output. Just doing the same as below but this time we
+            # need to create a dict for the outputs.
+            # NB: both outputs will need to have the same length as the
+            # base!
+            results = {k: np.zeros(len(base), dtype=self.dtype[k]) for k in self.provides}
+            deps_by_kind = self.dependencies_by_kind()
 
-        for i in range(len(base)):
-            r = self.compute_loop(base[i],
-                                  **{k: kwargs[k][i]
-                                     for k in deps_by_kind
-                                     if k != loop_over})
+            for i, base_chunk in enumerate(base):
+                res = self.compute_loop(base_chunk,
+                                        **{k: kwargs[k][i]
+                                           for k in deps_by_kind
+                                           if k != loop_over})
+                if not isinstance(res, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
+                # Convert from dict to array row:
+                for provides, r in res.items():
+                    for k, v in r.items():
+                        if np.shape(v) != np.shape(results[provides][i][k]):
+                            # Make sure that the buffer length as
+                            # defined by the base matches the output of
+                            # the compute argument.
+                            raise ValueError(
+                                f'{provides} returned an improper length array '
+                                f'that is not equal to the {loop_over} '
+                                'data-kind! Are you sure a LoopPlugin is the '
+                                'right Plugin for your application?')
+                        results[provides][i][k] = v
+        else:
+            # Normally you end up here were we are going to loop over
+            # base and add the results to the right format.
+            results = np.zeros(len(base), dtype=self.dtype)
+            deps_by_kind = self.dependencies_by_kind()
 
-            # Convert from dict to array row:
-            for k, v in r.items():
-                results[i][k] = v
-
+            for i, base_chunk in enumerate(base):
+                r = self.compute_loop(base_chunk,
+                                      **{k: kwargs[k][i]
+                                         for k in deps_by_kind
+                                         if k != loop_over})
+                if not isinstance(r, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
+                # Convert from dict to array row:
+                for k, v in r.items():
+                    results[i][k] = v
         return results
 
     def compute_loop(self, *args, **kwargs):

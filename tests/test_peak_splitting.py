@@ -2,8 +2,15 @@ import strax
 import numpy as np
 
 
-def test_LocalMinimumSplitter():
-    test_splitter = strax.processing.peak_splitting.LocalMinimumSplitter()
+def test_local_minimum_splitter(splitter='local_minimum'):
+    test_splitter = {
+        'local_minimum': strax.processing.peak_splitting.LocalMinimumSplitter(),
+        'natural_breaks': strax.processing.peak_splitting.NaturalBreaksSplitter()
+                     }.get(splitter, None)
+    print(f'Testing {splitter}')
+    if test_splitter is None:
+        raise NotImplementedError(f'Unknown splitter {splitter}')
+
     NO_MORE_SPLITS = strax.processing.peak_splitting.NO_MORE_SPLITS
 
     # arbitrary settings to check against
@@ -14,11 +21,17 @@ def test_LocalMinimumSplitter():
     w = np.random.random(size=100)
 
     for min_height, min_ratio in zip(min_heights, min_ratios):
-        my_splits = test_splitter.find_split_points(w,
-                                                    dt=None,
-                                                    peak_i=None,
-                                                    min_height=min_height,
-                                                    min_ratio=min_ratio)
+        # Split according to the different splitters
+        if splitter == 'local_minimum':
+            my_splits = test_splitter.find_split_points(
+                w, dt=None, peak_i=None, min_height=min_height,
+                min_ratio=min_ratio)
+        elif splitter == 'natural_breaks':
+            # Use min-height here as threshold (>1 meaningless)
+            threshold = np.array([min_height])
+            my_splits = test_splitter.find_split_points(
+                w, dt=1, peak_i=np.int(0), threshold=threshold, normalize=0,
+                split_low=0, filter_wing_width=0)
 
         my_splits = np.array(list(my_splits))
 
@@ -33,9 +46,13 @@ def test_LocalMinimumSplitter():
 
         # check if left and right from split index value is bigger or equal
         for left, right, split in split_checks:
-            assert min(w[split], w[left]) == w[split]
-            assert min(w[split], w[right]) == w[split]
+            assert w[left] >= w[split]
+            assert w[right] >= w[split]
 
         assert len(my_splits) <= int(len(w) / 2) + 1
         assert min(my_splits[:, 0]) == NO_MORE_SPLITS
         assert my_splits[-1, 0] == NO_MORE_SPLITS
+
+
+def test_natural_breaks():
+    test_local_minimum_splitter(splitter='natural_breaks')
