@@ -287,7 +287,8 @@ class ChildPlugin(ParentPlugin):
     depends_on = 'peaks'
     parallel = True
     __version__ = '0.0.1'
-    child_ends_with = '_child'
+    ends_with = '_child'
+    child_plugin = True
 
     def infer_dtype(self):
         # Loading here another config which will be different for child:
