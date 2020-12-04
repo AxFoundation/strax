@@ -97,11 +97,11 @@ class Option:
         self.parent_option_name = parent_option_name
         if (self.child_option and not self.parent_option_name) \
                 or (not self.child_option and self.parent_option_name):
-            raise ValueError(('You have to specify both, "child_option"=True and '
-                              'the name of the parent option which should be '
-                              'overwritten by the child. Options which are unique '
-                              'to the child should not be marked as a child option.'
-                              f'Please update {self.name} accordingly.'))
+            raise ValueError('You have to specify both, "child_option"=True and '
+                             'the name of the parent option which should be '
+                             'overwritten by the child. Options which are unique '
+                             'to the child should not be marked as a child option.'
+                             f'Please update {self.name} accordingly.')
 
         # if self.default_by_run is not OMITTED:
         #     warnings.warn(f"The {self.name} option uses default_by_run,"
