@@ -54,10 +54,9 @@ class Plugin:
     provides: tuple
     input_buffer: typing.Dict[str, strax.Chunk]
     
-    # Needed for plugins which are inherited from an already existing plugins:
+    # Needed for plugins which are inherited from an already existing plugins,
+    # indicates such an inheritance.
     child_plugin = False
-    ends_with = None              # Property which indicates the end of the plugin, required
-                                  # for child plugins and parent plugins which have a fix ending.
     
     compressor = 'blosc'
 

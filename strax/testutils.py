@@ -270,14 +270,20 @@ class ParentPlugin(strax.Plugin):
 # Child:
 @strax.takes_config(
     strax.Option('by_child_overwrite_option_child',
-                 default=DEFAULT_CONFIG_TEST['area_child'], child_option=True,
+                 default=DEFAULT_CONFIG_TEST['area_child'],
+                 child_option=True,
+                 parent_option_name='by_child_overwrite_option',
                  help="Option we will overwrite in our child plugin"),
     strax.Option('context_option_child', type=int,
-                 default=DEFAULT_CONFIG_TEST['area_per_channel_shape_child'][0], child_option=True,
+                 default=DEFAULT_CONFIG_TEST['area_per_channel_shape_child'][0],
+                 child_option=True,
+                 parent_option_name='context_option',
                  help='Tracked context option e.g. n_pmts_tpc.'),
     strax.Option('child_exclusive_option', type=int, default=DEFAULT_CONFIG_TEST['nhits_child'],
                  help='Option which is exclusive for the child.'),
-    strax.Option('more_special_context_option_child', child_option=True,
+    strax.Option('more_special_context_option_child',
+                 child_option=True,
+                 parent_option_name='more_special_context_option',
                  track=False,
                  default=immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_child']), type=immutabledict,
                  help="Special context option which is not tacked e.g. channel_map")

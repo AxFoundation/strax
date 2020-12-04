@@ -408,33 +408,22 @@ class Context:
             # child. This is required since the super().compute() method in a child plugins
             # will still point to the option names of the parent (e.g. self.config['parent_name']).
 
-            # Get the parent_class to determine whether the plugin names have a characteristic ending
-            # in the name. In case specified we will overwrite this ending with the ending of the child.
-            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
-
             # options to pass. So update parent config according to child:
-            for k, opt in p.takes_config.items():
+            for option_name, opt in p.takes_config.items():
                 # Now loop again overall options for this plugin (parent + child)
-                if k.endswith(p.ends_with) and opt.child_option:
-                    # See if option ending matches ending of child plugin and 
-                    # option is a child option. (Could also be a normal option, but just with 
-                    # the corresponding ending of the plugin.)
-                    option_value = config[k]
-                    if parent_class.ends_with:
-                        # Parent has already an ending so we must exchange the endings
-                        # to overwrite the correct option.
-                        kparent = k[:-len(p.ends_with)] + parent_class.ends_with
-                    else:
-                        # Otherwise we just have to remove the childs end:
-                        kparent = k[:-len(p.ends_with)]
+                # and get all child options:
+                if opt.child_option:
+                    # See if option is tagged as a child option. In that case replace the
+                    # config value of the parent with the value of the child
+                    option_value = config[option_name]
+                    parent_name = opt.parent_option_name
 
-                    mes = (f'Cannot find {kparent} among the options of the parent.'
-                           f' Either you specified by accident {k} as child option' 
-                           ' or the parent option has the wrong ending. If ends_with '
-                           'is used for both parent and child, all inherited options '
-                           'must share the corresponding endings!')
-                    assert kparent in p.takes_config.keys(), mes
-                    p.config[kparent] = option_value
+                    mes = (f'Cannot find "{parent_name}" among the options of the parent.'
+                           f' Either you specified by accident {option_name} as child option' 
+                           f' or you specified the wrong parent_option_name. Have you specified '
+                           'the correct parent option name?')
+                    assert parent_name in p.config, mes
+                    p.config[parent_name] = option_value
 
 
     def _get_plugins(self,
@@ -482,28 +471,23 @@ class Context:
             if p.child_plugin:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
+                configs = {}
 
                 # Getting information about the parent:
                 parent_class = p.__class__.__bases__[0]
-                configs = {}
+                # Get all parent options which are overwritten by a child:
+                parent_options = [option.parent_option_name for option in p.takes_config.values()
+                                  if option.child_option]
+
                 for option_name, v in p.config.items():
                     # Looping over all settings, option_name is either the option name of the
-                    # parent or the child. In case it is the parent we continue
-                    # and do not add it to the lineage.
-                    # In order to do this we have to identify for which option_name we can find
-                    # the corresponding child_option key:
-                    if (parent_class.ends_with
-                            and option_name.endswith(parent_class.ends_with)):
-                        # The parent has also a fixed ending indicated, hence we want
-                        # to overwrite the ending instead of just adding one.
-                        child_name = option_name[:-len(parent_class.ends_with)] + p.ends_with
-                    else:
-                        child_name = option_name + p.ends_with
-
-                    if child_name in p.takes_config:
-                        # In case it is just a unique child_option or parent option we can continue
+                    # parent or the child.
+                    if option_name in parent_options:
+                        # In case it is the parent we continue
                         continue
-                    elif p.takes_config[option_name].track:
+
+                    if p.takes_config[option_name].track:
+                        # Add all options which should be tracked:
                         configs[option_name] = v
 
                 # Also adding name and version of the parent to the lineage:
