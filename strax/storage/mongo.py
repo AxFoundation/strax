@@ -311,7 +311,7 @@ def remove_np(dictin):
         result = {}
         for k in dictin.keys():
             result[k] = remove_np(dictin[k])
-    elif isinstance(dictin, np.ndarray) or isinstance(dictin, list):
+    elif isinstance(dictin, (np.ndarray, list)):
         result = []
         for k in dictin:
             result.append(remove_np(k))

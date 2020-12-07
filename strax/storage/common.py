@@ -578,7 +578,6 @@ class Saver:
             # Write exception (with close), but exit gracefully.
             # One traceback on screen is enough
             self.close(wait_for=pending)
-            pass
 
         except Exception as e:
             # log exception for the final check
