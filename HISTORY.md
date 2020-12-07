@@ -1,3 +1,13 @@
+0.12.5 / 2020-12-06
+---------------------
+- Finally fix time selection bug (#345)
+- Allow multioutput for loop plugin (#357)
+- Allow copy from frontend to frontend (#351)
+- Add more tests to strax (#359)
+- Small bugfix progressbar (#353)
+- Smooth database initiation CMT (#356)
+- Remove s3 storage (#358)
+
 0.12.4 / 2020-11-13
 ---------------------
 - Limit mongo backend memory usage (#349)
