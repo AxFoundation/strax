@@ -1,4 +1,4 @@
-numpy==1.19
+numpy<=1.19, >=1.18.5
 pandas
 numba>=0.43.1
 blosc
