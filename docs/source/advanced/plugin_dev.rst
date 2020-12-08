@@ -43,14 +43,69 @@ You can specify defaults in several ways:
 - ``default_per_run``: Specify a list of 2-tuples: ``(start_run, default)``. Here start_run is a numerized run name (e.g 170118_1327; note the underscore is valid in integers since python 3.6) and ``default`` the option that applies from that run onwards.
 - The ``strax_defaults`` dictionary in the run metadata. This overrides any defaults specified in the plugin code, but take care -- if you change a value here, there will be no record anywhere of what value was used previously, so you cannot reproduce your results anymore!
 
+
 Plugin types
 ----------------------
 
 There are several plugin types:
    * `Plugin`: The general type of plugin. Should contain at least `depends_on = <datakind>`, `provides = <datatype>`, `def compute(self, <datakind>)`, and `dtype = <dtype> ` or `def infer_dtype(): <>`.
-   * `ChildPlugin`: Plugin which is inherited from an already existing `strax.Plugin` (e.g. in order to use the same `compute()` method). This plugin must have `child_ends_with  = str` defined to be recognized as a child plugin. The options of the child plugin are inherited from the parent. The option values of the parent can be changed by specifying new options for the child plugins. These options must obey the following two rules in order to overwrite the parent value: 1. They are tagged as `child_option=True` 2. the option name ends with the same string as in `child_ends_with`. A child plugin can also take additional new options.
    * `OverlapWindowPlugin`: Allows a plugin to only
    * `LoopPlugin`: Allows user to loop over a given datakind and find the corresponding data of a lower datakind using for example `def compute_loop(self, events, peaks)` where we loop over events and get the corresponding peaks that are within the time range of the event. Currently the second argument (`peaks`) must be fully contained in the first argument (`events` ).
    * `CutPlugin`: Plugin type where using `def cut_by(self, <datakind>)` inside the plugin a user can return a boolean array that can be used to select data.
    * `MergeOnlyPlugin`: This is for internal use and only merges two plugins into a new one. See as an example in straxen the `EventInfo` plugin where the following datatypes are merged `'events', 'event_basics', 'event_positions', 'corrected_areas', 'energy_estimates'`.
    * `ParallelSourcePlugin`: For internal use only to parallelize the processing of low level plugins. This can be activated using stating `parallel = 'process'` in a plugin.
+
+
+Plugin inheritance
+----------------------
+It is possible to inherit the `compute()` method of an already existing plugin with another plugin. We call these types of plugins child plugins. Child plugins are recognized by strax when the `child_plugin` attribute of the plugin is set to `True`. Below you can find a simple example of a child plugin with its parent plugin:
+
+.. code-block:: python
+    @strax.takes_config(
+    strax.Option('by_child_overwrite_option', type=int, default=5,
+                 help="Option we will overwrite in our child plugin"),
+    strax.Option('parent_unique_option', type=int, default=2,
+                 help='Option which is not touched by the child and '
+                      'therefore the same for parent and child'),
+                      )
+    class ParentPlugin(strax.Plugin):
+        provides = 'odd_peaks'
+        depends_on = 'peaks'
+        __version__ = '0.0.1'
+        dtype = parent_dtype
+
+        def compute(self, peaks):
+            peaks['area'] *= self.config['parent_unique_option']
+            peaks['time'] *= self.config['by_child_overwrite_option']
+            return res
+
+
+    # Child:
+    @strax.takes_config(
+        strax.Option('by_child_overwrite_option_child',
+                     default=3,
+                     child_option=True,
+                     parent_option_name='by_child_overwrite_option',
+                     help="Option we will overwrite in our child plugin"),
+        strax.Option('option_unique_child',
+                      default=10,
+                      help="Option we will overwrite in our child plugin"),
+    )
+    class ChildPlugin(ParentPlugin):
+        provides = 'odd_peaks_child'
+        depends_on = 'peaks'
+        __version__ = '0.0.1'
+        child_plugin = True
+
+        def compute(self, peaks):
+            res = super().compute(peaks)
+            res['width'] = self.config['option_unique_child']
+            return res
+
+The `super().compute()` statement in the `compute` method of `ChildPlugin` allows us to execute the code of the parent's compute method without duplicating it. Additionally, if needed, we can extend the code with some for the child-plugin unique computation steps.
+
+To allow for the child plugin to have different settings then its parent (e.g. `'by_child_overwrite_option'` in `self.config['by_child_overwrite_option']` of the parent's `compute` method), we have to use specific child option. These options will be recognized by strax and overwrite the config values of the parent parameter during the initialization of the child-plugin. Hence, these changes only affect the child, but not the parent.
+
+An option can be flagged as a child option if the corresponding option attribute is set `child_option=True`. Further, the option name which should be overwritten must be specified via the option attribute `parent_option_name`.
+
+The lineage of a child plugin contains in addition to its options the name and version of the parent plugin.
