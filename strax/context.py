@@ -402,29 +402,28 @@ class Context:
         p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
 
-        if p.child_ends_with:
-            # This plugin is a child of another plugin and has some different
-            # Checking if the parent plugin is registered, this does not have to be the case
-            # but enables some useful checks.
-            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
-            is_parent_reg = parent_class in self._plugin_class_registry.values()
+        if p.child_plugin:
+            # This plugin is a child of another plugin. This means we have to overwrite
+            # the registered option settings in p.config with the options specified by the
+            # child. This is required since the super().compute() method in a child plugins
+            # will still point to the option names of the parent (e.g. self.config['parent_name']).
+
             # options to pass. So update parent config according to child:
-            for k, opt in p.takes_config.items():
-                if k.endswith(p.child_ends_with):
-                    if opt.child_option:
-                        v = config[k]
-                        kparent = k[:-len(p.child_ends_with)]
+            for option_name, opt in p.takes_config.items():
+                # Now loop again overall options for this plugin (parent + child)
+                # and get all child options:
+                if opt.child_option:
+                    # See if option is tagged as a child option. In that case replace the
+                    # config value of the parent with the value of the child
+                    option_value = config[option_name]
+                    parent_name = opt.parent_option_name
 
-                        if is_parent_reg:
-                            mes = f'Option {kparent} is not taken by parent plugin.'
-                            assert kparent in parent_class.takes_config.keys(), mes
-
-                        p.config[kparent] = v
-                    else:
-                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
-                                         f' Found the option {k} with the ending {p.child_ends_with}'
-                                         ' which was not specified as a child option.'
-                                         ' Was this intended? If yes, please change the ending')
+                    mes = (f'Cannot find "{parent_name}" among the options of the parent.'
+                           f' Either you specified by accident {option_name} as child option' 
+                           f' or you specified the wrong parent_option_name. Have you specified '
+                           'the correct parent option name?')
+                    assert parent_name in p.config, mes
+                    p.config[parent_name] = option_value
 
 
     def _get_plugins(self,
@@ -469,17 +468,29 @@ class Context:
 
             last_provide = d_provides
 
-            if p.child_ends_with:
+            if p.child_plugin:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
                 configs = {}
-                for q, v in p.config.items():
-                    if q + p.child_ends_with in p.takes_config:
-                        continue
-                    elif p.takes_config[q].track:
-                        configs[q] = v
-                # Adding parent information to the lineage:
+
+                # Getting information about the parent:
                 parent_class = p.__class__.__bases__[0]
+                # Get all parent options which are overwritten by a child:
+                parent_options = [option.parent_option_name for option in p.takes_config.values()
+                                  if option.child_option]
+
+                for option_name, v in p.config.items():
+                    # Looping over all settings, option_name is either the option name of the
+                    # parent or the child.
+                    if option_name in parent_options:
+                        # In case it is the parent we continue
+                        continue
+
+                    if p.takes_config[option_name].track:
+                        # Add all options which should be tracked:
+                        configs[option_name] = v
+
+                # Also adding name and version of the parent to the lineage:
                 configs[parent_class.__name__] = parent_class.__version__
                         
                 p.lineage = {last_provide: (p.__class__.__name__,
