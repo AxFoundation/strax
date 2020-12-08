@@ -40,7 +40,7 @@ def get_float_array(min_value=0, max_value=1, min_size=0, max_size=20):
 
 @given(get_float_array(),
        get_int_array(max_value=100),
-       get_float_array(min_size=4, max_value=100),
+       get_float_array(min_size=20, max_size=150, max_value=100),
        )
 @settings(deadline=None)
 def test_local_minimum(min_heights, min_ratios, w):
@@ -52,7 +52,7 @@ def test_local_minimum(min_heights, min_ratios, w):
 
 @given(get_float_array(),
        get_int_array(max_value=100),
-       get_float_array(min_size=4, max_value=100),
+       get_float_array(min_size=20, max_size=150, max_value=100),
        )
 @settings(deadline=None)
 def test_natural_breaks(min_heights, min_ratios, w):
