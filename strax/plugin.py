@@ -318,8 +318,8 @@ class Plugin:
                         f"more  than {self.input_timeout} sec for arrival of "
                         f"input chunk {chunk_i}, and has given up.")
 
-                print(f"{self.__class__.__name__}:{id(self)} "
-                      f"waiting for chunk {chunk_i}")
+                print(f"{self.__class__.__name__} with object id: {id(self)} "
+                      f"waits for chunk {chunk_i}")
                 time.sleep(2)
             last_input_received = time.time()
 
