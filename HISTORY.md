@@ -1,3 +1,11 @@
+0.12.6 / 2020-12-09
+---------------------
+- Muveto + hitlet fixes (#355)
+- Add more tests to strax (#359)
+- More clear print statement (#362)
+- Fix reproducibility of peak split test (#363)
+- Fix numpy deps (#364)
+
 0.12.5 / 2020-12-06
 ---------------------
 - Finally fix time selection bug (#345)
