@@ -42,7 +42,8 @@ install:
   - source activate strax
   - conda install -c conda-forge python-blosc      # Recommended way to install blosc
 
-  - pip install coveralls
+  - pip install coveralls --use-feature=2020-resolver
+  - pip install -r requirements.txt --use-feature=2020-resolver
   - python setup.py install
 
 script:
