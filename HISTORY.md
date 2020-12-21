@@ -1,3 +1,9 @@
+0.12.7 / 2020-12-21
+---------------------
+- Fix for select_runs with Nones(#370)
+- Numpy requirement fix (#369)
+- Documentation maintenance (cad6bce8, 9c023b0d)
+
 0.12.6 / 2020-12-09
 ---------------------
 - Muveto + hitlet fixes (#355)
