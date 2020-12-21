@@ -84,8 +84,8 @@ def scan_runs(self: strax.Context,
             if ('start' in store_fields
                     and 'end' in store_fields
                     and 'livetime' in store_fields
-                    and 'start' in doc
-                    and 'end' in doc):
+                    and doc.get('start') is not None
+                    and doc.get('end') is not None):
                 doc.setdefault('livetime', doc['end'] - doc['start'])
 
             # Put the strax defaults stuff into a different cache
