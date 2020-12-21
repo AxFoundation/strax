@@ -61,6 +61,7 @@ Plugin inheritance
 It is possible to inherit the `compute()` method of an already existing plugin with another plugin. We call these types of plugins child plugins. Child plugins are recognized by strax when the `child_plugin` attribute of the plugin is set to `True`. Below you can find a simple example of a child plugin with its parent plugin:
 
 .. code-block:: python
+
     @strax.takes_config(
     strax.Option('by_child_overwrite_option', type=int, default=5,
                  help="Option we will overwrite in our child plugin"),
