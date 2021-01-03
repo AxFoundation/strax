@@ -10,7 +10,7 @@ limit is respected!
 
 import strax
 import numpy as np
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
@@ -92,7 +92,11 @@ class MongoBackend(StorageBackend):
     def get_metadata(self, key):
         """See strax.Backend"""
         query = backend_key_to_query(key)
-        doc = self.db[self.col_name].find_one(query)
+        # Make sure to get the last of the meta-data docs. Otherwise we
+        # might be getting a previously failed document.
+        doc = self.db[self.col_name].find_one({
+            **query, 'metadata': {"$exists": True}},
+            sort=[('write_time', DESCENDING)])
         if doc and 'metadata' in doc:
             return doc['metadata']
         raise strax.DataNotAvailable
