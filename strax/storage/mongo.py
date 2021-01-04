@@ -158,6 +158,7 @@ class MongoBackend(StorageBackend):
                 del self.chunks_registry[registry_key]
         del self._buffered_backend_keys[0]
 
+
 @export
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
@@ -209,7 +210,6 @@ class MongoSaver(Saver):
         basic_meta = backend_key_to_query(key).copy()
         # Start with a clean sheet, we are just going to overwrite
         self.col.delete_many(basic_meta)
-
         # Add datetime objects as candidates for TTL collections. Either
         # can be used according to the preference of the user to index.
         # Two entries can be used:
