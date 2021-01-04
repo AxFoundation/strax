@@ -1,3 +1,8 @@
+0.13.2 / 2021-01-04
+---------------------
+- Speed up st.select_runs by ~100x (#371)
+- Finding latest OnlineMonitor data (#374)
+
 0.13.1 / 2020-12-21
 ---------------------
 - Fix bug in baselining (#367)
