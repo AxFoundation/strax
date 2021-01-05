@@ -891,8 +891,19 @@ class ParallelSourcePlugin(Plugin):
         p.sub_savers = sub_savers
         p.start_from = start_from
         if p.multi_output:
-            p.dtype = {d: p.sub_plugins[d].dtype_for(d)
-                       for d in outputs_to_send}
+            p.dtype = {}
+            for d in outputs_to_send:
+                if d in p.sub_plugins:
+                    p.dtype[d] = p.sub_plugins[d].dtype_for(d)
+                else:
+                    log.debug(f'Finding plugin that provides {d}')
+                    # Need to do some more work to get the plugin that
+                    # provides this data-type.
+                    for sp in p.sub_plugins.values():
+                        if d in sp.provides:
+                            log.debug(f'{sp} provides {d}')
+                            p.dtype[d] = sp.dtype_for(d)
+                            break
         else:
             to_send = list(outputs_to_send)[0]
             p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
