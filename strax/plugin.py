@@ -511,7 +511,12 @@ class Plugin:
                     "Plugins without dependencies must return full strax "
                     f"Chunks, but {self.__class__.__name__} produced a "
                     f"{type(result)}!")
-
+            if isinstance(result, dict) and len(result) == 1:
+                raise ValueError(
+                    f'Ran into single key results dict with key: '
+                    f'{list(result.keys())}, cannot convert this to array of '
+                    f'dtype {self.dtype_for(_dtype)}.\nSee '
+                    f'github.com/AxFoundation/strax/issues/238 for more info')
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
             self._check_dtype(result, _dtype)
             result = self.chunk(
@@ -886,8 +891,19 @@ class ParallelSourcePlugin(Plugin):
         p.sub_savers = sub_savers
         p.start_from = start_from
         if p.multi_output:
-            p.dtype = {d: p.sub_plugins[d].dtype_for(d)
-                       for d in outputs_to_send}
+            p.dtype = {}
+            for d in outputs_to_send:
+                if d in p.sub_plugins:
+                    p.dtype[d] = p.sub_plugins[d].dtype_for(d)
+                else:
+                    log.debug(f'Finding plugin that provides {d}')
+                    # Need to do some more work to get the plugin that
+                    # provides this data-type.
+                    for sp in p.sub_plugins.values():
+                        if d in sp.provides:
+                            log.debug(f'{sp} provides {d}')
+                            p.dtype[d] = sp.dtype_for(d)
+                            break
         else:
             to_send = list(outputs_to_send)[0]
             p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
