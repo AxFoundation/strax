@@ -396,6 +396,17 @@ def hitlet_properties(hitlets):
             h['low_left_area'] = res[0]
             h['range_50p_area'] = res[2]-res[1]
             h['range_80p_area'] = res[3]-res[0]
+            
+        # Compute width based on HDR:
+        resh = highest_density_region_width(h['data'], 
+                                            fractions_desired=np.array([0.5, 0.8]),
+                                            dt=h['dt'],
+                                            fractionl_edges=True,
+                                            )
+        h['left_hdr'] = resh[0,0]
+        h['low_left_hdr'] = resh[1,0]
+        h['range_hdr_50p_area'] = resh[0,1]-resh[0,0]
+        h['range_hdr_80p_area'] = resh[1,1]-resh[1,0]
 
 
 
@@ -583,7 +594,7 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
 
 
 @numba.njit
-def heighest_density_region_width(data,
+def highest_density_region_width(data,
                                   fractions_desired,
                                   dt=1,
                                   fractionl_edges=False,
@@ -595,7 +606,7 @@ def heighest_density_region_width(data,
     Defines a 100% fraction as the sum over all positive samples in a
     waveform.
 
-    :param data: Signals, e.g. hitlets or peaks including zero length
+    :param data: Data of a signal, e.g. hitlet or peak including zero length
         encoding.
     :param fractions_desired: Area fractions for which the highest
         density region should be computed.
@@ -605,38 +616,35 @@ def heighest_density_region_width(data,
         sample.
     :param _buffer_size: Maximal number of allowed intervals.
     """
-    res = np.zeros((len(data), len(fractions_desired), 2), dtype=np.float32)
+    res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
+    data = np.maximum(data, 0)
+    inter, amps = strax.highest_density_region(data, fractions_desired, _buffer_size=_buffer_size)
 
-    for ind, d in enumerate(data):
-        r = res[ind]
-        d = np.maximum(d, 0)
-        inter, amps = strax.heighest_density_region(d, fractions_desired, _buffer_size=_buffer_size)
+    for f_ind, (i, a) in enumerate(zip(inter, amps)):
+        if not fractionl_edges:
+            res[f_ind, 0] = i[0, 0] * dt
+            res[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
+        else:
+            left = i[0, 0]
+            right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
 
-        for f_ind, (i, a) in enumerate(zip(inter, amps)):
-            if not fractionl_edges:
-                r[f_ind, 0] = i[0, 0] * dt
-                r[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
-            else:
-                left = i[0, 0]
-                right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
+            # Get amplitudes of outer most samples
+            # and amplitudes of adjacent samples (if any)
+            left_amp = data[left]
+            right_amp = data[right]
 
-                # Get amplitudes of outer most samples
-                # and amplitudes of adjacent samples (if any)
-                left_amp = d[left]
-                right_amp = d[right]
+            next_left_amp = 0
+            if (left - 1) >= 0:
+                next_left_amp = data[left - 1]
+            next_right_amp = 0
+            if (right + 1) < len(data):
+                next_right_amp = data[right + 1]
 
-                next_left_amp = 0
-                if (left - 1) >= 0:
-                    next_left_amp = d[left - 1]
-                next_right_amp = 0
-                if (right + 1) < len(d):
-                    next_right_amp = d[right + 1]
+            # Compute fractions and new left and right edges:
+            fl = (left_amp - a) / (left_amp - next_left_amp)
+            fr = (right_amp - a) / (right_amp - next_right_amp)
 
-                # Compute fractions and new left and right edges:
-                fl = (left_amp - a) / (left_amp - next_left_amp)
-                fr = (right_amp - a) / (right_amp - next_right_amp)
-
-                r[f_ind, 0] = (left + 0.5 - fl) * dt
-                r[f_ind, 1] = (right + 0.5 + fr) * dt
+            res[f_ind, 0] = (left + 0.5 - fl) * dt
+            res[f_ind, 1] = (right + 0.5 + fr) * dt
 
     return res
