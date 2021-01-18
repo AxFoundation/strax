@@ -360,27 +360,41 @@ def hitlet_properties(hitlets):
         dt = h['dt']
         data = h['data'][:h['length']]
         
-        if np.any(data):
-            # Compute amplitude
-            amp_ind = np.argmax(data)
-            amp_time = int(amp_ind * dt)
-            height = data[amp_ind]
+        if not np.any(data):
+            continue
 
-            h['amplitude'] = height
-            h['time_amplitude'] = amp_time
+        # Compute amplitude
+        amp_ind = np.argmax(data)
+        amp_time = int(amp_ind * dt)
+        height = data[amp_ind]
 
-            # Computing FWHM:
-            left_edge, right_edge = get_fwxm(h, 0.5)
-            width = right_edge - left_edge
+        h['amplitude'] = height
+        h['time_amplitude'] = amp_time
 
-            # Computing FWTM:
-            left_edge_low, right_edge = get_fwxm(h, 0.1)
-            width_low = right_edge - left_edge_low
+        # Computing FWHM:
+        left_edge, right_edge = get_fwxm(h, 0.5)
+        width = right_edge - left_edge
 
-            h['fwhm'] = width
-            h['left'] = left_edge
-            h['low_left'] = left_edge_low
-            h['fwtm'] = width_low
+        # Computing FWTM:
+        left_edge_low, right_edge = get_fwxm(h, 0.1)
+        width_low = right_edge - left_edge_low
+
+        h['fwhm'] = width
+        h['left'] = left_edge
+        h['low_left'] = left_edge_low
+        h['fwtm'] = width_low
+
+        # Compute area deciles & width:
+        res = np.zeros(4, dtype=np.float32)
+        deciles = np.array([0.1, 0.25, 0.75, 0.9])
+        strax.compute_index_of_fraction(h, deciles, res)
+        res *= h['dt']
+
+        h['left_area'] = res[1]
+        h['low_left_area'] = res[0]
+        h['range_50_p_area'] = res[2]-res[1]
+        h['range_80_p_area'] = res[3]-res[0]
+
 
 
 @export
@@ -571,20 +585,23 @@ def heighest_density_region_width(data,
                                   fractions_desired,
                                   dt=1,
                                   fractionl_edges=False,
-                                  _buffer_size=20):
+                                  _buffer_size=40):
     """
-    Function which computes the width based on the highest density
-    region of the signal.
+    Function which computes the left and right edge based on the outer
+    most sample for the highest density region of a signal.
 
     Defines a 100% fraction as the sum over all positive samples in a
     waveform.
 
     :param data: Signals, e.g. hitlets or peaks including zero length
         encoding.
-    :param fractions_desired:
-    :param dt:
-    :param fractionl_edges:
-    :param _buffer_size:
+    :param fractions_desired: Area fractions for which the highest
+        density region should be computed.
+    :param dt: Sample length in ns.
+    :param fractionl_edges: If true computes width as fractional time
+        depending on the covered area between the current and next
+        sample.
+    :param _buffer_size: Maximal number of allowed intervals.
     """
     res = np.zeros((len(data), len(fractions_desired), 2), dtype=np.float32)
 
