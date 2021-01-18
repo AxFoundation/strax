@@ -564,3 +564,60 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
         res[ind] = e
     return res
+
+
+@numba.njit
+def heighest_density_region_width(data,
+                                  fractions_desired,
+                                  dt=1,
+                                  fractionl_edges=False,
+                                  _buffer_size=20):
+    """
+    Function which computes the width based on the highest density
+    region of the signal.
+
+    Defines a 100% fraction as the sum over all positive samples in a
+    waveform.
+
+    :param data: Signals, e.g. hitlets or peaks including zero length
+        encoding.
+    :param fractions_desired:
+    :param dt:
+    :param fractionl_edges:
+    :param _buffer_size:
+    """
+    res = np.zeros((len(data), len(fractions_desired), 2), dtype=np.float32)
+
+    for ind, d in enumerate(data):
+        r = res[ind]
+        d = np.maximum(d, 0)
+        inter, amps = strax.heighest_density_region(d, fractions_desired, _buffer_size=_buffer_size)
+
+        for f_ind, (i, a) in enumerate(zip(inter, amps)):
+            if not fractionl_edges:
+                r[f_ind, 0] = i[0, 0] * dt
+                r[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
+            else:
+                left = i[0, 0]
+                right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
+
+                # Get amplitudes of outer most samples
+                # and amplitudes of adjacent samples (if any)
+                left_amp = d[left]
+                right_amp = d[right]
+
+                next_left_amp = 0
+                if (left - 1) >= 0:
+                    next_left_amp = d[left - 1]
+                next_right_amp = 0
+                if (right + 1) < len(d):
+                    next_right_amp = d[right + 1]
+
+                # Compute fractions and new left and right edges:
+                fl = (left_amp - a) / (left_amp - next_left_amp)
+                fr = (right_amp - a) / (right_amp - next_right_amp)
+
+                r[f_ind, 0] = (left + 0.5 - fl) * dt
+                r[f_ind, 1] = (right + 0.5 + fr) * dt
+
+    return res
