@@ -1,3 +1,14 @@
+0.13.3 / 2021-01-15
+---------------------
+- Better online monitor queries (#375)
+- Multiprocess fix (#376)
+- Bugfix (#377)
+
+0.13.2 / 2021-01-04
+---------------------
+- Speed up st.select_runs by ~100x (#371)
+- Finding latest OnlineMonitor data (#374)
+
 0.13.1 / 2020-12-21
 ---------------------
 - Fix bug in baselining (#367)
