@@ -385,15 +385,17 @@ def hitlet_properties(hitlets):
         h['fwtm'] = width_low
 
         # Compute area deciles & width:
-        res = np.zeros(4, dtype=np.float32)
-        deciles = np.array([0.1, 0.25, 0.75, 0.9])
-        strax.compute_index_of_fraction(h, deciles, res)
-        res *= h['dt']
-
-        h['left_area'] = res[1]
-        h['low_left_area'] = res[0]
-        h['range_50_p_area'] = res[2]-res[1]
-        h['range_80_p_area'] = res[3]-res[0]
+        if not h['area'] == 0:
+            # Due to noise total area can sum up to zero
+            res = np.zeros(4, dtype=np.float32)
+            deciles = np.array([0.1, 0.25, 0.75, 0.9])
+            strax.compute_index_of_fraction(h, deciles, res)
+            res *= h['dt']
+            
+            h['left_area'] = res[1]
+            h['low_left_area'] = res[0]
+            h['range_50p_area'] = res[2]-res[1]
+            h['range_80p_area'] = res[3]-res[0]
 
 
 
