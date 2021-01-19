@@ -90,5 +90,12 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
 
         if fi == (len(fractions_desired)):
             return res, res_amp
-    raise ValueError('Have not found all the desired fractions.'
-                     ' This should not have happened.')
+    
+    # If we end up here this might be due to an offset 
+    # of the distribution with respect to zero. In that case
+    # there is only a single interval which has the the size 
+    # of the entire distribution. 
+    res[fi:, 0, 0] = 0
+    res[fi:, 0, 1] = len(data)+1
+    res_amp[fi:] = 0
+    return res, res_amp
