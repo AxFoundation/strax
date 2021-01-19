@@ -42,8 +42,17 @@ install:
   - source activate strax
   - conda install -c conda-forge python-blosc      # Recommended way to install blosc
 
-  - pip install coveralls --use-feature=2020-resolver
-  - pip install -r requirements.txt --use-feature=2020-resolver
+  - echo "download requirements from base_environment"
+  - wget -O pre_requirements.txt https://raw.githubusercontent.com/XENONnT/base_environment/master/requirements.txt &> /dev/null
+  - echo "select important dependencies for strax(en)"
+  - cat pre_requirements.txt | grep 'numpy\|numba\|scikit-learn\|coveralls\|pandas' &> sel_pre_requirements.txt
+  - echo "Will pre-install:"
+  - cat sel_pre_requirements.txt
+  - echo "Start preinstall and rm pre-requirements:"
+  - pip install -r sel_pre_requirements.txt
+  - rm pre_requirements.txt sel_pre_requirements.txt
+
+  - pip install -r requirements.txt
   - python setup.py install
 
 script:
