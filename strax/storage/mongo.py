@@ -98,8 +98,7 @@ class MongoBackend(StorageBackend):
         # should be obsolete (due to the self.col.delete_many in the
         # MongoSaver) but rather safe than sorry.
         doc = self.db[self.col_name].find_one({
-            **query, 'metadata': {"$exists": True}},
-            # **query, 'provides_meta': True}, <-change to this after TTL has flushed
+            **query, 'provides_meta': True},
             sort=[('write_time', DESCENDING)])
         if doc and 'metadata' in doc:
             return doc['metadata']
@@ -118,8 +117,7 @@ class MongoBackend(StorageBackend):
 
         query = backend_key_to_query(backend_key)
         chunks_registry = self.db[self.col_name].find(
-            {**query, 'chunk_i': {'$exists': True}},
-            # {**query, 'provides_meta': False},  <-change to this after TTL has flushed
+            {**query, 'provides_meta': False},
             {"chunk_i": 1, "data": 1})
 
         # We are going to convert this to a dictionary as that is
