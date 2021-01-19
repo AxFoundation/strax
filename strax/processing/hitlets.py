@@ -356,7 +356,7 @@ def hitlet_properties(hitlets):
     """
     Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
-    for h in hitlets:
+    for ind, h in enumerate(hitlets):
         dt = h['dt']
         data = h['data'][:h['length']]
         
@@ -403,6 +403,7 @@ def hitlet_properties(hitlets):
                                             dt=h['dt'],
                                             fractionl_edges=True,
                                             )
+
         h['left_hdr'] = resh[0,0]
         h['low_left_hdr'] = resh[1,0]
         h['range_hdr_50p_area'] = resh[0,1]-resh[0,0]
@@ -598,7 +599,7 @@ def highest_density_region_width(data,
                                   fractions_desired,
                                   dt=1,
                                   fractionl_edges=False,
-                                  _buffer_size=40):
+                                  _buffer_size=100):
     """
     Function which computes the left and right edge based on the outer
     most sample for the highest density region of a signal.
