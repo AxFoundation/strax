@@ -14,8 +14,8 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     Does not assume anything on the normalisation of the data.
 
     :param data: Sampled distribution
-    :param fractions_desired: Area/probability for which the hdr should
-        be computed.
+    :param fractions_desired: numpy.array Area/probability for which
+        the hdr should be computed.
     :param _buffer_size: Size of the result buffer. The size is
         equivalent to the maximal number of allowed intervals.
 
@@ -111,6 +111,6 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     # happen that we do not find all desired fractions.
     # The remaining intervals have a size of the entire distribution.
     res[fi:, 0, 0] = 0
-    res[fi:, 0, 1] = len(data)+1
+    res[fi:, 1, 0] = len(data)+1
     res_amp[fi:] = 0
     return res, res_amp
