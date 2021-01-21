@@ -35,6 +35,9 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     res_amp = np.zeros(len(fractions_desired), dtype=np.float32)
 
     area_tot = np.sum(data)
+    if area_tot <= 0:
+        raise ValueError('Highest density regions are not defined for distributions '
+                         'with a total probability of less-equal 0.')
 
     # Need an index which sorted by amplitude
     max_to_min = np.argsort(data)[::-1]
