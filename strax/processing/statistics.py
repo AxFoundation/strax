@@ -112,8 +112,14 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     # If we end up here this might be due to an offset 
     # of the distribution with respect to zero. In that case it can
     # happen that we do not find all desired fractions.
-    # The remaining intervals have a size of the entire distribution.
+    # Hence we have to enforce to compute the last step from the last
+    # lowest hight we have seen to zero.
+    # Left and right edge is by definition 0 and len(data):
     res[fi:, 0, 0] = 0
     res[fi:, 1, 0] = len(data)
-    res_amp[fi:] = 0
+    # Now we have to compute the heights for the fractions we have not 
+    # seen yet, since lowest_sample_seen == 0 and j == len(data)
+    # the formula above reduces to:
+    for ind, fraction_desired in enumerate(fractions_desired[fi:]):
+        res_amp[fi+ind] = (1-fraction_desired) * np.sum(data)/len(data)
     return res, res_amp
