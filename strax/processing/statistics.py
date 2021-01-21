@@ -114,6 +114,10 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     # happen that we do not find all desired fractions.
     # The remaining intervals have a size of the entire distribution.
     res[fi:, 0, 0] = 0
-    res[fi:, 1, 0] = len(data)+1
+    if len(data) > 1:
+        res[fi:, 1, 0] = len(data)+1
+    else:
+        # In case of a distribution with just a single value.
+        res[fi:, 1, 0] = 1
     res_amp[fi:] = 0
     return res, res_amp
