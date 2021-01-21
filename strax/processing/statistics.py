@@ -43,7 +43,7 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     max_to_min = np.argsort(data)[::-1]
 
     lowest_sample_seen = np.inf
-    for j in range(1, len(data) - 1):
+    for j in range(1, len(data)):
         # Loop over indices compute fractions from max to min
         if lowest_sample_seen == data[max_to_min[j]]:
             # We saw this sample height already, so no need to repeat
@@ -114,10 +114,6 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
     # happen that we do not find all desired fractions.
     # The remaining intervals have a size of the entire distribution.
     res[fi:, 0, 0] = 0
-    if len(data) > 1:
-        res[fi:, 1, 0] = len(data)+1
-    else:
-        # In case of a distribution with just a single value.
-        res[fi:, 1, 0] = 1
+    res[fi:, 1, 0] = len(data)
     res_amp[fi:] = 0
     return res, res_amp
