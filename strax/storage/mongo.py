@@ -10,7 +10,7 @@ limit is respected!
 
 import strax
 import numpy as np
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
@@ -92,24 +92,32 @@ class MongoBackend(StorageBackend):
     def get_metadata(self, key):
         """See strax.Backend"""
         query = backend_key_to_query(key)
-        doc = self.db[self.col_name].find_one(query)
+
+        # Make sure to get the last of the meta-data docs. Otherwise we
+        # might be getting a previously failed document. Sort argument
+        # should be obsolete (due to the self.col.delete_many in the
+        # MongoSaver) but rather safe than sorry.
+        doc = self.db[self.col_name].find_one({
+            **query, 'provides_meta': True},
+            sort=[('write_time', DESCENDING)])
         if doc and 'metadata' in doc:
             return doc['metadata']
         raise strax.DataNotAvailable
 
     def _build_chunk_registry(self, backend_key):
         """
-        :param backend_key: strax.DataKey to query the collection for
         Build chunk info in a single registry using only one query to
         the database. This is much faster as one does not have to do
         n-chunk queries to the database. Just one will do. As the
         documents-size is limited to 16 MB, it's unlikely that we will
         run into memory issues (that we otherwise would not run into).
+
+        :param backend_key: strax.DataKey to query the collection for
         """
 
         query = backend_key_to_query(backend_key)
         chunks_registry = self.db[self.col_name].find(
-            {**query, 'chunk_i': {'$exists': True}},
+            {**query, 'provides_meta': False},
             {"chunk_i": 1, "data": 1})
 
         # We are going to convert this to a dictionary as that is
@@ -147,6 +155,7 @@ class MongoBackend(StorageBackend):
             if to_clean in registry_key:
                 del self.chunks_registry[registry_key]
         del self._buffered_backend_keys[0]
+
 
 @export
 class MongoFrontend(StorageFrontend):
@@ -195,12 +204,10 @@ class MongoSaver(Saver):
         """
         super().__init__(metadata)
         self.col = col
-        # Parse basic properties for online document by forcing keys in
-        # specific representations (rep)
-        basic_meta = {}
-        for k, rep in (
-                ('run_id', int), ('data_type', str), ('lineage_hash', str)):
-            basic_meta[k.replace('run_id', 'number')] = rep(self.md[k])
+        # All meta_documents should have the key to query against
+        basic_meta = backend_key_to_query(key).copy()
+        # Start with a clean sheet, we are just going to overwrite
+        self.col.delete_many(basic_meta)
         # Add datetime objects as candidates for TTL collections. Either
         # can be used according to the preference of the user to index.
         # Two entries can be used:
@@ -211,6 +218,8 @@ class MongoSaver(Saver):
         # in the _save_chunk_metadata for the first chunk. Nevertheless
         # we need an object in case there e.g. is no chunk.
         basic_meta['run_start_time'] = datetime.now(py_utc)
+        # Add flag to doc that we are providing the metadata
+        basic_meta['provides_meta'] = True
         # If available later update with this value:
         self.run_start = None
         # This info should be added to all of the associated documents
@@ -263,6 +272,7 @@ class MongoSaver(Saver):
             doc['write_time'] = datetime.now(py_utc)
             doc['chunk_i'] = chunk_i
             doc["data"] = aggregate_data
+            doc['provides_meta'] = False
 
             chunk_id = self.col.insert_one(doc).inserted_id
             self.ids_chunk[chunk_i] = chunk_id

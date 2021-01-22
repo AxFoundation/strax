@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '0.12.6'
+__version__ = '0.13.3'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -32,3 +32,4 @@ from strax.processing.peak_merging import *
 from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
 from strax.processing.hitlets import *
+from strax.processing.statistics import *

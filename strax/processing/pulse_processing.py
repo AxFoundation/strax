@@ -42,7 +42,7 @@ def baseline(records, baseline_samples=40, flip=True,
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
     n_channels = records['channel'].max() + 1
-    last_bl_in = np.zeros((n_channels, 2), dtype=np.int16)
+    last_bl_in = np.zeros((n_channels, 2), dtype=np.float32)
     seen_first = np.zeros(n_channels, dtype=np.bool_)
 
     for d_i, d in enumerate(records):

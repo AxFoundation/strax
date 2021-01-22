@@ -12,7 +12,6 @@ from .common import StorageFrontend
 
 export, __all__ = strax.exporter()
 
-
 RUN_METADATA_PATTERN = '%s-metadata.json'
 
 
@@ -116,11 +115,16 @@ class DataDirectory(StorageFrontend):
         if exists and self._folder_matches(dirname, key, None, None):
             return bk
 
-        # Check metadata of all potentially matching data dirs for match...
-        for fn in self._subfolders():
-            if self._folder_matches(fn, key,
-                                    fuzzy_for, fuzzy_for_options):
-                return self.backend_key(fn)
+        # Check metadata of all potentially matching data dirs for
+        # matches. This only makes sense for fuzzy searches since
+        # otherwise we should have had an exact match already. (Also
+        # really slows down st.select runs otherwise because we doing an
+        # entire search over all the files in self._subfolders for all
+        # non-available keys).
+        if fuzzy_for or fuzzy_for_options:
+            for fn in self._subfolders():
+                if self._folder_matches(fn, key, fuzzy_for, fuzzy_for_options):
+                    return self.backend_key(fn)
 
         raise strax.DataNotAvailable
 
@@ -205,11 +209,11 @@ class FileSytemBackend(strax.StorageBackend):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)
-        
+
         if not osp.exists(md_path):
             # Try to see if we are so fast that there exists a temp folder 
             # with the metadata we need.
-            md_path = osp.join(dirname+'_temp', metadata_json)
+            md_path = osp.join(dirname + '_temp', metadata_json)
 
         if not osp.exists(md_path):
             # Try old-format metadata
