@@ -186,6 +186,40 @@ def hits_n_data(draw, strategy):
     return hd
 
 
+
+def test_highest_density_region_width():
+    """
+    Some unit test for the HDR width estimate.
+    """
+    truth_dict = {0.5: [[2/3, 2+1/3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
+    distribution = np.array([1, 7, 1, 1, 0])
+    # Some distribution with offset:
+    _test_highest_density_region_width(distribution, truth_dict)
+        
+    
+    # Same but with offset (zero missing):
+    _test_highest_density_region_width(np.array([1, 7, 1, 1]), truth_dict)
+    
+    # Two more nasty cases:
+    truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
+    distribution = np.array([1])
+    _test_highest_density_region_width(np.array([1]), truth_dict)
+    
+    truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
+    distribution = np.array([1, 0])
+    _test_highest_density_region_width(np.array([1, 0]), truth_dict)
+    
+
+def _test_highest_density_region_width(distribution, truth_dict):
+    res = strax.processing.hitlets.highest_density_region_width(distribution,
+                                                            np.array(list(truth_dict.keys())), 
+                                                            fractionl_edges=True)
+    
+    for ind, (fraction, truth) in enumerate(truth_dict.items()):
+        mes = f'Found wrong edges for {fraction} in {distribution} expected {truth} but got {res[ind]}.'
+        assert np.all(np.isclose(truth, res[ind])), mes
+
+
 @given(hits_n_data=hits_n_data(fake_hits))
 @settings(deadline=None)
 def test_hitlet_properties(hits_n_data):

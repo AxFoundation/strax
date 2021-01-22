@@ -13,7 +13,7 @@ def test_highest_density_region():
 
     # Distribution with an offset:
     distribution = np.array([0, 0, 3, 4, 2, 0, 1]) + 2
-    truth_dict = {0.2: [[2, 5]], 0.7: [[0, len(distribution) + 1]]}
+    truth_dict = {0.2: [[2, 5]], 0.7: [[0, len(distribution)]]}
     _test_highest_density_region(distribution, truth_dict)
 
 
