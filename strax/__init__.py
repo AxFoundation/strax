@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '0.13.3'
+__version__ = '0.13.4'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
