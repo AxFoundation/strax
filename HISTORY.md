@@ -1,3 +1,10 @@
+0.13.4 / 2021-01-22
+---------------------
+- Nveto changes + highest density regions (#384) 
+- Parse requirements for testing (#383)
+- Added keep_columns into docstring (#382)
+- remove slow operators from mongo storage (#382)
+
 0.13.3 / 2021-01-15
 ---------------------
 - Better online monitor queries (#375)
