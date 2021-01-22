@@ -103,14 +103,12 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def hitlet_dtype(n_widths=11):
+def hitlet_dtype():
     """
     Hitlet dtype same as peaklet or peak dtype but for hit-kind of
     objects.
     """
     dtype = interval_dtype + [
-        (('Original length of the hit interval in samples',
-          'hit_length'), np.int32),
         (('Total hit area in pe',
           'area'), np.float32),
         (('Maximum of the PMT pulse in pe/sample',
@@ -119,23 +117,34 @@ def hitlet_dtype(n_widths=11):
           'time_amplitude'), np.int16),
         (('Hit entropy',
           'entropy'), np.float32),
-        (('Peak widths in range of central area fraction in ns',
-          'width'), np.float32, n_widths),
-        (('Peak widths: time between nth and 5th area decile in ns',
-          'area_decile_from_midpoint'), np.float32, n_widths),
-        (('FWHM of the PMT pulse in ns',
+        (('Width (in ns) of the central 50% area of the hitlet',
+          'range_50p_area'), np.float32),
+        (('Width (in ns) of the central 80% area of the hitlet',
+          'range_80p_area'), np.float32),
+        (('Position of the 25% area decile [ns]',
+          'left_area'), np.float32),
+        (('Position of the 10% area decile [ns]',
+          'low_left_area'), np.float32),
+        (('Width (in ns) of the highest density region covering a 50% area of the hitlet',
+          'range_hdr_50p_area'), np.float32),
+        (('Width (in ns) of the highest density region covering a 80% area of the hitlet',
+          'range_hdr_80p_area'), np.float32),
+        (('Left edge of the 50% highest density region  [ns]',
+          'left_hdr'), np.float32),
+        (('Left edge of the 80% highest density region  [ns]',
+          'low_left_hdr'), np.float32),
+        (('FWHM of the PMT pulse [ns]',
           'fwhm'), np.float32),
-        (('Left edge of the FWHM in ns (minus "time")',
+        (('Left edge of the FWHM [ns] (minus "time")',
           'left'), np.float32),
-        (('FWTM of the PMT pulse in ns', 'fwtm'),
+        (('FWTM of the PMT pulse [ns]', 'fwtm'),
          np.float32),
-        (('Left edge of the FWTM in ns (minus "time")',
-          'low_left'), np.float32),
-        (('Fragment index in which hit was found (hitlets can be in more than 1 fragment)',
-          'record_i'), np.int32)]
+        (('Left edge of the FWTM [ns] (minus "time")',
+          'low_left'), np.float32),]
     return dtype
 
-def hitlet_with_data_dtype(n_samples, n_widths=11):
+
+def hitlet_with_data_dtype(n_samples):
     """
     Hitlet dtype with data field. Required within the plugins to compute
     hitlet properties. 
@@ -147,10 +156,15 @@ def hitlet_with_data_dtype(n_samples, n_widths=11):
     Note:
         The data buffer will be at least 2 samples long
     """
-    dtype = hitlet_dtype(n_widths)
+    dtype = hitlet_dtype()
     n_samples = max(n_samples, 2)
-    return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
-                         np.float32, n_samples)]
+    additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
+                           np.float32, n_samples),
+                         (('Fragment number in the pulse',
+                           'record_i'), np.int32),
+                         ]
+
+    return dtype + additional_fields
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
