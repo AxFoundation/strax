@@ -356,31 +356,59 @@ def hitlet_properties(hitlets):
     """
     Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
-    for h in hitlets:
+    for ind, h in enumerate(hitlets):
         dt = h['dt']
         data = h['data'][:h['length']]
         
-        if np.any(data):
-            # Compute amplitude
-            amp_ind = np.argmax(data)
-            amp_time = int(amp_ind * dt)
-            height = data[amp_ind]
+        if not np.any(data):
+            continue
 
-            h['amplitude'] = height
-            h['time_amplitude'] = amp_time
+        # Compute amplitude
+        amp_ind = np.argmax(data)
+        amp_time = int(amp_ind * dt)
+        height = data[amp_ind]
 
-            # Computing FWHM:
-            left_edge, right_edge = get_fwxm(h, 0.5)
-            width = right_edge - left_edge
+        h['amplitude'] = height
+        h['time_amplitude'] = amp_time
 
-            # Computing FWTM:
-            left_edge_low, right_edge = get_fwxm(h, 0.1)
-            width_low = right_edge - left_edge_low
+        # Computing FWHM:
+        left_edge, right_edge = get_fwxm(h, 0.5)
+        width = right_edge - left_edge
 
-            h['fwhm'] = width
-            h['left'] = left_edge
-            h['low_left'] = left_edge_low
-            h['fwtm'] = width_low
+        # Computing FWTM:
+        left_edge_low, right_edge = get_fwxm(h, 0.1)
+        width_low = right_edge - left_edge_low
+
+        h['fwhm'] = width
+        h['left'] = left_edge
+        h['low_left'] = left_edge_low
+        h['fwtm'] = width_low
+
+        # Compute area deciles & width:
+        if not h['area'] == 0:
+            # Due to noise total area can sum up to zero
+            res = np.zeros(4, dtype=np.float32)
+            deciles = np.array([0.1, 0.25, 0.75, 0.9])
+            strax.compute_index_of_fraction(h, deciles, res)
+            res *= h['dt']
+            
+            h['left_area'] = res[1]
+            h['low_left_area'] = res[0]
+            h['range_50p_area'] = res[2]-res[1]
+            h['range_80p_area'] = res[3]-res[0]
+            
+        # Compute width based on HDR:
+        resh = highest_density_region_width(h['data'], 
+                                            fractions_desired=np.array([0.5, 0.8]),
+                                            dt=h['dt'],
+                                            fractionl_edges=True,
+                                            )
+
+        h['left_hdr'] = resh[0,0]
+        h['low_left_hdr'] = resh[1,0]
+        h['range_hdr_50p_area'] = resh[0,1]-resh[0,0]
+        h['range_hdr_80p_area'] = resh[1,1]-resh[1,0]
+
 
 
 @export
@@ -563,4 +591,61 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             m = m_hit & m_temp
             e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
         res[ind] = e
+    return res
+
+
+@numba.njit
+def highest_density_region_width(data,
+                                  fractions_desired,
+                                  dt=1,
+                                  fractionl_edges=False,
+                                  _buffer_size=100):
+    """
+    Function which computes the left and right edge based on the outer
+    most sample for the highest density region of a signal.
+
+    Defines a 100% fraction as the sum over all positive samples in a
+    waveform.
+
+    :param data: Data of a signal, e.g. hitlet or peak including zero length
+        encoding.
+    :param fractions_desired: Area fractions for which the highest
+        density region should be computed.
+    :param dt: Sample length in ns.
+    :param fractionl_edges: If true computes width as fractional time
+        depending on the covered area between the current and next
+        sample.
+    :param _buffer_size: Maximal number of allowed intervals.
+    """
+    res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
+    data = np.maximum(data, 0)
+    inter, amps = strax.highest_density_region(data, fractions_desired, _buffer_size=_buffer_size)
+
+    for f_ind, (i, a) in enumerate(zip(inter, amps)):
+        if not fractionl_edges:
+            res[f_ind, 0] = i[0, 0] * dt
+            res[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
+        else:
+            left = i[0, 0]
+            right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
+
+            # Get amplitudes of outer most samples
+            # and amplitudes of adjacent samples (if any)
+            left_amp = data[left]
+            right_amp = data[right]
+
+            next_left_amp = 0
+            if (left - 1) >= 0:
+                next_left_amp = data[left - 1]
+            next_right_amp = 0
+            if (right + 1) < len(data):
+                next_right_amp = data[right + 1]
+
+            # Compute fractions and new left and right edges:
+            fl = (left_amp - a) / (left_amp - next_left_amp)
+            fr = (right_amp - a) / (right_amp - next_right_amp)
+
+            res[f_ind, 0] = (left + 0.5 - fl) * dt
+            res[f_ind, 1] = (right + 0.5 + fr) * dt
+
     return res
