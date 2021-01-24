@@ -926,78 +926,48 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
-        
+
+        # If no selection is specified we have to get the last end_time:
+        start_time = None
+        end_time = None
+
         # Defining time ranges for the progress bar:
         if time_range:
             # user specified a time selection
             start_time, end_time = time_range
-        else:
-            # If no selection is specified we have to get the last end_time:
-            start_time = 0
-            end_time = float('inf')
-
-        if progress_bar:
+        elif progress_bar:
+            # It is off unless we find some start and end times to work with
+            progress_bar = False
             for t in strax.to_str_tuple(targets):
                 try:
-                    # Sometimes some metadata might be missing e.g. during tests.
+                    # Sometimes some metadata might be missing e.g.
+                    # during tests. Just get one plugin, should be good enough.
                     chunks = self.get_meta(run_id, t)['chunks']
-                    start_time = max(start_time, chunks[0]['start'])
-                    end_time = min(end_time, chunks[-1]['end'])
+                    start_time = chunks[0]['start']
+                    end_time = chunks[-1]['end']
+                    progress_bar = True
+                    break
                 except (strax.DataNotAvailable, KeyError, IndexError):
-                    # IndexError caused for only empty chunks when data not
-                    # available.
-                    # Maybe at least one target had some metadata.
-                    start_time = max(start_time, 0)
-                    end_time = min(end_time, float('inf'))
-
-            # Define nice progressbar format:
-            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
-                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
-                         " #chunks processed: {postfix[1][n]}"
-            sec_per_chunk = np.nan  # Have not computed any chunk yet.
-            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
+                    pass
 
         try:
-            with contextlib.ExitStack() as stack:
-                if progress_bar and (start_time != 0 and end_time != float('inf')):
-                    # Get initial time
-                    pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
-                    last_time = pbar.last_print_t
-                else:
-                    progress_bar = False
-                
-                for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
-                    seen_a_chunk = True
-                    if not isinstance(result, strax.Chunk):
-                        raise ValueError(f"Got type {type(result)} rather than "
-                                         f"a strax Chunk from the processor!")
-                    result.data = self.apply_selection(
-                        result.data,
-                        selection_str=selection_str,
-                        keep_columns=keep_columns,
-                        time_range=time_range,
-                        time_selection=time_selection)
-                    
-                    if progress_bar:
-                        # Update progressbar:
-                        if end_time - start_time > 0:
-                            pbar.n = (result.end - start_time) / (end_time - start_time)
-                        else:
-                            # Strange, start and endtime are the same, probably we 
-                            # don't have data yet e.g. allow_incomplete == True.
-                            pbar.n = 0
-                        pbar.update(0)
-                        # Now get last time printed and refresh seconds_per_chunk:
-                        # This is a small work around since we do not know the
-                        # pacemaker here and therefore we do not know the number of
-                        # chunks.
-                        sec_per_chunk = pbar.last_print_t - last_time
-                        pbar.postfix[1]['spc'] = sec_per_chunk
-                        pbar.postfix[1]['n'] = n_chunks
-                        pbar.refresh()
-                        last_time = pbar.last_print_t
-
-                    yield result
+            pbar = self._make_progress_bar(progress_bar=progress_bar)
+            _last_t_pbar = pbar.last_print_t
+            for n_chunks, result in pbar(enumerate(strax.continuity_check(generator), 1)):
+                seen_a_chunk = True
+                if not isinstance(result, strax.Chunk):
+                    raise ValueError(f"Got type {type(result)} rather than "
+                                     f"a strax Chunk from the processor!")
+                result.data = self.apply_selection(
+                    result.data,
+                    selection_str=selection_str,
+                    keep_columns=keep_columns,
+                    time_range=time_range,
+                    time_selection=time_selection)
+                _last_t_pbar = self._update_progress_bar(
+                    pbar, start_time, end_time, n_chunks, _last_t_pbar,
+                    result.end)
+                yield result
 
         except GeneratorExit:
             generator.throw(OutsideException(
@@ -1013,6 +983,36 @@ class Context:
                 raise strax.DataCorrupted("No data returned!")
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
+
+    def _make_progress_bar(self, progress_bar=True):
+        # Define nice progressbar format:
+        bar_format = ("{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"
+                      "{postfix[0]}  {postfix[1][spc]:.2f} s/chunk, "
+                      "#chunks processed: {postfix[1][n]}")
+        sec_per_chunk = np.nan  # Have not computed any chunk yet.
+        post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
+        pbar = tqdm(total=1,
+                    postfix=post_fix,
+                    bar_format=bar_format,
+                    disable=not progress_bar)
+        return pbar
+
+    def _update_progress_bar(self, pbar, start_time, end_time, n_chunks, last_time, chunk_end):
+        if end_time - start_time > 0:
+            pbar.n = (chunk_end - start_time) / (end_time - start_time)
+        else:
+            # Strange, start and endtime are the same, probably we
+            # don't have data yet e.g. allow_incomplete == True.
+            pbar.n = 0
+        pbar.update(0)
+        # Now get last time printed and refresh seconds_per_chunk:
+        # This is a small work around since we do not know the
+        # pacemaker here and therefore we do not know the number of
+        # chunks.
+        pbar.postfix[1]['spc'] = pbar.last_print_t - last_time
+        pbar.postfix[1]['n'] = n_chunks
+        pbar.refresh()
+        return pbar.last_print_t
 
     def apply_selection(self, x,
                         selection_str=None,
