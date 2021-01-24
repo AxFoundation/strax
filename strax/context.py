@@ -7,13 +7,14 @@ import random
 import string
 import typing as ty
 import warnings
+import time
 
 import contextlib
 import sys
 if any('jupyter' in arg for arg in sys.argv):
     # In some cases we are not using any notebooks,
     # Taken from 44952863 on stack overflow thanks!
-    from tqdm import tqdm_notebook as tqdm
+    from tqdm.notebook import tqdm
 else:
     from tqdm import tqdm
 
@@ -424,7 +425,6 @@ class Context:
                            'the correct parent option name?')
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
-
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -927,44 +927,28 @@ class Context:
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
 
-        # If no selection is specified we have to get the last end_time
-        # for the progress bar:
-        start_time = None
-        end_time = None
-        if time_range:
-            # user specified a time selection
-            start_time, end_time = time_range
-        elif progress_bar:
-            # It is off unless we find some start and end times to work with
-            progress_bar = False
-            for t in strax.to_str_tuple(targets):
-                try:
-                    # Sometimes some metadata might be missing e.g.
-                    # during tests. Just get one plugin, should be good enough.
-                    chunks = self.get_meta(run_id, t)['chunks']
-                    start_time = chunks[0]['start']
-                    end_time = chunks[-1]['end']
-                    progress_bar = True
-                    break
-                except (strax.DataNotAvailable, KeyError, IndexError):
-                    pass
         try:
-            pbar = self._make_progress_bar(progress_bar=progress_bar)
-            _last_t_pbar = pbar.last_print_t
-            for n_chunks, result in pbar(enumerate(strax.continuity_check(generator), 1)):
-                seen_a_chunk = True
-                if not isinstance(result, strax.Chunk):
-                    raise ValueError(f"Got type {type(result)} rather than "
-                                     f"a strax Chunk from the processor!")
-                result.data = self.apply_selection(
-                    result.data,
-                    selection_str=selection_str,
-                    keep_columns=keep_columns,
-                    time_range=time_range,
-                    time_selection=time_selection)
-                _last_t_pbar = self._update_progress_bar(
-                    pbar, start_time, end_time, n_chunks, _last_t_pbar, result.end)
-                yield result
+            _p, t_start, t_end = self._make_progress_bar(run_id,
+                                                         targets=targets,
+                                                         progress_bar=progress_bar)
+            with _p as pbar:
+                pbar.last_print_t = time.time()
+                for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
+                    seen_a_chunk = True
+                    if not isinstance(result, strax.Chunk):
+                        raise ValueError(f"Got type {type(result)} rather than "
+                                         f"a strax Chunk from the processor!")
+                    result.data = self.apply_selection(
+                        result.data,
+                        selection_str=selection_str,
+                        keep_columns=keep_columns,
+                        time_range=time_range,
+                        time_selection=time_selection)
+                    self._update_progress_bar(
+                        pbar, t_start, t_end, n_chunks, result.end)
+
+                    yield result
+            _p.close()
 
         except GeneratorExit:
             generator.throw(OutsideException(
@@ -981,34 +965,49 @@ class Context:
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
 
-    @staticmethod
-    def _make_progress_bar(progress_bar=True):
+    def _make_progress_bar(self, run_id, targets, progress_bar=True):
+        """
+        Make a progress bar for get_iter
+        :param run_id, targets: run_id and targets
+        :param progress_bar: Bool weither or not to display the progress bar
+        :return: progress bar, t_start (run) and t_end (run)
+        """
+        try:
+            t_start, t_end, = self.estimate_run_start_and_end(run_id, targets)
+        except (AttributeError, KeyError, IndexError):
+            # During testing some thing remain a secret
+            t_start, t_end, = 0, float('inf')
+        if t_end == float('inf'):
+            progress_bar = False
+
         # Define nice progressbar format:
-        bar_format = ("{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"
-                      "{postfix[0]}  {postfix[1][spc]:.2f} s/chunk, "
-                      "#chunks processed: {postfix[1][n]}")
-        sec_per_chunk = np.nan  # Have not computed any chunk yet.
-        post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
-        pbar = tqdm(total=1, postfix=post_fix, bar_format=bar_format,
+        bar_format = ("{desc}: "  # The loading plugin x
+                      "|{bar}| "  # Bar that is being filled
+                      "{percentage:.2f} % "  # Percentage
+                      "[{elapsed}<{remaining}]"  # Time estimate
+                      "{postfix}"  # Extra info
+                      )
+        pbar = tqdm(total=1,
+                    desc=f'Loading {targets}',
+                    bar_format=bar_format,
+                    leave=True,
                     disable=not progress_bar)
-        return pbar
+        return pbar, t_start, t_end,
 
     @staticmethod
-    def _update_progress_bar(pbar, start_time, end_time, n_chunks, last_time, chunk_end):
-        if end_time - start_time > 0:
-            pbar.n = (chunk_end - start_time) / (end_time - start_time)
+    def _update_progress_bar(pbar, t_start, t_end, n_chunks,  chunk_end):
+        """Do some tqdm voodoo to get the progress bar for st.get_iter"""
+        if t_end - t_start > 0:
+            pbar.n += (chunk_end - t_start) / (t_end - t_start)/n_chunks
         else:
             # Strange, start and endtime are the same, probably we
             # don't have data yet e.g. allow_incomplete == True.
             pbar.n = 0
+        # Let's add the postfix which is some info behind the tqdm marker
+        seconds_per_chunk = time.time() - pbar.last_print_t
+        postfix = f'Last chunk: {seconds_per_chunk:.2f} s. #chunks {n_chunks}'
+        pbar.set_postfix_str(postfix)
         pbar.update(0)
-        # Now get last time printed and refresh seconds_per_chunk: This is a
-        # small work around since we do not know the pacemaker here and
-        # therefore we do not know the number of chunks.
-        pbar.postfix[1]['spc'] = pbar.last_print_t - last_time
-        pbar.postfix[1]['n'] = n_chunks
-        pbar.refresh()
-        return pbar.last_print_t
 
     def apply_selection(self, x,
                         selection_str=None,
