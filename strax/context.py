@@ -927,11 +927,10 @@ class Context:
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
 
-        # If no selection is specified we have to get the last end_time:
+        # If no selection is specified we have to get the last end_time
+        # for the progress bar:
         start_time = None
         end_time = None
-
-        # Defining time ranges for the progress bar:
         if time_range:
             # user specified a time selection
             start_time, end_time = time_range
@@ -949,7 +948,6 @@ class Context:
                     break
                 except (strax.DataNotAvailable, KeyError, IndexError):
                     pass
-
         try:
             pbar = self._make_progress_bar(progress_bar=progress_bar)
             _last_t_pbar = pbar.last_print_t
@@ -965,8 +963,7 @@ class Context:
                     time_range=time_range,
                     time_selection=time_selection)
                 _last_t_pbar = self._update_progress_bar(
-                    pbar, start_time, end_time, n_chunks, _last_t_pbar,
-                    result.end)
+                    pbar, start_time, end_time, n_chunks, _last_t_pbar, result.end)
                 yield result
 
         except GeneratorExit:
@@ -984,20 +981,20 @@ class Context:
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
 
-    def _make_progress_bar(self, progress_bar=True):
+    @staticmethod
+    def _make_progress_bar(progress_bar=True):
         # Define nice progressbar format:
         bar_format = ("{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"
                       "{postfix[0]}  {postfix[1][spc]:.2f} s/chunk, "
                       "#chunks processed: {postfix[1][n]}")
         sec_per_chunk = np.nan  # Have not computed any chunk yet.
         post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
-        pbar = tqdm(total=1,
-                    postfix=post_fix,
-                    bar_format=bar_format,
+        pbar = tqdm(total=1, postfix=post_fix, bar_format=bar_format,
                     disable=not progress_bar)
         return pbar
 
-    def _update_progress_bar(self, pbar, start_time, end_time, n_chunks, last_time, chunk_end):
+    @staticmethod
+    def _update_progress_bar(pbar, start_time, end_time, n_chunks, last_time, chunk_end):
         if end_time - start_time > 0:
             pbar.n = (chunk_end - start_time) / (end_time - start_time)
         else:
@@ -1005,10 +1002,9 @@ class Context:
             # don't have data yet e.g. allow_incomplete == True.
             pbar.n = 0
         pbar.update(0)
-        # Now get last time printed and refresh seconds_per_chunk:
-        # This is a small work around since we do not know the
-        # pacemaker here and therefore we do not know the number of
-        # chunks.
+        # Now get last time printed and refresh seconds_per_chunk: This is a
+        # small work around since we do not know the pacemaker here and
+        # therefore we do not know the number of chunks.
         pbar.postfix[1]['spc'] = pbar.last_print_t - last_time
         pbar.postfix[1]['n'] = n_chunks
         pbar.refresh()
