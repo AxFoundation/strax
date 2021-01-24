@@ -974,7 +974,7 @@ class Context:
         """
         try:
             t_start, t_end, = self.estimate_run_start_and_end(run_id, targets)
-        except (MemoryError):
+        except (AttributeError, KeyError, IndexError):
             # During testing some thing remain a secret
             t_start, t_end, = 0, float('inf')
         if t_end == float('inf'):
