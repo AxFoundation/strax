@@ -974,7 +974,7 @@ class Context:
         """
         try:
             t_start, t_end, = self.estimate_run_start_and_end(run_id, targets)
-        except (AttributeError, KeyError, IndexError):
+        except (MemoryError):
             # During testing some thing remain a secret
             t_start, t_end, = 0, float('inf')
         if t_end == float('inf'):
@@ -992,7 +992,7 @@ class Context:
                     bar_format=bar_format,
                     leave=True,
                     disable=not progress_bar)
-        return pbar, t_start, t_end,
+        return pbar, t_start, t_end
 
     @staticmethod
     def _update_progress_bar(pbar, t_start, t_end, n_chunks,  chunk_end):
