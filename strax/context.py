@@ -969,7 +969,7 @@ class Context:
         """
         Make a progress bar for get_iter
         :param run_id, targets: run_id and targets
-        :param progress_bar: Bool weither or not to display the progress bar
+        :param progress_bar: Bool whether or not to display the progress bar
         :return: progress bar, t_start (run) and t_end (run)
         """
         try:
@@ -995,15 +995,15 @@ class Context:
         return pbar, t_start, t_end
 
     @staticmethod
-    def _update_progress_bar(pbar, t_start, t_end, n_chunks,  chunk_end):
+    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end):
         """Do some tqdm voodoo to get the progress bar for st.get_iter"""
         if t_end - t_start > 0:
-            pbar.n += (chunk_end - t_start) / (t_end - t_start)/n_chunks
+            pbar.n = (chunk_end - t_start) / (t_end - t_start)
         else:
-            # Strange, start and endtime are the same, probably we
-            # don't have data yet e.g. allow_incomplete == True.
+            # Strange, start and endtime are the same, probably we don't
+            # have data yet e.g. allow_incomplete == True.
             pbar.n = 0
-        # Let's add the postfix which is some info behind the tqdm marker
+        # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
         postfix = f'Last chunk: {seconds_per_chunk:.2f} s. #chunks {n_chunks}'
         pbar.set_postfix_str(postfix)
