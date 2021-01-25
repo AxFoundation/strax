@@ -8,8 +8,10 @@ import string
 import typing as ty
 import warnings
 import time
-
-import contextlib
+import numexpr
+import numpy as np
+import pandas as pd
+import strax
 import sys
 if any('jupyter' in arg for arg in sys.argv):
     # In some cases we are not using any notebooks,
@@ -18,11 +20,6 @@ if any('jupyter' in arg for arg in sys.argv):
 else:
     from tqdm import tqdm
 
-import numexpr
-import numpy as np
-import pandas as pd
-
-import strax
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
 
