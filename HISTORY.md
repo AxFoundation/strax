@@ -1,4 +1,4 @@
-0.13.6 / 2021-01-29
+0.13.7 / 2021-01-29
 ---------------------
 - Warn for non saved plugins in run selection (#387)
 - Cleanup progressbar (#386)
