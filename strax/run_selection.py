@@ -173,7 +173,7 @@ def select_runs(self, run_mode=None, run_id=None,
        select blinded dsatasets that aren't bad or messy
     """
     if self.runs is None:
-        self.scan_runs()
+        self.scan_runs(check_available=strax.to_str_tuple(available))
     dsets = self.runs.copy()
 
     if pattern_type not in ('re', 'fnmatch'):
