@@ -80,6 +80,9 @@ class Option:
         :param parent_option_name: Name of the parent option of child option.
             Required to find the key of the parent option so it can be overwritten
             by the value of the child option.
+        :param overwrite: allow this option to overwrite if there is
+            another option already registered with the same name with a
+             different value. Only use for subclassing plugins.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
         :param help: Human-readable description of the option.
