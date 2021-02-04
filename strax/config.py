@@ -62,7 +62,7 @@ class Option:
                  default_by_run=OMITTED,
                  child_option: bool = False,
                  parent_option_name: str = None,
-                 overwrite=False,
+                 overwrite: bool = False,
                  track: bool = True,
                  help: str = ''):
         """
