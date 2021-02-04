@@ -37,7 +37,7 @@ def takes_config(*options):
             # Already have some options set, e.g. because of subclassing
             # where both child and parent have a takes_config decorator
             for opt in result.values():
-                if opt.name in plugin_class.takes_config:
+                if opt.name in plugin_class.takes_config and not opt.overwrite:
                     raise RuntimeError(
                         f"Attempt to specify option {opt.name} twice")
             plugin_class.takes_config = immutabledict({
@@ -62,6 +62,7 @@ class Option:
                  default_by_run=OMITTED,
                  child_option: bool = False,
                  parent_option_name: str = None,
+                 overwrite=False,
                  track: bool = True,
                  help: str = ''):
         """
@@ -88,6 +89,7 @@ class Option:
         self.default = default
         self.default_by_run = default_by_run
         self.default_factory = default_factory
+        self.overwrite=overwrite
         self.track = track
         self.help = help
 
