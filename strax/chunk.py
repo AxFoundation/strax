@@ -74,12 +74,12 @@ class Chunk:
             # Check the last 500 samples (arbitrary number) as sanity check
             data_ends_at = strax.endtime(self.data[-500:]).max()
 
-            if data_starts_at < self.start:
-                raise ValueError(f"Attempt to create chunk {self} "
-                                 f"whose data starts early at {data_starts_at}")
-            if data_ends_at > self.end:
-                raise ValueError(f"Attempt to create chunk {self} "
-                                 f"whose data ends late at {data_ends_at}")
+            # if data_starts_at < self.start:
+            #     raise ValueError(f"Attempt to create chunk {self} "
+            #                      f"whose data starts early at {data_starts_at}")
+            # if data_ends_at > self.end:
+            #     raise ValueError(f"Attempt to create chunk {self} "
+            #                      f"whose data ends late at {data_ends_at}")
 
         # This is commented out for performance, but it's perhaps useful
         # when debugging

@@ -23,7 +23,8 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
 
     # Do the merging. Could numbafy this to optimize, probably...
-    buffer = np.zeros(max_buffer, dtype=np.float32)
+    #3:full, top, bottom array
+    buffer = np.zeros(3, dtype=(np.float32,max_buffer))
 
     for new_i, new_p in enumerate(new_peaks):
 
@@ -41,7 +42,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         # re-zero relevant part of buffer (overkill? not sure if
         # this saves much time)
-        buffer[:min(
+        buffer[:,:min(
             int(
                 (
                         last_peak['time']
@@ -56,8 +57,12 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             upsample = p['dt'] // common_dt
             n_after = p['length'] * upsample
             i0 = (p['time'] - new_p['time']) // common_dt
-            buffer[i0: i0 + n_after] = \
+            buffer[0][i0: i0 + n_after] = \
                 np.repeat(p['data'][:p['length']], upsample) / upsample
+            buffer[1][i0: i0 + n_after] = \
+                np.repeat(p['data_top'][:p['length']], upsample) / upsample
+            buffer[2][i0: i0 + n_after] = \
+                np.repeat(p['data_bottom'][:p['length']], upsample) / upsample
 
             # Handle the other peak attributes
             new_p['area'] += p['area']
@@ -66,7 +71,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             new_p['saturated_channel'][p['saturated_channel'] == 1] = 1
 
         # Downsample the buffer into new_p['data']
-        strax.store_downsampled_waveform(new_p, buffer)
+        strax.store_downsampled_waveform(new_p, *buffer)
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
