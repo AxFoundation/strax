@@ -111,6 +111,7 @@ def store_downsampled_waveform(p, wv_buffer, wv_top_buffer, wv_bottom_buffer):
     Note that p['dt'] is adjusted to match the downsampling.
     :param wv_buffer: numpy array containing sum waveform during the peak
     at the input peak's sampling resolution p['dt'].
+    :param wv_buffer_top/bottom: numpy array for sum waveforms of top and obttom array
 
     The number of samples to take from wv_buffer, and thus the downsampling
     factor, is determined from p['dt'] and p['length'].
@@ -163,10 +164,13 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, select_peaks_indices=Non
         return
     dt = records[0]['dt']
 
+    # Big buffer to hold even largest sum waveforms		
+     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
     swv_buffer_top = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
     swv_buffer_bottom = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
     buffers =(swv_buffer,swv_buffer_top, swv_buffer_bottom)
+
     # Index of first record that could still contribute to subsequent peaks
     # Records before this do not need to be considered anymore
     left_r_i = 0
