@@ -15,6 +15,7 @@ def split_peaks(peaks, records, to_pe, n_top_pmts, algorithm='local_minimum',
     and properties must have been computed (if you use them)
     :param records: Records from which peaks were built
     :param to_pe: ADC to PE conversion factor array (of n_channels)
+    :param n_top_pmts: Needed for seperating the top and bottom array waveforms
     :param algorithm: 'local_minimum' or 'natural_breaks'.
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_wavefrom or get_hitlets_data to compute the waveform of
@@ -45,6 +46,7 @@ class PeakSplitter:
     and properties must have been computed (if you use them).
     :param records: Records from which peaks were built.
     :param to_pe: ADC to PE conversion factor array (of n_channels).
+    :param n_top_pmts: Needed for seperating the top and bottom array waveforms
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_waveform or get_hitlets_data to compute the waveform of the
         new split peaks/hitlets.

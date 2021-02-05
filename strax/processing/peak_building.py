@@ -102,9 +102,8 @@ def find_peaks(hits, adc_to_pe,
 
     yield offset
 
-
 @export
-@numba.jit(nopython=True, nogil=True, cache=False)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def store_downsampled_waveform(p, wv_buffer, wv_top_buffer, wv_bottom_buffer):
     """Downsample the waveform in buffer and store it in p['data']
 
