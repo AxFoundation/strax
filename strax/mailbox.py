@@ -203,7 +203,7 @@ class Mailbox:
         for t in self._threads:
             t.join(timeout=self.timeout)
             if t.is_alive():
-                raise RuntimeError("Thread %s did not terminate! %s" % (t.name,self.timeout))
+                raise RuntimeError("Thread %s did not terminate!" % t.name)
 
     def _can_fetch(self):
         """Return if we can fetch then send the next element from the source.
@@ -255,7 +255,12 @@ class Mailbox:
                 except StopIteration:
                     # No need to send this yet, close will do that
                     break
-                self.send(x)
+                try:
+                    self.send(x)
+                except Exception as e:
+                    # Inform the source we're going down
+                    iterable.throw(e)
+                    raise
                 i += 1
 
         except Exception as e:
@@ -355,7 +360,7 @@ class Mailbox:
                     if not self._read_condition.wait_for(next_ready,
                                                          self.timeout):
                         raise MailboxReadTimeout(
-                            f"{self.name} did not get {next_number} in time.{self.timeout}")
+                            f"{self.name} did not get {next_number} in time.")
                 self._subscriber_waiting_for[subscriber_i] = None
 
                 if self.killed:
@@ -488,8 +493,13 @@ def divide_outputs(source,
                 # No need to send this yet, close will do that
                 break
 
-            for d, x in result.items():
-                mailboxes[d].send(x)
+            try:
+                for d, x in result.items():
+                    mailboxes[d].send(x)
+            except Exception as e:
+                # Inform the source we're going down
+                source.throw(e)
+                raise
             i += 1
 
     except Exception as e:
