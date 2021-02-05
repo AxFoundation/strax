@@ -1,3 +1,8 @@
+0.13.7 / 2021-01-29
+---------------------
+- Warn for non saved plugins in run selection (#387)
+- Cleanup progressbar (#386)
+
 0.13.4 / 2021-01-22
 ---------------------
 - Nveto changes + highest density regions (#384) 
