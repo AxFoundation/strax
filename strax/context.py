@@ -984,8 +984,9 @@ class Context:
                       "[{elapsed}<{remaining}]"  # Time estimate
                       "{postfix}"  # Extra info
                       )
+        description = f'Loading {"plugins" if targets[0].startswith("_temp") else targets}'
         pbar = tqdm(total=1,
-                    desc=f'Loading {targets}',
+                    desc=description,
                     bar_format=bar_format,
                     leave=True,
                     disable=not progress_bar)
