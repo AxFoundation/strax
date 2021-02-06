@@ -83,11 +83,11 @@ class MongoBackend(StorageBackend):
                 result[i][key] = chunk_doc[i][key]
         return result
 
-    def _saver(self, key, metadata):
+    def _saver(self, key, metadata, **kwargs):
         """See strax.Backend"""
         # Use the key to make a collection otherwise, use the backend-key
         col = self.db[self.col_name if self.col_name is not None else str(key)]
-        return MongoSaver(key, metadata, col)
+        return MongoSaver(key, metadata, col, **kwargs)
 
     def get_metadata(self, key):
         """See strax.Backend"""
