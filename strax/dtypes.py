@@ -225,23 +225,30 @@ def copy_to_buffer(source: np.ndarray,
     """
     if np.shape(source) != np.shape(buffer):
         raise ValueError('Source should be the same length as the buffer')
+
     if field_names is None:
         # To lazy to specify what to copy, just do all
-        field_names = source.dtype.names
-        if not any([n in buffer.dtype.names for n in field_names]):
-            raise ValueError('Trying to copy dtypes that are not in the '
-                             'destination')
+        field_names = tuple(n for n in source.dtype.names
+                            if n in buffer.dtype.names)
+    elif not any([n in buffer.dtype.names for n in field_names]):
+        raise ValueError('Trying to copy dtypes that are not in the '
+                         'destination')
+
     if not func_name.startswith('_'):
         raise ValueError('Start function with "_"')
+
     if func_name not in globals():
+        # Create a numba function for us
         _create_copy_function(buffer.dtype, field_names, func_name)
+
     globals()[func_name](source, buffer)
 
 
 def _create_copy_function(res_dtype, field_names, func_name):
-    """Write out a jitted function to copy data"""
+    """Write out a numba-njitted function to copy data"""
+    # Cannot cache = True since we are creating the function dynamically
     code = f'''
-@numba.njit
+@numba.njit(nogil=True)
 def {func_name}(source, result): 
     for i in range(len(source)):
         s = source[i]
@@ -249,12 +256,10 @@ def {func_name}(source, result):
 '''
     for d in field_names:
         if d not in res_dtype.names:
-            raise ValueError
-        assert 'data' in field_names
-        assert 'data' in res_dtype.names
+            raise ValueError('This cannot happen')
         if np.shape(res_dtype[d]):
+            # Copy array fields as arrays
             code += f'\n        r["{d}"][:] = s["{d}"][:]'
         else:
             code += f'\n        r["{d}"] = s["{d}"]'
-    print(code)
     exec(code, globals())
