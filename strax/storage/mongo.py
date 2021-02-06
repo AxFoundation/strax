@@ -194,7 +194,7 @@ class MongoFrontend(StorageFrontend):
 class MongoSaver(Saver):
     allow_rechunk = False
 
-    def __init__(self, key, metadata, col):
+    def __init__(self, key, metadata, col, **kwargs):
         """
         Mongo saver
         :param key: strax.Datakey
@@ -202,7 +202,7 @@ class MongoSaver(Saver):
         :param col: collection (NB! pymongo collection object) of mongo
         instance to write to
         """
-        super().__init__(metadata)
+        super().__init__(metadata, **kwargs)
         self.col = col
         # All meta_documents should have the key to query against
         basic_meta = backend_key_to_query(key).copy()

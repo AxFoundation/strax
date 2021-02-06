@@ -171,11 +171,11 @@ class StorageFrontend:
             executor=executor,
             chunk_number=chunk_number)
 
-    def saver(self, key, metadata):
+    def saver(self, key, metadata, **kwargs):
         """Return saver for data described by DataKey."""
         backend, backend_key = self.find(key, write=True)
         return self._get_backend(backend).saver(backend_key,
-                                                metadata)
+                                                metadata, **kwargs)
 
     def get_metadata(self, key,
                      allow_incomplete=False,
@@ -496,13 +496,13 @@ class StorageBackend:
 
         return result
 
-    def saver(self, key, metadata):
+    def saver(self, key, metadata, **kwargs):
         """Return saver for data described by key"""
         metadata.setdefault('compressor', 'blosc')  # TODO wrong place?
         metadata['strax_version'] = strax.__version__
         if 'dtype' in metadata:
             metadata['dtype'] = metadata['dtype'].descr.__repr__()
-        return self._saver(key, metadata)
+        return self._saver(key, metadata, **kwargs)
 
     ##
     # Abstract methods (to override in child)
@@ -538,10 +538,11 @@ class Saver:
 
     got_exception = None
 
-    def __init__(self, metadata):
+    def __init__(self, metadata, saver_timeout=300):
         self.md = metadata
         self.md['writing_started'] = time.time()
         self.md['chunks'] = []
+        self.timeout = saver_timeout
 
     def save_from(self, source: typing.Generator, rechunk=True, executor=None):
         """Iterate over source and save the results under key
@@ -625,13 +626,12 @@ class Saver:
         return future
 
     def close(self,
-              wait_for: typing.Union[list, tuple] = tuple(),
-              timeout=300):
+              wait_for: typing.Union[list, tuple] = tuple()):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
 
         if wait_for:
-            done, not_done = wait(wait_for, timeout=timeout)
+            done, not_done = wait(wait_for, timeout=self.timeout)
             if len(not_done):
                 raise RuntimeError(
                     f"{len(not_done)} futures of {self.md} did not"
