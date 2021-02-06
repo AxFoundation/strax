@@ -5,10 +5,14 @@ there is an existing numba cache. Clear __pycache__ and restart.
 TODO: file numba issue.
 """
 import numpy as np
+import typing as ty
+import numba
+
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype').split()
+           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype '
+           'copy_to_buffer').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -201,3 +205,56 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
     ]
+
+
+def copy_to_buffer(source: np.ndarray,
+                   buffer: np.ndarray,
+                   func_name: str,
+                   field_names: ty.Tuple[str] = None):
+    """
+    Copy the data from the source to the destination e.g. raw_records to
+        records. To this end, we dynamically create the  njitted function
+        with the name 'func_name' (should start with "_").
+
+    :param source: array of input
+    :param destination: array of buffer to fill with values from input
+    :param func_name: how to store the dynamically created function.
+        Should start with an _underscore
+    :param field_names: dtype names to copy (if none, use all in the
+        source)
+    """
+    if np.shape(source) != np.shape(buffer):
+        raise ValueError('Source should be the same length as the buffer')
+    if field_names is None:
+        # To lazy to specify what to copy, just do all
+        field_names = source.dtype.names
+        if not any([n in buffer.dtype.names for n in field_names]):
+            raise ValueError('Trying to copy dtypes that are not in the '
+                             'destination')
+    if not func_name.startswith('_'):
+        raise ValueError('Start function with "_"')
+    if func_name not in globals():
+        _create_copy_function(buffer.dtype, field_names, func_name)
+    globals()[func_name](source, buffer)
+
+
+def _create_copy_function(res_dtype, field_names, func_name):
+    """Write out a jitted function to copy data"""
+    code = f'''
+@numba.njit
+def {func_name}(source, result): 
+    for i in range(len(source)):
+        s = source[i]
+        r = result[i]
+'''
+    for d in field_names:
+        if d not in res_dtype.names:
+            raise ValueError
+        assert 'data' in field_names
+        assert 'data' in res_dtype.names
+        if np.shape(res_dtype[d]):
+            code += f'\n        r["{d}"][:] = s["{d}"][:]'
+        else:
+            code += f'\n        r["{d}"] = s["{d}"]'
+    print(code)
+    exec(code, globals())
