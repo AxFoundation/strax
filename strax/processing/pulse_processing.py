@@ -6,7 +6,7 @@ import typing as ty
 import numpy as np
 import numba
 from scipy.ndimage import convolve1d
-
+from warnings import warn
 import strax
 export, __all__ = strax.exporter()
 __all__ += ['NO_RECORD_LINK']
@@ -76,25 +76,14 @@ def raw_to_records(raw_records):
         len(raw_records),
         dtype=strax.record_dtype(
             record_length_from_dtype(raw_records.dtype)))
-    copy_raw_records(raw_records, records)
+    strax.copy_to_buffer(raw_records, records, '_copy_raw_records')
     return records
 
 
-# Numpy record arrays have a rowwise memory layout, so filling it
-# rowwise should be faster.
 @export
-@numba.njit(nogil=True, cache=True)
 def copy_raw_records(old, new):
-    for i in range(len(old)):
-        r = old[i]
-        r2 = new[i]
-        r2['channel'] = r['channel']
-        r2['dt'] = r['dt']
-        r2['time'] = r['time']
-        r2['length'] = r['length']
-        r2['pulse_length'] = r['pulse_length']
-        r2['record_i'] = r['record_i']
-        r2['data'][:] = r['data'][:]
+    warn('Deprecated, use strax.copy_to_buffer')
+    strax.copy_to_buffer(old, new, '_copy_raw_records')
 
 
 @export
