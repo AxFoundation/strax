@@ -198,3 +198,12 @@ def test_overlap_indices(a1, n_a, b1, n_b):
         (true_a_inds[0], true_a_inds[-1] + 1),
         (true_b_inds[0], true_b_inds[-1] + 1))
     assert found == expected
+
+
+@hypothesis.settings(deadline=None)
+@hypothesis.given(strax.testutils.several_fake_records)
+def test_raw_to_records(r):
+    buffer = np.zeros(len(r), r.dtype)
+    strax.copy_to_buffer(r, buffer, "_test_r_to_buffer")
+    if len(r):
+        assert np.all(buffer == r)
