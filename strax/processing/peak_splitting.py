@@ -6,7 +6,7 @@ export, __all__ = strax.exporter()
 
 
 @export
-def split_peaks(peaks, records, to_pe, n_top_pmts, algorithm='local_minimum',
+def split_peaks(peaks, records, to_pe, n_top_pmts, store_top_waveform, algorithm='local_minimum',
                 data_type='peaks', **kwargs):
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
@@ -34,7 +34,7 @@ def split_peaks(peaks, records, to_pe, n_top_pmts, algorithm='local_minimum',
         next_ri = None
     else:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, records, to_pe, n_top_pmts, data_type, next_ri, **kwargs)
+    return splitter(peaks, records, to_pe, n_top_pmts, store_top_waveform, data_type, next_ri, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -63,7 +63,7 @@ class PeakSplitter:
     """
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, n_top_pmts, data_type,
+    def __call__(self, peaks, records, to_pe, n_top_pmts, store_top_waveform, data_type,
                  next_ri=None, do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
@@ -106,14 +106,14 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
-                strax.sum_waveform(new_peaks, records, to_pe, n_top_pmts)
+                strax.sum_waveform(new_peaks, records, to_pe, n_top_pmts, store_top_waveform)
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
                 strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
 
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe, n_top_pmts, data_type, next_ri,
+            new_peaks = self(new_peaks, records, to_pe, n_top_pmts, store_top_waveform, data_type, next_ri,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],

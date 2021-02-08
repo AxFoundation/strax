@@ -104,14 +104,15 @@ def find_peaks(hits, adc_to_pe,
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def store_downsampled_waveform(p, wv_buffer, wv_top_buffer, wv_bottom_buffer):
+def store_downsampled_waveform(p, wv_buffer, wv_buffer_top, store_top_waveform=False):
     """Downsample the waveform in buffer and store it in p['data']
 
     :param p: Row of a strax peak array, or compatible type.
     Note that p['dt'] is adjusted to match the downsampling.
     :param wv_buffer: numpy array containing sum waveform during the peak
     at the input peak's sampling resolution p['dt'].
-    :param wv_buffer_top/bottom: numpy array for sum waveforms of top and obttom array
+    :param store_top_waveform. Bool for storing top waveform
+    :param wv_buffer_top. numpy array with top array sum waveform
 
     The number of samples to take from wv_buffer, and thus the downsampling
     factor, is determined from p['dt'] and p['length'].
@@ -130,21 +131,19 @@ def store_downsampled_waveform(p, wv_buffer, wv_top_buffer, wv_bottom_buffer):
         p['data'][:p['length']] = wv_buffer[:p['length'] * downsample_factor] \
                                     .reshape(-1, downsample_factor) \
                                     .sum(axis=1)
-        p['data_top'][:p['length']] = wv_top_buffer[:p['length'] * downsample_factor] \
-                                    .reshape(-1, downsample_factor) \
-                                    .sum(axis=1)
-        p['data_bottom'][:p['length']] = wv_bottom_buffer[:p['length'] * downsample_factor] \
+        if store_top_waveform:
+            p['data_top'][:p['length']] = wv_buffer_top[:p['length'] * downsample_factor] \
                                     .reshape(-1, downsample_factor) \
                                     .sum(axis=1)
         p['dt'] *= downsample_factor
     else:
         p['data'][:p['length']] = wv_buffer[:p['length']]
-        p['data_top'][:p['length']] = wv_top_buffer[:p['length']]
-        p['data_bottom'][:p['length']] = wv_bottom_buffer[:p['length']]
+        if store_top_waveform:
+            p['data_top'][:p['length']] = wv_buffer_top[:p['length']]
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, select_peaks_indices=None):
+def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, store_top_waveform=False, select_peaks_indices=None):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
@@ -167,10 +166,10 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, select_peaks_indices=Non
     # Big buffer to hold even largest sum waveforms		
      # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-    swv_buffer_top = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-    swv_buffer_bottom = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-    buffers =(swv_buffer,swv_buffer_top, swv_buffer_bottom)
-
+    swv_buffer_top = None
+    if store_top_waveform:
+        swv_buffer_top = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
+    
     # Index of first record that could still contribute to subsequent peaks
     # Records before this do not need to be considered anymore
     left_r_i = 0
@@ -183,8 +182,9 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, select_peaks_indices=Non
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
-        for buffer in buffers:
-            buffer[:min(2 * p_length, len(swv_buffer))] = 0
+        swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
+        if store_top_waveform:
+            swv_buffer_top[:min(2 * p_length, len(swv_buffer))] = 0
 
         # Clear area and area per channel
         # (in case find_peaks already populated them)
@@ -238,17 +238,15 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, select_peaks_indices=Non
                     + bl_fpart)
 
             swv_buffer[p_start:p_end] += pe_waveform
-            if ch < n_pmts_top:
+            if store_top_waveform  & (ch < n_pmts_top):
                 swv_buffer_top[p_start:p_end] += pe_waveform
-            else:
-                swv_buffer_bottom[p_start:p_end] += pe_waveform
 
 
             area_pe = pe_waveform.sum()
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
 
-        store_downsampled_waveform(p, *buffers)
+        store_downsampled_waveform(p, swv_buffer, swv_buffer_top, store_top_waveform)
 
         p['n_saturated_channels'] = p['saturated_channel'].sum()
         p['area_per_channel'][:] = area_per_channel
