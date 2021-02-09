@@ -58,7 +58,7 @@ def test_sum_waveform(records, peak_left, peak_length):
     n_top_pmts=256
     store_top_waveform=True
     n_ch = 100
-    peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200) + [(('data_top'), np.float32, 200)])
+    peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200))
     p = peaks[0]
     p['time'] = peak_left
     p['length'] = peak_length
