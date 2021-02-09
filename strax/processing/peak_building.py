@@ -165,9 +165,12 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, store_top_waveform=False
 
     # Big buffer to hold even largest sum waveforms		
      # Need a little more even for downsampling..
+     #if not storing top array make placeholder to pass to store_downsampled_waveform
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-    swv_buffer_top = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-    
+    if store_top_waveform: 
+        swv_buffer_top = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
+    else:
+        swv_buffer_top = np.zeros(1, dtype=np.float32)
     # Index of first record that could still contribute to subsequent peaks
     # Records before this do not need to be considered anymore
     left_r_i = 0
