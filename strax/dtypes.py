@@ -262,4 +262,5 @@ def {func_name}(source, result):
             code += f'\n        r["{d}"][:] = s["{d}"][:]'
         else:
             code += f'\n        r["{d}"] = s["{d}"]'
+    # pylint: disable=exec-used
     exec(code, globals())
