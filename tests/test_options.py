@@ -42,7 +42,9 @@ def test_overwrite():
             runtime error
             """
             pass
+
         st.register(CrashPlugin)
+
     except RuntimeError:
         print('Ran into a RuntimeError because we tried specifying an '
               'option twice. This is exactly what we want!')

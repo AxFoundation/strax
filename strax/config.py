@@ -82,7 +82,7 @@ class Option:
             by the value of the child option.
         :param overwrite: allow this option to overwrite if there is
             another option already registered with the same name with a
-             different value. Only use for subclassing plugins.
+            different value. Only use for subclassing plugins.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
         :param help: Human-readable description of the option.
@@ -92,7 +92,7 @@ class Option:
         self.default = default
         self.default_by_run = default_by_run
         self.default_factory = default_factory
-        self.overwrite=overwrite
+        self.overwrite = overwrite
         self.track = track
         self.help = help
 
