@@ -83,11 +83,11 @@ class MongoBackend(StorageBackend):
                 result[i][key] = chunk_doc[i][key]
         return result
 
-    def _saver(self, key, metadata):
+    def _saver(self, key, metadata, **kwargs):
         """See strax.Backend"""
         # Use the key to make a collection otherwise, use the backend-key
         col = self.db[self.col_name if self.col_name is not None else str(key)]
-        return MongoSaver(key, metadata, col)
+        return MongoSaver(key, metadata, col, **kwargs)
 
     def get_metadata(self, key):
         """See strax.Backend"""
@@ -194,7 +194,7 @@ class MongoFrontend(StorageFrontend):
 class MongoSaver(Saver):
     allow_rechunk = False
 
-    def __init__(self, key, metadata, col):
+    def __init__(self, key, metadata, col, **kwargs):
         """
         Mongo saver
         :param key: strax.Datakey
@@ -202,7 +202,7 @@ class MongoSaver(Saver):
         :param col: collection (NB! pymongo collection object) of mongo
         instance to write to
         """
-        super().__init__(metadata)
+        super().__init__(metadata, **kwargs)
         self.col = col
         # All meta_documents should have the key to query against
         basic_meta = backend_key_to_query(key).copy()

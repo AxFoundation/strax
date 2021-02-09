@@ -231,7 +231,7 @@ class FileSytemBackend(strax.StorageBackend):
         fn = osp.join(dirname, chunk_info['filename'])
         return strax.load_file(fn, dtype=dtype, compressor=compressor)
 
-    def _saver(self, dirname, metadata):
+    def _saver(self, dirname, metadata, **kwargs):
         # Test if the parent directory is writeable.
         # We need abspath since the dir itself may not exist,
         # even though its parent-to-be does
@@ -254,7 +254,7 @@ class FileSytemBackend(strax.StorageBackend):
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
 
-        return FileSaver(dirname, metadata=metadata)
+        return FileSaver(dirname, metadata=metadata, **kwargs)
 
 
 @export
@@ -262,8 +262,8 @@ class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, dirname, metadata):
-        super().__init__(metadata)
+    def __init__(self, dirname, metadata, **kwargs):
+        super().__init__(metadata, **kwargs)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
         self.prefix = dirname_to_prefix(dirname)

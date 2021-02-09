@@ -67,6 +67,9 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
     strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
+    strax.Option(name='saver_timeout', default=900,
+                 help="Max time [s] a saver can take to store a result. Set "
+                      "high for slow compression algorithms."),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
@@ -744,7 +747,9 @@ class Context:
                             key,
                             metadata=p.metadata(
                                 run_id,
-                                d_to_save)))
+                                d_to_save),
+                            saver_timeout=self.context_config['saver_timeout']
+                        ))
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass
