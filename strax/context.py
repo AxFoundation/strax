@@ -774,18 +774,6 @@ class Context:
             savers=dict(savers),
             targets=targets)
 
-    def estimate_run_start(self, run_id, targets=None):
-        """Return run start time in ns since epoch.
-
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
-        """
-        warnings.warn('This function is outdated and will be removed in '
-                      'one of the feature strax releases. Please use '
-                      '"estimate_run_start_and_end" instead.', UserWarning)
-        start, _ = self.estimate_run_start_and_end(run_id, targets=targets)
-        return start
-
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
 
