@@ -67,6 +67,9 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
     strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
+    strax.Option(name='saver_timeout', default=900,
+                 help="Max time [s] a saver can take to store a result. Set "
+                      "high for slow compression algorithms."),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
@@ -744,7 +747,9 @@ class Context:
                             key,
                             metadata=p.metadata(
                                 run_id,
-                                d_to_save)))
+                                d_to_save),
+                            saver_timeout=self.context_config['saver_timeout']
+                        ))
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass
@@ -768,18 +773,6 @@ class Context:
             loaders=loaders,
             savers=dict(savers),
             targets=targets)
-
-    def estimate_run_start(self, run_id, targets=None):
-        """Return run start time in ns since epoch.
-
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
-        """
-        warnings.warn('This function is outdated and will be removed in '
-                      'one of the feature strax releases. Please use '
-                      '"estimate_run_start_and_end" instead.', UserWarning)
-        start, _ = self.estimate_run_start_and_end(run_id, targets=targets)
-        return start
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
