@@ -989,7 +989,11 @@ class Context:
     def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end):
         """Do some tqdm voodoo to get the progress bar for st.get_iter"""
         if t_end - t_start > 0:
-            pbar.n = (chunk_end - t_start) / (t_end - t_start)
+            fraction_done = (chunk_end - t_start) / (t_end - t_start)
+            if fraction_done > .99:
+                # Patch to 1 to not have a red pbar when very close to 100%
+                fraction_done = 1
+            pbar.n = np.clip(fraction_done, 0, 1)
         else:
             # Strange, start and endtime are the same, probably we don't
             # have data yet e.g. allow_incomplete == True.
