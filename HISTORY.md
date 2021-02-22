@@ -1,3 +1,7 @@
+0.13.9 / 2021-02-22
+---------------------
+- Clip progress progressbar (#399)
+
 0.13.8 / 2021-02-09
 ---------------------
 - Specify saver timeout at context level (#394)
