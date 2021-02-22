@@ -255,7 +255,12 @@ class Mailbox:
                 except StopIteration:
                     # No need to send this yet, close will do that
                     break
-                self.send(x)
+                try:
+                    self.send(x)
+                except Exception as e:
+                    # Inform the source we're going down
+                    iterable.throw(e)
+                    raise
                 i += 1
 
         except Exception as e:
@@ -488,8 +493,13 @@ def divide_outputs(source,
                 # No need to send this yet, close will do that
                 break
 
-            for d, x in result.items():
-                mailboxes[d].send(x)
+            try:
+                for d, x in result.items():
+                    mailboxes[d].send(x)
+            except Exception as e:
+                # Inform the source we're going down
+                source.throw(e)
+                raise
             i += 1
 
     except Exception as e:

@@ -1,3 +1,21 @@
+0.13.9 / 2021-02-22
+---------------------
+- Clip progress progressbar (#399)
+
+0.13.8 / 2021-02-09
+---------------------
+- Specify saver timeout at context level (#394)
+- Allow dynamic function creation for dtype copy (#395)
+- Close inlined savers on exceptions in multiprocessing (#390)
+- Allow option to be overwritten to allow subclassing (#392)
+- Fix availability checks (#389)
+- Don't print for temp plugins (#391)
+
+0.13.7 / 2021-01-29
+---------------------
+- Warn for non saved plugins in run selection (#387)
+- Cleanup progressbar (#386)
+
 0.13.4 / 2021-01-22
 ---------------------
 - Nveto changes + highest density regions (#384) 
