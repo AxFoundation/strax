@@ -107,41 +107,6 @@ def fully_contained_in(things, containers):
     for which things are fully contained in a container, or -1 if no such
     exists.
     We assume all intervals are sorted by time, and b_intervals
-    non overlapping.
-    """
-    result = np.ones(len(things), dtype=np.int32) * -1
-    a_starts = things['time']
-    b_starts = containers['time']
-    a_ends = strax.endtime(things)
-    b_ends = strax.endtime(containers)
-    _fc_in(a_starts, b_starts, a_ends, b_ends, result)
-    return result
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
-    b_i = 0
-    for a_i in range(len(a_starts)):
-        # Skip ahead one or more b's if we're beyond them
-        # Note <= in second condition: end is an exclusive bound
-        while b_i < len(b_starts) and b_ends[b_i] <= a_starts[a_i]:
-            b_i += 1
-        if b_i == len(b_starts):
-            break
-
-        # Check for containment. We only need to check one b, since bs
-        # are nonoverlapping
-        if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
-            result[a_i] = b_i
-
-
-@export
-@numba.jit(nopython=True, nogil=True, cache=True)
-def fully_contained_in(things, containers):
-    """Return array of len(things) with index of interval in containers
-    for which things are fully contained in a container, or -1 if no such
-    exists.
-    We assume all intervals are sorted by time, and b_intervals
     nonoverlapping.
     """
     result = np.ones(len(things), dtype=np.int32) * -1
