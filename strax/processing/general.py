@@ -169,6 +169,7 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
 
+
 @export
 def split_by_containment(things, containers):
     """
@@ -216,12 +217,12 @@ def _split_by_containment(things, containers):
 @numba.njit(cache=True, nogil=True)
 def _split(things, split_indices):
     """
-    Helper to replace np.split, reuqired since numba numpy.split does
+    Helper to replace np.split, required since numba numpy.split does
     not return a typed.List. Hence outputs cannot be unified.
     """
     things_split = List()
     if len(split_indices):
-        # Found split indicies so split things up:
+        # Found split indices so split things up:
         prev_si = 0
         for si in split_indices:
             things_split.append(things[prev_si:si])
@@ -231,7 +232,7 @@ def _split(things, split_indices):
             # Append things after last gap if exist
             things_split.append(things[prev_si:])
     else:
-        # If there are no split indicies, all things are in the same
+        # If there are no split indices, all things are in the same
         # container
         things_split.append(things)
     return things_split
