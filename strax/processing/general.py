@@ -2,6 +2,7 @@ import os
 
 import strax
 import numba
+from numba.typed import List
 import numpy as np
 
 export, __all__ = strax.exporter()
@@ -100,6 +101,42 @@ def _find_break_i(data, safe_break, not_before):
 
 
 @export
+@numba.jit(nopython=True, nogil=True, cache=True)
+def fully_contained_in(things, containers):
+    """Return array of len(things) with index of interval in containers
+    for which things are fully contained in a container, or -1 if no such
+    exists.
+    We assume all intervals are sorted by time, and b_intervals
+    non overlapping.
+    """
+    result = np.ones(len(things), dtype=np.int32) * -1
+    a_starts = things['time']
+    b_starts = containers['time']
+    a_ends = strax.endtime(things)
+    b_ends = strax.endtime(containers)
+    _fc_in(a_starts, b_starts, a_ends, b_ends, result)
+    return result
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
+    b_i = 0
+    for a_i in range(len(a_starts)):
+        # Skip ahead one or more b's if we're beyond them
+        # Note <= in second condition: end is an exclusive bound
+        while b_i < len(b_starts) and b_ends[b_i] <= a_starts[a_i]:
+            b_i += 1
+        if b_i == len(b_starts):
+            break
+
+        # Check for containment. We only need to check one b, since bs
+        # are nonoverlapping
+        if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
+            result[a_i] = b_i
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
 def fully_contained_in(things, containers):
     """Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
@@ -132,16 +169,22 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
         if b_starts[b_i] <= a_starts[a_i] and a_ends[a_i] <= b_ends[b_i]:
             result[a_i] = b_i
 
-
 @export
 def split_by_containment(things, containers):
-    """Return list of thing-arrays contained in each container
+    """
+    Return list of thing-arrays contained in each container. Result is
+    returned as a numba.typed.List or list if containers are empty.
 
-    Assumes everything is sorted, and containers are nonoverlapping
+    Assumes everything is sorted, and containers are non-overlapping.
     """
     if not len(containers):
         return []
 
+    return _split_by_containment(things, containers)
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _split_by_containment(things, containers):
     # Index of which container each thing belongs to, or -1
     which_container = fully_contained_in(things, containers)
 
@@ -150,20 +193,73 @@ def split_by_containment(things, containers):
     things = things[mask]
     which_container = which_container[mask]
     if not len(things):
-        # np.split has confusing behaviour for empty arrays
-        return [things[:0] for _ in range(len(containers))]
+        # Return list of empty things in case things are empty,
+        # needed to preserve dtype in LoopPlugins.
+        things_split = List()
+        for _ in range(len(containers)):
+            things_split.append(things[:0])
+        return things_split
 
     # Split things up by container
     split_indices = np.where(np.diff(which_container))[0] + 1
-    things_split = np.split(things, split_indices)
+    things_split = _split(things, split_indices)
 
     # Insert empty arrays for empty containers
-    empty_containers = np.setdiff1d(np.arange(len(containers)),
-                                    np.unique(which_container))
+    empty_containers = _get_empty_container_ids(len(containers),
+                                                np.unique(which_container))
     for c_i in empty_containers:
         things_split.insert(c_i, things[:0])
 
     return things_split
+
+
+@numba.njit(cache=True, nogil=True)
+def _split(things, split_indices):
+    """
+    Helper to replace np.split, reuqired since numba numpy.split does
+    not return a typed.List. Hence outputs cannot be unified.
+    """
+    things_split = List()
+    if len(split_indices):
+        # Found split indicies so split things up:
+        prev_si = 0
+        for si in split_indices:
+            things_split.append(things[prev_si:si])
+            prev_si = si
+
+        if prev_si < len(things):
+            # Append things after last gap if exist
+            things_split.append(things[prev_si:])
+    else:
+        # If there are no split indicies, all things are in the same
+        # container
+        things_split.append(things)
+    return things_split
+
+
+@numba.njit(cache=True, nogil=True)
+def _get_empty_container_ids(n_containers, full_container_ids):
+    """
+    Helper to replace np.setdiff1d for numbafied split_by_containment.
+    """
+    res = np.zeros(n_containers, dtype=np.int64)
+
+    n_empty = 0
+    prev_fid = 0
+    for fid in full_container_ids:
+        # Loop over all container ids with input, ids in between
+        # must be empty:
+        n = fid - prev_fid
+        res[n_empty:n_empty + n] = np.arange(prev_fid, fid, dtype=np.int64)
+        prev_fid = fid + 1
+        n_empty += n
+
+    if prev_fid < n_containers:
+        # Do the rest if there is any:
+        n = n_containers - prev_fid
+        res[n_empty:n_empty + n] = np.arange(prev_fid, n_containers, dtype=np.int64)
+        n_empty += n
+    return res[:n_empty]
 
 
 @export
