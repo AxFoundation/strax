@@ -12,7 +12,7 @@ import numba
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
            'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype '
-           'copy_to_buffer').split()
+           'copy_to_buffer peak_interval_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -33,18 +33,16 @@ time_dt_fields = [
     (('Width of one sample [ns]',
       'dt'), np.int16)]
 
-# Base dtype for interval-like objects (pulse, peak, hit)
-interval_dtype = [
-    (('Start time since unix epoch [ns]',
-      'time'), np.int64),
-    # Don't try to make O(second) long intervals!
-    (('Length of the interval in samples',
-      'length'), np.int32),
-    (('Width of one sample [ns]',
-      'dt'), np.uint16),
+# Base dtype for interval-like objects (pulse, hit)
+interval_dtype = time_dt_fields + [
     (('Channel/PMT number',
         'channel'), np.int16)]
 
+# Base dtype with interval like objects for long objects (peaks)
+peak_interval_dtype = interval_dtype.copy()
+# print(peak_interval_dtype)
+peak_interval_dtype[2] = (('Width of one sample [ns]', 'dt'), np.uint32)
+print(peak_interval_dtype)
 
 def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform raw_record.
@@ -185,7 +183,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
     if n_channels == 1:
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
-    return interval_dtype + [
+    return peak_interval_dtype + [
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8),
@@ -224,7 +222,7 @@ def copy_to_buffer(source: np.ndarray,
         with the name 'func_name' (should start with "_").
 
     :param source: array of input
-    :param destination: array of buffer to fill with values from input
+    :param buffer: array of buffer to fill with values from input
     :param func_name: how to store the dynamically created function.
         Should start with an _underscore
     :param field_names: dtype names to copy (if none, use all in the
