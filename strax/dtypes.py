@@ -34,7 +34,14 @@ time_dt_fields = [
       'dt'), np.int16)]
 
 # Base dtype for interval-like objects (pulse, peak, hit)
-interval_dtype = time_dt_fields + [
+interval_dtype = [
+    (('Start time since unix epoch [ns]',
+      'time'), np.int64),
+    # Don't try to make O(second) long intervals!
+    (('Length of the interval in samples',
+      'length'), np.int32),
+    (('Width of one sample [ns]',
+      'dt'), np.uint16),
     (('Channel/PMT number',
         'channel'), np.int16)]
 
