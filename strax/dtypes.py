@@ -40,9 +40,8 @@ interval_dtype = time_dt_fields + [
 
 # Base dtype with interval like objects for long objects (peaks)
 peak_interval_dtype = interval_dtype.copy()
-# print(peak_interval_dtype)
-peak_interval_dtype[2] = (('Width of one sample [ns]', 'dt'), np.uint32)
-print(peak_interval_dtype)
+# Allow peaks to have very long dts
+peak_interval_dtype[2] = (('Width of one sample [ns]', 'dt'), np.int32)
 
 def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform raw_record.
