@@ -101,6 +101,17 @@ def _is_contained(_thing, _container):
                                    unique=True))
 @hypothesis.settings(deadline=None)
 def test_get_empty_container_ids(full_container_ids):
+    """
+    Helper function to test if strax.processing.general._get_empty_container_ids
+    behaves the same as np.setdiff1d. Both functions should compute the
+    a set diff of the two arrays. E.g. in this case an array with unique
+    numbers between 0 and 15 which are not in full_container_ids.
+
+    :param full_container_ids: Array which mimics the ids of full containers.
+        the array has a size between 0 and 10 and is filled with integer
+        values between 0 and 15.
+    :return:
+    """
     full_container_ids = np.sort(full_container_ids)
 
     if len(full_container_ids):
@@ -134,12 +145,22 @@ def test_get_empty_container_ids(full_container_ids):
                   )
 @hypothesis.settings(deadline=None)
 def test_split(things, split_indices):
+    """
+    Test to check if strax.processing.general._split shows the same
+    behavior as np.split for the previous split_by_containment function.
+
+    :param things: things to be split. Hypothesis will create here an
+        array of a length between 0 and 10. Each element in this array
+        can also range between 0 and 10.
+    :param split_indices: Indices at which things should be split.
+    """
     split_indices = np.sort(split_indices)
 
     split_things = strax.processing.general._split(things, split_indices)
     split_things_np = np.split(things, split_indices)
 
     for ci, (s, snp) in enumerate(zip(split_things, split_things_np)):
+        # Loop over splitted objects and check if they are the same.
         mes = f'Not all splitted things are the same for split {ci}!'
         assert np.all(s == snp), mes
 
