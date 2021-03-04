@@ -144,7 +144,12 @@ def split_by_containment(things, containers):
     Assumes everything is sorted, and containers are non-overlapping.
     """
     if not len(containers):
-        return []
+        # No containers so return empty numba.typed.List
+        empty_list = List()
+        # Small hack to define its type before returning it:
+        empty_list.append(np.zeros(0, dtype=things.dtype))
+        empty_list = empty_list[:0]
+        return empty_list
 
     return _split_by_containment(things, containers)
 
