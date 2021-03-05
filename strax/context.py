@@ -1462,6 +1462,18 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
+    @property
+    def provided_dtypes(self):
+        """
+        Summarize useful dtype information provided by this context
+        :return: dictionary of provided dtypes with their corresponding lineage hash
+        """
+        hashes = set([(d, self.key_for('0', d).lineage_hash, p.save_when)
+                    for p in self._plugin_class_registry.values()
+                    for d in p.provides])
+
+        return {dtype: dict(hash=h, save_when=save_when.name) for dtype, h, save_when in hashes}
+
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method"""
