@@ -815,8 +815,7 @@ class Context:
                     pass
         self.log.warning(
             "Could not estimate run start and end time from "
-            "run metadata: assuming it is 0 and inf",
-            UserWarning)
+            "run metadata: assuming it is 0 and inf")
         return 0, float('inf')
 
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
