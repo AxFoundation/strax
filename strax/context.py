@@ -777,8 +777,9 @@ class Context:
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
 
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
+        This fetches from run metadata, and if this fails, it estimates
+            it using data metadata from the targets or the underlying
+            data-types (if it is stored).
         """
         try:
             res = []
@@ -790,12 +791,19 @@ class Context:
                 t = int(t.timestamp()) * int(1e9)
                 res.append(t)
             return res
-        except (strax.RunMetadataNotAvailable, KeyError):
+        except (strax.RunMetadataNotAvailable, KeyError) as e:
+            self.log.debug(f'Could not infer start/stop due to type {type(e)} {e}')
             pass
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
         if targets:
-            for t in strax.to_str_tuple(targets):
+            self.log.debug('Infer start/stop from targets')
+            for t in self._get_plugins(strax.to_str_tuple(targets),
+                                       run_id,
+                                       ).keys():
+                if not self.is_stored(run_id, t):
+                    continue
+                self.log.debug(f'Try inferring start/stop from {t}')
                 try:
                     t0 = self.get_meta(run_id, t)['chunks'][0]['start']
                     t0 = (int(t0) // int(1e9)) * int(1e9)
@@ -805,10 +813,9 @@ class Context:
                     return t0, t1
                 except strax.DataNotAvailable:
                     pass
-        warnings.warn(
+        self.log.warning(
             "Could not estimate run start and end time from "
-            "run metadata: assuming it is 0 and inf",
-            UserWarning)
+            "run metadata: assuming it is 0 and inf")
         return 0, float('inf')
 
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
