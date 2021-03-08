@@ -777,8 +777,9 @@ class Context:
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
 
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
+        This fetches from run metadata, and if this fails, it estimates
+            it using data metadata from the targets or the underlying
+            data-types (if it is stored).
         """
         try:
             res = []
@@ -790,12 +791,19 @@ class Context:
                 t = int(t.timestamp()) * int(1e9)
                 res.append(t)
             return res
-        except (strax.RunMetadataNotAvailable, KeyError):
+        except (strax.RunMetadataNotAvailable, KeyError) as e:
+            self.log.debug(f'Could not infer start/stop due to type {type(e)} {e}')
             pass
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
         if targets:
-            for t in strax.to_str_tuple(targets):
+            self.log.debug('Infer start/stop from targets')
+            for t in self._get_plugins(strax.to_str_tuple(targets),
+                                       run_id,
+                                       ).keys():
+                if not self.is_stored(run_id, t):
+                    continue
+                self.log.debug(f'Try inferring start/stop from {t}')
                 try:
                     t0 = self.get_meta(run_id, t)['chunks'][0]['start']
                     t0 = (int(t0) // int(1e9)) * int(1e9)
@@ -805,10 +813,9 @@ class Context:
                     return t0, t1
                 except strax.DataNotAvailable:
                     pass
-        warnings.warn(
+        self.log.warning(
             "Could not estimate run start and end time from "
-            "run metadata: assuming it is 0 and inf",
-            UserWarning)
+            "run metadata: assuming it is 0 and inf")
         return 0, float('inf')
 
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
@@ -1461,6 +1468,18 @@ class Context:
         if should_exist:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
+
+    def provided_dtypes(self, runid='0'):
+        """
+        Summarize useful dtype information provided by this context
+        :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
+        """
+        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
+                    for p in self._plugin_class_registry.values()
+                    for d in p.provides])
+
+        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
+                for dtype, h, save_when, version in hashes}
 
     @classmethod
     def add_method(cls, f):
