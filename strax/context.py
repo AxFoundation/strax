@@ -1462,17 +1462,17 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
-    @property
-    def provided_dtypes(self):
+    def provided_dtypes(self, runid='0'):
         """
         Summarize useful dtype information provided by this context
         :return: dictionary of provided dtypes with their corresponding lineage hash and save_when
         """
-        hashes = set([(d, self.key_for('0', d).lineage_hash, p.save_when)
+        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
                     for p in self._plugin_class_registry.values()
                     for d in p.provides])
 
-        return {dtype: dict(hash=h, save_when=save_when.name) for dtype, h, save_when in hashes}
+        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
+                for dtype, h, save_when, version in hashes}
 
     @classmethod
     def add_method(cls, f):
