@@ -1465,7 +1465,7 @@ class Context:
     def provided_dtypes(self, runid='0'):
         """
         Summarize useful dtype information provided by this context
-        :return: dictionary of provided dtypes with their corresponding lineage hash and save_when
+        :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
         hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
                     for p in self._plugin_class_registry.values()
