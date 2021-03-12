@@ -771,7 +771,7 @@ class Context:
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
         if len(targets) > 1:
-            final_plugin = self._get_end_targets(plugins)[:1]
+            final_plugin = [t for t in targets if t in self._get_end_targets(plugins)][:1]
             self.log.warning(
                 f'Multiple targets detected! This is only suitable for mass '
                 f'producing dataypes since only {final_plugin} will be '
@@ -918,6 +918,8 @@ class Context:
                 targets = (temp_name,)
             elif not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
+            elif self.context_config['allow_lazy']:
+                raise RuntimeError(f'Cannot allow_multiple in lazy mode.')
 
         components = self.get_components(run_id,
                                          targets=targets,
