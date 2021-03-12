@@ -918,8 +918,8 @@ class Context:
                 targets = (temp_name,)
             elif not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
-            elif self.context_config['allow_lazy']:
-                raise RuntimeError(f'Cannot allow_multiple in lazy mode.')
+            elif self.context_config['allow_lazy'] or self.context_config['timeout'] < 7200:
+                raise RuntimeError(f'Cannot allow_multiple in lazy mode or with long timeouts.')
 
         components = self.get_components(run_id,
                                          targets=targets,
