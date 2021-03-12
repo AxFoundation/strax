@@ -412,7 +412,8 @@ def test_allow_multiple(targets=('peaks', 'records')):
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                             deep_scan=True),
                                 register=[Records, Peaks])
-        mystrax.set_context_config({'allow_lazy': False})
+        mystrax.set_context_config({'allow_lazy': False,
+                                    'timeout': 80})
 
         assert not mystrax.is_stored(run_id, 'peaks')
         # Create everything at once with get_array and get_df should fail
