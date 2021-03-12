@@ -525,6 +525,19 @@ class Context:
 
         return plugins
 
+    @staticmethod
+    def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
+        """
+        Get the datatype that is provided by a plugin but not depended
+            on by any other plugin
+        """
+        provides = [prov for p in plugins.values()
+                    for prov in strax.to_str_tuple(p.provides)]
+        depends_on = [dep for p in plugins.values()
+                      for dep in strax.to_str_tuple(p.depends_on)]
+        uniques = list(set(provides) ^ set(depends_on))
+        return strax.to_str_tuple(uniques)
+
     @property
     def _find_options(self):
 
@@ -584,12 +597,6 @@ class Context:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         plugins = self._get_plugins(targets, run_id)
-
-        if len(targets) > 1:
-            self.log.warning(
-                f'Multiple targets detected! This is only suitable for mass '
-                f'producing dataypes since only {targets[0]} will be '
-                f'subscribed in the mailbox system!')
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -763,6 +770,14 @@ class Context:
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
+        if len(targets) > 1:
+            final_plugin = self._get_end_targets(plugins)
+            self.log.warning(
+                f'Multiple targets detected! This is only suitable for mass '
+                f'producing dataypes since only {final_plugin} will be '
+                f'subscribed in the mailbox system!')
+        else:
+            final_plugin = targets
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
         # Also run any user-defined setup
@@ -773,7 +788,7 @@ class Context:
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
-            targets=strax.to_str_tuple(targets[0]))
+            targets=strax.to_str_tuple(final_plugin))
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
