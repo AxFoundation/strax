@@ -412,8 +412,6 @@ def test_allow_multiple(targets=('peaks', 'records')):
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                             deep_scan=True),
                                 register=[Records, Peaks])
-        for p in mystrax._plugin_class_registry.values():
-            p.parallel = False
         assert not mystrax.is_stored(run_id, 'peaks')
         # Create everything at once with get_array and get_df should fail
         for function in [mystrax.get_array, mystrax.get_df]:
