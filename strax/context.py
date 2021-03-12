@@ -570,7 +570,7 @@ class Context:
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
-                       time_range=None, chunk_number=None
+                       time_range=None, chunk_number=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -579,15 +579,17 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
-        # Although targets is a tuple, we only support one target at the moment
-        # we could just make it a string!
-        assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
-        if len(targets[0]) == 1:
-            raise ValueError(
-                f"Plugin names must be more than one letter, not {targets[0]}")
+        for t in targets:
+            if len(t) == 1:
+                raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         plugins = self._get_plugins(targets, run_id)
-        target = targets[0]  # See above, already restricted to one target
+
+        if len(targets) > 1:
+            self.log.warning(
+                f'Multiple targets detected! This is only suitable for mass '
+                f'producing dataypes since only {targets[0]} will be '
+                f'subscribed in the mailbox system!')
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -761,7 +763,6 @@ class Context:
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
-
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
         # Also run any user-defined setup
@@ -772,7 +773,7 @@ class Context:
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
-            targets=targets)
+            targets=strax.to_str_tuple(targets[0]))
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
@@ -865,8 +866,9 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
-                 _chunk_number=None,
+                 allow_multiple=False,
                  progress_bar=True,
+                 _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -899,7 +901,7 @@ class Context:
                          dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            else:
+            if not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id,
@@ -1115,6 +1117,7 @@ class Context:
                 targets,
                 save=save,
                 max_workers=max_workers,
+                allow_multiple=False,
                 **kwargs)
             results = [x.data for x in source]
 
@@ -1175,7 +1178,9 @@ class Context:
                 return arr
             function_takes_fields = False
 
-        for chunk in self.get_iter(run_id, targets, **kwargs):
+        for chunk in self.get_iter(run_id, targets,
+                                   allow_multiple=False,
+                                   **kwargs):
             data = chunk.data
             data = self._apply_function(data, targets)
 
@@ -1511,6 +1516,11 @@ get_docs = """
     Many plugins save automatically anyway.
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
+:param allow_multiple: Allow multiple targets to be computed
+    simultaneously without merging the results of the target. This can
+    be used when mass producing plugins that are not of the same
+    datakind. Don't try to use this in get_array or get_df because the
+    data is not returned.
 """ + select_docs
 
 
