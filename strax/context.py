@@ -360,7 +360,7 @@ class Context:
 
         for x in dir(module):
             x = getattr(module, x)
-            if type(x) != type(type):
+            if not isinstance(x, type(type)):
                 continue
             if issubclass(x, strax.Plugin):
                 self.register(x)
@@ -901,7 +901,7 @@ class Context:
                          dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            if not allow_multiple:
+            elif not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
 
         components = self.get_components(run_id,
