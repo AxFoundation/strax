@@ -1122,6 +1122,10 @@ class Context:
         {get_docs}
         """
         run_ids = strax.to_str_tuple(run_id)
+
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with get_array/get_df')
+
         if len(run_ids) > 1:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
@@ -1132,7 +1136,6 @@ class Context:
                 targets,
                 save=save,
                 max_workers=max_workers,
-                allow_multiple=False,
                 **kwargs)
             results = [x.data for x in source]
 
@@ -1183,6 +1186,9 @@ class Context:
                 n_chunks: number of chunks in run
                 n_rows: number of data entries in run
         """
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with accumulate')
+
         n_chunks = 0
         seen_data = False
         result = {'n_rows': 0}
@@ -1194,7 +1200,6 @@ class Context:
             function_takes_fields = False
 
         for chunk in self.get_iter(run_id, targets,
-                                   allow_multiple=False,
                                    **kwargs):
             data = chunk.data
             data = self._apply_function(data, targets)

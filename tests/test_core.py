@@ -421,7 +421,7 @@ def test_allow_multiple(targets=('peaks', 'records')):
                 function(run_id=run_id,
                          allow_multiple=True,
                          targets=targets)
-            except TypeError:
+            except RuntimeError:
                 # Great, this doesn't work (and it shouldn't!)
                 continue
             raise ValueError(f'{function} could run with allow_multiple')
