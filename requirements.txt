@@ -1,9 +1,9 @@
-numpy
+numpy>=1.18.5
 pandas
 numba>=0.43.1
 blosc
 zstd
-tqdm
+tqdm>=4.46.0
 dill
 psutil
 numexpr

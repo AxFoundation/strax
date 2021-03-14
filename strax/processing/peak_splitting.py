@@ -105,11 +105,10 @@ class PeakSplitter:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
                 strax.sum_waveform(new_peaks, records, to_pe)
+                strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
                 strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
-
-            strax.compute_widths(new_peaks)
 
             # ... and recurse (if needed)
             new_peaks = self(new_peaks, records, to_pe, data_type, next_ri,

@@ -6,7 +6,7 @@ import typing as ty
 import numpy as np
 import numba
 from scipy.ndimage import convolve1d
-
+from warnings import warn
 import strax
 export, __all__ = strax.exporter()
 __all__ += ['NO_RECORD_LINK']
@@ -42,7 +42,7 @@ def baseline(records, baseline_samples=40, flip=True,
     # We only care about the channels in this set of records; a single .max()
     # is worth avoiding the hassle of passing n_channels around
     n_channels = records['channel'].max() + 1
-    last_bl_in = np.zeros((n_channels, 2), dtype=np.int16)
+    last_bl_in = np.zeros((n_channels, 2), dtype=np.float32)
     seen_first = np.zeros(n_channels, dtype=np.bool_)
 
     for d_i, d in enumerate(records):
@@ -76,25 +76,14 @@ def raw_to_records(raw_records):
         len(raw_records),
         dtype=strax.record_dtype(
             record_length_from_dtype(raw_records.dtype)))
-    copy_raw_records(raw_records, records)
+    strax.copy_to_buffer(raw_records, records, '_copy_raw_records')
     return records
 
 
-# Numpy record arrays have a rowwise memory layout, so filling it
-# rowwise should be faster.
 @export
-@numba.njit(nogil=True, cache=True)
 def copy_raw_records(old, new):
-    for i in range(len(old)):
-        r = old[i]
-        r2 = new[i]
-        r2['channel'] = r['channel']
-        r2['dt'] = r['dt']
-        r2['time'] = r['time']
-        r2['length'] = r['length']
-        r2['pulse_length'] = r['pulse_length']
-        r2['record_i'] = r['record_i']
-        r2['data'][:] = r['data'][:]
+    warn('Deprecated, use strax.copy_to_buffer')
+    strax.copy_to_buffer(old, new, '_copy_raw_records')
 
 
 @export

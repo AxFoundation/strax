@@ -5,10 +5,14 @@ there is an existing numba cache. Clear __pycache__ and restart.
 TODO: file numba issue.
 """
 import numpy as np
+import typing as ty
+import numba
+
 
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
-           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype').split()
+           'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype '
+           'copy_to_buffer').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -103,14 +107,12 @@ hit_dtype = interval_dtype + [
 ]
 
 
-def hitlet_dtype(n_widths=11):
+def hitlet_dtype():
     """
     Hitlet dtype same as peaklet or peak dtype but for hit-kind of
     objects.
     """
     dtype = interval_dtype + [
-        (('Original length of the hit interval in samples',
-          'hit_length'), np.int32),
         (('Total hit area in pe',
           'area'), np.float32),
         (('Maximum of the PMT pulse in pe/sample',
@@ -119,23 +121,34 @@ def hitlet_dtype(n_widths=11):
           'time_amplitude'), np.int16),
         (('Hit entropy',
           'entropy'), np.float32),
-        (('Peak widths in range of central area fraction in ns',
-          'width'), np.float32, n_widths),
-        (('Peak widths: time between nth and 5th area decile in ns',
-          'area_decile_from_midpoint'), np.float32, n_widths),
-        (('FWHM of the PMT pulse in ns',
+        (('Width (in ns) of the central 50% area of the hitlet',
+          'range_50p_area'), np.float32),
+        (('Width (in ns) of the central 80% area of the hitlet',
+          'range_80p_area'), np.float32),
+        (('Position of the 25% area decile [ns]',
+          'left_area'), np.float32),
+        (('Position of the 10% area decile [ns]',
+          'low_left_area'), np.float32),
+        (('Width (in ns) of the highest density region covering a 50% area of the hitlet',
+          'range_hdr_50p_area'), np.float32),
+        (('Width (in ns) of the highest density region covering a 80% area of the hitlet',
+          'range_hdr_80p_area'), np.float32),
+        (('Left edge of the 50% highest density region  [ns]',
+          'left_hdr'), np.float32),
+        (('Left edge of the 80% highest density region  [ns]',
+          'low_left_hdr'), np.float32),
+        (('FWHM of the PMT pulse [ns]',
           'fwhm'), np.float32),
-        (('Left edge of the FWHM in ns (minus "time")',
+        (('Left edge of the FWHM [ns] (minus "time")',
           'left'), np.float32),
-        (('FWTM of the PMT pulse in ns', 'fwtm'),
+        (('FWTM of the PMT pulse [ns]', 'fwtm'),
          np.float32),
-        (('Left edge of the FWTM in ns (minus "time")',
-          'low_left'), np.float32),
-        (('Fragment index in which hit was found (hitlets can be in more than 1 fragment)',
-          'record_i'), np.int32)]
+        (('Left edge of the FWTM [ns] (minus "time")',
+          'low_left'), np.float32),]
     return dtype
 
-def hitlet_with_data_dtype(n_samples, n_widths=11):
+
+def hitlet_with_data_dtype(n_samples):
     """
     Hitlet dtype with data field. Required within the plugins to compute
     hitlet properties. 
@@ -147,10 +160,15 @@ def hitlet_with_data_dtype(n_samples, n_widths=11):
     Note:
         The data buffer will be at least 2 samples long
     """
-    dtype = hitlet_dtype(n_widths)
+    dtype = hitlet_dtype()
     n_samples = max(n_samples, 2)
-    return dtype + [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
-                         np.float32, n_samples)]
+    additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
+                           np.float32, n_samples),
+                         (('Fragment number in the pulse',
+                           'record_i'), np.int32),
+                         ]
+
+    return dtype + additional_fields
 
 
 def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
@@ -187,3 +205,62 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
     ]
+
+
+def copy_to_buffer(source: np.ndarray,
+                   buffer: np.ndarray,
+                   func_name: str,
+                   field_names: ty.Tuple[str] = None):
+    """
+    Copy the data from the source to the destination e.g. raw_records to
+        records. To this end, we dynamically create the  njitted function
+        with the name 'func_name' (should start with "_").
+
+    :param source: array of input
+    :param destination: array of buffer to fill with values from input
+    :param func_name: how to store the dynamically created function.
+        Should start with an _underscore
+    :param field_names: dtype names to copy (if none, use all in the
+        source)
+    """
+    if np.shape(source) != np.shape(buffer):
+        raise ValueError('Source should be the same length as the buffer')
+
+    if field_names is None:
+        # To lazy to specify what to copy, just do all
+        field_names = tuple(n for n in source.dtype.names
+                            if n in buffer.dtype.names)
+    elif not any([n in buffer.dtype.names for n in field_names]):
+        raise ValueError('Trying to copy dtypes that are not in the '
+                         'destination')
+
+    if not func_name.startswith('_'):
+        raise ValueError('Start function with "_"')
+
+    if func_name not in globals():
+        # Create a numba function for us
+        _create_copy_function(buffer.dtype, field_names, func_name)
+
+    globals()[func_name](source, buffer)
+
+
+def _create_copy_function(res_dtype, field_names, func_name):
+    """Write out a numba-njitted function to copy data"""
+    # Cannot cache = True since we are creating the function dynamically
+    code = f'''
+@numba.njit(nogil=True)
+def {func_name}(source, result): 
+    for i in range(len(source)):
+        s = source[i]
+        r = result[i]
+'''
+    for d in field_names:
+        if d not in res_dtype.names:
+            raise ValueError('This cannot happen')
+        if np.shape(res_dtype[d]):
+            # Copy array fields as arrays
+            code += f'\n        r["{d}"][:] = s["{d}"][:]'
+        else:
+            code += f'\n        r["{d}"] = s["{d}"]'
+    # pylint: disable=exec-used
+    exec(code, globals())

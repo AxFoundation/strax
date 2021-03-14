@@ -7,21 +7,19 @@ import random
 import string
 import typing as ty
 import warnings
-
-import contextlib
+import time
+import numexpr
+import numpy as np
+import pandas as pd
+import strax
 import sys
 if any('jupyter' in arg for arg in sys.argv):
     # In some cases we are not using any notebooks,
     # Taken from 44952863 on stack overflow thanks!
-    from tqdm import tqdm_notebook as tqdm
+    from tqdm.notebook import tqdm
 else:
     from tqdm import tqdm
 
-import numexpr
-import numpy as np
-import pandas as pd
-
-import strax
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
 
@@ -69,6 +67,9 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
     strax.Option(name='timeout', default=24 * 3600,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
+    strax.Option(name='saver_timeout', default=900,
+                 help="Max time [s] a saver can take to store a result. Set "
+                      "high for slow compression algorithms."),
     strax.Option(name='use_per_run_defaults', default=False,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
@@ -359,7 +360,7 @@ class Context:
 
         for x in dir(module):
             x = getattr(module, x)
-            if type(x) != type(type):
+            if not isinstance(x, type(type)):
                 continue
             if issubclass(x, strax.Plugin):
                 self.register(x)
@@ -402,30 +403,28 @@ class Context:
         p.config = {k: v for k, v in config.items()
                     if k in p.takes_config}
 
-        if p.child_ends_with:
-            # This plugin is a child of another plugin and has some different
-            # Checking if the parent plugin is registered, this does not have to be the case
-            # but enables some useful checks.
-            parent_class = self._plugin_class_registry[p.provides[-1]].__bases__[0]
-            is_parent_reg = parent_class in self._plugin_class_registry.values()
+        if p.child_plugin:
+            # This plugin is a child of another plugin. This means we have to overwrite
+            # the registered option settings in p.config with the options specified by the
+            # child. This is required since the super().compute() method in a child plugins
+            # will still point to the option names of the parent (e.g. self.config['parent_name']).
+
             # options to pass. So update parent config according to child:
-            for k, opt in p.takes_config.items():
-                if k.endswith(p.child_ends_with):
-                    if opt.child_option:
-                        v = config[k]
-                        kparent = k[:-len(p.child_ends_with)]
+            for option_name, opt in p.takes_config.items():
+                # Now loop again overall options for this plugin (parent + child)
+                # and get all child options:
+                if opt.child_option:
+                    # See if option is tagged as a child option. In that case replace the
+                    # config value of the parent with the value of the child
+                    option_value = config[option_name]
+                    parent_name = opt.parent_option_name
 
-                        if is_parent_reg:
-                            mes = f'Option {kparent} is not taken by parent plugin.'
-                            assert kparent in parent_class.takes_config.keys(), mes
-
-                        p.config[kparent] = v
-                    else:
-                        raise ValueError(f'You specified plugin {p.__class__.__name__} as a child plugin.'
-                                         f' Found the option {k} with the ending {p.child_ends_with}'
-                                         ' which was not specified as a child option.'
-                                         ' Was this intended? If yes, please change the ending')
-
+                    mes = (f'Cannot find "{parent_name}" among the options of the parent.'
+                           f' Either you specified by accident {option_name} as child option' 
+                           f' or you specified the wrong parent_option_name. Have you specified '
+                           'the correct parent option name?')
+                    assert parent_name in p.config, mes
+                    p.config[parent_name] = option_value
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -442,7 +441,7 @@ class Context:
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
             if not (k in all_opts or k in self.context_config['free_options']):
-                warnings.warn(f"Option {k} not taken by any registered plugin")
+                warnings.warn(f"Option {k} not taken by any registered plugin", UserWarning, 2)
 
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
@@ -469,17 +468,29 @@ class Context:
 
             last_provide = d_provides
 
-            if p.child_ends_with:
+            if p.child_plugin:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
                 configs = {}
-                for q, v in p.config.items():
-                    if q + p.child_ends_with in p.takes_config:
-                        continue
-                    elif p.takes_config[q].track:
-                        configs[q] = v
-                # Adding parent information to the lineage:
+
+                # Getting information about the parent:
                 parent_class = p.__class__.__bases__[0]
+                # Get all parent options which are overwritten by a child:
+                parent_options = [option.parent_option_name for option in p.takes_config.values()
+                                  if option.child_option]
+
+                for option_name, v in p.config.items():
+                    # Looping over all settings, option_name is either the option name of the
+                    # parent or the child.
+                    if option_name in parent_options:
+                        # In case it is the parent we continue
+                        continue
+
+                    if p.takes_config[option_name].track:
+                        # Add all options which should be tracked:
+                        configs[option_name] = v
+
+                # Also adding name and version of the parent to the lineage:
                 configs[parent_class.__name__] = parent_class.__version__
                         
                 p.lineage = {last_provide: (p.__class__.__name__,
@@ -513,6 +524,19 @@ class Context:
             plugins[t] = p
 
         return plugins
+
+    @staticmethod
+    def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
+        """
+        Get the datatype that is provided by a plugin but not depended
+            on by any other plugin
+        """
+        provides = [prov for p in plugins.values()
+                    for prov in strax.to_str_tuple(p.provides)]
+        depends_on = [dep for p in plugins.values()
+                      for dep in strax.to_str_tuple(p.depends_on)]
+        uniques = list(set(provides) ^ set(depends_on))
+        return strax.to_str_tuple(uniques)
 
     @property
     def _find_options(self):
@@ -559,7 +583,7 @@ class Context:
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
-                       time_range=None, chunk_number=None
+                       time_range=None, chunk_number=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -568,15 +592,11 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
-        # Although targets is a tuple, we only support one target at the moment
-        # we could just make it a string!
-        assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
-        if len(targets[0]) == 1:
-            raise ValueError(
-                f"Plugin names must be more than one letter, not {targets[0]}")
+        for t in targets:
+            if len(t) == 1:
+                raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         plugins = self._get_plugins(targets, run_id)
-        target = targets[0]  # See above, already restricted to one target
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -736,7 +756,9 @@ class Context:
                             key,
                             metadata=p.metadata(
                                 run_id,
-                                d_to_save)))
+                                d_to_save),
+                            saver_timeout=self.context_config['saver_timeout']
+                        ))
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass
@@ -748,7 +770,14 @@ class Context:
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
-
+        if len(targets) > 1:
+            final_plugin = [t for t in targets if t in self._get_end_targets(plugins)][:1]
+            self.log.warning(
+                f'Multiple targets detected! This is only suitable for mass '
+                f'producing dataypes since only {final_plugin} will be '
+                f'subscribed in the mailbox system!')
+        else:
+            final_plugin = targets
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
         # Also run any user-defined setup
@@ -759,58 +788,78 @@ class Context:
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
-            targets=targets)
+            targets=strax.to_str_tuple(final_plugin))
 
-    def estimate_run_start(self, run_id, targets=None):
-        """Return run start time in ns since epoch.
+    def estimate_run_start_and_end(self, run_id, targets=None):
+        """Return run start and end time in ns since epoch.
 
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
+        This fetches from run metadata, and if this fails, it estimates
+            it using data metadata from the targets or the underlying
+            data-types (if it is stored).
         """
         try:
-            # Use run metadata, if it is available, to get
-            # the run start time (floored to seconds)
-            t0 = self.run_metadata(run_id, 'start')['start']
-            t0 = t0.replace(tzinfo=datetime.timezone.utc)
-            return int(t0.timestamp()) * int(1e9)
-        except (strax.RunMetadataNotAvailable, KeyError):
+            res = []
+            for i in ('start', 'end'):
+                # Use run metadata, if it is available, to get
+                # the run start time (floored to seconds)
+                t = self.run_metadata(run_id, i)[i]
+                t = t.replace(tzinfo=datetime.timezone.utc)
+                t = int(t.timestamp()) * int(1e9)
+                res.append(t)
+            return res
+        except (strax.RunMetadataNotAvailable, KeyError) as e:
+            self.log.debug(f'Could not infer start/stop due to type {type(e)} {e}')
             pass
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
         if targets:
-            for t in strax.to_str_tuple(targets):
+            self.log.debug('Infer start/stop from targets')
+            for t in self._get_plugins(strax.to_str_tuple(targets),
+                                       run_id,
+                                       ).keys():
+                if not self.is_stored(run_id, t):
+                    continue
+                self.log.debug(f'Try inferring start/stop from {t}')
                 try:
                     t0 = self.get_meta(run_id, t)['chunks'][0]['start']
-                    return (int(t0) // int(1e9)) * int(1e9)
+                    t0 = (int(t0) // int(1e9)) * int(1e9)
+
+                    t1 = self.get_meta(run_id, t)['chunks'][-1]['end']
+                    t1 = (int(t1) // int(1e9)) * int(1e9)
+                    return t0, t1
                 except strax.DataNotAvailable:
                     pass
-        warnings.warn(
-            "Could not estimate run start time from "
-            "run metadata: assuming it is 0",
-            UserWarning)
-        return 0
+        self.log.warning(
+            "Could not estimate run start and end time from "
+            "run metadata: assuming it is 0 and inf")
+        return 0, float('inf')
 
-
-    def to_absolute_time_range(self, run_id, targets, time_range=None,
-                               seconds_range=None, time_within=None):
+    def to_absolute_time_range(self, run_id, targets=None, time_range=None,
+                               seconds_range=None, time_within=None,
+                               full_range=None):
         """Return (start, stop) time in ns since unix epoch corresponding
         to time range.
 
+        :param run_id: run id to get
         :param time_range: (start, stop) time in ns since unix epoch.
         Will be returned without modification
         :param targets: data types. Used only if run metadata is unavailable,
         so run start time has to be estimated from data.
         :param seconds_range: (start, stop) seconds since start of run
         :param time_within: row of strax data (e.g. eent)
+        :param full_range: If True returns full time_range of the run.
         """
-        if ((time_range is None)
-                + (seconds_range is None)
-                + (time_within is None)
-                < 2):
+        
+        selection = ((time_range is None) +
+                     (seconds_range is None) +
+                     (time_within is None) +
+                     (full_range is None))
+        if selection < 2:
             raise RuntimeError("Pass no more than one one of"
-                               " time_range, seconds_range, ot time_within")
+                               " time_range, seconds_range, time_within"
+                               ", or full_range")
         if seconds_range is not None:
-            t0 = self.estimate_run_start(run_id, targets)
+            t0, _ = self.estimate_run_start_and_end(run_id, targets)
             time_range = (t0 + int(1e9 * seconds_range[0]),
                           t0 + int(1e9 * seconds_range[1]))
         if time_within is not None:
@@ -819,6 +868,9 @@ class Context:
             # Force time range to be integers, since float math on large numbers
             # in not precise
             time_range = tuple([int(x) for x in time_range])
+            
+        if full_range:
+            time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
 
     def get_iter(self, run_id: str,
@@ -829,8 +881,9 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
-                 _chunk_number=None,
+                 allow_multiple=False,
                  progress_bar=True,
+                 _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -863,8 +916,16 @@ class Context:
                          dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            else:
+            elif not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
+            elif (self.context_config['timeout'] > 7200 or (
+                    self.context_config['allow_lazy'] and
+                    not self.context_config['allow_multiprocess'])):
+                # For allow_multiple we don't want allow this when in lazy mode
+                # with long timeouts (lazy-mode is disabled if multiprocessing
+                # so if that is activated, we can also continue)
+                raise RuntimeError(f'Cannot allow_multiple in lazy mode or '
+                                   f'with long timeouts.')
 
         components = self.get_components(run_id,
                                          targets=targets,
@@ -887,46 +948,13 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout']).iter()
-        
-        # Defining time ranges for the progress bar:
-        if time_range:
-            # user specified a time selection
-            start_time, end_time = time_range
-        else:
-            # If no selection is specified we have to get the last end_time:
-            start_time = 0
-            end_time = float('inf')
-
-        if progress_bar:
-            for t in strax.to_str_tuple(targets):
-                try:
-                    # Sometimes some metadata might be missing e.g. during tests.
-                    chunks = self.get_meta(run_id, t)['chunks']
-                    start_time = max(start_time, chunks[0]['start'])
-                    end_time = min(end_time, chunks[-1]['end'])
-                except (strax.DataNotAvailable, KeyError, IndexError):
-                    # IndexError caused for only empty chunks when data not
-                    # available.
-                    # Maybe at least one target had some metadata.
-                    start_time = max(start_time, 0)
-                    end_time = min(end_time, float('inf'))
-
-            # Define nice progressbar format:
-            bar_format = "{desc}: |{bar}| {percentage:.2f} % [{elapsed}<{remaining}],"\
-                         " {postfix[0]} {postfix[1][spc]:.2f} s/chunk,"\
-                         " #chunks processed: {postfix[1][n]}"
-            sec_per_chunk = np.nan  # Have not computed any chunk yet.
-            post_fix = ['Rate last Chunk:', {'spc': sec_per_chunk, 'n': 0}]
 
         try:
-            with contextlib.ExitStack() as stack:
-                if progress_bar and (start_time != 0 and end_time != float('inf')):
-                    # Get initial time
-                    pbar = stack.enter_context(tqdm(total=1, postfix=post_fix, bar_format=bar_format))
-                    last_time = pbar.last_print_t
-                else:
-                    progress_bar = False
-                
+            _p, t_start, t_end = self._make_progress_bar(run_id,
+                                                         targets=targets,
+                                                         progress_bar=progress_bar)
+            with _p as pbar:
+                pbar.last_print_t = time.time()
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
                     if not isinstance(result, strax.Chunk):
@@ -938,22 +966,11 @@ class Context:
                         keep_columns=keep_columns,
                         time_range=time_range,
                         time_selection=time_selection)
-                    
-                    if progress_bar:
-                        # Update progressbar:
-                        pbar.n = (result.end - start_time) / (end_time - start_time)
-                        pbar.update(0)
-                        # Now get last time printed and refresh seconds_per_chunk:
-                        # This is a small work around since we do not know the
-                        # pacemaker here and therefore we do not know the number of
-                        # chunks.
-                        sec_per_chunk = pbar.last_print_t - last_time
-                        pbar.postfix[1]['spc'] = sec_per_chunk
-                        pbar.postfix[1]['n'] = n_chunks
-                        pbar.refresh()
-                        last_time = pbar.last_print_t
+                    self._update_progress_bar(
+                        pbar, t_start, t_end, n_chunks, result.end)
 
                     yield result
+            _p.close()
 
         except GeneratorExit:
             generator.throw(OutsideException(
@@ -969,6 +986,55 @@ class Context:
                 raise strax.DataCorrupted("No data returned!")
             raise ValueError(f"Invalid time range: {time_range}, "
                              "returned no chunks!")
+
+    def _make_progress_bar(self, run_id, targets, progress_bar=True):
+        """
+        Make a progress bar for get_iter
+        :param run_id, targets: run_id and targets
+        :param progress_bar: Bool whether or not to display the progress bar
+        :return: progress bar, t_start (run) and t_end (run)
+        """
+        try:
+            t_start, t_end, = self.estimate_run_start_and_end(run_id, targets)
+        except (AttributeError, KeyError, IndexError):
+            # During testing some thing remain a secret
+            t_start, t_end, = 0, float('inf')
+        if t_end == float('inf'):
+            progress_bar = False
+
+        # Define nice progressbar format:
+        bar_format = ("{desc}: "  # The loading plugin x
+                      "|{bar}| "  # Bar that is being filled
+                      "{percentage:.2f} % "  # Percentage
+                      "[{elapsed}<{remaining}]"  # Time estimate
+                      "{postfix}"  # Extra info
+                      )
+        description = f'Loading {"plugins" if targets[0].startswith("_temp") else targets}'
+        pbar = tqdm(total=1,
+                    desc=description,
+                    bar_format=bar_format,
+                    leave=True,
+                    disable=not progress_bar)
+        return pbar, t_start, t_end
+
+    @staticmethod
+    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end):
+        """Do some tqdm voodoo to get the progress bar for st.get_iter"""
+        if t_end - t_start > 0:
+            fraction_done = (chunk_end - t_start) / (t_end - t_start)
+            if fraction_done > .99:
+                # Patch to 1 to not have a red pbar when very close to 100%
+                fraction_done = 1
+            pbar.n = np.clip(fraction_done, 0, 1)
+        else:
+            # Strange, start and endtime are the same, probably we don't
+            # have data yet e.g. allow_incomplete == True.
+            pbar.n = 0
+        # Let's add the postfix which is the info behind the tqdm marker
+        seconds_per_chunk = time.time() - pbar.last_print_t
+        postfix = f'Last chunk: {seconds_per_chunk:.2f} s. #chunks {n_chunks}'
+        pbar.set_postfix_str(postfix)
+        pbar.update(0)
 
     def apply_selection(self, x,
                         selection_str=None,
@@ -1064,6 +1130,10 @@ class Context:
         {get_docs}
         """
         run_ids = strax.to_str_tuple(run_id)
+
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with get_array/get_df')
+
         if len(run_ids) > 1:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
@@ -1124,6 +1194,9 @@ class Context:
                 n_chunks: number of chunks in run
                 n_rows: number of data entries in run
         """
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with accumulate')
+
         n_chunks = 0
         seen_data = False
         result = {'n_rows': 0}
@@ -1134,7 +1207,8 @@ class Context:
                 return arr
             function_takes_fields = False
 
-        for chunk in self.get_iter(run_id, targets, **kwargs):
+        for chunk in self.get_iter(run_id, targets,
+                                   **kwargs):
             data = chunk.data
             data = self._apply_function(data, targets)
 
@@ -1295,13 +1369,10 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        key = self.key_for(run_id, target)
         for sf in self.storage:
-            try:
-                sf.find(key, **self._find_options)
+            if self._is_stored_in_sf(run_id, target, sf):
                 return True
-            except strax.DataNotAvailable:
-                continue
+        # None of the frontends has the data
         return False
 
     def _check_forbidden(self):
@@ -1333,6 +1404,116 @@ class Context:
             data = function(data, targets)
         return data
 
+    def copy_to_frontend(self, run_id, target,
+                         target_frontend_id=None, rechunk=False):
+        """
+        Copy data from one frontend to another
+        :param run_id: run_id
+        :param target: target datakind
+        :param target_frontend_id: index of the frontend that the data should go to
+        in context.storage. If no index is specified, try all.
+        :param rechunk: allow re-chunking for saving
+        """
+        if not self.is_stored(run_id, target):
+            raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
+                                         f'does not exist')
+        if len(strax.to_str_tuple(target)) > 1:
+            raise ValueError(
+                'copy_to_frontend only works for a single target at the time')
+        if target_frontend_id is None:
+            target_sf = self.storage
+        elif len(self.storage) > target_frontend_id:
+            # only write to selected other frontend
+            target_sf = [self.storage[target_frontend_id]]
+        else:
+            raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
+                             f'we only have {len(self.storage)} frontends!')
+
+        # Figure out which of the frontends has the data. Raise error when none
+        source_sf = self._get_source_sf(run_id, target, should_exist=True)
+
+        # Keep frontends that:
+        #  1. don't already have the data; and
+        #  2. take the data; and
+        #  3. are not readonly
+        target_sf = [t_sf for t_sf in target_sf if
+                     (not self._is_stored_in_sf(run_id, target, t_sf) and
+                      t_sf._we_take(target) and
+                      t_sf.readonly is False)]
+
+        if not len(target_sf):
+            raise ValueError('No frontend to copy to! Perhaps you already stored '
+                             'it or none of the frontends is willing to take it?')
+
+        # Get the info from the source backend (s_be) that we need to fill
+        # the target backend (t_be) with
+        data_key = self.key_for(run_id, target)
+        # This should never fail, we just tried
+        s_be_str, s_be_key = source_sf.find(data_key)
+        s_be = source_sf._get_backend(s_be_str)
+        md = s_be.get_metadata(s_be_key)
+
+        for t_sf in target_sf:
+            try:
+                # Need to load a new loader each time since it's a generator
+                # and will be exhausted otherwise.
+                loader = s_be.loader(s_be_key)
+                # Fill the target buffer
+                t_be_str, t_be_key = t_sf.find(data_key, write=True)
+                target_be = t_sf._get_backend(t_be_str)
+                saver = target_be._saver(t_be_key, md)
+                saver.save_from(loader, rechunk=rechunk)
+            except NotImplementedError:
+                # Target is not susceptible
+                continue
+            except strax.DataExistsError:
+                raise strax.DataExistsError(
+                    f'Trying to write {data_key} to {t_sf} which already exists, '
+                    'do you have two storage frontends writing to the same place?')
+
+    def _is_stored_in_sf(self, run_id, target,
+                         storage_frontend: strax.StorageFrontend) -> bool:
+        """
+        :param run_id, target: run_id, target
+        :param storage_frontend: strax.StorageFrontend to check if it has the
+        requested datakey for the run_id and target.
+        :return: if the frontend has the key or not.
+        """
+        key = self.key_for(run_id, target)
+        try:
+            storage_frontend.find(key, **self._find_options)
+            return True
+        except strax.DataNotAvailable:
+            return False
+
+    def _get_source_sf(self, run_id, target, should_exist=False):
+        """
+        Get the source storage frontend for a given run_id and target
+        :param run_id, target: run_id, target
+        :param should_exist: Raise a ValueError if we cannot find one
+        (e.g. we already checked the data is stored)
+        :return: strax.StorageFrontend or None (when raise_error is
+        False)
+        """
+        for sf in self.storage:
+            if self._is_stored_in_sf(run_id, target, sf):
+                return sf
+        if should_exist:
+            raise ValueError('This cannot happen, we just checked that this '
+                             'run should be stored?!?')
+
+    def provided_dtypes(self, runid='0'):
+        """
+        Summarize useful dtype information provided by this context
+        :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
+        """
+        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
+                    for p in self._plugin_class_registry.values()
+                    for d in p.provides])
+
+        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
+                for dtype, h, save_when, version in hashes}
+
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method"""
@@ -1341,6 +1522,8 @@ class Context:
 
 select_docs = """
 :param selection_str: Query string or sequence of strings to apply.
+:param keep_columns: Array field/dataframe column names to keep. 
+    Useful to reduce amount of data in memory.
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
 the start of the run to load.
@@ -1361,6 +1544,11 @@ get_docs = """
     Many plugins save automatically anyway.
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
+:param allow_multiple: Allow multiple targets to be computed
+    simultaneously without merging the results of the target. This can
+    be used when mass producing plugins that are not of the same
+    datakind. Don't try to use this in get_array or get_df because the
+    data is not returned.
 """ + select_docs
 
 

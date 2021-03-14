@@ -10,7 +10,7 @@ import itertools
 import logging
 import time
 import typing
-
+from warnings import warn
 from immutabledict import immutabledict
 import numpy as np
 
@@ -54,8 +54,9 @@ class Plugin:
     provides: tuple
     input_buffer: typing.Dict[str, strax.Chunk]
     
-    # Needed for plugins which are inherited from an already eliciting plugin:
-    child_ends_with = None
+    # Needed for plugins which are inherited from an already existing plugins,
+    # indicates such an inheritance.
+    child_plugin = False
     
     compressor = 'blosc'
 
@@ -180,8 +181,18 @@ class Plugin:
         return self.__class__.__name__
 
     def dtype_for(self, data_type):
+        """
+        Provide the dtype of one of the provide arguments of the plugin.
+        NB: does not simply provide the dtype of any datatype but must
+        be one of the provide arguments known to the plugin.
+        """
         if self.multi_output:
-            return self.dtype[data_type]
+            if data_type in self.dtype:
+                return self.dtype[data_type]
+            else:
+                raise ValueError(f'dtype_for provides the dtype of one of the '
+                                 f'provide datatypes specified in this plugin '
+                                 f'{data_type} is not provided by this plugin')
         return self.dtype
 
     def can_rechunk(self, data_type):
@@ -285,122 +296,127 @@ class Plugin:
         _end = float('inf')
         for d in self.depends_on:
             self._fetch_chunk(d, iters)
+            if self.input_buffer[d] is None:
+                raise ValueError(f'Cannot work with empty input buffer {self.input_buffer}')
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end
 
-        for chunk_i in itertools.count():
+        # To break out of nested loops:
+        class IterDone(Exception):
+            pass
 
-            # Online input support
-            while not self.is_ready(chunk_i):
-                if self.source_finished():
-                    # Chunk_i does not exist. We are done.
-                    print("Source finished!")
-                    self.cleanup(iters, wait_for=pending_futures)
-                    return
+        try:
+            for chunk_i in itertools.count():
 
-                if time.time() > last_input_received + self.input_timeout:
-                    raise InputTimeoutExceeded(
-                        f"{self.__class__.__name__}:{id(self)} waited for "
-                        f"more  than {self.input_timeout} sec for arrival of "
-                        f"input chunk {chunk_i}, and has given up.")
+                # Online input support
+                while not self.is_ready(chunk_i):
+                    if self.source_finished():
+                        # Chunk_i does not exist. We are done.
+                        print("Source finished!")
+                        raise IterDone()
 
-                print(f"{self.__class__.__name__}:{id(self)} "
-                      f"waiting for chunk {chunk_i}")
-                time.sleep(2)
-            last_input_received = time.time()
+                    if time.time() > last_input_received + self.input_timeout:
+                        raise InputTimeoutExceeded(
+                            f"{self.__class__.__name__}:{id(self)} waited for "
+                            f"more  than {self.input_timeout} sec for arrival of "
+                            f"input chunk {chunk_i}, and has given up.")
 
-            if pacemaker is None:
-                inputs_merged = dict()
-            else:
-                if chunk_i != 0:
-                    # Fetch the pacemaker, to figure out when this chunk ends
-                    # (don't do it for chunk 0, for which we already fetched)
-                    if not self._fetch_chunk(pacemaker, iters):
-                        # Source exhausted. Cleanup will do final checks.
-                        self.cleanup(iters, wait_for=pending_futures)
-                        return
-                this_chunk_end = self.input_buffer[pacemaker].end
+                    print(f"{self.__class__.__name__} with object id: {id(self)} "
+                          f"waits for chunk {chunk_i}")
+                    time.sleep(2)
+                last_input_received = time.time()
 
-                inputs = dict()
-                # Fetch other inputs (when needed)
-                for d in self.depends_on:
-                    if d != pacemaker:
-                        while (self.input_buffer[d] is None
-                               or self.input_buffer[d].end < this_chunk_end):
-                            self._fetch_chunk(
-                                d, iters,
-                                check_end_not_before=this_chunk_end)
-                    inputs[d], self.input_buffer[d] = \
-                        self.input_buffer[d].split(
-                            t=this_chunk_end,
-                            allow_early_split=True)
+                if pacemaker is None:
+                    inputs_merged = dict()
+                else:
+                    if chunk_i != 0:
+                        # Fetch the pacemaker, to figure out when this chunk ends
+                        # (don't do it for chunk 0, for which we already fetched)
+                        if not self._fetch_chunk(pacemaker, iters):
+                            # Source exhausted. Cleanup will do final checks.
+                            raise IterDone()
+                    this_chunk_end = self.input_buffer[pacemaker].end
 
-                # If any of the inputs were trimmed due to early splits,
-                # trim the others too.
-                # In very hairy cases this can take multiple passes.
-                # TODO: can we optimize this, or code it more elegantly?
-                max_passes_left = 10
-                while max_passes_left > 0:
-                    this_chunk_end = min([x.end for x in inputs.values()]
-                                         + [this_chunk_end])
-                    if len(set([x.end for x in inputs.values()])) <= 1:
-                        break
+                    inputs = dict()
+                    # Fetch other inputs (when needed)
                     for d in self.depends_on:
-                        inputs[d], back_to_buffer = \
-                            inputs[d].split(
+                        if d != pacemaker:
+                            while (self.input_buffer[d] is None
+                                   or self.input_buffer[d].end < this_chunk_end):
+                                self._fetch_chunk(
+                                    d, iters,
+                                    check_end_not_before=this_chunk_end)
+                        inputs[d], self.input_buffer[d] = \
+                            self.input_buffer[d].split(
                                 t=this_chunk_end,
                                 allow_early_split=True)
-                        self.input_buffer[d] = strax.Chunk.concatenate(
-                            [back_to_buffer, self.input_buffer[d]])
-                    max_passes_left -= 1
+                    # If any of the inputs were trimmed due to early splits,
+                    # trim the others too.
+                    # In very hairy cases this can take multiple passes.
+                    # TODO: can we optimize this, or code it more elegantly?
+                    max_passes_left = 10
+                    while max_passes_left > 0:
+                        this_chunk_end = min([x.end for x in inputs.values()]
+                                             + [this_chunk_end])
+                        if len(set([x.end for x in inputs.values()])) <= 1:
+                            break
+                        for d in self.depends_on:
+                            inputs[d], back_to_buffer = \
+                                inputs[d].split(
+                                    t=this_chunk_end,
+                                    allow_early_split=True)
+                            self.input_buffer[d] = strax.Chunk.concatenate(
+                                [back_to_buffer, self.input_buffer[d]])
+                        max_passes_left -= 1
+                    else:
+                        raise RuntimeError(
+                            f"{self} was unable to get time-consistent "
+                            f"inputs after ten passess. Inputs: \n{inputs}\n"
+                            f"Input buffer:\n{self.input_buffer}")
+
+                    # Merge inputs of the same kind
+                    inputs_merged = {
+                        kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
+                        for kind, deps_of_kind in self.dependencies_by_kind().items()}
+
+                # Submit the computation
+                # print(f"{self} calling with {inputs_merged}")
+                if self.parallel and executor is not None:
+                    new_future = executor.submit(
+                        self.do_compute,
+                        chunk_i=chunk_i,
+                        **inputs_merged)
+                    pending_futures.append(new_future)
+                    pending_futures = [f for f in pending_futures if not f.done()]
+                    yield new_future
                 else:
+                    yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+
+        except IterDone:
+            # Check all sources are exhausted.
+            # This is more than a check though -- it ensure the content of
+            # all sources are requested all the way (including the final
+            # Stopiteration), as required by lazy-mode processing requires
+            for d in iters.keys():
+                if self._fetch_chunk(d, iters):
                     raise RuntimeError(
-                        f"{self} was unable to get time-consistent "
-                        f"inputs after ten passess. Inputs: \n{inputs}\n"
-                        f"Input buffer:\n{self.input_buffer}")
+                        f"Plugin {d} terminated without fetching last {d}!")
 
-                # Merge inputs of the same kind
-                inputs_merged = {
-                    kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
-                    for kind, deps_of_kind in self.dependencies_by_kind().items()}
+            # This can happen especially in time range selections
+            if int(self.save_when) != strax.SaveWhen.NEVER:
+                for d, buffer in self.input_buffer.items():
+                    # Check the input buffer is empty
+                    if buffer is not None and len(buffer):
+                        raise RuntimeError(
+                            f"Plugin {d} terminated with leftover {d}: {buffer}")
 
-            # Submit the computation
-            # print(f"{self} calling with {inputs_merged}")
-            if self.parallel and executor is not None:
-                new_future = executor.submit(
-                    self.do_compute,
-                    chunk_i=chunk_i,
-                    **inputs_merged)
-                pending_futures.append(new_future)
-                pending_futures = [f for f in pending_futures if not f.done()]
-                yield new_future
-            else:
-                yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+        finally:
+            self.cleanup(wait_for=pending_futures)
 
-        raise RuntimeError("This cannot happen.")
-
-    def cleanup(self,
-                iters: typing.Dict[str, typing.Iterable],
-                wait_for):
-        # The wait_for option is only used in child classes;
-        # A standard plugin doesn't need to do anything with the computation
-        # future results.
-
-        # Check all sources are exhausted.
-        # This is more than a check though -- it ensure the content of
-        # all sources are requested all the way (including the final
-        # Stopiteration), as required by lazy-mode processing requires
-        for d in iters.keys():
-            if self._fetch_chunk(d, iters):
-                raise RuntimeError(
-                    f"Plugin {d} terminated without fetching last {d}!")
-
-        # Check the input buffer is empty
-        for d, buffer in self.input_buffer.items():
-            if buffer is not None and len(buffer):
-                raise RuntimeError(
-                    f"Plugin {d} terminated with leftover {d}: {buffer}")
+    def cleanup(self, wait_for):
+        pass
+        # A standard plugin doesn't need to do anything here
 
     def _check_dtype(self, x, d=None):
         # There is an additional 'last resort' data type check
@@ -442,10 +458,27 @@ class Plugin:
         if len(kwargs):
             # Check inputs describe the same time range
             tranges = {k: (v.start, v.end) for k, v in kwargs.items()}
-            if len(set(tranges.values())) != 1:
-                raise ValueError(f"{self.__class__.__name__} got inconsistent "
-                                 f"time ranges of inputs: {tranges}")
             start, end = list(tranges.values())[0]
+
+            # For non-saving plugins, don't be strict, just take whatever
+            # endtimes are available and don't check time-consistency
+            if int(self.save_when) == strax.SaveWhen.NEVER:
+                # </start>This warning/check will be deleted, see UserWarning
+                if len(set(tranges.values())) != 1:
+                    end = max([v.end for v in kwargs.values()])  # Don't delete
+                    message = (
+                        f"New feature, we are ignoring inconsistent the "
+                        f"possible ValueError in time ranges for "
+                        f"{self.__class__.__name__} of inputs: {tranges}"
+                        f"because this occurred in a save_when.NEVER "
+                        f"plugin. Report any findings in "
+                        f"github.com/AxFoundation/strax/issues/247")
+                    warn(message, UserWarning)
+                # This block will be deleted </end>
+            elif len(set(tranges.values())) != 1:
+                message = (f"{self.__class__.__name__} got inconsistent time "
+                           f"ranges of inputs: {tranges}")
+                raise ValueError(message)
         else:
             # This plugin starts from scratch
             start, end = None, None
@@ -480,7 +513,12 @@ class Plugin:
                     "Plugins without dependencies must return full strax "
                     f"Chunks, but {self.__class__.__name__} produced a "
                     f"{type(result)}!")
-
+            if isinstance(result, dict) and len(result) == 1:
+                raise ValueError(
+                    f'Ran into single key results dict with key: '
+                    f'{list(result.keys())}, cannot convert this to array of '
+                    f'dtype {self.dtype_for(_dtype)}.\nSee '
+                    f'github.com/AxFoundation/strax/issues/238 for more info')
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
             self._check_dtype(result, _dtype)
             result = self.chunk(
@@ -638,19 +676,53 @@ class LoopPlugin(Plugin):
                                        f"should be {len(base)}!")
                 kwargs[k] = r
 
-        results = np.zeros(len(base), dtype=self.dtype)
-        deps_by_kind = self.dependencies_by_kind()
+        if self.multi_output:
+            # This is the a-typical case. Most of the time you just have
+            # one output. Just doing the same as below but this time we
+            # need to create a dict for the outputs.
+            # NB: both outputs will need to have the same length as the
+            # base!
+            results = {k: np.zeros(len(base), dtype=self.dtype[k]) for k in self.provides}
+            deps_by_kind = self.dependencies_by_kind()
 
-        for i in range(len(base)):
-            r = self.compute_loop(base[i],
-                                  **{k: kwargs[k][i]
-                                     for k in deps_by_kind
-                                     if k != loop_over})
+            for i, base_chunk in enumerate(base):
+                res = self.compute_loop(base_chunk,
+                                        **{k: kwargs[k][i]
+                                           for k in deps_by_kind
+                                           if k != loop_over})
+                if not isinstance(res, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
+                # Convert from dict to array row:
+                for provides, r in res.items():
+                    for k, v in r.items():
+                        if np.shape(v) != np.shape(results[provides][i][k]):
+                            # Make sure that the buffer length as
+                            # defined by the base matches the output of
+                            # the compute argument.
+                            raise ValueError(
+                                f'{provides} returned an improper length array '
+                                f'that is not equal to the {loop_over} '
+                                'data-kind! Are you sure a LoopPlugin is the '
+                                'right Plugin for your application?')
+                        results[provides][i][k] = v
+        else:
+            # Normally you end up here were we are going to loop over
+            # base and add the results to the right format.
+            results = np.zeros(len(base), dtype=self.dtype)
+            deps_by_kind = self.dependencies_by_kind()
 
-            # Convert from dict to array row:
-            for k, v in r.items():
-                results[i][k] = v
-
+            for i, base_chunk in enumerate(base):
+                r = self.compute_loop(base_chunk,
+                                      **{k: kwargs[k][i]
+                                         for k in deps_by_kind
+                                         if k != loop_over})
+                if not isinstance(r, (dict, immutabledict)):
+                    raise AttributeError('Please provide result in '
+                                         'compute loop as dict')
+                # Convert from dict to array row:
+                for k, v in r.items():
+                    results[i][k] = v
         return results
 
     def compute_loop(self, *args, **kwargs):
@@ -821,8 +893,19 @@ class ParallelSourcePlugin(Plugin):
         p.sub_savers = sub_savers
         p.start_from = start_from
         if p.multi_output:
-            p.dtype = {d: p.sub_plugins[d].dtype_for(d)
-                       for d in outputs_to_send}
+            p.dtype = {}
+            for d in outputs_to_send:
+                if d in p.sub_plugins:
+                    p.dtype[d] = p.sub_plugins[d].dtype_for(d)
+                else:
+                    log.debug(f'Finding plugin that provides {d}')
+                    # Need to do some more work to get the plugin that
+                    # provides this data-type.
+                    for sp in p.sub_plugins.values():
+                        if d in sp.provides:
+                            log.debug(f'{sp} provides {d}')
+                            p.dtype[d] = sp.dtype_for(d)
+                            break
         else:
             to_send = list(outputs_to_send)[0]
             p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
@@ -900,10 +983,10 @@ class ParallelSourcePlugin(Plugin):
 
         return self._fix_output(results, start=r0.start, end=r0.end)
 
-    def cleanup(self, iters, wait_for):
-        print(f"{self.__class__.__name__} exhausted. "
+    def cleanup(self, wait_for):
+        print(f"{self.__class__.__name__} terminated. "
               f"Waiting for {len(wait_for)} pending futures.")
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=wait_for)
-        super().cleanup(iters, wait_for)
+        super().cleanup(wait_for)

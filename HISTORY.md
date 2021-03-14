@@ -1,3 +1,86 @@
+0.13.9 / 2021-02-22
+---------------------
+- Clip progress progressbar (#399)
+
+0.13.8 / 2021-02-09
+---------------------
+- Specify saver timeout at context level (#394)
+- Allow dynamic function creation for dtype copy (#395)
+- Close inlined savers on exceptions in multiprocessing (#390)
+- Allow option to be overwritten to allow subclassing (#392)
+- Fix availability checks (#389)
+- Don't print for temp plugins (#391)
+
+0.13.7 / 2021-01-29
+---------------------
+- Warn for non saved plugins in run selection (#387)
+- Cleanup progressbar (#386)
+
+0.13.4 / 2021-01-22
+---------------------
+- Nveto changes + highest density regions (#384) 
+- Parse requirements for testing (#383)
+- Added keep_columns into docstring (#382)
+- remove slow operators from mongo storage (#382)
+
+0.13.3 / 2021-01-15
+---------------------
+- Better online monitor queries (#375)
+- Multiprocess fix (#376)
+- Bugfix (#377)
+
+0.13.2 / 2021-01-04
+---------------------
+- Speed up st.select_runs by ~100x (#371)
+- Finding latest OnlineMonitor data (#374)
+
+0.13.1 / 2020-12-21
+---------------------
+- Fix bug in baselining (#367)
+
+0.12.7 / 2020-12-21
+---------------------
+- Fix for select_runs with Nones(#370)
+- Numpy requirement fix (#369)
+- Documentation maintenance (cad6bce8, 9c023b0d)
+
+0.12.6 / 2020-12-09
+---------------------
+- Muveto + hitlet fixes (#355)
+- Add more tests to strax (#359)
+- More clear print statement (#362)
+- Fix reproducibility of peak split test (#363)
+- Fix numpy deps (#364)
+
+0.12.5 / 2020-12-06
+---------------------
+- Finally fix time selection bug (#345)
+- Allow multioutput for loop plugin (#357)
+- Allow copy from frontend to frontend (#351)
+- Add more tests to strax (#359)
+- Small bugfix progressbar (#353)
+- Smooth database initiation CMT (#356)
+- Remove s3 storage (#358)
+
+0.12.4 / 2020-11-13
+---------------------
+- Limit mongo backend memory usage (#349)
+- Small CMT simplification (#347)
+
+0.12.3 / 2020-11-05
+---------------------
+- Updates to mongo.py (#335, #336 )
+- Several bug-fixes (#340, #343, #344, #338)
+- Contributions to documentation (#342, #344)
+- Accommodate  scada (#318)
+
+0.12.2 / 2020-10-15
+---------------------
+- OnlineMonitor in mongo.py (#315, #323)
+- Several bugfixes (#320, #321, #327, #329, #334)
+- Option to give range to sum_waveform (#322)
+
+
 0.12.1 / 2020-09-10
 ---------------------
 - Added the "Corrections Management Tool" (#303)

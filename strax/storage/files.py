@@ -12,7 +12,6 @@ from .common import StorageFrontend
 
 export, __all__ = strax.exporter()
 
-
 RUN_METADATA_PATTERN = '%s-metadata.json'
 
 
@@ -116,11 +115,16 @@ class DataDirectory(StorageFrontend):
         if exists and self._folder_matches(dirname, key, None, None):
             return bk
 
-        # Check metadata of all potentially matching data dirs for match...
-        for fn in self._subfolders():
-            if self._folder_matches(fn, key,
-                                    fuzzy_for, fuzzy_for_options):
-                return self.backend_key(fn)
+        # Check metadata of all potentially matching data dirs for
+        # matches. This only makes sense for fuzzy searches since
+        # otherwise we should have had an exact match already. (Also
+        # really slows down st.select runs otherwise because we doing an
+        # entire search over all the files in self._subfolders for all
+        # non-available keys).
+        if fuzzy_for or fuzzy_for_options:
+            for fn in self._subfolders():
+                if self._folder_matches(fn, key, fuzzy_for, fuzzy_for_options):
+                    return self.backend_key(fn)
 
         raise strax.DataNotAvailable
 
@@ -207,6 +211,11 @@ class FileSytemBackend(strax.StorageBackend):
         md_path = osp.join(dirname, metadata_json)
 
         if not osp.exists(md_path):
+            # Try to see if we are so fast that there exists a temp folder 
+            # with the metadata we need.
+            md_path = osp.join(dirname + '_temp', metadata_json)
+
+        if not osp.exists(md_path):
             # Try old-format metadata
             # (if it's not there, just let it raise FileNotFound
             # with the usual message in the next stage)
@@ -222,7 +231,7 @@ class FileSytemBackend(strax.StorageBackend):
         fn = osp.join(dirname, chunk_info['filename'])
         return strax.load_file(fn, dtype=dtype, compressor=compressor)
 
-    def _saver(self, dirname, metadata):
+    def _saver(self, dirname, metadata, **kwargs):
         # Test if the parent directory is writeable.
         # We need abspath since the dir itself may not exist,
         # even though its parent-to-be does
@@ -245,7 +254,7 @@ class FileSytemBackend(strax.StorageBackend):
                 f"Can't write data to {dirname}, "
                 f"no write permissions in {parent_dir}.")
 
-        return FileSaver(dirname, metadata=metadata)
+        return FileSaver(dirname, metadata=metadata, **kwargs)
 
 
 @export
@@ -253,8 +262,8 @@ class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
 
-    def __init__(self, dirname, metadata):
-        super().__init__(metadata)
+    def __init__(self, dirname, metadata, **kwargs):
+        super().__init__(metadata, **kwargs)
         self.dirname = dirname
         self.tempdirname = dirname + '_temp'
         self.prefix = dirname_to_prefix(dirname)

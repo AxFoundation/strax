@@ -37,7 +37,7 @@ def takes_config(*options):
             # Already have some options set, e.g. because of subclassing
             # where both child and parent have a takes_config decorator
             for opt in result.values():
-                if opt.name in plugin_class.takes_config:
+                if opt.name in plugin_class.takes_config and not opt.overwrite:
                     raise RuntimeError(
                         f"Attempt to specify option {opt.name} twice")
             plugin_class.takes_config = immutabledict({
@@ -61,6 +61,8 @@ class Option:
                  default_factory: ty.Callable = OMITTED,
                  default_by_run=OMITTED,
                  child_option: bool = False,
+                 parent_option_name: str = None,
+                 overwrite: bool = False,
                  track: bool = True,
                  help: str = ''):
         """
@@ -72,9 +74,15 @@ class Option:
          - Callable. Will be called with run_id, must return value for run.
          - List [(start_run_id, value), ..,] for values specified by range of
            runs.
-        :param child_option: If true option is marked as a child_option. In case of
-            plugin which is inherited from an already existing plugin we only store the
-            child options in the lineage of the plugin.
+        :param child_option: If true option is marked as a child_option. All
+            options which are marked as a child overwrite the corresponding parent
+            option. Removes also the corresponding parent option from the lineage.
+        :param parent_option_name: Name of the parent option of child option.
+            Required to find the key of the parent option so it can be overwritten
+            by the value of the child option.
+        :param overwrite: allow this option to overwrite if there is
+            another option already registered with the same name with a
+            different value. Only use for subclassing plugins.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
         :param help: Human-readable description of the option.
@@ -84,9 +92,21 @@ class Option:
         self.default = default
         self.default_by_run = default_by_run
         self.default_factory = default_factory
+        self.overwrite = overwrite
         self.track = track
         self.help = help
+
+        # Options required for inherited child plugins:
+        # Require both to be more explicit and reduce errors by the user
         self.child_option = child_option
+        self.parent_option_name = parent_option_name
+        if (self.child_option and not self.parent_option_name) \
+                or (not self.child_option and self.parent_option_name):
+            raise ValueError('You have to specify both, "child_option"=True and '
+                             'the name of the parent option which should be '
+                             'overwritten by the child. Options which are unique '
+                             'to the child should not be marked as a child option.'
+                             f'Please update {self.name} accordingly.')
 
         # if self.default_by_run is not OMITTED:
         #     warnings.warn(f"The {self.name} option uses default_by_run,"

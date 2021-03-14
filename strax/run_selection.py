@@ -60,6 +60,12 @@ def scan_runs(self: strax.Context,
         list(strax.to_str_tuple(check_available))
         + list(self.context_config['check_available'])))
 
+    for target in check_available:
+        p = self._plugin_class_registry[target]
+        if p.save_when < strax.SaveWhen.ALWAYS:
+            self.log.warning(f'{p.__name__}-plugin is {str(p.save_when)}. '
+                             f'Therefore {target} is most likely not stored!')
+
     docs = None
     for sf in self.storage:
         _temp_docs = []
@@ -84,8 +90,8 @@ def scan_runs(self: strax.Context,
             if ('start' in store_fields
                     and 'end' in store_fields
                     and 'livetime' in store_fields
-                    and 'start' in doc
-                    and 'end' in doc):
+                    and doc.get('start') is not None
+                    and doc.get('end') is not None):
                 doc.setdefault('livetime', doc['end'] - doc['start'])
 
             # Put the strax defaults stuff into a different cache
@@ -167,7 +173,7 @@ def select_runs(self, run_mode=None, run_id=None,
        select blinded dsatasets that aren't bad or messy
     """
     if self.runs is None:
-        self.scan_runs()
+        self.scan_runs(check_available=strax.to_str_tuple(available))
     dsets = self.runs.copy()
 
     if pattern_type not in ('re', 'fnmatch'):
@@ -209,9 +215,13 @@ def select_runs(self, run_mode=None, run_id=None,
     for d in have_available:
         if not d + '_available' in dsets.columns:
             # Get extra availability info from the run db
-            self.runs[d + '_available'] = np.in1d(
-                self.runs.name.values,
-                self.list_available(d))
+            d_available = np.in1d(self.runs.name.values,
+                                  self.list_available(d))
+            # Save both in the context and for this selection using
+            # available = ('data_type',)
+            self.runs[d + '_available'] = d_available
+            dsets[d + '_available'] = d_available
+    for d in have_available:
         dsets = dsets[dsets[d + '_available']]
 
     return dsets

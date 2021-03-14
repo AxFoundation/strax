@@ -186,6 +186,40 @@ def hits_n_data(draw, strategy):
     return hd
 
 
+
+def test_highest_density_region_width():
+    """
+    Some unit test for the HDR width estimate.
+    """
+    truth_dict = {0.5: [[2/3, 2+1/3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
+    distribution = np.array([1, 7, 1, 1, 0])
+    # Some distribution with offset:
+    _test_highest_density_region_width(distribution, truth_dict)
+        
+    
+    # Same but with offset (zero missing):
+    _test_highest_density_region_width(np.array([1, 7, 1, 1]), truth_dict)
+    
+    # Two more nasty cases:
+    truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
+    distribution = np.array([1])
+    _test_highest_density_region_width(np.array([1]), truth_dict)
+    
+    truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
+    distribution = np.array([1, 0])
+    _test_highest_density_region_width(np.array([1, 0]), truth_dict)
+    
+
+def _test_highest_density_region_width(distribution, truth_dict):
+    res = strax.processing.hitlets.highest_density_region_width(distribution,
+                                                            np.array(list(truth_dict.keys())), 
+                                                            fractionl_edges=True)
+    
+    for ind, (fraction, truth) in enumerate(truth_dict.items()):
+        mes = f'Found wrong edges for {fraction} in {distribution} expected {truth} but got {res[ind]}.'
+        assert np.all(np.isclose(truth, res[ind])), mes
+
+
 @given(hits_n_data=hits_n_data(fake_hits))
 @settings(deadline=None)
 def test_hitlet_properties(hits_n_data):
@@ -238,24 +272,7 @@ def test_hitlet_properties(hits_n_data):
         # Checking FHWM and FWTM:
         fractions = [0.1, 0.5]
         for f in fractions:
-            amplitude = np.max(d)
-            le = np.argwhere(d[:pos_max] <= amplitude * f)
-            if len(le):
-                le = le[-1, 0]
-                m = d[le + 1] - d[le]
-                le = le + 0.5 + (amplitude * f - d[le]) / m
-            else:
-                le = 0
-
-            re = np.argwhere(d[pos_max:] <= amplitude * f)
-
-            if len(re) and re[0, 0] != 0:
-                re = re[0, 0] + pos_max
-                m = d[re] - d[re - 1]
-                re = re + 0.5 + (amplitude * f - d[re]) / m
-            else:
-                re = len(d)
-
+            # Get field names for the correct test:
             if f == 0.5:
                 left = 'left'
                 fwxm = 'fwhm'
@@ -263,9 +280,51 @@ def test_hitlet_properties(hits_n_data):
                 left = 'low_left'
                 fwxm = 'fwtm'
 
-            assert math.isclose(le, h[left], rel_tol=10**-4, abs_tol=10**-4), f'Left edge does not match for fraction {f}'
-            assert math.isclose(re - le, h[fwxm], rel_tol=10**-4, abs_tol=10**-4), f'FWHM does not match for {f}'
+            amplitude = np.max(d)
+            if np.all(d[0] == d) or np.all(d > amplitude*f):
+                # If all samples are either the same or greater than required height FWXM is not defined:
+                mes = 'All samples are the same or larger than require height.'
+                assert np.isnan(h[left]),  mes + f' Left edge for {f} should have been np.nan.'
+                assert np.isnan(h[left]), mes + f' FWXM for X={f} should have been np.nan.'
+            else:
+                le = np.argwhere(d[:pos_max] <= amplitude * f)
+                if len(le):
+                    le = le[-1, 0]
+                    m = d[le + 1] - d[le]
+                    le = le + 0.5 + (amplitude * f - d[le]) / m
+                else:
+                    le = 0
 
+                re = np.argwhere(d[pos_max:] <= amplitude * f)
+
+                if len(re) and re[0, 0] != 0:
+                    re = re[0, 0] + pos_max
+                    m = d[re] - d[re - 1]
+                    re = re + 0.5 + (amplitude * f - d[re]) / m
+                else:
+                    re = len(d)
+
+                assert math.isclose(le, h[left],
+                                    rel_tol=10**-4, abs_tol=10**-4), f'Left edge does not match for fraction {f}'
+                assert math.isclose(re - le, h[fwxm], rel_tol=10**-4,
+                                    abs_tol=10**-4), f'FWHM does not match for {f}'
+
+    # Step 5.: Unity test for not defined get_fhwm-cases:
+    # This is a specific unity test for some edge-cases in which the full
+    # width half maximum is not defined.
+    odd_hitlets = np.zeros(3, dtype=strax.hitlet_with_data_dtype(10))
+    odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
+    odd_hitlets[0]['length'] = 5
+    odd_hitlets[1]['data'][:2] = [5, 5]
+    odd_hitlets[1]['length'] = 2
+    odd_hitlets[2]['length'] = 3
+
+    for oh in odd_hitlets:
+        res = strax.get_fwxm(oh)
+        mes = (f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
+               'However, the FWHM is not defined and the return should be nan!'
+               )
+        assert np.all(np.isnan(res)), mes
 
 # ------------------------
 # Entropy test

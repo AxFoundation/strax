@@ -218,6 +218,13 @@ def get_single_hitlet_data(hitlet, records, prev_r, next_r):
             r = records[prev_r_i]
             data, (p_start_i, end) = _get_thing_data(hitlet, r)
             if not end:
+                # If end is zero this means we have not found any
+                # overlap which should not have happened. In case of an
+                # overlap start and end should reflect the start and end
+                # sample of the hitlet for which we found data.
+                print('Data found for this record:', data,
+                      'Start index', p_start_i,
+                      'End index:', end)
                 raise ValueError('This is odd found previous record, but no'
                                  ' overlapping indices.')
             temp_data[p_start_i:data_start] = data
@@ -244,6 +251,13 @@ def get_single_hitlet_data(hitlet, records, prev_r, next_r):
             r = records[next_r_i]
             data, (start, p_end_i) = _get_thing_data(hitlet, r)
             if not start:
+                # If start is zero this means we have not found any
+                # overlap which should not have happened. In case of an
+                # overlap start and end should reflect the start and end
+                # sample of the hitlet for which we found data.
+                print('Data found for this record:', data,
+                      'Start index', start,
+                      'End index:', p_end_i)
                 raise ValueError('This is odd found the next record, but no'
                                  ' overlapping indicies.')
             temp_data[data_end:p_end_i] = data
@@ -342,10 +356,13 @@ def hitlet_properties(hitlets):
     """
     Computes additional hitlet properties such as amplitude, FHWM, etc.
     """
-    for h in hitlets:
-
+    for ind, h in enumerate(hitlets):
         dt = h['dt']
         data = h['data'][:h['length']]
+        
+        if not np.any(data):
+            continue
+
         # Compute amplitude
         amp_ind = np.argmax(data)
         amp_time = int(amp_ind * dt)
@@ -366,6 +383,32 @@ def hitlet_properties(hitlets):
         h['left'] = left_edge
         h['low_left'] = left_edge_low
         h['fwtm'] = width_low
+
+        # Compute area deciles & width:
+        if not h['area'] == 0:
+            # Due to noise total area can sum up to zero
+            res = np.zeros(4, dtype=np.float32)
+            deciles = np.array([0.1, 0.25, 0.75, 0.9])
+            strax.compute_index_of_fraction(h, deciles, res)
+            res *= h['dt']
+            
+            h['left_area'] = res[1]
+            h['low_left_area'] = res[0]
+            h['range_50p_area'] = res[2]-res[1]
+            h['range_80p_area'] = res[3]-res[0]
+            
+        # Compute width based on HDR:
+        resh = highest_density_region_width(h['data'], 
+                                            fractions_desired=np.array([0.5, 0.8]),
+                                            dt=h['dt'],
+                                            fractionl_edges=True,
+                                            )
+
+        h['left_hdr'] = resh[0,0]
+        h['low_left_hdr'] = resh[1,0]
+        h['range_hdr_50p_area'] = resh[0,1]-resh[0,0]
+        h['range_hdr_80p_area'] = resh[1,1]-resh[1,0]
+
 
 
 @export
@@ -388,31 +431,36 @@ def get_fwxm(hitlet, fraction=0.5):
         right last sample + 1.
     """
     data = hitlet['data'][:hitlet['length']]
-    max_val = hitlet['amplitude'] * fraction
 
     index_maximum = np.argmax(data)
-    pre_max = data[:index_maximum]
-    post_max = data[1 + index_maximum:]
+    max_val = data[index_maximum] * fraction
+    if np.all(data > max_val) or np.all(data == 0):
+        # In case all samples are larger, FWXM is not definition.
+        return np.nan, np.nan
 
-    # First the left edge:
-    lbi, lbs = _get_fwxm_boundary(pre_max, max_val)  # coming from the left
-    if lbi == NO_FWXM:
-        # We have not found any sample below:
-        left_edge = 0.
-    else:
-        # We found a sample below so lets compute
-        # the left edge:
+    pre_max = data[:index_maximum]  # Does not include maximum
+    post_max = data[1 + index_maximum:]  # same
+
+    if len(pre_max) and np.any(pre_max <= max_val):
+        # First the left edge:
+
+        lbi, lbs = _get_fwxm_boundary(pre_max[::-1], max_val)  # Reversing data starting at sample
+        # before maximum and go left
+        lbi = (index_maximum - 1) - lbi  # start sample minus samples we went to the left
         m = data[lbi + 1] - lbs  # divided by 1 sample
-        left_edge = lbi + (max_val - lbs) / m + 0.5  # .5 to start from bin center
-
-        # Now the right edge:
-    rbi, rbs = _get_fwxm_boundary(post_max[::-1], max_val)  # coming from the right
-    if rbi == NO_FWXM:
-        right_edge = len(data)
+        left_edge = lbi + (max_val - lbs) / m + 0.5
     else:
-        rbi = len(data) - rbi
-        m = data[rbi - 2] - rbs
-        right_edge = rbi - (max_val - data[rbi - 1]) / m - 0.5
+        # There is no data before the maximum:
+        left_edge = 0
+
+    if len(post_max) and np.any(post_max <= max_val):
+        # Now the right edge:
+        rbi, rbs = _get_fwxm_boundary(post_max, max_val)  # Starting after maximum and go right
+        rbi += 1 + index_maximum  # sample to the right plus start
+        m = data[rbi - 1] - rbs
+        right_edge = rbi - (max_val - rbs) / m + 0.5
+    else:
+        right_edge = len(data)
 
     left_edge = left_edge * hitlet['dt']
     right_edge = right_edge * hitlet['dt']
@@ -423,15 +471,22 @@ def get_fwxm(hitlet, fraction=0.5):
 def _get_fwxm_boundary(data, max_val):
     """
     Returns sample position and height for the last sample which
-    amplitude is below the specified value
+    amplitude is below the specified value.
+
+    If no sample can be found returns position and value of last sample
+    seen.
+
+    Note:
+        For FWHM we assume that we start at the maximum.
     """
-    i = NO_FWXM
-    s = NO_FWXM
-    for ind, d in enumerate(data):
+    ind = None
+    s = None
+    for i, d in enumerate(data):
         if d <= max_val:
-            i = ind
+            ind = i
             s = d
-    return i, s
+            return ind, s
+    return len(data)-1, data[-1]
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):
@@ -482,7 +537,11 @@ def conditional_entropy(hitlets, template='flat', square_data=False):
 def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     res = np.zeros(len(hitlets), dtype=np.float32)
     for ind, h in enumerate(hitlets):
-        hitlet = h['data'][:h['length']]
+        # h['data'][:] generates just a view and not a copy of the data
+        # Since the data of hitlets should not be modified we have
+        # to use a copy instead.... See also https://stackoverflow.com/questions/4370745/view-onto-a-numpy-array
+        hitlet = np.copy(h['data'][:h['length']])
+
         # Squaring and normalizing:
         if square_data:
             hitlet[:] = hitlet * hitlet
@@ -532,4 +591,61 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
             m = m_hit & m_temp
             e = - np.sum(buffer[0][m] * np.log(buffer[0][m] / buffer[1][m]))
         res[ind] = e
+    return res
+
+
+@numba.njit
+def highest_density_region_width(data,
+                                  fractions_desired,
+                                  dt=1,
+                                  fractionl_edges=False,
+                                  _buffer_size=100):
+    """
+    Function which computes the left and right edge based on the outer
+    most sample for the highest density region of a signal.
+
+    Defines a 100% fraction as the sum over all positive samples in a
+    waveform.
+
+    :param data: Data of a signal, e.g. hitlet or peak including zero length
+        encoding.
+    :param fractions_desired: Area fractions for which the highest
+        density region should be computed.
+    :param dt: Sample length in ns.
+    :param fractionl_edges: If true computes width as fractional time
+        depending on the covered area between the current and next
+        sample.
+    :param _buffer_size: Maximal number of allowed intervals.
+    """
+    res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
+    data = np.maximum(data, 0)
+    inter, amps = strax.highest_density_region(data, fractions_desired, _buffer_size=_buffer_size)
+
+    for f_ind, (i, a) in enumerate(zip(inter, amps)):
+        if not fractionl_edges:
+            res[f_ind, 0] = i[0, 0] * dt
+            res[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
+        else:
+            left = i[0, 0]
+            right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
+
+            # Get amplitudes of outer most samples
+            # and amplitudes of adjacent samples (if any)
+            left_amp = data[left]
+            right_amp = data[right]
+
+            next_left_amp = 0
+            if (left - 1) >= 0:
+                next_left_amp = data[left - 1]
+            next_right_amp = 0
+            if (right + 1) < len(data):
+                next_right_amp = data[right + 1]
+
+            # Compute fractions and new left and right edges:
+            fl = (left_amp - a) / (left_amp - next_left_amp)
+            fr = (right_amp - a) / (right_amp - next_right_amp)
+
+            res[f_ind, 0] = (left + 0.5 - fl) * dt
+            res[f_ind, 1] = (right + 0.5 + fr) * dt
+
     return res
