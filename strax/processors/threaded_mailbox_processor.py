@@ -7,6 +7,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
+from .base import ProcessorComponents, BaseProcessor
 
 import strax
 export, __all__ = strax.exporter()
@@ -18,15 +19,6 @@ try:
 except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
-
-
-@export
-class ProcessorComponents(ty.NamedTuple):
-    """Specification to assemble a processor"""
-    plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, callable]
-    savers:  ty.Dict[str, ty.List[strax.Saver]]
-    targets: ty.Tuple[str]
 
 
 class MailboxDict(dict):
@@ -41,7 +33,7 @@ class MailboxDict(dict):
 
 
 @export
-class ThreadedMailboxProcessor:
+class ThreadedMailboxProcessor(BaseProcessor):
     mailboxes: ty.Dict[str, strax.Mailbox]
 
     def __init__(self,

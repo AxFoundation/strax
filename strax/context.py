@@ -100,11 +100,14 @@ class Context:
 
     storage: ty.List[strax.StorageFrontend]
 
+    processors: ty.Mapping[str,strax.BaseProcessor]
+
     def __init__(self,
                  storage=None,
                  config=None,
                  register=None,
                  register_all=None,
+                 processors=None,
                  **kwargs):
         """Create a strax context.
 
@@ -117,10 +120,13 @@ class Context:
         :param register: plugin class or list of plugin classes to register
         :param register_all: module for which all plugin classes defined in it
            will be registered.
+        :param processors: A mapping of processor names to classes to use for data processing. 
         Any additional kwargs are considered Context-specific options; see
         Context.takes_config.
         """
         self.log = logging.getLogger('strax')
+
+        
 
         if storage is None:
             storage = ['./strax_data']
@@ -139,12 +145,30 @@ class Context:
             self.register_all(register_all)
         if register is not None:
             self.register(register)
+        
+        if processors is None:
+            processors = strax.PROCESSORS
+
+        if isinstance(processors, str) :
+            processors = [processors]
+
+        if isinstance(processors, (list, tuple)):
+            ps = {}
+            for processor in processors:
+                if isinstance(processor, str) and processor in strax.PROCESSORS:
+                    ps[processor] = strax.PROCESSORS[processor]
+                if isinstance(processor, strax.BaseProcessor):
+                    ps[processor.__name__] = processor
+            processors = ps
+
+        self.processors = processors
 
     def new_context(self,
                     storage=tuple(),
                     config=None,
                     register=None,
                     register_all=None,
+                    processors=None,
                     replace=False,
                     **kwargs):
         """Return a new context with new setting adding to those in
@@ -170,8 +194,10 @@ class Context:
             kwargs = strax.combine_configs(self.context_config,
                                            kwargs,
                                            mode='update')
+        if processors is None:
+            processors = self.processors
 
-        new_c = Context(storage=storage, config=config, **kwargs)
+        new_c = Context(storage=storage, config=config, processors=processors, **kwargs)
         if not replace:
             new_c._plugin_class_registry = self._plugin_class_registry.copy()
         new_c.register_all(register_all)
@@ -884,6 +910,7 @@ class Context:
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
+                 processor=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -939,7 +966,16 @@ class Context:
                 del self._plugin_class_registry[k]
 
         seen_a_chunk = False
-        generator = strax.ThreadedMailboxProcessor(
+        if processor is None:
+            processor = list(self.processors)[0]
+
+        if isinstance(processor, str):
+            processor = self.processors[processor]
+
+        if not hasattr(processor, "iter"):
+            raise ValueError("Processors must implement a iter methed.")
+
+        generator = processor(
                 components,
                 max_workers=max_workers,
                 allow_shm=self.context_config['allow_shm'],
@@ -1100,7 +1136,7 @@ class Context:
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
              progress_bar=False, _skip_if_built=True,
-             **kwargs) -> None:
+             processor=None, **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
@@ -1120,7 +1156,8 @@ class Context:
 
         for _ in self.get_iter(run_ids[0], targets,
                                progress_bar=progress_bar,
-                               save=save, max_workers=max_workers, **kwargs):
+                               save=save, max_workers=max_workers,
+                               processor=processor, **kwargs):
             pass
 
     def get_array(self, run_id: ty.Union[str, tuple, list],
