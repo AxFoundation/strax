@@ -189,8 +189,17 @@ class Context:
     _run_defaults_cache: dict
     storage: ty.List[strax.StorageFrontend]
 
-    def __init__(self, storage=None, config=None, register=None, register_all=None, **kwargs):
-        """Create a strax context.
+    processors: ty.Mapping[str,strax.BaseProcessor]
+
+    def __init__(self,
+                 storage=None,
+                 config=None,
+                 register=None,
+                 register_all=None,
+                 processors=None,
+                 **kwargs):
+        """
+        Create a strax context.
 
         :param storage: Storage front-ends to use. Can be:
             - None (default). Will use DataDirectory('./strax_data').
@@ -200,12 +209,12 @@ class Context:
             applied to plugins
         :param register: plugin class or list of plugin classes to register
         :param register_all: module for which all plugin classes defined in it
-            will be registered.
+           will be registered.
         Any additional kwargs are considered Context-specific options; see
         Context.takes_config.
 
         """
-        self.log = logging.getLogger("strax")
+        self.log = logging.getLogger('strax')
 
         if storage is None:
             storage = ["./strax_data"]
@@ -224,20 +233,20 @@ class Context:
         if register is not None:
             self.register(register)
 
-    def new_context(
-        self,
-        storage=tuple(),
-        config=None,
-        register=None,
-        register_all=None,
-        replace=False,
-        **kwargs,
-    ):
-        """Return a new context with new setting adding to those in this context.
+    def new_context(self,
+                    storage=tuple(),
+                    config=None,
+                    register=None,
+                    register_all=None,
+                    replace=False,
+                    **kwargs):
+        """
+        Return a new context with new setting adding to those in
+        this context.
 
-        :param replace: If True, replaces settings rather than adding them. See Context.__init__ for
-            documentation on other parameters.
+        :param replace: If True, replaces settings rather than adding them.
 
+        See Context.__init__ for documentation on other parameters.
         """
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
@@ -250,10 +259,14 @@ class Context:
 
         if not replace:
             storage = self.storage + list(storage)
-            config = strax.combine_configs(self.config, config, mode="update")
-            kwargs = strax.combine_configs(self.context_config, kwargs, mode="update")
+            config = strax.combine_configs(self.config,
+                                           config,
+                                           mode='update')
+            kwargs = strax.combine_configs(self.context_config,
+                                           kwargs,
+                                           mode='update')
 
-        new_c = Context(storage=storage, config=config, **kwargs)
+        new_c = Context(storage=storage, config=config, processors=processors, **kwargs)
         if not replace:
             new_c._plugin_class_registry = self._plugin_class_registry.copy()
         new_c.register_all(register_all)
@@ -1044,13 +1057,10 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            if self.context_config["storage_converter"]:
-                warnings.warn(
-                    'The storage converter mode will be replaced by "copy_to_frontend" soon. '
-                    "It will be removed in one of the future releases. Please let us know if "
-                    'you are still using the "storage_converter" option.',
-                    DeprecationWarning,
-                )
+            if self.context_config['storage_converter']:
+                warnings.warn('The storage converter mode will be replaced by "copy_to_frontend" soon. '
+                              'It will be removed in one of the future releases. Please let us know if '
+                              'you are still using the "storage_converter" option.', DeprecationWarning)
 
             # Should we save this data? If not, return.
             _can_store_superrun = self.context_config["write_superruns"] and _is_superrun
@@ -1125,9 +1135,8 @@ class Context:
                         assert target_plugin.multi_output
                         continue
 
-                    savers = self._add_saver(
-                        savers, d_to_save, target_plugin, _is_superrun, loading_this_data
-                    )
+                    savers = self._add_saver(savers, d_to_save, target_plugin,
+                                             _is_superrun, loading_this_data)
 
         for target_i in targets:
             check_cache(target_i)
@@ -1156,19 +1165,17 @@ class Context:
             loaders=loaders,
             loader_plugins=loader_plugins,
             savers=savers,
-            targets=strax.to_str_tuple(final_plugin),
-        )
+            targets=strax.to_str_tuple(final_plugin))
 
-    def _add_saver(
-        self,
-        savers: dict,
-        d_to_save: str,
-        target_plugin: strax.Plugin,
-        _is_superrun: bool,
-        loading_this_data: bool,
-    ):
-        """Adds savers to already existing savers. Checks if data_type can be stored in any storage
-        frontend.
+    def _add_saver(self,
+                   savers: dict,
+                   d_to_save: str,
+                   target_plugin: strax.Plugin,
+                   _is_superrun: bool,
+                   loading_this_data: bool):
+        """
+        Adds savers to already existing savers. Checks if data_type can
+        be stored in any storage frontend.
 
         :param savers: Dictionary of already existing savers.
         :param d_to_save: String of the data_type to be saved.
@@ -1335,26 +1342,22 @@ class Context:
             time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
 
-    def get_iter(
-        self,
-        run_id: str,
-        targets: ty.Union[ty.Tuple[str], ty.List[str]],
-        save=tuple(),
-        max_workers=None,
-        time_range=None,
-        seconds_range=None,
-        time_within=None,
-        time_selection="fully_contained",
-        selection=None,
-        selection_str=None,
-        keep_columns=None,
-        drop_columns=None,
-        allow_multiple=False,
-        progress_bar=True,
-        _chunk_number=None,
-        **kwargs,
-    ) -> ty.Iterator[strax.Chunk]:
-        """Compute target for run_id and iterate over results.
+    def get_iter(self, run_id: str,
+                 targets, save=tuple(), max_workers=None,
+                 time_range=None,
+                 seconds_range=None,
+                 time_within=None,
+                 time_selection='fully_contained',
+                 selection=None,
+                 selection_str=None,
+                 keep_columns=None,
+                 drop_columns=None,
+                 allow_multiple=False,
+                 progress_bar=True,
+                 _chunk_number=None,
+                 **kwargs) -> ty.Iterator[strax.Chunk]:
+        """
+        Compute target for run_id and iterate over results.
 
         Do NOT interrupt the iterator (i.e. break): it will keep running stuff
         in background threads...
@@ -1416,16 +1419,15 @@ class Context:
 
         seen_a_chunk = False
         generator = strax.ThreadedMailboxProcessor(
-            components,
-            max_workers=max_workers,
-            allow_shm=self.context_config["allow_shm"],
-            allow_multiprocess=self.context_config["allow_multiprocess"],
-            allow_rechunk=self.context_config["allow_rechunk"],
-            allow_lazy=self.context_config["allow_lazy"],
-            max_messages=self.context_config["max_messages"],
-            timeout=self.context_config["timeout"],
-            is_superrun=_is_superrun,
-        ).iter()
+                components,
+                max_workers=max_workers,
+                allow_shm=self.context_config['allow_shm'],
+                allow_multiprocess=self.context_config['allow_multiprocess'],
+                allow_rechunk=self.context_config['allow_rechunk'],
+                allow_lazy=self.context_config['allow_lazy'],
+                max_messages=self.context_config['max_messages'],
+                timeout=self.context_config['timeout'],
+                is_superrun=_is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(
@@ -1711,10 +1713,11 @@ class Context:
         result["n_chunks"] = n_chunks
         return result
 
-    def get_df(
-        self, run_id: ty.Union[str, tuple, list], targets, save=tuple(), max_workers=None, **kwargs
-    ) -> pd.DataFrame:
-        """Compute target for run_id and return as pandas DataFrame.
+    def get_df(self, run_id: ty.Union[str, tuple, list],
+               targets, save=tuple(), max_workers=None,
+               **kwargs) -> pd.DataFrame:
+        """
+        Compute target for run_id and return as pandas DataFrame
 
         {get_docs}
 
@@ -2071,8 +2074,8 @@ class Context:
             context.storage. If no index is specified, try all.
         :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
-        :param rechunk_to_mb: rechunk to specified target size. Only works if rechunk is True.
-
+        :param rechunk_to_mb: rechunk to specified target size. Only works if
+            rechunk is True.
         """
         # NB! We don't want to use self._sorted_storage here since the order matters!
 
@@ -2373,6 +2376,8 @@ get_docs = """
 :param run_id_as_bytes: Boolean if true uses byte string instead of an
     unicode string added to a multi-run array. This can save a lot of
     memory when loading many runs.
+:param processor: Name of the processor to use. If not specified, the
+    first processor from the context's processor list is used.
 """ + select_docs
 
 for attr in dir(Context):

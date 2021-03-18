@@ -7,30 +7,11 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
+from .base import ProcessorComponents, BaseProcessor
 
 import strax
 
 export, __all__ = strax.exporter()
-
-try:
-    import npshmex
-
-    SHMExecutor = npshmex.ProcessPoolExecutor
-    npshmex.register_array_wrapper(strax.Chunk, "data")
-except ImportError:
-    # This is allowed to fail, it only crashes if allow_shm = True
-    SHMExecutor = None
-
-
-@export
-class ProcessorComponents(ty.NamedTuple):
-    """Specification to assemble a processor."""
-
-    plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, ty.Callable]
-    loader_plugins: ty.Dict[str, strax.Plugin]  # Required for inline ParallelSource plugin.
-    savers: ty.Dict[str, ty.List[strax.Saver]]
-    targets: ty.Tuple[str]
 
 
 class MailboxDict(dict):
@@ -42,9 +23,18 @@ class MailboxDict(dict):
         res = self[key] = strax.Mailbox(name=key + "_mailbox", lazy=self.lazy)
         return res
 
+try:
+    import npshmex
+    SHMExecutor = npshmex.ProcessPoolExecutor
+    npshmex.register_array_wrapper(strax.Chunk, 'data')
+except ImportError:
+    # This is allowed to fail, it only crashes if allow_shm = True
+    SHMExecutor = None
+__all__.append('SHMExecutor')
+
 
 @export
-class ThreadedMailboxProcessor:
+class ThreadedMailboxProcessor(BaseProcessor):
     mailboxes: ty.Dict[str, strax.Mailbox]
 
     def __init__(
