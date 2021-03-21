@@ -399,7 +399,7 @@ def hitlet_properties(hitlets):
             h['range_80p_area'] = res[3]-res[0]
             
         # Compute width based on HDR:
-        resh = highest_density_region_width(h['data'], 
+        resh = highest_density_region_width(data, 
                                             fractions_desired=np.array([0.5, 0.8]),
                                             dt=h['dt'],
                                             fractionl_edges=True,
