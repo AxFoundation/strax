@@ -1,3 +1,4 @@
+from hypothesis.extra import numpy as hyp_numpy
 import hypothesis.strategies
 import strax.testutils
 
@@ -91,6 +92,78 @@ def _is_contained(_thing, _container):
            <= _thing['time'] \
            <= _thing['time'] + _thing['length'] \
            <= _container['time'] + _container['length']
+
+
+@hypothesis.given(full_container_ids=
+                  hyp_numpy.arrays(np.int8,
+                                   hypothesis.strategies.integers(0, 10),
+                                   elements=hypothesis.strategies.integers(0, 15),
+                                   unique=True))
+@hypothesis.settings(deadline=None)
+def test_get_empty_container_ids(full_container_ids):
+    """
+    Helper function to test if strax.processing.general._get_empty_container_ids
+    behaves the same as np.setdiff1d. Both functions should compute the
+    a set diff of the two arrays. E.g. in this case an array with unique
+    numbers between 0 and 15 which are not in full_container_ids.
+
+    :param full_container_ids: Array which mimics the ids of full containers.
+        the array has a size between 0 and 10 and is filled with integer
+        values between 0 and 15.
+    :return:
+    """
+    full_container_ids = np.sort(full_container_ids)
+
+    if len(full_container_ids):
+        n_containers = np.max(full_container_ids)
+    else:
+        n_containers = 0
+
+    empty_ids = strax.processing.general._get_empty_container_ids(n_containers,
+                                                                  full_container_ids)
+
+    empty_ids_np = np.setdiff1d(np.arange(n_containers),
+                                full_container_ids)
+
+    mes = ('_get_empty_containers_ids did not match the behavior or np.setdiff1d.\n' +
+           f'_get_empty_containers_ids: {empty_ids}\n' +
+           f'np.setdiff1d: {empty_ids_np}')
+
+    assert np.all(empty_ids == empty_ids_np), mes
+
+
+@hypothesis.given(things=
+                  hyp_numpy.arrays(np.int8,
+                                   hypothesis.strategies.integers(0, 10),
+                                   elements=hypothesis.strategies.integers(0, 10),
+                                   unique=False),
+                  split_indices=
+                  hyp_numpy.arrays(np.int8,
+                                   hypothesis.strategies.integers(0, 10),
+                                   elements=hypothesis.strategies.integers(0, 10),
+                                   unique=True),
+                  )
+@hypothesis.settings(deadline=None)
+def test_split(things, split_indices):
+    """
+    Test to check if strax.processing.general._split shows the same
+    behavior as np.split for the previous split_by_containment function.
+
+    :param things: things to be split. Hypothesis will create here an
+        array of a length between 0 and 10. Each element in this array
+        can also range between 0 and 10.
+    :param split_indices: Indices at which things should be split.
+    """
+    split_indices = np.sort(split_indices)
+
+    split_things = strax.processing.general._split(things, split_indices)
+    split_things_np = np.split(things, split_indices)
+
+    for ci, (s, snp) in enumerate(zip(split_things, split_things_np)):
+        # Loop over splitted objects and check if they are the same.
+        mes = f'Not all splitted things are the same for split {ci}!'
+        assert np.all(s == snp), mes
+
 
 
 @hypothesis.settings(deadline=None)
