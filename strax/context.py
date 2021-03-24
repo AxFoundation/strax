@@ -1407,8 +1407,8 @@ class Context:
     def copy_to_frontend(self,
                          run_id: str,
                          target: str,
-                         target_frontend_id: int = None,
-                         target_compressor: str = None,
+                         target_frontend_id: ty.Optional[int] = None,
+                         target_compressor: ty.Optional[str] = None,
                          rechunk: bool = False):
         """
         Copy data from one frontend to another
