@@ -66,6 +66,7 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
                 mask = strax.endtime(concat_hits[m])[:-1] - concat_hits[m]['time'][1:]
                 assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
 
+
 # -----------------------------
 # Test for get_hitlets_data.
 # This test is done with some predefined
@@ -186,35 +187,30 @@ def hits_n_data(draw, strategy):
     return hd
 
 
-
 def test_highest_density_region_width():
     """
     Some unit test for the HDR width estimate.
     """
-    truth_dict = {0.5: [[2/3, 2+1/3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
-    distribution = np.array([1, 7, 1, 1, 0])
+    truth_dict = {0.5: [[2 / 3, 2 + 1 / 3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
     # Some distribution with offset:
-    _test_highest_density_region_width(distribution, truth_dict)
-        
-    
+    _test_highest_density_region_width(np.array([1, 7, 1, 1, 0]), truth_dict)
+
     # Same but with offset (zero missing):
     _test_highest_density_region_width(np.array([1, 7, 1, 1]), truth_dict)
-    
+
     # Two more nasty cases:
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
-    distribution = np.array([1])
     _test_highest_density_region_width(np.array([1]), truth_dict)
-    
+
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
-    distribution = np.array([1, 0])
     _test_highest_density_region_width(np.array([1, 0]), truth_dict)
-    
+
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(distribution,
-                                                            np.array(list(truth_dict.keys())), 
-                                                            fractionl_edges=True)
-    
+                                                                np.array(list(truth_dict.keys())),
+                                                                fractionl_edges=True)
+
     for ind, (fraction, truth) in enumerate(truth_dict.items()):
         mes = f'Found wrong edges for {fraction} in {distribution} expected {truth} but got {res[ind]}.'
         assert np.all(np.isclose(truth, res[ind])), mes
@@ -246,7 +242,7 @@ def test_hitlet_properties(hits_n_data):
 
     # Testing refresh_hit_to_hitlets for free:
     assert len(hits) == len(hitlets), 'Somehow hitlets and hits have different sizes'
-    # Tetsing interval fields:
+    # Testing interval fields:
     dummy = np.zeros(0, dtype=strax.interval_dtype)
     for name in dummy.dtype.names:
         assert np.all(hitlets[name] == hits[name]), f'The entry of the field {name} did not match between hit and ' \
@@ -257,9 +253,15 @@ def test_hitlet_properties(hits_n_data):
         h = hitlets[ind]
         h['data'][:h['length']] = d[:h['length']]
 
-    strax.hitlet_properties(hitlets)
+    # Step 3.: Add np.nan in data but outside of length:
+    for h in hitlets:
+        if h['length'] < len(h['data']):
+            h['data'][-1] = np.nan
+            # It is enough to test this for a single hitlet:
+            break
 
-    # Step 4.: Apply tests.
+    # Step 4.: Compute properties and apply tests:
+    strax.hitlet_properties(hitlets)
     for ind, d in enumerate(data):
         h = hitlets[ind]
         d = d[:h['length']]
@@ -281,10 +283,10 @@ def test_hitlet_properties(hits_n_data):
                 fwxm = 'fwtm'
 
             amplitude = np.max(d)
-            if np.all(d[0] == d) or np.all(d > amplitude*f):
+            if np.all(d[0] == d) or np.all(d > amplitude * f):
                 # If all samples are either the same or greater than required height FWXM is not defined:
                 mes = 'All samples are the same or larger than require height.'
-                assert np.isnan(h[left]),  mes + f' Left edge for {f} should have been np.nan.'
+                assert np.isnan(h[left]), mes + f' Left edge for {f} should have been np.nan.'
                 assert np.isnan(h[left]), mes + f' FWXM for X={f} should have been np.nan.'
             else:
                 le = np.argwhere(d[:pos_max] <= amplitude * f)
@@ -326,6 +328,7 @@ def test_hitlet_properties(hits_n_data):
                )
         assert np.all(np.isnan(res)), mes
 
+
 # ------------------------
 # Entropy test
 # ------------------------
@@ -340,19 +343,19 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
 @settings(deadline=None)
 # Example that failed once
 @example(
-    data=np.array([7.9956017,  6.6565537, -7.7413940, -2.8149414, -2.8149414,
+    data=np.array([7.9956017, 6.6565537, -7.7413940, -2.8149414, -2.8149414,
                    9.9609370, -2.8149414, -2.8149414, -2.8149414, -2.8149414],
                   dtype=np.float32),
     size_template_and_ind_max_template=[0, 1])
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
     Test for conditional entropy. For the template larger int value defines
-    size of the tempalte, smaller int value position of the maximum.
+    size of the template, smaller int value position of the maximum.
     """
-    
+
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
     ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
-    
+
     # Make dummy hitlet:
     data = data.astype(np.float32)
     len_data = len(data)
@@ -370,7 +373,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         template = template / np.sum(template)
 
         e2 = - np.sum(d[m] * np.log(d[m] / template))
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2 * 10**-4,
+                            abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 2.: Arbitrary template:
         template = np.ones(size_template, dtype=np.float32)
@@ -382,7 +386,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e2 = _align_compute_entropy(d, template)
 
         e1 = strax.conditional_entropy(hitlet, template)[0]
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2 * 10**-4,
+                            abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 3.: Squared waveform:
         # Same as before but this time we square the template and the
@@ -398,7 +403,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e2 = _align_compute_entropy(d, template)
 
         e1 = strax.conditional_entropy(hitlet, template, square_data=True)[0]
-        assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=10**-4,
+                            abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
     else:
         assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
 
