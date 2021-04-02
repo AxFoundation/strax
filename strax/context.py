@@ -1404,14 +1404,19 @@ class Context:
             data = function(data, targets)
         return data
 
-    def copy_to_frontend(self, run_id, target,
-                         target_frontend_id=None, rechunk=False):
+    def copy_to_frontend(self,
+                         run_id: str,
+                         target: str,
+                         target_frontend_id: ty.Optional[int] = None,
+                         target_compressor: ty.Optional[str] = None,
+                         rechunk: bool = False):
         """
         Copy data from one frontend to another
         :param run_id: run_id
         :param target: target datakind
         :param target_frontend_id: index of the frontend that the data should go to
-        in context.storage. If no index is specified, try all.
+            in context.storage. If no index is specified, try all.
+        :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
         """
         if not self.is_stored(run_id, target):
@@ -1440,7 +1445,7 @@ class Context:
                      (not self._is_stored_in_sf(run_id, target, t_sf) and
                       t_sf._we_take(target) and
                       t_sf.readonly is False)]
-
+        self.log.info(f'Copy data from {source_sf} to {target_sf}')
         if not len(target_sf):
             raise ValueError('No frontend to copy to! Perhaps you already stored '
                              'it or none of the frontends is willing to take it?')
@@ -1452,6 +1457,11 @@ class Context:
         s_be_str, s_be_key = source_sf.find(data_key)
         s_be = source_sf._get_backend(s_be_str)
         md = s_be.get_metadata(s_be_key)
+
+        if target_compressor is not None:
+            self.log.info(f'Changing compressor from {md["compressor"]} '
+                           f'to {target_compressor}.')
+            md.update({'compressor': target_compressor})
 
         for t_sf in target_sf:
             try:
