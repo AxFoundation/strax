@@ -1,3 +1,9 @@
+0.13.11 / 2021-04-02
+---------------------
+- Allow re-compression at copy to frontend (#407)
+- Bug fix, in processing hitlets (#411)
+- Cleanup requirements for boto3 (#414)
+
 0.13.10 / 2021-03-24
 ---------------------
 - Allow multiple targets to be computed simultaneously (#408, #409)
