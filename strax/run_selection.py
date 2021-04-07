@@ -299,7 +299,8 @@ def available_for_run(self: strax.Context,
     :param exclude_targets: targets to exclude e.g. raw_records,
         raw_records* or *_nv. If multiple targets (e.g. a list) is
         provided, the target should match none of the arguments!
-    :param pattern_type: either 'fnmatch' or 're'
+    :param pattern_type: either 'fnmatch' (Unix filename pattern
+        matching) or 're' (Regular expression operations).
     :return: Table of available data per target
     """
     if not isinstance(run_id, str):
