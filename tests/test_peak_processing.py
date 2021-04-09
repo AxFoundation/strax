@@ -1,5 +1,4 @@
 from strax.testutils import fake_hits, several_fake_records
-
 import numpy as np
 from hypothesis import given, settings
 import hypothesis.strategies as st
@@ -72,7 +71,7 @@ def test_sum_waveform(records, peak_left, peak_length):
 
     # Create a simple sum waveform
     if not len(records):
-        max_sample = 3   # Whatever
+        max_sample = 3  # Whatever
     else:
         max_sample = (records['time'] + records['length']).max()
     max_sample = max(max_sample, peak_left + peak_length)
@@ -87,3 +86,123 @@ def test_sum_waveform(records, peak_left, peak_length):
 
     # Finally check that we also can use a selection of peaks to sum
     strax.sum_waveform(peaks, records, np.ones(n_ch), select_peaks_indices=np.array([0]))
+
+
+@settings(deadline=None)
+@given(several_fake_records,
+       st.integers(min_value=1, max_value=10000),
+       st.integers(min_value=10, max_value=4000),
+       st.integers(min_value=int(1e3), max_value=int(7_000_000)),
+       st.integers(min_value=0, max_value=int(1e4)),
+       st.integers(min_value=int(0), max_value=int(1e4)),
+       st.integers(min_value=int(1e4), max_value=int(2e4)),
+       )
+def test_peak_overflow(records,
+                       gap_factor,
+                       record_repetition_factor,
+                       max_duration,
+                       left_extension,
+                       right_extension,
+                       gap_threshold,
+                       ):
+    """
+    Test that we handle dt overflows in peaks correctly. To this end, we
+        just create some sets of records and copy that set of records
+        for a few times. That way we may end up with a very long
+        artificial set of hits that can be used in the peak building. By
+        setting the peak finding parameters to very strange conditions
+        we are able to replicate the behaviour where a peak would become
+        so large that it cannot be written out correctly due to integer
+        overflow of the dt field,
+    :param records: records
+    :param gap_factor: to create very extended sets of records, just
+        add a factor that can be used to multiply the time field with,
+        to more quickly arrive to a very long pulse-train
+    :param record_repetition_factor: how much do we repeat the records
+        pusle train
+    :param max_duration: max_duration option for strax.find_peaks
+    :param left_extension: option for strax.find_peaks
+    :param right_extension: option for strax.find_peaks
+    :param gap_threshold: option for strax.find_peaks
+    :return: None
+    """
+    p = np.zeros(0, dtype=strax.peak_dtype())
+    magic_overflow_time = np.iinfo(p.dtype['dt']).max * p.dtype['data'].shape[0]
+    del p
+
+    # Make a single big peak to contain all the records
+    def retrun_1(x):
+        """
+        Return 1 for all of the input that can be used as a parameter
+            for the splitting in natural breaks
+        :param x: any type of array
+        :return: ones * len(array)
+        """
+        ret = np.ones(len(x))
+        return ret
+
+    r = records
+    if not len(r):
+        # Hard to test integer overflow for empty records
+        return
+
+    # Copy the pulse train of the records. We are going to copy the same
+    # set of records many times now
+    r_buffer = []
+    t_max = strax.endtime(r)
+    for i in range(record_repetition_factor):
+        r_copy = r.copy()
+        r_copy['time'] = r_copy['time'] + t_max * i * gap_factor
+        r_buffer.append(r_copy)
+        if r_copy['time'] - r['time'][0] > 2*magic_overflow_time:
+            # No need to go over and beyond
+            break
+    r = np.concatenate(r_buffer)
+
+    # Do peak finding!
+    hits = strax.find_hits(r, min_amplitude=0)
+    assert len(hits)
+    hits = strax.sort_by_time(hits)
+
+    # Dummy to_pe
+    to_pe = np.ones(max(r['channel']))
+
+    # Find peaks, we might end up with negative dt here!
+    p = strax.find_peaks(hits, to_pe,
+                         gap_threshold=gap_threshold,
+                         left_extension=left_extension,
+                         right_extension=right_extension,
+                         # max_duration=max_duration,
+                         # Due to these settings, we will start merging
+                         # whatever strax can get its hands on
+                         min_area=0,
+                         min_channels=1, )
+    assert len(p)
+    assert np.all(p['dt'] > 0)
+
+    # Compute basics
+    strax.sum_waveform(p, r, to_pe)
+    strax.compute_widths(p)
+    try:
+        peaklets = strax.split_peaks(
+            p, r, to_pe,
+            algorithm='natural_breaks',
+            threshold=retrun_1,
+            split_low=True,
+            filter_wing_width=70,
+            min_area=0,
+            do_iterations=2)
+    except AssertionError as e:
+        if left_extension+max_duration+right_extension > magic_overflow_time:
+            print(f'Great, the test worked, we are getting the assertion statement')
+        else:
+            raise e
+    finally:
+        if left_extension + max_duration + right_extension > magic_overflow_time:
+            raise ValueError(
+                'We were not properly warned of the imminent peril we are '
+                'facing. Where is our white knight in shining armour to '
+                'protected from imminent doom')
+    assert len(peaklets)
+    assert len(peaklets) <= len(records)
+    assert peaklets['dt']
