@@ -93,7 +93,7 @@ def test_sum_waveform(records, peak_left, peak_length):
        st.integers(min_value=10, max_value=400),
        st.integers(min_value=1000, max_value=2000),
        st.integers(min_value=1900, max_value=10000),
-       # st.integers(min_value=1000, max_value=int(7_000_000)),
+       st.integers(min_value=1000, max_value=int(7_000_000)),
        )
 @example(
     records=np.array([(0, 1, 1, 0, 0, 0, 0, 0, 0., 0., 0, [1, 0]),
@@ -108,7 +108,7 @@ def test_peak_overflow(records,
                        gap_factor,
                        right_extension,
                        gap_threshold,
-                       # max_duration,
+                       max_duration,
                        ):
 
     """
@@ -129,8 +129,6 @@ def test_peak_overflow(records,
     :param gap_threshold: option for strax.find_peaks
     :return: None
     """
-    # TODO set this in the function def
-    max_duration = 7e6
 
     # Set this here, no need to test left and right independently
     left_extension = 0
@@ -183,7 +181,7 @@ def test_peak_overflow(records,
                              gap_threshold=gap_threshold,
                              left_extension=left_extension,
                              right_extension=right_extension,
-                             # max_duration=max_duration,
+                             max_duration=max_duration,
                              # Due to these settings, we will start merging
                              # whatever strax can get its hands on
                              min_area=0.,
