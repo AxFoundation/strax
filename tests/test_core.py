@@ -298,7 +298,6 @@ def test_run_selection():
     with tempfile.TemporaryDirectory() as temp_dir:
         sf = strax.DataDirectory(path=temp_dir,
                                  deep_scan=True, provide_run_metadata=True)
-
         # Write mock runs db
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
@@ -404,3 +403,64 @@ def test_superrun():
         np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
         np.testing.assert_array_equal(p2['area'], np.zeros(len(p2)))
         np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
+
+
+def test_allow_multiple(targets=('peaks', 'records')):
+    """Test if we can use the allow_multiple correctly and fail otherwise"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                            deep_scan=True),
+                                register=[Records, Peaks])
+        mystrax.set_context_config({'allow_lazy': False,
+                                    'timeout': 80})
+
+        assert not mystrax.is_stored(run_id, 'peaks')
+        # Create everything at once with get_array and get_df should fail
+        for function in [mystrax.get_array, mystrax.get_df]:
+            try:
+                function(run_id=run_id,
+                         allow_multiple=True,
+                         targets=targets)
+            except RuntimeError:
+                # Great, this doesn't work (and it shouldn't!)
+                continue
+            raise ValueError(f'{function} could run with allow_multiple')
+
+        try:
+            mystrax.make(run_id=run_id,
+                         targets=targets)
+        except RuntimeError:
+            # Great, we shouldn't be allowed
+            pass
+
+        assert not mystrax.is_stored(run_id, 'peaks')
+        mystrax.make(run_id=run_id,
+                     allow_multiple=True,
+                     targets=targets)
+
+        for t in targets:
+            assert mystrax.is_stored(run_id, t)
+
+
+def test_allow_multiple_inverted():
+    # Make sure that the processing also works if the first target is
+    # actually depending on the second. In that case, we should
+    # subscribe the first target as the endpoint of the processing
+    test_allow_multiple(targets=('records', 'peaks',))
+
+
+def test_available_for_run():
+    """Very simply test the available_for_run function"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                            deep_scan=True),
+                                register=[Records, Peaks])
+        targets = list(mystrax._plugin_class_registry.keys())
+        for exclude_i in range(len(targets)):
+            for include_i in range(len(targets)):
+                df = mystrax.available_for_run(run_id,
+                                               include_targets = targets[:include_i],
+                                               exclude_targets = targets[:exclude_i])
+                if len(df):
+                    # We haven't made any data
+                    assert not sum(df['is_stored'])

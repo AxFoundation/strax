@@ -360,7 +360,7 @@ class Context:
 
         for x in dir(module):
             x = getattr(module, x)
-            if type(x) != type(type):
+            if not isinstance(x, type(type)):
                 continue
             if issubclass(x, strax.Plugin):
                 self.register(x)
@@ -525,6 +525,19 @@ class Context:
 
         return plugins
 
+    @staticmethod
+    def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
+        """
+        Get the datatype that is provided by a plugin but not depended
+            on by any other plugin
+        """
+        provides = [prov for p in plugins.values()
+                    for prov in strax.to_str_tuple(p.provides)]
+        depends_on = [dep for p in plugins.values()
+                      for dep in strax.to_str_tuple(p.depends_on)]
+        uniques = list(set(provides) ^ set(depends_on))
+        return strax.to_str_tuple(uniques)
+
     @property
     def _find_options(self):
 
@@ -570,7 +583,7 @@ class Context:
 
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
-                       time_range=None, chunk_number=None
+                       time_range=None, chunk_number=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -579,15 +592,11 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
-        # Although targets is a tuple, we only support one target at the moment
-        # we could just make it a string!
-        assert len(targets) == 1, f"Found {len(targets)} instead of 1 target"
-        if len(targets[0]) == 1:
-            raise ValueError(
-                f"Plugin names must be more than one letter, not {targets[0]}")
+        for t in targets:
+            if len(t) == 1:
+                raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         plugins = self._get_plugins(targets, run_id)
-        target = targets[0]  # See above, already restricted to one target
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -761,7 +770,14 @@ class Context:
         intersec = list(plugins.keys() & loaders.keys())
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
-
+        if len(targets) > 1:
+            final_plugin = [t for t in targets if t in self._get_end_targets(plugins)][:1]
+            self.log.warning(
+                f'Multiple targets detected! This is only suitable for mass '
+                f'producing dataypes since only {final_plugin} will be '
+                f'subscribed in the mailbox system!')
+        else:
+            final_plugin = targets
         # For the plugins which will run computations,
         # check all required options are available or set defaults.
         # Also run any user-defined setup
@@ -772,13 +788,14 @@ class Context:
             plugins=plugins,
             loaders=loaders,
             savers=dict(savers),
-            targets=targets)
+            targets=strax.to_str_tuple(final_plugin))
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
 
-        This fetches from run metadata, and if this fails, it
-        estimates it using data metadata from targets.
+        This fetches from run metadata, and if this fails, it estimates
+            it using data metadata from the targets or the underlying
+            data-types (if it is stored).
         """
         try:
             res = []
@@ -790,12 +807,19 @@ class Context:
                 t = int(t.timestamp()) * int(1e9)
                 res.append(t)
             return res
-        except (strax.RunMetadataNotAvailable, KeyError):
+        except (strax.RunMetadataNotAvailable, KeyError) as e:
+            self.log.debug(f'Could not infer start/stop due to type {type(e)} {e}')
             pass
         # Get an approx start from the data itself,
         # then floor it to seconds for consistency
         if targets:
-            for t in strax.to_str_tuple(targets):
+            self.log.debug('Infer start/stop from targets')
+            for t in self._get_plugins(strax.to_str_tuple(targets),
+                                       run_id,
+                                       ).keys():
+                if not self.is_stored(run_id, t):
+                    continue
+                self.log.debug(f'Try inferring start/stop from {t}')
                 try:
                     t0 = self.get_meta(run_id, t)['chunks'][0]['start']
                     t0 = (int(t0) // int(1e9)) * int(1e9)
@@ -805,10 +829,9 @@ class Context:
                     return t0, t1
                 except strax.DataNotAvailable:
                     pass
-        warnings.warn(
+        self.log.warning(
             "Could not estimate run start and end time from "
-            "run metadata: assuming it is 0 and inf",
-            UserWarning)
+            "run metadata: assuming it is 0 and inf")
         return 0, float('inf')
 
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
@@ -858,8 +881,9 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
-                 _chunk_number=None,
+                 allow_multiple=False,
                  progress_bar=True,
+                 _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -892,8 +916,16 @@ class Context:
                          dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            else:
+            elif not allow_multiple:
                 raise RuntimeError("Cannot automerge different data kinds!")
+            elif (self.context_config['timeout'] > 7200 or (
+                    self.context_config['allow_lazy'] and
+                    not self.context_config['allow_multiprocess'])):
+                # For allow_multiple we don't want allow this when in lazy mode
+                # with long timeouts (lazy-mode is disabled if multiprocessing
+                # so if that is activated, we can also continue)
+                raise RuntimeError(f'Cannot allow_multiple in lazy mode or '
+                                   f'with long timeouts.')
 
         components = self.get_components(run_id,
                                          targets=targets,
@@ -1098,6 +1130,10 @@ class Context:
         {get_docs}
         """
         run_ids = strax.to_str_tuple(run_id)
+
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with get_array/get_df')
+
         if len(run_ids) > 1:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
@@ -1158,6 +1194,9 @@ class Context:
                 n_chunks: number of chunks in run
                 n_rows: number of data entries in run
         """
+        if kwargs.get('allow_multiple', False):
+            raise RuntimeError('Cannot allow_multiple with accumulate')
+
         n_chunks = 0
         seen_data = False
         result = {'n_rows': 0}
@@ -1168,7 +1207,8 @@ class Context:
                 return arr
             function_takes_fields = False
 
-        for chunk in self.get_iter(run_id, targets, **kwargs):
+        for chunk in self.get_iter(run_id, targets,
+                                   **kwargs):
             data = chunk.data
             data = self._apply_function(data, targets)
 
@@ -1364,14 +1404,19 @@ class Context:
             data = function(data, targets)
         return data
 
-    def copy_to_frontend(self, run_id, target,
-                         target_frontend_id=None, rechunk=False):
+    def copy_to_frontend(self,
+                         run_id: str,
+                         target: str,
+                         target_frontend_id: ty.Optional[int] = None,
+                         target_compressor: ty.Optional[str] = None,
+                         rechunk: bool = False):
         """
         Copy data from one frontend to another
         :param run_id: run_id
         :param target: target datakind
         :param target_frontend_id: index of the frontend that the data should go to
-        in context.storage. If no index is specified, try all.
+            in context.storage. If no index is specified, try all.
+        :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
         """
         if not self.is_stored(run_id, target):
@@ -1400,7 +1445,7 @@ class Context:
                      (not self._is_stored_in_sf(run_id, target, t_sf) and
                       t_sf._we_take(target) and
                       t_sf.readonly is False)]
-
+        self.log.info(f'Copy data from {source_sf} to {target_sf}')
         if not len(target_sf):
             raise ValueError('No frontend to copy to! Perhaps you already stored '
                              'it or none of the frontends is willing to take it?')
@@ -1412,6 +1457,11 @@ class Context:
         s_be_str, s_be_key = source_sf.find(data_key)
         s_be = source_sf._get_backend(s_be_str)
         md = s_be.get_metadata(s_be_key)
+
+        if target_compressor is not None:
+            self.log.info(f'Changing compressor from {md["compressor"]} '
+                           f'to {target_compressor}.')
+            md.update({'compressor': target_compressor})
 
         for t_sf in target_sf:
             try:
@@ -1462,6 +1512,18 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
+    def provided_dtypes(self, runid='0'):
+        """
+        Summarize useful dtype information provided by this context
+        :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
+        """
+        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
+                    for p in self._plugin_class_registry.values()
+                    for d in p.provides])
+
+        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
+                for dtype, h, save_when, version in hashes}
+
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method"""
@@ -1492,6 +1554,11 @@ get_docs = """
     Many plugins save automatically anyway.
 :param max_workers: Number of worker threads/processes to spawn.
     In practice more CPUs may be used due to strax's multithreading.
+:param allow_multiple: Allow multiple targets to be computed
+    simultaneously without merging the results of the target. This can
+    be used when mass producing plugins that are not of the same
+    datakind. Don't try to use this in get_array or get_df because the
+    data is not returned.
 """ + select_docs
 
 

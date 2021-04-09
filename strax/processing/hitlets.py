@@ -90,16 +90,17 @@ def _concat_overlapping_hits(hits,
                 res['channel'] = lhc['channel']
                 res['record_i'] = lhc['record_i']
                 res['dt'] = lhc['dt']
-                offset += 1
-                if offset == len(buffer):
-                    yield offset
-                    offset = 0
-
+                
                 # Updating current last hit:
                 lhc['time'] = st
                 lhc['endtime'] = et
                 lhc['channel'] = hc
                 lhc['record_i'] = r_i
+                
+                offset += 1
+                if offset == len(buffer):
+                    yield offset
+                    offset = 0
 
     # We went through so now we have to save all remaining hits:
     mask = last_hit_in_channel['time'] != 0
@@ -398,7 +399,7 @@ def hitlet_properties(hitlets):
             h['range_80p_area'] = res[3]-res[0]
             
         # Compute width based on HDR:
-        resh = highest_density_region_width(h['data'], 
+        resh = highest_density_region_width(data, 
                                             fractions_desired=np.array([0.5, 0.8]),
                                             dt=h['dt'],
                                             fractionl_edges=True,
