@@ -231,9 +231,8 @@ def test_peak_overflow(records,
                 'our white knight in shining armour to protected from this '
                 'imminent doom:\n'
                 'github.com/AxFoundation/strax/issues/397') from e
-        else:
-            # We failed for another reason, we need to re-raise
-            raise e
+        # We failed for another reason, we need to re-raise
+        raise e
 
     assert len(peaklets)
     assert len(peaklets) <= len(r)
