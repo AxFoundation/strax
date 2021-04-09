@@ -191,6 +191,12 @@ def test_peak_overflow(records,
             print(f'Great, we are getting the assertion statement for the '
                   f'incongruent extensions')
             return
+        elif not left_extension + max_duration + right_extension < magic_overflow_time:
+            # Ending up here is the ultimate goal of the tests. This
+            # means we are hitting github.com/AxFoundation/strax/issues/397
+            print(f'Great, the test worked, we are getting the assertion '
+                  f'statement for the int overflow')
+            return 
         else:
             # The error is caused by something else, we need to re-raise
             raise e
@@ -219,7 +225,7 @@ def test_peak_overflow(records,
             min_area=0,
             do_iterations=2)
     except AssertionError as e:
-        if left_extension + max_duration + right_extension > magic_overflow_time:
+        if not left_extension + max_duration + right_extension < magic_overflow_time:
             # Ending up here is the ultimate goal of the tests. This
             # means we are hitting github.com/AxFoundation/strax/issues/397
             print(f'Great, the test worked, we are getting the assertion '
