@@ -154,7 +154,7 @@ def test_peak_overflow(records,
         r_copy = r.copy()
         r_copy['time'] = r_copy['time'] + t_max * i * gap_factor
         r_buffer.append(r_copy)
-        if r_copy['time'] - r['time'][0] > 2*magic_overflow_time:
+        if r_copy['time'][-1] - r['time'][0] > 2 * magic_overflow_time:
             # No need to go over and beyond
             break
     r = np.concatenate(r_buffer)
