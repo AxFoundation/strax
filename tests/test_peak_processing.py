@@ -129,7 +129,6 @@ def test_peak_overflow(records,
     :param gap_threshold: option for strax.find_peaks
     :return: None
     """
-
     # Set this here, no need to test left and right independently
     left_extension = 0
     p = np.zeros(0, dtype=strax.peak_dtype())
@@ -181,7 +180,6 @@ def test_peak_overflow(records,
                              gap_threshold=gap_threshold,
                              left_extension=left_extension,
                              right_extension=right_extension,
-                             max_duration=max_duration,
                              # Due to these settings, we will start merging
                              # whatever strax can get its hands on
                              min_area=0.,
@@ -231,9 +229,8 @@ def test_peak_overflow(records,
                 'our white knight in shining armour to protected from this '
                 'imminent doom:\n'
                 'github.com/AxFoundation/strax/issues/397') from e
-        else:
-            # We failed for another reason, we need to re-raise
-            raise e
+        # We failed for another reason, we need to re-raise
+        raise e
 
     assert len(peaklets)
     assert len(peaklets) <= len(r)
