@@ -1,3 +1,7 @@
+0.14.0 / 2021-04-02
+---------------------
+- Check data availability for single run (#416) 
+
 0.13.11 / 2021-04-02
 ---------------------
 - Allow re-compression at copy to frontend (#407)
