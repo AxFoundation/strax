@@ -298,7 +298,6 @@ def test_run_selection():
     with tempfile.TemporaryDirectory() as temp_dir:
         sf = strax.DataDirectory(path=temp_dir,
                                  deep_scan=True, provide_run_metadata=True)
-
         # Write mock runs db
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
@@ -448,3 +447,20 @@ def test_allow_multiple_inverted():
     # actually depending on the second. In that case, we should
     # subscribe the first target as the endpoint of the processing
     test_allow_multiple(targets=('records', 'peaks',))
+
+
+def test_available_for_run():
+    """Very simply test the available_for_run function"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                            deep_scan=True),
+                                register=[Records, Peaks])
+        targets = list(mystrax._plugin_class_registry.keys())
+        for exclude_i in range(len(targets)):
+            for include_i in range(len(targets)):
+                df = mystrax.available_for_run(run_id,
+                                               include_targets = targets[:include_i],
+                                               exclude_targets = targets[:exclude_i])
+                if len(df):
+                    # We haven't made any data
+                    assert not sum(df['is_stored'])

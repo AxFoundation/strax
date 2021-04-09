@@ -2,7 +2,7 @@
 import fnmatch
 import re
 import typing as ty
-
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -281,6 +281,67 @@ def define_run(self: strax.Context,
     else:
         raise RuntimeError("No storage frontend registered that allows"
                            " run definition")
+
+
+@strax.Context.add_method
+def available_for_run(self: strax.Context,
+                      run_id: str,
+                      include_targets: ty.Union[None, list, tuple, str] = None,
+                      exclude_targets: ty.Union[None, list, tuple, str] = None,
+                      pattern_type: str = 'fnmatch') -> pd.DataFrame:
+    """
+    For a given single run, check all the targets if they are stored.
+        Excludes the target if never stored anyway.
+    :param run_id: requested run
+    :param include_targets: targets to include e.g. raw_records,
+        raw_records* or *_nv. If multiple targets (e.g. a list) is
+        provided, the target should match any of the arguments!
+    :param exclude_targets: targets to exclude e.g. raw_records,
+        raw_records* or *_nv. If multiple targets (e.g. a list) is
+        provided, the target should match none of the arguments!
+    :param pattern_type: either 'fnmatch' (Unix filename pattern
+        matching) or 're' (Regular expression operations).
+    :return: Table of available data per target
+    """
+    if not isinstance(run_id, str):
+        raise ValueError(f'Only single run_id is allowed (str),'
+                         f' got {run_id} ({type(run_id)})')
+
+    if exclude_targets is None:
+        exclude_targets = []
+    if include_targets is None:
+        include_targets = []
+
+    is_stored = defaultdict(list)
+    for target in self._plugin_class_registry.keys():
+        # Skip targets that are not stored
+        if not self._plugin_class_registry[target].save_when > strax.SaveWhen.NEVER:
+            continue
+
+        # Should we include this target or exclude it?
+        include_t = []
+        exclude_t = False
+
+        for excl in strax.to_str_tuple(exclude_targets):
+            # Simple logic, if we match the excluded target, we should
+            # should not continue
+            if _tag_match(target, excl, pattern_type, False):
+                exclude_t = True
+                break
+
+        # We can match any of the "incl" targets, keep a list and check
+        # of any of the "incl" matches the target.
+        for incl in strax.to_str_tuple(include_targets):
+            include_t.append(_tag_match(target, incl, pattern_type, False))
+
+        # Convert to simple bool. If no include_targets is specified,
+        # all are fine, otherwise check at least one is matching.
+        include_t = True if not len(include_t) else any(include_t)
+
+        if include_t and not exclude_t:
+            is_stored['target'].append(target)
+            is_stored['is_stored'].append(self.is_stored(run_id, target))
+    return pd.DataFrame(is_stored)
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
