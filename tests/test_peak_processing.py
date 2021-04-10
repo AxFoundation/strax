@@ -93,14 +93,12 @@ def test_sum_waveform(records, peak_left, peak_length):
        st.integers(min_value=10, max_value=400),
        st.integers(min_value=1000, max_value=2000),
        st.integers(min_value=1900, max_value=10000),
-       st.integers(min_value=1000, max_value=int(7_000_000)),
        )
 @example(
     records=np.array([(0, 1, 1, 0, 0, 0, 0, 0, 0., 0., 0, [1, 0]),
                       (1, 1, 1, 1, 0, 0, 0, 0, 0., 0., 0, [1, 0])],
                      dtype=strax.record_dtype(2)),
     gap_factor=108,
-    max_duration=1000,
     right_extension=5000,
     gap_threshold=18000,
 )
@@ -108,7 +106,6 @@ def test_peak_overflow(records,
                        gap_factor,
                        right_extension,
                        gap_threshold,
-                       max_duration,
                        ):
 
     """
@@ -129,6 +126,7 @@ def test_peak_overflow(records,
     :param gap_threshold: option for strax.find_peaks
     :return: None
     """
+
     # Set this here, no need to test left and right independently
     left_extension = 0
     p = np.zeros(0, dtype=strax.peak_dtype())
@@ -172,7 +170,7 @@ def test_peak_overflow(records,
     hits = strax.sort_by_time(hits)
 
     # Dummy to_pe
-    to_pe = np.ones(max(r['channel']))
+    to_pe = np.ones(max(r['channel'])+1)
 
     try:
         # Find peaks, we might end up with negative dt here!
@@ -217,20 +215,17 @@ def test_peak_overflow(records,
             min_area=0,
             do_iterations=2)
     except AssertionError as e:
-        if left_extension + max_duration + right_extension > magic_overflow_time:
-            # Ending up here is the ultimate goal of the tests. This
-            # means we are hitting github.com/AxFoundation/strax/issues/397
-            print(f'Great, the test worked, we are getting the assertion '
-                  f'statement for the int overflow')
-            raise RuntimeError(
-                'We were not properly warned of the imminent peril we are '
-                'facing. This error means that the peak_finding is not '
-                'protected against integer overflow in the dt field. Where is '
-                'our white knight in shining armour to protected from this '
-                'imminent doom:\n'
-                'github.com/AxFoundation/strax/issues/397') from e
-        # We failed for another reason, we need to re-raise
-        raise e
+     # Ending up here is the ultimate goal of the tests. This
+     # means we are hitting github.com/AxFoundation/strax/issues/397
+     print(f'Great, the test worked, we are getting the assertion '
+           f'statement for the int overflow')
+     raise RuntimeError(
+         'We were not properly warned of the imminent peril we are '
+         'facing. This error means that the peak_finding is not '
+         'protected against integer overflow in the dt field. Where is '
+         'our white knight in shining armour to protected from this '
+         'imminent doom:\n'
+         'github.com/AxFoundation/strax/issues/397') from e
 
     assert len(peaklets)
     assert len(peaklets) <= len(r)
