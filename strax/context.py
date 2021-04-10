@@ -79,7 +79,7 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       'even when no registered plugin takes them.'),
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
-                      'data. The function should take thee positional arguments: '
+                      'data. The function should take three positional arguments: '
                       'func(<data>, <run_id>, <targets>).')
 )
 @export
