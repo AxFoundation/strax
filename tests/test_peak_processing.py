@@ -173,7 +173,7 @@ def test_peak_overflow(records,
     hits = strax.sort_by_time(hits)
 
     # Dummy to_pe
-    to_pe = np.ones(max(r['channel']))
+    to_pe = np.ones(max(r['channel'])+1)
 
     try:
         # Find peaks, we might end up with negative dt here!

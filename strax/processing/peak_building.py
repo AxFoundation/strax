@@ -34,10 +34,12 @@ def find_peaks(hits, adc_to_pe,
     assert min_channels >= 1, "min_channels must be >= 1"
     assert gap_threshold > left_extension + right_extension, \
         "gap_threshold must be larger than left + right extension"
+    assert max(hits['channel']) < len(adc_to_pe), "more channels than to_pe"
     # Magic number comes from
     #   np.iinfo(p['dt'].dtype).max*np.shape(p['data'])[1] = 6553400 ns
     # but numba does not like it
-    assert left_extension+max_duration+right_extension < 6_553_400, "Too large max duration causes integer overflow"
+    assert left_extension+max_duration+right_extension < 6_553_400, (
+        "Too large max duration causes integer overflow")
 
     n_channels = len(buffer[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -79,12 +81,16 @@ def find_peaks(hits, adc_to_pe,
         # Finally, make sure that if we include the next hit, we are not
         # exceeding the max_duration.
         is_last_hit = hit_i == len(hits) - 1
-        next_hit = hits[hit_i + 1]
-        next_hit_is_far = next_hit['time'] - peak_endtime >= gap_threshold
-        peak_too_long = (next_hit['time'] - p['time']
-                         + next_hit['dt'] * next_hit['length']
-                         + left_extension
-                         + right_extension) > max_duration
+        peak_too_long = next_hit_is_far = False
+        if not is_last_hit:
+            # These can only be computed if there is a nex hit
+            next_hit = hits[hit_i + 1]
+            next_hit_is_far = next_hit['time'] - peak_endtime >= gap_threshold
+            # Peaks may not extend the max_duration
+            peak_too_long = (next_hit['time'] - p['time']
+                             + next_hit['dt'] * next_hit['length']
+                             + left_extension
+                             + right_extension) > max_duration
         if is_last_hit or next_hit_is_far or peak_too_long:
             # Next hit (if it exists) will initialize the new peak candidate
             in_peak = False
