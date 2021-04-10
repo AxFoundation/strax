@@ -121,7 +121,6 @@ def test_peak_overflow(records,
     :param gap_factor: to create very extended sets of records, just
         add a factor that can be used to multiply the time field with,
         to more quickly arrive to a very long pulse-train
-    :param max_duration: max_duration option for strax.find_peaks
     :param right_extension: option for strax.find_peaks
     :param gap_threshold: option for strax.find_peaks
     :return: None
@@ -130,7 +129,7 @@ def test_peak_overflow(records,
     # Set this here, no need to test left and right independently
     left_extension = 0
     p = np.zeros(0, dtype=strax.peak_dtype())
-    magic_overflow_time = np.iinfo(p.dtype['dt']).max * p.dtype['data'].shape[0]
+    magic_overflow_time = np.iinfo(np.int16).max * p.dtype['data'].shape[0]
     del p
 
     # Make a single big peak to contain all the records
@@ -155,7 +154,9 @@ def test_peak_overflow(records,
     r_buffer = []
     t_max = strax.endtime(r)
     max_record_repetition_factor = 1_000_000
+    print('make buffer')
     for i in range(max_record_repetition_factor):
+        print(f'buff len\t{len(r_buffer)}')
         r_copy = r.copy()
         r_copy['time'] = r_copy['time'] + t_max * i * gap_factor
         r_buffer.append(r_copy)
@@ -163,8 +164,10 @@ def test_peak_overflow(records,
             # No need to go over and beyond. We should get int-overflow
             break
     r = np.concatenate(r_buffer)
+    print(f'Array is {r.nbytes/1e6} MB, good luck')
 
     # Do peak finding!
+    print(f'Find hits')
     hits = strax.find_hits(r, min_amplitude=0)
     assert len(hits)
     hits = strax.sort_by_time(hits)
@@ -173,6 +176,7 @@ def test_peak_overflow(records,
     to_pe = np.ones(max(r['channel'])+1)
 
     try:
+        print('Find peaks')
         # Find peaks, we might end up with negative dt here!
         p = strax.find_peaks(hits, to_pe,
                              gap_threshold=gap_threshold,
@@ -190,7 +194,7 @@ def test_peak_overflow(records,
         else:
             # The error is caused by something else, we need to re-raise
             raise e
-
+    print(f'Peaklet array is {p.nbytes / 1e6} MB, good luck')
     if len(p) == 0:
         print(f'rec length {len(r)}')
     assert len(p)
@@ -206,6 +210,7 @@ def test_peak_overflow(records,
     strax.compute_widths(p)
 
     try:
+        print('Split peaks')
         peaklets = strax.split_peaks(
             p, r, to_pe,
             algorithm='natural_breaks',
@@ -215,17 +220,17 @@ def test_peak_overflow(records,
             min_area=0,
             do_iterations=2)
     except AssertionError as e:
-     # Ending up here is the ultimate goal of the tests. This
-     # means we are hitting github.com/AxFoundation/strax/issues/397
-     print(f'Great, the test worked, we are getting the assertion '
-           f'statement for the int overflow')
-     raise RuntimeError(
-         'We were not properly warned of the imminent peril we are '
-         'facing. This error means that the peak_finding is not '
-         'protected against integer overflow in the dt field. Where is '
-         'our white knight in shining armour to protected from this '
-         'imminent doom:\n'
-         'github.com/AxFoundation/strax/issues/397') from e
+        # Ending up here is the ultimate goal of the tests. This
+        # means we are hitting github.com/AxFoundation/strax/issues/397
+        print(f'Great, the test worked, we are getting the assertion '
+              f'statement for the int overflow')
+        raise RuntimeError(
+            'We were not properly warned of the imminent peril we are '
+            'facing. This error means that the peak_finding is not '
+            'protected against integer overflow in the dt field. Where is '
+            'our white knight in shining armour to protected from this '
+            'imminent doom:\n'
+            'github.com/AxFoundation/strax/issues/397') from e
 
     assert len(peaklets)
     assert len(peaklets) <= len(r)
