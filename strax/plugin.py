@@ -639,9 +639,10 @@ class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
     # time_selection: Kind of time selection to apply:
-    # - touching: select things that (partially) overlap with the range
+    # - touching: select things that (partially) overlap with the range.
+    # The number of samples to be desired to overlapped can be set by
+    # self.touching_window. Otherwise 0 is assumed (see strax.touching_windows)
     # - fully_contained: (default) select things fully contained in the range
-
     time_selection = 'fully_contained'
 
     def compute(self, **kwargs):
@@ -679,7 +680,12 @@ class LoopPlugin(Plugin):
                 if self.time_selection == 'fully_contained':
                     r = strax.split_by_containment(things, base)
                 elif self.time_selection == 'touching':
-                    r = strax.split_touching_windows(things, base)
+                    window = 0
+                    if hasattr(self, 'touching_window'):
+                        window = self.touching_window
+                    r = strax.split_touching_windows(things,
+                                                     base,
+                                                     window=window)
                 else:
                     raise RuntimeError('Unknown time_selection')
                 if len(r) != len(base):
