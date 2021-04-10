@@ -960,6 +960,11 @@ class Context:
                     if not isinstance(result, strax.Chunk):
                         raise ValueError(f"Got type {type(result)} rather than "
                                          f"a strax Chunk from the processor!")
+                    # Apply functions known to contexts if any.
+                    result.data = self._apply_function(result.data,
+                                                       run_id,
+                                                       targets)
+
                     result.data = self.apply_selection(
                         result.data,
                         selection_str=selection_str,
@@ -968,10 +973,6 @@ class Context:
                         time_selection=time_selection)
                     self._update_progress_bar(
                         pbar, t_start, t_end, n_chunks, result.end)
-                    # Apply functions known to contexts if any.
-                    result.data = self._apply_function(result.data,
-                                                       run_id,
-                                                       targets)
                     yield result
             _p.close()
 
