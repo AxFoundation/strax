@@ -105,6 +105,7 @@ def find_peaks(hits, adc_to_pe,
             # Compute final quantities
             p['length'] = (peak_endtime - p['time'] + right_extension) / dt
             if p['length'] <= 0:
+                # This is most likely caused by a negative dt
                 raise ValueError(
                     "Caught attempt to save nonpositive peak length?!")
             p['area_per_channel'][:] = area_per_channel
