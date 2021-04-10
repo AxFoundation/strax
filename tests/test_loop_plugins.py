@@ -36,6 +36,7 @@ def drop_random(input_array: np.ndarray) -> np.ndarray:
 def _loop_test_inner(big_data,
                      nchunks,
                      target='added_thing',
+                     time_selection='fully_contained',
                      force_value_error=False):
     """
     Test loop plugins for random data. For this test we are going to
@@ -109,6 +110,9 @@ def _loop_test_inner(big_data,
         depends_on = 'big_thing', 'small_thing'
         provides = 'added_thing'
         loop_over = 'big_kinda_data'  # Also just test this feature
+
+        def setup(self):
+            self.time_selection = time_selection
 
         def infer_dtype(self):
             # Get the dtype from the dependency
@@ -221,3 +225,19 @@ def test_value_error_for_loop_plugin(big_data, nchunks):
     except ValueError:
         # Good we got the ValueError we wanted
         pass
+
+
+@given(get_some_array().filter(lambda x: len(x) >= 0),
+       strategies.integers(min_value=1, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [(0, 0, 1, 1),
+         (1, 1, 1, 1),
+         (5, 2, 2, 1),
+         (11, 4, 2, 4)],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_loop_plugin_tw(big_data, nchunks):
+    """Test the loop plugin for random data"""
+    _loop_test_inner(big_data, nchunks, time_selection='touching')

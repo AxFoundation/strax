@@ -1046,7 +1046,7 @@ class Context:
         :param x: Numpy structured array
         :param selection_str: Query string or sequence of strings to apply.
         :param time_range: (start, stop) range to load, in ns since the epoch
-        :param time_selection: Kind of time selectoin to apply:
+        :param time_selection: Kind of time selection to apply:
         - skip: Do not select a time range, even if other arguments say so
         - touching: select things that (partially) overlap with the range
         - fully_contained: (default) select things fully contained in the range

@@ -638,6 +638,12 @@ class OverlapWindowPlugin(Plugin):
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
+    # time_selection: Kind of time selection to apply:
+    # - touching: select things that (partially) overlap with the range
+    # - fully_contained: (default) select things fully contained in the range
+
+    time_selection = 'fully_contained'
+
     def compute(self, **kwargs):
         # If not otherwise specified, data kind to loop over
         # is that of the first dependency (e.g. events)
@@ -670,7 +676,12 @@ class LoopPlugin(Plugin):
                          for x in examples]))
 
             if k != loop_over:
-                r = strax.split_by_containment(things, base)
+                if self.time_selection == 'fully_contained':
+                    r = strax.split_by_containment(things, base)
+                elif self.time_selection == 'touching':
+                    r = strax.split_touching_windows(things, base)
+                else:
+                    raise RuntimeError('Unknown time_selection')
                 if len(r) != len(base):
                     raise RuntimeError(f"Split {k} into {len(r)}, "
                                        f"should be {len(base)}!")
