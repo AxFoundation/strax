@@ -1059,9 +1059,11 @@ class Context:
             'context.apply_selection is replaced by strax.apply_selection and '
             'will be removed in a future release',
             DeprecationWarning)
-        strax.apply_selection(x, selection_str, keep_columns,
-                              time_range,
-                              time_selection)
+        return strax.apply_selection(x,
+                                     selection_str,
+                                     keep_columns,
+                                     time_range,
+                                     time_selection)
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
