@@ -110,8 +110,10 @@ def test_selection_str(d):
     :return: None
     """
     mean_data = np.mean(d['data'])
-    mask = d['data'] > mean_data
-    selections_str = f'data > {mean_data}'
+    max_data = np.max(d['data'])
+    mask = (d['data'] > mean_data) & (d['data'] < max_data)
+    selections_str = [f'data > {mean_data}', 
+                      f'data < {max_data}']
     selected_data = strax.apply_selection(d, selection_str=selections_str)
     assert np.all(selected_data == d[mask])
 
