@@ -1,6 +1,5 @@
 import numpy as np
 import hypothesis.strategies as hst
-import hypothesis.extra.numpy as hnp
 from hypothesis import given, settings
 import strax
 
@@ -51,7 +50,7 @@ def get_dummy_data(draw,
     max_time = draw(hst.integers(*max_time))
 
     data = np.zeros(data_length, dtype=strax.time_fields + [('data', np.float)])
-    data['time'] = np.random.randint(0, max_time+1, data_length)
+    data['time'] = np.random.randint(0, max_time + 1, data_length)
     data['endtime'] = data['time'] + dt
     data['data'] = np.random.random(data_length)
     data.sort(order='time')
