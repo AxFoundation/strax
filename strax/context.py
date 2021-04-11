@@ -8,7 +8,6 @@ import string
 import typing as ty
 import warnings
 import time
-import numexpr
 import numpy as np
 import pandas as pd
 import strax
@@ -960,7 +959,7 @@ class Context:
                     if not isinstance(result, strax.Chunk):
                         raise ValueError(f"Got type {type(result)} rather than "
                                          f"a strax Chunk from the processor!")
-                    result.data = self.apply_selection(
+                    result.data = strax.apply_selection(
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
@@ -1036,7 +1035,8 @@ class Context:
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
-    def apply_selection(self, x,
+    @staticmethod
+    def apply_selection(x,
                         selection_str=None,
                         keep_columns=None,
                         time_range=None,
@@ -1055,47 +1055,13 @@ class Context:
         Thus, data that ends (exclusively) exactly at the right edge of a
         fully_contained selection is returned.
         """
-        # Apply the time selections
-        if time_range is None or time_selection == 'skip':
-            pass
-        elif time_selection == 'fully_contained':
-            x = x[(time_range[0] <= x['time']) &
-                  (strax.endtime(x) <= time_range[1])]
-        elif time_selection == 'touching':
-            x = x[(strax.endtime(x) > time_range[0]) &
-                  (x['time'] < time_range[1])]
-        else:
-            raise ValueError(f"Unknown time_selection {time_selection}")
-
-        if selection_str:
-            if isinstance(selection_str, (list, tuple)):
-                selection_str = ' & '.join(f'({x})' for x in selection_str)
-
-            mask = numexpr.evaluate(selection_str, local_dict={
-                fn: x[fn]
-                for fn in x.dtype.names})
-            x = x[mask]
-
-        if keep_columns:
-            keep_columns = strax.to_str_tuple(keep_columns)
-
-            # Construct the new dtype
-            new_dtype = []
-            for unpacked_dtype in strax.unpack_dtype(x.dtype):
-                field_name = unpacked_dtype[0]
-                if isinstance(field_name, tuple):
-                    field_name = field_name[1]
-                if field_name in keep_columns:
-                    new_dtype.append(unpacked_dtype)
-
-            # Copy over the data
-            x2 = np.zeros(len(x), dtype=new_dtype)
-            for field_name in keep_columns:
-                x2[field_name] = x[field_name]
-            x = x2
-            del x2
-
-        return x
+        warnings.warn(
+            'context.apply_selection is replaced by strax.apply_selection and '
+            'will be removed in a future release',
+            DeprecationWarning)
+        strax.apply_selection(x, selection_str, keep_columns,
+                              time_range,
+                              time_selection)
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
