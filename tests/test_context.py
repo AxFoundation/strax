@@ -81,7 +81,7 @@ def test_apply_drop_data():
             keep = np.random.randint(0, 2, len(data)).astype(np.bool_)
 
             # Keep in mind that we do this on a per chunk basis!
-            self.dropped += len(data) - np.sum(keep)
+            self.kept = keep
             res = data.copy()[keep]
             return res
 
