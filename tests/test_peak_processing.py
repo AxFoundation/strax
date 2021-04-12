@@ -100,9 +100,9 @@ def test_sum_waveform(records, peak_left, peak_length):
                       (1, 1, 1, 1, 0, 0, 0, 0, 0., 0., 0, [1, 0])],
                      dtype=strax.record_dtype(2)),
     gap_factor=108,
-    max_duration=1000,
     right_extension=5000,
     gap_threshold=18000,
+    max_duration=int(7_000_000),
 )
 def test_peak_overflow(records,
                        gap_factor,
@@ -132,8 +132,11 @@ def test_peak_overflow(records,
 
     # Set this here, no need to test left and right independently
     left_extension = 0
+    # Make a single big peak to contain all the records
     peak_dtype = np.zeros(0, strax.peak_dtype()).dtype
-    magic_overflow_time = np.iinfo(peak_dtype['dt']).max * peak_dtype['data'].shape[0]
+    # NB! This is only for before #403, now peaks are int32 so 
+    # this test would take forever with int32.
+    magic_overflow_time = np.iinfo(np.int16).max * peak_dtype['data'].shape[0]
 
     def retrun_1(x):
         """
@@ -154,6 +157,7 @@ def test_peak_overflow(records,
     # Copy the pulse train of the records. We are going to copy the same
     # set of records many times now.
     t_max = strax.endtime(r).max()
+    print('make buffer')
     n_repeat = int(1.5 * magic_overflow_time + t_max * gap_factor) // int(t_max * gap_factor) + 1
     time_offset = np.linspace(0,
                               1.5 * magic_overflow_time + t_max * gap_factor,
@@ -165,8 +169,10 @@ def test_peak_overflow(records,
     assert strax.endtime(r_buffer[-1]) - r_buffer['time'].min() > magic_overflow_time
     r = r_buffer.copy()
     del r_buffer
+    print(f'Array is {r.nbytes/1e6} MB, good luck')
 
     # Do peak finding!
+    print(f'Find hits')
     hits = strax.find_hits(r, min_amplitude=0)
     assert len(hits)
     hits = strax.sort_by_time(hits)
@@ -175,6 +181,7 @@ def test_peak_overflow(records,
     to_pe = np.ones(max(r['channel'])+1)
 
     try:
+        print('Find peaks')
         # Find peaks, we might end up with negative dt here!
         p = strax.find_peaks(hits, to_pe,
                              gap_threshold=gap_threshold,
@@ -200,6 +207,7 @@ def test_peak_overflow(records,
             # The error is caused by something else, we need to re-raise
             raise e
 
+    print(f'Peaklet array is {p.nbytes / 1e6} MB, good luck')
     if len(p) == 0:
         print(f'rec length {len(r)}')
     assert len(p)
@@ -215,6 +223,7 @@ def test_peak_overflow(records,
     strax.compute_widths(p)
 
     try:
+        print('Split peaks')
         peaklets = strax.split_peaks(
             p, r, to_pe,
             algorithm='natural_breaks',
