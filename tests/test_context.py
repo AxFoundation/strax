@@ -73,7 +73,7 @@ def test_apply_drop_data():
     class Drop:
         """Small class to keep track of the number of dropped rows"""
 
-        dropped = 0
+        kept = []
 
         def drop(self, data, r, t):
             """Drop a random portion of the data"""
@@ -82,7 +82,7 @@ def test_apply_drop_data():
             keep = np.random.randint(0, 2, len(data)).astype(np.bool_)
 
             # Keep in mind that we do this on a per chunk basis!
-            self.kept = keep
+            self.kept += [keep]
             res = data.copy()[keep]
             return res
 
@@ -91,8 +91,7 @@ def test_apply_drop_data():
     r, r_changed = _apply_function_to_data(dropper.drop)
 
     # The number of records should e
-    assert np.all(r[dropper.kept] == r_changed)
-
+    assert np.all(r[np.concatenate(dropper.kept)] == r_changed)
 
 
 def test_accumulate():
