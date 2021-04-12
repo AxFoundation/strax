@@ -638,6 +638,16 @@ class OverlapWindowPlugin(Plugin):
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
+    # time_selection: Kind of time selection to apply:
+    # - touching: select things that (partially) overlap with the range.
+    # NB! Use this option with care since if e.g. two events are
+    # adjacent, touching windows might return ambiguous results as peaks
+    # may be touching both events.
+    # The number of samples to be desired to overlapped can be set by
+    # self.touching_window. Otherwise 0 is assumed (see strax.touching_windows)
+    # - fully_contained: (default) select things fully contained in the range
+    time_selection = 'fully_contained'
+
     def compute(self, **kwargs):
         # If not otherwise specified, data kind to loop over
         # is that of the first dependency (e.g. events)
@@ -670,7 +680,23 @@ class LoopPlugin(Plugin):
                          for x in examples]))
 
             if k != loop_over:
-                r = strax.split_by_containment(things, base)
+                if self.time_selection == 'fully_contained':
+                    r = strax.split_by_containment(things, base)
+                elif self.time_selection == 'touching':
+                    # Experimental feature that should be handled with care:
+                    # github.com/AxFoundation/strax/pull/424
+                    warn(f'{self.__class__.__name__} has a touching time '
+                         f'selection. This may lead to ambiguous results as two '
+                         f'{loop_over}\'s may contain the same {k}, thereby a '
+                         f'given {k} can be included multiple times.')
+                    window = 0
+                    if hasattr(self, 'touching_window'):
+                        window = self.touching_window
+                    r = strax.split_touching_windows(things,
+                                                     base,
+                                                     window=window)
+                else:
+                    raise RuntimeError('Unknown time_selection')
                 if len(r) != len(base):
                     raise RuntimeError(f"Split {k} into {len(r)}, "
                                        f"should be {len(base)}!")

@@ -902,8 +902,12 @@ class Context:
             time_range=time_range, seconds_range=seconds_range,
             time_within=time_within)
 
+        # Keep a copy of the list of targets for apply_function
+        # (otherwise potentially overwritten in temp-plugin)
+        targets_list = targets
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
-        # to merge the results automatically
+        # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
@@ -962,7 +966,7 @@ class Context:
                     # Apply functions known to contexts if any.
                     result.data = self._apply_function(result.data,
                                                        run_id,
-                                                       targets)
+                                                       targets_list)
 
                     result.data = strax.apply_selection(
                         result.data,
@@ -1050,7 +1054,7 @@ class Context:
         :param x: Numpy structured array
         :param selection_str: Query string or sequence of strings to apply.
         :param time_range: (start, stop) range to load, in ns since the epoch
-        :param time_selection: Kind of time selectoin to apply:
+        :param time_selection: Kind of time selection to apply:
         - skip: Do not select a time range, even if other arguments say so
         - touching: select things that (partially) overlap with the range
         - fully_contained: (default) select things fully contained in the range
