@@ -902,8 +902,12 @@ class Context:
             time_range=time_range, seconds_range=seconds_range,
             time_within=time_within)
 
+        # Keep a copy of the list of targets for apply_function
+        # (otherwise potentially overwritten in temp-plugin)
+        targets_list = targets
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
-        # to merge the results automatically
+        # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
@@ -962,7 +966,7 @@ class Context:
                     # Apply functions known to contexts if any.
                     result.data = self._apply_function(result.data,
                                                        run_id,
-                                                       targets)
+                                                       targets_list)
 
                     result.data = strax.apply_selection(
                         result.data,
