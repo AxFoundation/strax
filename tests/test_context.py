@@ -32,7 +32,8 @@ def _apply_function_to_data(function
 def test_apply_pass_to_data():
     """
     What happens if we apply a function that does nothing (well,
-        nothing hopefully)
+    nothing hopefully)
+
     :return: None
     """
 
@@ -97,8 +98,9 @@ def test_apply_drop_data():
 def test_accumulate():
     """
     Test the st.accumulate function. Should add the results and
-        accumulate per chunk. Lets add channels and verify the results
-        are correct.
+    accumulate per chunk. Lets add channels and verify the results
+    are correct.
+
     :return: None
     """
     with tempfile.TemporaryDirectory() as temp_dir:
