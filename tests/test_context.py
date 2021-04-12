@@ -90,7 +90,8 @@ def test_apply_drop_data():
     r, r_changed = _apply_function_to_data(dropper.drop)
 
     # The number of records should e
-    assert (dropper.dropped == len(r) - len(r_changed))
+    assert np.all(r[dropper.kept] == r_changed)
+
 
 
 def test_accumulate():
