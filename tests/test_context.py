@@ -70,7 +70,8 @@ def test_apply_drop_data():
     """
 
     class Drop:
-        """Small class to keep track of the number of dropped fields"""
+        """Small class to keep track of the number of dropped rows"""
+
         dropped = 0
 
         def drop(self, data, r, t):
