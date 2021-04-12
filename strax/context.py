@@ -8,7 +8,6 @@ import string
 import typing as ty
 import warnings
 import time
-import numexpr
 import numpy as np
 import pandas as pd
 import strax
@@ -79,8 +78,8 @@ RUN_DEFAULTS_KEY = 'strax_defaults'
                       'even when no registered plugin takes them.'),
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
-                      'data. The function should take two positional arguments: '
-                      'func(<data>, <targets>).')
+                      'data. The function should take three positional arguments: '
+                      'func(<data>, <run_id>, <targets>).')
 )
 @export
 class Context:
@@ -960,7 +959,12 @@ class Context:
                     if not isinstance(result, strax.Chunk):
                         raise ValueError(f"Got type {type(result)} rather than "
                                          f"a strax Chunk from the processor!")
-                    result.data = self.apply_selection(
+                    # Apply functions known to contexts if any.
+                    result.data = self._apply_function(result.data,
+                                                       run_id,
+                                                       targets)
+
+                    result.data = strax.apply_selection(
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
@@ -968,7 +972,6 @@ class Context:
                         time_selection=time_selection)
                     self._update_progress_bar(
                         pbar, t_start, t_end, n_chunks, result.end)
-
                     yield result
             _p.close()
 
@@ -1036,7 +1039,8 @@ class Context:
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
-    def apply_selection(self, x,
+    @staticmethod
+    def apply_selection(x,
                         selection_str=None,
                         keep_columns=None,
                         time_range=None,
@@ -1055,47 +1059,15 @@ class Context:
         Thus, data that ends (exclusively) exactly at the right edge of a
         fully_contained selection is returned.
         """
-        # Apply the time selections
-        if time_range is None or time_selection == 'skip':
-            pass
-        elif time_selection == 'fully_contained':
-            x = x[(time_range[0] <= x['time']) &
-                  (strax.endtime(x) <= time_range[1])]
-        elif time_selection == 'touching':
-            x = x[(strax.endtime(x) > time_range[0]) &
-                  (x['time'] < time_range[1])]
-        else:
-            raise ValueError(f"Unknown time_selection {time_selection}")
-
-        if selection_str:
-            if isinstance(selection_str, (list, tuple)):
-                selection_str = ' & '.join(f'({x})' for x in selection_str)
-
-            mask = numexpr.evaluate(selection_str, local_dict={
-                fn: x[fn]
-                for fn in x.dtype.names})
-            x = x[mask]
-
-        if keep_columns:
-            keep_columns = strax.to_str_tuple(keep_columns)
-
-            # Construct the new dtype
-            new_dtype = []
-            for unpacked_dtype in strax.unpack_dtype(x.dtype):
-                field_name = unpacked_dtype[0]
-                if isinstance(field_name, tuple):
-                    field_name = field_name[1]
-                if field_name in keep_columns:
-                    new_dtype.append(unpacked_dtype)
-
-            # Copy over the data
-            x2 = np.zeros(len(x), dtype=new_dtype)
-            for field_name in keep_columns:
-                x2[field_name] = x[field_name]
-            x = x2
-            del x2
-
-        return x
+        warnings.warn(
+            'context.apply_selection is replaced by strax.apply_selection and '
+            'will be removed in a future release',
+            DeprecationWarning)
+        return strax.apply_selection(x,
+                                     selection_str,
+                                     keep_columns,
+                                     time_range,
+                                     time_selection)
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
@@ -1148,7 +1120,6 @@ class Context:
             results = [x.data for x in source]
 
         results = np.concatenate(results)
-        results = self._apply_function(results, targets)
         return results
 
     def accumulate(self,
@@ -1210,7 +1181,6 @@ class Context:
         for chunk in self.get_iter(run_id, targets,
                                    **kwargs):
             data = chunk.data
-            data = self._apply_function(data, targets)
 
             if n_chunks == 0:
                 result['start'] = chunk.start
@@ -1381,17 +1351,26 @@ class Context:
         self.context_config['forbid_creation_of'] = strax.to_str_tuple(
             self.context_config['forbid_creation_of'])
     
-    def _apply_function(self, data, targets):
+    def _apply_function(self,
+                        chunk_data: np.ndarray,
+                        run_id: ty.Union[str, tuple, list],
+                        targets: ty.Union[str, tuple, list],
+                        ) -> np.ndarray:
         """
         Apply functions stored in the context config to any data that is returned via
             get_array, get_df or accumulate. Functions stored in
             context_config['apply_data_function'] should take exactly two positional
             arguments: data and targets.
         :param data: Any type of data
+        :param run_id: run_id of the data.
         :param targets: list/tuple of strings of data type names to get
         :return: the data after applying the function(s)
         """
         apply_functions = self.context_config['apply_data_function']
+        if hasattr(apply_functions, '__call__'):
+            # Apparently someone did not read the docstring and inserted
+            # a single function instead of a list.
+            apply_functions = [apply_functions]
         if not isinstance(apply_functions, (tuple, list)):
             raise ValueError(f"apply_data_function in context config should be tuple of "
                              f"functions. Instead got {apply_functions}")
@@ -1401,8 +1380,8 @@ class Context:
                                 f'{function} but expected callable function with two '
                                 f'positional arguments: f(data, targets).')
             # Make sure that the function takes two arguments (data and targets)
-            data = function(data, targets)
-        return data
+            chunk_data = function(chunk_data, run_id, targets)
+        return chunk_data
 
     def copy_to_frontend(self,
                          run_id: str,

@@ -9,7 +9,8 @@ import sys
 import traceback
 import typing as ty
 from hashlib import sha1
-
+import strax
+import numexpr
 import dill
 import numba
 import numpy as np
@@ -500,3 +501,66 @@ def iter_chunk_meta(md):
         c['n_from'] = _n_from
         c['n_to'] = _n_to
         yield c
+
+
+@export
+def apply_selection(x,
+                    selection_str=None,
+                    keep_columns=None,
+                    time_range=None,
+                    time_selection='fully_contained'):
+    """Return x after applying selections
+
+    :param x: Numpy structured array
+    :param selection_str: Query string or sequence of strings to apply.
+    :param time_range: (start, stop) range to load, in ns since the epoch
+    :param time_selection: Kind of time selectoin to apply:
+    - skip: Do not select a time range, even if other arguments say so
+    - touching: select things that (partially) overlap with the range
+    - fully_contained: (default) select things fully contained in the range
+
+    The right bound is, as always in strax, considered exclusive.
+    Thus, data that ends (exclusively) exactly at the right edge of a
+    fully_contained selection is returned.
+    """
+    # Apply the time selections
+    if time_range is None or time_selection == 'skip':
+        pass
+    elif time_selection == 'fully_contained':
+        x = x[(time_range[0] <= x['time']) &
+              (strax.endtime(x) <= time_range[1])]
+    elif time_selection == 'touching':
+        x = x[(strax.endtime(x) > time_range[0]) &
+              (x['time'] < time_range[1])]
+    else:
+        raise ValueError(f"Unknown time_selection {time_selection}")
+
+    if selection_str:
+        if isinstance(selection_str, (list, tuple)):
+            selection_str = ' & '.join(f'({x})' for x in selection_str)
+
+        mask = numexpr.evaluate(selection_str, local_dict={
+            fn: x[fn]
+            for fn in x.dtype.names})
+        x = x[mask]
+
+    if keep_columns:
+        keep_columns = strax.to_str_tuple(keep_columns)
+
+        # Construct the new dtype
+        new_dtype = []
+        for unpacked_dtype in strax.unpack_dtype(x.dtype):
+            field_name = unpacked_dtype[0]
+            if isinstance(field_name, tuple):
+                field_name = field_name[1]
+            if field_name in keep_columns:
+                new_dtype.append(unpacked_dtype)
+
+        # Copy over the data
+        x2 = np.zeros(len(x), dtype=new_dtype)
+        for field_name in keep_columns:
+            x2[field_name] = x[field_name]
+        x = x2
+        del x2
+
+    return x
