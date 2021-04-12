@@ -83,7 +83,7 @@ def find_peaks(hits, adc_to_pe,
         is_last_hit = hit_i == len(hits) - 1
         peak_too_long = next_hit_is_far = False
         if not is_last_hit:
-            # These can only be computed if there is a nex hit
+            # These can only be computed if there is a next hit
             next_hit = hits[hit_i + 1]
             next_hit_is_far = next_hit['time'] - peak_endtime >= gap_threshold
             # Peaks may not extend the max_duration
