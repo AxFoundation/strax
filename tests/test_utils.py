@@ -71,7 +71,6 @@ def test_time_selection(d, second_time, second_dt):
     :param second_dt: the ofset w.r.t. the first
     :return: None
     """
-    # assert False, d
     container = np.zeros(1, dtype=strax.time_fields)
     container['time'] = second_time
     container['endtime'] = second_time + second_dt

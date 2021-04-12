@@ -132,11 +132,9 @@ def test_peak_overflow(records,
 
     # Set this here, no need to test left and right independently
     left_extension = 0
-    p = np.zeros(0, dtype=strax.peak_dtype())
-    magic_overflow_time = np.iinfo(p.dtype['dt']).max * p.dtype['data'].shape[0]
-    del p
+    peak_dtype = np.zeros(0, strax.peak_dtype()).dtype
+    magic_overflow_time = np.iinfo(peak_dtype['dt']).max * peak_dtype['data'].shape[0]
 
-    # Make a single big peak to contain all the records
     def retrun_1(x):
         """
         Return 1 for all of the input that can be used as a parameter
@@ -154,18 +152,19 @@ def test_peak_overflow(records,
         return
 
     # Copy the pulse train of the records. We are going to copy the same
-    # set of records many times now
-    r_buffer = []
-    t_max = strax.endtime(r)
-    max_record_repetition_factor = 1_000_000
-    for i in range(max_record_repetition_factor):
-        r_copy = r.copy()
-        r_copy['time'] = r_copy['time'] + t_max * i * gap_factor
-        r_buffer.append(r_copy)
-        if r_copy['time'][-1] - r['time'][0] > 1.5 * magic_overflow_time:
-            # No need to go over and beyond. We should get int-overflow
-            break
-    r = np.concatenate(r_buffer)
+    # set of records many times now.
+    t_max = strax.endtime(r).max()
+    n_repeat = int(1.5 * magic_overflow_time + t_max * gap_factor) // int(t_max * gap_factor) + 1
+    time_offset = np.linspace(0,
+                              1.5 * magic_overflow_time + t_max * gap_factor,
+                              n_repeat,
+                              dtype=np.int64)
+    r_buffer = np.tile(r, n_repeat // len(r) + 1)[:len(time_offset)]
+    assert len(r_buffer) == len(time_offset)
+    r_buffer['time'] = r_buffer['time'] + time_offset
+    assert strax.endtime(r_buffer[-1]) - r_buffer['time'].min() > magic_overflow_time
+    r = r_buffer.copy()
+    del r_buffer
 
     # Do peak finding!
     hits = strax.find_hits(r, min_amplitude=0)
