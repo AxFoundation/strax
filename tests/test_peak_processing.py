@@ -102,6 +102,7 @@ def test_sum_waveform(records, peak_left, peak_length):
     gap_factor=108,
     right_extension=5000,
     gap_threshold=18000,
+    max_duration=int(7_000_000),
 )
 def test_peak_overflow(records,
                        gap_factor,
