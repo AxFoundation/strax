@@ -1,10 +1,11 @@
 import strax
-from strax.testutils import Records, run_id
+from strax.testutils import Records, Peaks, run_id
 import tempfile
 import numpy as np
 from hypothesis import given
 import hypothesis.strategies as st
 import typing as ty
+import os
 
 
 def _apply_function_to_data(function
@@ -103,9 +104,65 @@ def test_accumulate():
     :return: None
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        st = strax.Context(storage=strax.DataDirectory(temp_dir,
+        context = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                        deep_scan=True),
                            register=[Records])
-        channels_from_array = np.sum(st.get_array(run_id, 'records')['channel'])
-        channels = st.accumulate(run_id, 'records', fields='channel')['channel']
+        channels_from_array = np.sum(context.get_array(run_id, 'records')['channel'])
+        channels = context.accumulate(run_id, 'records', fields='channel')['channel']
     assert (channels_from_array == channels)
+
+
+def _get_context(temp_dir=tempfile.gettempdir()) -> strax.Context:
+    """Get a context for the tests below"""
+    context = strax.Context(storage=strax.DataDirectory(
+        temp_dir,
+        deep_scan=True),
+        register=[Records, Peaks])
+    return context
+
+
+def test_search_field():
+    """Test search field in the context"""
+    context = _get_context()
+    context.search_field('data')
+
+
+def test_show_config():
+    """Test show_config in the context"""
+    context = _get_context()
+    df = context.show_config('peaks')
+    assert len(df)
+
+
+def test_data_info():
+    """Test data info in the context"""
+    context = _get_context()
+    df = context.data_info('peaks')
+    assert len(df)
+
+
+def test_copy_to_frontend():
+    """
+    Write some data, add a new storage frontend and make sure that our
+    copy to that frontend is successful
+    """
+    # We need two directories for the test
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir_2:
+            context = _get_context(temp_dir)
+            # Make some data
+            context.get_array(run_id, 'records')
+            assert context.is_stored(run_id, 'records')
+
+            # Add the second frontend
+            context.storage += [strax.DataDirectory(temp_dir_2)]
+            context.copy_to_frontend(run_id, 'records',
+                                     target_compressor='lz4')
+
+            # Make sure both frontends have the same data.
+            assert os.listdir(temp_dir) == os.listdir(temp_dir)
+            rec_folder = os.listdir(temp_dir)[0]
+            assert (
+                    os.listdir(os.path.join(temp_dir, rec_folder)) ==
+                    os.listdir(os.path.join(temp_dir_2, rec_folder))
+            )
