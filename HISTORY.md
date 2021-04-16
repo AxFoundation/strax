@@ -1,4 +1,13 @@
-0.14.0 / 2021-04-02
+0.15.0 / 2021-04-16
+---------------------
+- Use int32 for peak dt, fix #397 (#403, #426)
+- max peak duration (#420)
+- Loopplugin touching windows + plugin documentation (#424)
+- Move apply selection from context to utils (#425)
+- Context testing functions + copy_to_frontend documented (#423)
+- Apply function to data & test (#422)
+
+0.14.0 / 2021-04-09
 ---------------------
 - Check data availability for single run (#416) 
 
