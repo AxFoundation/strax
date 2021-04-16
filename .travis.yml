@@ -24,13 +24,14 @@ jobs:
   include:
     - name: "Python 3.7"
       env: PYTHON=3.7 DEPLOY_ME=true
-    - name: "Python 3.7 numbaless (for coverage)"
-      env: PYTHON=3.7 NUMBA_DISABLE_JIT=1
+    - name: "Python 3.8 numbaless (for coverage)"
+      env: PYTHON=3.8 NUMBA_DISABLE_JIT=1
     - name: "Python 3.6 (legacy)"
       env: PYTHON=3.6
-    - name: "Python 3.8 (beta)"
+    - name: "Python 3.8"
       env: PYTHON=3.8
-
+    - name: "Python 3.9 (beta)"
+      env: PYTHON=3.8
 install:
   - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
   - chmod +x miniconda.sh
