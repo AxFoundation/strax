@@ -18,8 +18,7 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     right hit extension. Assumes that hits are sorted correctly.
 
     Note:
-        This function only updates time, length and record_i of the hit.
-        (record_i is set according to the first hit)
+        This function only updates time, and length of the hit.
 
     :param hits: Hits in records.
     :param extensions: Tuple of the left and right hit extension.
@@ -30,7 +29,6 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     :returns:
         array with concataneted hits.
     """
-    # Getting channel map and compute the number of channels:
     first_channel, last_channel = pmt_channels
     nchannels = last_channel - first_channel + 1
 
@@ -42,7 +40,12 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
                                                'endtime'), np.int64)]))
 
     if len(hits):
-        hits = _concat_overlapping_hits(hits, extensions, first_channel, last_hit_in_channel, start, end)
+        hits = _concat_overlapping_hits(hits,
+                                        extensions,
+                                        first_channel,
+                                        last_hit_in_channel,
+                                        start,
+                                        end)
     return hits
 
 
@@ -51,71 +54,69 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
 def _concat_overlapping_hits(hits,
                              extensions,
                              first_channel,
-                             last_hit_in_channel,
-                             start=0,
-                             end=float('inf'),
+                             last_hit_in_channel_buffer,
+                             chunk_start=0,
+                             chunk_end=float('inf'),
                              _result_buffer=None):
     buffer = _result_buffer
-    offset = 0
+    res_offset = 0
 
-    le, re = extensions
+    left_extension, right_extension = extensions
     dt = hits['dt'][0]
     assert np.all(hits['dt'] == dt), 'All hits must have the same dt!'
 
-    for h in hits:
-        st = h['time'] - int(le * h['dt'])
-        et = strax.endtime(h) + int(re * h['dt'])
-        hc = h['channel']
-        r_i = h['record_i']
+    for hit in hits:
+        time_with_le = hit['time'] - int(left_extension * hit['dt'])
+        endtime_with_re = strax.endtime(hit) + int(right_extension * hit['dt'])
+        hit_channel = hit['channel']
 
-        lhc = last_hit_in_channel[hc - first_channel]
-        # Have not found any hit in this channel yet:
-        if lhc['time'] == 0:
-            lhc['time'] = max(st, start)
-            lhc['endtime'] = min(et, end)
-            lhc['channel'] = hc
-            lhc['record_i'] = h['record_i']
-            lhc['dt'] = dt
+        last_hit_in_channel = last_hit_in_channel_buffer[hit_channel - first_channel]
 
-        # Checking if events overlap:
+        found_no_hit_for_channel_yet = last_hit_in_channel['time'] == 0
+        if found_no_hit_for_channel_yet:
+            last_hit_in_channel['time'] = max(time_with_le, chunk_start)
+            last_hit_in_channel['endtime'] = min(endtime_with_re, chunk_end)
+            last_hit_in_channel['channel'] = hit_channel
+            last_hit_in_channel['dt'] = dt
         else:
-            if lhc['endtime'] >= st:
-                # Yes, so we have to update only the end_time:
-                lhc['endtime'] = et
+            hits_overlap_in_channel = last_hit_in_channel['endtime'] >= time_with_le
+            if hits_overlap_in_channel:
+                last_hit_in_channel['endtime'] = endtime_with_re
             else:
                 # No, this means we have to save the previous data and update lhc:
-                res = buffer[offset]
-                res['time'] = lhc['time']
-                res['length'] = (lhc['endtime'] - lhc['time']) // lhc['dt']
-                res['channel'] = lhc['channel']
-                res['record_i'] = lhc['record_i']
-                res['dt'] = lhc['dt']
+                res = buffer[res_offset]
+                res['time'] = last_hit_in_channel['time']
+                hitlet_length = (last_hit_in_channel['endtime'] - last_hit_in_channel['time'])
+                hitlet_length //= last_hit_in_channel['dt']
+                res['length'] = hitlet_length
+                res['channel'] = last_hit_in_channel['channel']
+                res['dt'] = last_hit_in_channel['dt']
                 
                 # Updating current last hit:
-                lhc['time'] = st
-                lhc['endtime'] = et
-                lhc['channel'] = hc
-                lhc['record_i'] = r_i
+                last_hit_in_channel['time'] = time_with_le
+                last_hit_in_channel['endtime'] = endtime_with_re
+                last_hit_in_channel['channel'] = hit_channel
                 
-                offset += 1
-                if offset == len(buffer):
-                    yield offset
-                    offset = 0
+                res_offset += 1
+                if res_offset == len(buffer):
+                    yield res_offset
+                    res_offset = 0
 
     # We went through so now we have to save all remaining hits:
-    mask = last_hit_in_channel['time'] != 0
-    for lhc in last_hit_in_channel[mask]:
-        res = buffer[offset]
-        res['time'] = lhc['time']
-        res['channel'] = lhc['channel']
-        res['length'] = (lhc['endtime'] - lhc['time']) // lhc['dt']
-        res['record_i'] = lhc['record_i']
-        res['dt'] = lhc['dt']
-        offset += 1
-        if offset == len(buffer):
-            yield offset
-            offset = 0
-    yield offset
+    mask = last_hit_in_channel_buffer['time'] != 0
+    for last_hit_in_channel in last_hit_in_channel_buffer[mask]:
+        res = buffer[res_offset]
+        res['time'] = last_hit_in_channel['time']
+        res['channel'] = last_hit_in_channel['channel']
+        hitlet_length = (last_hit_in_channel['endtime'] - last_hit_in_channel['time'])
+        hitlet_length //= last_hit_in_channel['dt']
+        res['length'] = hitlet_length
+        res['dt'] = last_hit_in_channel['dt']
+        res_offset += 1
+        if res_offset == len(buffer):
+            yield res_offset
+            res_offset = 0
+    yield res_offset
 
 
 @export
