@@ -2,6 +2,8 @@ import numpy as np
 import numba
 
 import strax
+from strax.processing.general import _touching_windows
+
 export, __all__ = strax.exporter()
 
 # Hardcoded numbers:
@@ -139,160 +141,84 @@ def refresh_hit_to_hitlets(hits, hitlets):
 
 
 @export
-@numba.njit(nogil=True, cache=True)
 def get_hitlets_data(hitlets, records, to_pe):
     """
     Function which searches for every hitlet in a given chunk the 
-    corresponding records data.
-    
+    corresponding records data. Additionally compute the total area of
+    the signal.
+
     :param hitlets: Hitlets found in a chunk of records.
     :param records: Records of the chunk.
-    :param to_pe: Array with area conversion factors from adc/sample to 
+    :param to_pe: Array with area conversion factors from adc/sample to
         pe/sample
-    
-    Note:
-        hitlets must have a "data" and "area" field.
-    
-    The function updates the hitlet fields time, length (if necessary 
-    e.g. hit was extended in regions of now records) and area
-    according to the found data.
+    :returns: Hitlets including data stored in the "data" field
+        (if it did not exists before it will be added.)
     """
+    hitelts_is_single_row = isinstance(hitlets, np.void)
+    if hitelts_is_single_row:
+        # A structured array becomes void type if a single row is called,
+        # e.g. hitlets[0] which does not work in numba while, hitlets[:1]
+        # does. So we have to convert the row into the correct format first.
+        hitlets = np.array([hitlets])
 
-    rlink = strax.record_links(records)
-    for h in hitlets:
-        data, start_time = get_single_hitlet_data(h, records, *rlink)
-        h['length'] = len(data)
-        h['data'][:len(data)] = data * to_pe[h['channel']]
-        h['time'] = start_time
-        h['area'] = np.sum(data * to_pe[h['channel']])
+    data_field_in_hitlets = 'data' in hitlets.dtype.names
+    if data_field_in_hitlets:
+        data_is_not_empty = np.any(hitlets['data'] != 0)
+        if data_is_not_empty:
+            raise ValueError('The data field of hitlets must be empty!')
 
+        data_field_not_long_enough = len(hitlets[0]['data']) < hitlets['length'].max()
+        if data_field_not_long_enough:
+            raise ValueError('The data field must be as large as the longest hitlet in our data.')
 
-@export
-@numba.njit(nogil=True, cache=True)
-def get_single_hitlet_data(hitlet, records, prev_r, next_r):
-    """
-    Function which gets the data of a single hit or hitlet. The data is
-    returned according to the objects time and length (LE/RE is not
-    included in case of a hit.).
+        hitlets_with_data_field = hitlets
+    else:
+        n_samples = max(100, hitlets['length'].max())
+        hitlets_with_data_field = np.zeros(len(hitlets), strax.hitlet_with_data_dtype(n_samples))
+        strax.copy_to_buffer(hitlets,
+                             hitlets_with_data_field,
+                             '_copy_hitlets_to_hitlets_width_data')
 
-    In case the hit or hitlet is extended into non-recorded regions
-    the data gets chopped.
-
-
-    :param hitlet: Hits or hitlets.
-    :param records: Records
-    :param prev_r: Index of the previous record seen from the current
-        record. (Return of strax.record_links)
-    :param next_r: Index of the next record seen by the current record.
-        (Return of strax.record_links)
-    :return:
-        np.ndarray: Samples of the hitlet [ADC]
-        int: Start time of the hitlet. (In case data gets chopped on the
-            left)
-    """
-    temp_data = np.zeros(hitlet['length'], dtype=np.float64)
-
-    # Lets get the starting record and the corresponding data:
-    r_i = hitlet['record_i']
-    r = records[r_i]
-    data, (p_start_i, p_end_i) = _get_thing_data(hitlet, r)
-    temp_data[p_start_i:p_end_i] = data
-
-    # We have to store the first and last index of the so far found data 
-    data_start = p_start_i
-    data_end = p_end_i
-
-    if not (p_end_i - p_start_i == hitlet['length']):
-        # We have not found the entire data yet....
-        # Starting with data before our current record:
-        trial_counter = 0
-        prev_r_i = r_i
-        while p_start_i:
-            # We are still searching for data in a previous record.
-            temp_prev_r_i = prev_r[prev_r_i]
-            if temp_prev_r_i == -1:
-                # There is no (more) previous record. So stop here and keep
-                # last pre_r_i
-                break
-            prev_r_i = temp_prev_r_i
-
-            # There is a previous record:
-            r = records[prev_r_i]
-            data, (p_start_i, end) = _get_thing_data(hitlet, r)
-            if not end:
-                # If end is zero this means we have not found any
-                # overlap which should not have happened. In case of an
-                # overlap start and end should reflect the start and end
-                # sample of the hitlet for which we found data.
-                print('Data found for this record:', data,
-                      'Start index', p_start_i,
-                      'End index:', end)
-                raise ValueError('This is odd found previous record, but no'
-                                 ' overlapping indices.')
-            temp_data[p_start_i:data_start] = data
-            data_start = p_start_i
-
-            if trial_counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
-                raise RuntimeError('Tried too hard. There are more than'
-                                   '100 successive records. This is odd...')
-            trial_counter += 1
-
-        # Now we have to do the very same for records in the future:
-        # Almost the same code as above can I change this?
-        trial_counter = 0
-        next_r_i = r_i
-        while hitlet['length'] - p_end_i:
-            # We are still searching for data in a next record.
-            temp_next_r_i = next_r[next_r_i]
-            if temp_next_r_i == -1:
-                # There is no (more) previous record. So stop here and keep
-                # last next_r_i
-                break
-            next_r_i = temp_next_r_i
-            # There is a next record:
-            r = records[next_r_i]
-            data, (start, p_end_i) = _get_thing_data(hitlet, r)
-            if not start:
-                # If start is zero this means we have not found any
-                # overlap which should not have happened. In case of an
-                # overlap start and end should reflect the start and end
-                # sample of the hitlet for which we found data.
-                print('Data found for this record:', data,
-                      'Start index', start,
-                      'End index:', p_end_i)
-                raise ValueError('This is odd found the next record, but no'
-                                 ' overlapping indicies.')
-            temp_data[data_end:p_end_i] = data
-            data_end = p_end_i
-
-            if trial_counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
-                raise RuntimeError('Tried too hard. There are more than'
-                                   '100 successive records. This is odd...')
-            trial_counter += 1
-
-    # In some cases it might have happened that due to the left and right hit extension
-    # we extended our hitlet into regions without any data so we have to chop
-    # "time" according to the data we found....
-    time = hitlet['time'] + data_start * hitlet['dt']
-    temp_data = temp_data[data_start:data_end] + r['baseline'] % 1
-    return temp_data, time
+    _get_hitlets_data(hitlets_with_data_field, records, to_pe)
+    return hitlets_with_data_field
 
 
-@numba.njit(nogil=True, cache=True)
-def _get_thing_data(thing, container):
-    """
-    Function which returns data for some overlapping indices of a thing
-    in a container. 
-    
-    Note:
-        Thing must be of the interval dtype kind.
-    """
-    overlap_hit_i, overlap_record_i = strax.overlap_indices(thing['time']//thing['dt'],
-                                                            thing['length'],
-                                                            container['time']//container['dt'],
-                                                            container['length'])
-    data = container['data'][overlap_record_i[0]:overlap_record_i[1]]
-    return data, overlap_hit_i
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _get_hitlets_data(hitlets, records, to_pe):
+    rranges = _touching_windows(records['time'],
+                                strax.endtime(records),
+                                hitlets['time'],
+                                strax.endtime(hitlets))
+
+    for i, h in enumerate(hitlets):
+        recorded_samples_offset = 0
+        n_recorded_samples = 0
+        for ind, r_ind in enumerate(range(rranges[i][0], rranges[i][1])):
+            r = records[r_ind]
+            if r['channel'] != h['channel']:
+                continue
+
+            (r_start, r_end), (h_start, h_end) = strax.overlap_indices(
+                r['time'] // r['dt'],
+                r['length'],
+                h['time'] // h['dt'],
+                h['length'])
+
+            is_first_record = ind == 0
+            if is_first_record:
+                recorded_samples_offset = h_start
+            h_start -= recorded_samples_offset
+            h_end -= recorded_samples_offset
+
+            h['data'][h_start: h_end] += r['data'][r_start: r_end] + r['baseline'] % 1
+            n_recorded_samples += r_end - r_start
+
+        # Chop time and length in case hit extends into non-recorded regions.
+        h['time'] += int(recorded_samples_offset * h['dt'])
+        h['length'] = n_recorded_samples
+
+        h['data'][:] = h['data'][:] * to_pe[h['channel']]
+        h['area'] = np.sum(h['data'])
 
 # ----------------------
 # Hitlet splitting:
