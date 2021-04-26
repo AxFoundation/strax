@@ -136,7 +136,6 @@ def refresh_hit_to_hitlets(hits, hitlets):
         h_new['length'] = h_old['length']
         h_new['channel'] = h_old['channel']
         h_new['area'] = h_old['area']
-        h_new['record_i'] = h_old['record_i']
         h_new['dt'] = h_old['dt']
 
 
