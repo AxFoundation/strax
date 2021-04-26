@@ -168,8 +168,6 @@ def hitlet_with_data_dtype(n_samples):
     n_samples = max(n_samples, 2)
     additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                            np.float32, n_samples),
-                         (('Fragment number in the pulse',
-                           'record_i'), np.int32),
                          ]
 
     return dtype + additional_fields
