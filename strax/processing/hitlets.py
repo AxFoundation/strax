@@ -140,7 +140,7 @@ def refresh_hit_to_hitlets(hits, hitlets):
 
 
 @export
-def get_hitlets_data(hitlets, records, to_pe):
+def get_hitlets_data(hitlets, records, to_pe, channel_offset=2000):
     """
     Function which searches for every hitlet in a given chunk the 
     corresponding records data. Additionally compute the total area of
@@ -149,7 +149,9 @@ def get_hitlets_data(hitlets, records, to_pe):
     :param hitlets: Hitlets found in a chunk of records.
     :param records: Records of the chunk.
     :param to_pe: Array with area conversion factors from adc/sample to
-        pe/sample
+        pe/sample.
+    :param channel_offset: Channel offset of the nveto with respect to
+        zero. Required to query the correct gain values.
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
@@ -178,12 +180,12 @@ def get_hitlets_data(hitlets, records, to_pe):
                              hitlets_with_data_field,
                              '_copy_hitlets_to_hitlets_width_data')
 
-    _get_hitlets_data(hitlets_with_data_field, records, to_pe)
+    _get_hitlets_data(hitlets_with_data_field, records, to_pe, channel_offset)
     return hitlets_with_data_field
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _get_hitlets_data(hitlets, records, to_pe):
+def _get_hitlets_data(hitlets, records, to_pe, channel_offset):
     rranges = _touching_windows(records['time'],
                                 strax.endtime(records),
                                 hitlets['time'],
@@ -216,7 +218,7 @@ def _get_hitlets_data(hitlets, records, to_pe):
         h['time'] += int(recorded_samples_offset * h['dt'])
         h['length'] = n_recorded_samples
 
-        h['data'][:] = h['data'][:] * to_pe[h['channel']]
+        h['data'][:] = h['data'][:] * to_pe[h['channel']-channel_offset]
         h['area'] = np.sum(h['data'])
 
 # ----------------------

@@ -141,7 +141,7 @@ class TestGetHitletData(unittest.TestCase):
                          ]
 
         records, hitlets = self.make_records_and_hitlets(dummy_records)
-        strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
+        strax.get_hitlets_data(hitlets, records, np.array([1, 1]), channel_offset=0)
 
         for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
             h = hitlets[i]
