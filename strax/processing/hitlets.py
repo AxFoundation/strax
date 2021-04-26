@@ -194,6 +194,7 @@ def _get_hitlets_data(hitlets, records, to_pe, channel_offset):
     for i, h in enumerate(hitlets):
         recorded_samples_offset = 0
         n_recorded_samples = 0
+        is_first_record = True
         for ind, r_ind in enumerate(range(rranges[i][0], rranges[i][1])):
             r = records[r_ind]
             if r['channel'] != h['channel']:
@@ -205,8 +206,8 @@ def _get_hitlets_data(hitlets, records, to_pe, channel_offset):
                 h['time'] // h['dt'],
                 h['length'])
 
-            is_first_record = ind == 0
             if is_first_record:
+                is_first_record = False
                 recorded_samples_offset = h_start
             h_start -= recorded_samples_offset
             h_end -= recorded_samples_offset
