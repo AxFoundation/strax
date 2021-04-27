@@ -88,6 +88,11 @@ class TestGetHitletData(unittest.TestCase):
         strax.refresh_hit_to_hitlets(hits, hitlets)
         return records, hitlets
 
+    def test_to_pe_wrong_shape(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets['channel'] = 2000
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(10))
+
     def test_get_hitlets_data_for_single_hitlet(self):
         records, hitlets = self.make_records_and_hitlets([[self.test_data]])
 
@@ -141,7 +146,7 @@ class TestGetHitletData(unittest.TestCase):
                          ]
 
         records, hitlets = self.make_records_and_hitlets(dummy_records)
-        strax.get_hitlets_data(hitlets, records, np.array([1, 1]), channel_offset=0)
+        strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
 
         for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
             h = hitlets[i]

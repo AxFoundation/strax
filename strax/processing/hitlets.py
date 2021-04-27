@@ -149,12 +149,19 @@ def get_hitlets_data(hitlets, records, to_pe):
     :param hitlets: Hitlets found in a chunk of records.
     :param records: Records of the chunk.
     :param to_pe: Array with area conversion factors from adc/sample to
-        pe/sample.
-    :param channel_offset: Channel offset of the nveto with respect to
-        zero. Required to query the correct gain values.
+        pe/sample. Please make sure that to_pe has the correct shape.
+        The array index should match the channel number.
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
+    # Numba will not raise any exceptions if to_pe is too short, leading
+    # to strange bugs. This check is somewhat not complete, but should
+    # be sufficient in most cases.
+    to_pe_has_wrong_shape = len(to_pe) < hitlets['channel'].max()
+    if to_pe_has_wrong_shape:
+        raise ValueError('"to_pe" has a wrong shape. Array index must'
+                         ' match channel numbers.')
+
     hitelts_is_single_row = isinstance(hitlets, np.void)
     if hitelts_is_single_row:
         # A structured array becomes void type if a single row is called,
