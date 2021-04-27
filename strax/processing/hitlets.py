@@ -229,60 +229,6 @@ def _get_hitlets_data(hitlets, records, to_pe):
         h['data'][:] = h['data'][:] * to_pe[h['channel']]
         h['area'] = np.sum(h['data'])
 
-# ----------------------
-# Hitlet splitting:
-# ----------------------
-@export
-def update_new_hitlets(hitlets, records, next_ri, to_pe):
-    """
-    Function which computes the hitlet data area and record_i after
-    splitting.
-
-    :param hitlets: New hitlets received after splitting.
-    :param records: Records of the chunk.
-    :param next_ri: Index of next record for current record record_i.
-    :param  to_pe: ADC to PE conversion factor array (of n_channels).
-    """
-    _update_record_i(hitlets, records, next_ri)
-    get_hitlets_data(hitlets, records, to_pe)
-
-
-@numba.njit(cache=True, nogil=True)
-def _update_record_i(new_hitlets, records, next_ri):
-    """
-    Function which updates the record_i value of the new hitlets. 
-    
-    Notes:
-        Assumes new_hitlets to be sorted in time.
-    """
-    for ind, hit in enumerate(new_hitlets):
-
-        updated = False
-        counter = 0
-        current_ri = hit['record_i']
-        while not updated:
-            r = records[current_ri]
-            # Hitlet must only partially be contained in record_i:
-            time = hit['time']
-            end_time = strax.endtime(hit)
-            start_in = (r['time'] <= time) & (time < strax.endtime(r))
-            end_in = (r['time'] < end_time) & (end_time <= strax.endtime(r))
-            if start_in or end_in:
-                hit['record_i'] = current_ri
-                break
-            else:
-                last_ri = current_ri
-                current_ri = next_ri[current_ri]
-                counter += 1
-                
-            if current_ri == -1:
-                print('Record:\n', r, '\nHit:\n', hit)
-                raise ValueError('Was not able to find record_i')
-
-            if counter > TRIAL_COUNTER_NEIGHBORING_RECORDS:
-                print(ind, last_ri)
-                raise RuntimeError('Tried too often to find correct record_i.')
-
 
 # ----------------------
 # Hitlet properties:
