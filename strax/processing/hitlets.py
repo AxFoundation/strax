@@ -317,7 +317,7 @@ def get_fwxm(hitlet, fraction=0.5):
 
     index_maximum = np.argmax(data)
     max_val = data[index_maximum] * fraction
-    if np.all(data > max_val) or np.all(data == 0):
+    if np.all(data > max_val) or np.all(data <= 0):
         # In case all samples are larger, FWXM is not definition.
         return np.nan, np.nan
 

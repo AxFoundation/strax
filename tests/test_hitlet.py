@@ -366,22 +366,25 @@ def test_hitlet_properties(hits_n_data):
                 assert math.isclose(re - le, h[fwxm], rel_tol=10**-4,
                                     abs_tol=10**-4), f'FWHM does not match for {f}'
 
-    def test_not_defined_get_fhwm():
-        # This is a specific unity test for some edge-cases in which the full
-        # width half maximum is not defined.
-        odd_hitlets = np.zeros(3, dtype=strax.hitlet_with_data_dtype(10))
-        odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
-        odd_hitlets[0]['length'] = 5
-        odd_hitlets[1]['data'][:2] = [5, 5]
-        odd_hitlets[1]['length'] = 2
-        odd_hitlets[2]['length'] = 3
 
-        for oh in odd_hitlets:
-            res = strax.get_fwxm(oh)
-            mes = (f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
-                   'However, the FWHM is not defined and the return should be nan!'
-                   )
-            assert np.all(np.isnan(res)), mes
+def test_not_defined_get_fhwm():
+    # This is a specific unity test for some edge-cases in which the full
+    # width half maximum is not defined.
+    odd_hitlets = np.zeros(4, dtype=strax.hitlet_with_data_dtype(10))
+    odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
+    odd_hitlets[0]['length'] = 5
+    odd_hitlets[1]['data'][:2] = [5, 5]
+    odd_hitlets[1]['length'] = 2
+    odd_hitlets[2]['length'] = 3
+    odd_hitlets[3]['data'][:3] = [-1, -2, 0]
+    odd_hitlets[3]['length'] = 3
+
+    for oh in odd_hitlets:
+        res = strax.get_fwxm(oh)
+        mes = (f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
+               'However, the FWHM is not defined and the return should be nan!'
+               )
+        assert np.all(np.isnan(res)), mes
 
 
 # ------------------------
