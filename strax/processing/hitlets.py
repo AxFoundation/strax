@@ -242,7 +242,7 @@ def hitlet_properties(hitlets):
     for ind, h in enumerate(hitlets):
         dt = h['dt']
         data = h['data'][:h['length']]
-        
+
         if not np.any(data):
             continue
 
@@ -502,7 +502,12 @@ def highest_density_region_width(data,
     """
     res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
     data = np.maximum(data, 0)
-    inter, amps = strax.highest_density_region(data, fractions_desired, _buffer_size=_buffer_size)
+    
+    if np.all(data == 0):
+        res[:] = np.nan
+    else:
+        inter, amps = strax.highest_density_region(data,
+                                                   fractions_desired, _buffer_size=_buffer_size)
 
     for f_ind, (i, a) in enumerate(zip(inter, amps)):
         if not fractionl_edges:

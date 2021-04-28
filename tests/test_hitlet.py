@@ -254,6 +254,12 @@ def test_highest_density_region_width():
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
     _test_highest_density_region_width(np.array([1, 0]), truth_dict)
 
+    # Check that negative data does not raise:
+    res = strax.processing.hitlets.highest_density_region_width(np.array([0, -1, -2]),
+                                                          np.array([0.5]),
+                                                          fractionl_edges=True)
+    assert np.all(np.isnan(res)), 'For empty data HDR is not defined, should return np.nan!'
+
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(distribution,
