@@ -267,6 +267,32 @@ def overlap_indices(a1, n_a, b1, n_b):
 
 
 @export
+def split_touching_windows(things, containers, window=0):
+    """
+    Split things by their containers and return a list of length containers
+    :param things: Sorted array of interval-like data
+    :param containers: Sorted array of interval-like data
+    :param window: threshold distance for touching check
+    For example:
+       - window = 0: things must overlap one sample
+       - window = -1: things can start right after container ends
+         (i.e. container endtime equals the thing starttime, since strax
+          endtimes are exclusive)
+    :return:
+    """
+    windows = touching_windows(things, containers, window)
+    return _split_by_window(things, windows)
+
+
+@numba.njit
+def _split_by_window(r, windows):
+    result = []
+    for w in windows:
+        result.append(r[w[0]:w[1]])
+    return result
+
+
+@export
 def touching_windows(things, containers, window=0):
     """Return array of (start, exclusive end) indices into things which extend
     to within window of the container, for each container in containers.
