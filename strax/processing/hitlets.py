@@ -505,6 +505,7 @@ def highest_density_region_width(data,
     
     if np.all(data == 0):
         res[:] = np.nan
+        return res
     else:
         inter, amps = strax.highest_density_region(data,
                                                    fractions_desired, _buffer_size=_buffer_size)
