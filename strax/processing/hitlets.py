@@ -12,6 +12,45 @@ NO_FWXM = -42  # Value in case FWXM cannot be found.
 # Hitlet building:
 # ----------------------
 @export
+def create_hitlets_from_hits(hits,
+                             save_outside_hits,
+                             channel_range,
+                             chunk_start=0,
+                             chunk_end=np.inf,
+                             min_samples_data_field=100, ):
+    """
+    Function which creates hitlets from a bunch of hits.
+
+    :param hits: Hits found in records.
+    :param save_outside_hits: Tuple with left and right hit extension.
+    :param channel_range: Detectors change range from channelmap.
+    :param chunk_start: Start of the chunk or run.
+    :param chunk_end: End of the chunk or run.
+    :param min_samples_data_field: Minimal length of the hitlet data field.
+
+    :return: Hitlets with temporary fields (data, max_goodness_of_split...)
+    """
+    # Merge concatenate overlapping  within a channel. This is important
+    # in case hits were split by record boundaries. In case we
+    # accidentally concatenate two PMT signals we split them later again.
+    hits = strax.concat_overlapping_hits(hits,
+                                         save_outside_hits,
+                                         channel_range,
+                                         chunk_start,
+                                         chunk_end, )
+    hits = strax.sort_by_time(hits)
+
+    # Now convert hits into temp_hitlets including the data field:
+    nsamples = min_samples_data_field
+    if len(hits):
+        nsamples = max(hits['length'].max(), nsamples)
+
+    temp_hitlets = np.zeros(len(hits), strax.hitlet_dtype())
+    strax.copy_to_buffer(hits, temp_hitlets, '_refresh_hit_to_hitlets')
+    return temp_hitlets
+
+
+@export
 def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     """
     Function which concatenates hits which may overlap after left and 
@@ -116,25 +155,6 @@ def _concat_overlapping_hits(hits,
             yield offset
             offset = 0
     yield offset
-
-
-@export
-@numba.njit(nogil=True, cache=True)
-def refresh_hit_to_hitlets(hits, hitlets):
-    """
-    Function which copies basic hit information into a new hitlet array.
-    """
-    nhits = len(hits)
-    for ind in range(nhits):
-        h_new = hitlets[ind]
-        h_old = hits[ind]
-
-        h_new['time'] = h_old['time']
-        h_new['length'] = h_old['length']
-        h_new['channel'] = h_old['channel']
-        h_new['area'] = h_old['area']
-        h_new['record_i'] = h_old['record_i']
-        h_new['dt'] = h_old['dt']
 
 
 @export
