@@ -152,20 +152,18 @@ def hitlet_dtype():
     return dtype
 
 
-def hitlet_with_data_dtype(n_samples):
+def hitlet_with_data_dtype(n_samples=2):
     """
     Hitlet dtype with data field. Required within the plugins to compute
     hitlet properties. 
     
     :param n_samples: Buffer length of the data field. Make sure it can
         hold the longest hitlet.
-    :param n_widths: Number of area deciles width.
-
-    Note:
-        The data buffer will be at least 2 samples long
     """
+    if n_samples < 2:
+        raise ValueError('n_samples must be at least 2!')
+
     dtype = hitlet_dtype()
-    n_samples = max(n_samples, 2)
     additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                            np.float32, n_samples),
                          ]
