@@ -26,14 +26,10 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
 
-    if data_type == 'hitlets':
-        # This is only needed once.
-        _, next_ri = strax.record_links(records)
-    elif data_type == 'peaks':
-        next_ri = None
-    else:
+    data_type_is_not_supported = data_type not in ('hitlets', 'peaks')
+    if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, records, to_pe, data_type, next_ri, **kwargs)
+    return splitter(peaks, records, to_pe, data_type, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -48,8 +44,6 @@ class PeakSplitter:
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_waveform or get_hitlets_data to compute the waveform of the
         new split peaks/hitlets.
-    :param next_ri: Index of next record for current record record_i.
-        None if not needed.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
 
@@ -62,7 +56,7 @@ class PeakSplitter:
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, records, to_pe, data_type,
-                 next_ri=None, do_iterations=1, min_area=0, **kwargs):
+                 do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
@@ -108,10 +102,10 @@ class PeakSplitter:
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
-                strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
 
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe, data_type, next_ri,
+            new_peaks = self(new_peaks, records, to_pe, data_type,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
@@ -202,8 +196,6 @@ class PeakSplitter:
                 r = new_hits[offset]
                 r['time'] = h['time'] + prev_split_i * h['dt']
                 r['channel'] = h['channel']
-                # Hitlet specific
-                r['record_i'] = h['record_i']
                 # Set the dt to the original (lowest) dt first;
                 # this may change when the sum waveform of the new peak
                 # is computed

@@ -5,6 +5,7 @@ import strax
 from hypothesis import given, settings, example
 import hypothesis.extra.numpy as hnp
 import hypothesis.strategies as st
+import unittest
 from strax.testutils import fake_hits
 
 
@@ -72,95 +73,143 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
 # This test is done with some predefined
 # records.
 # -----------------------------
+class TestGetHitletData(unittest.TestCase):
 
-def test_get_hitlets_data():
-    dummy_records = [  # Contains Hitlet #:
-        [[1, 3, 2, 1, 0, 0], ],  # 0
-        [[0, 0, 0, 0, 1, 3],  # 1
-         [2, 1, 0, 0, 0, 0]],  #
-        [[0, 0, 0, 0, 1, 3],  # 2
-         [2, 1, 0, 1, 3, 2], ],  # 3
-        [[0, 0, 0, 0, 1, 2],  # 4
-         [2, 2, 2, 2, 2, 2],
-         [2, 1, 0, 0, 0, 0]],
-        [[2, 1, 0, 1, 3, 2]],  # 5, 6
-        [[2, 2, 2, 2, 2, 2]]  # 7
-    ]
+    def setUp(self):
+        self.test_data = [1, 3, 2, 1, 0, 0]
+        self.test_data_truth = self.test_data[:-2]
 
-    # Defining the true parameters of the hitlets:
-    true_area = [7, 7, 7, 6, 18, 3, 6, 12]
-    true_time = [10, 28, 46, 51, 68, 88, 91, 104]
-    true_waveform = [[1, 3, 2, 1],
-                     [1, 3, 2, 1],
-                     [1, 3, 2, 1],
-                     [1, 3, 2],
-                     [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-                     [2, 1],
-                     [1, 3, 2],
-                     [2, 2, 2, 2, 2, 2]
-                     ]
+    def make_records_and_hitlets(self, dummy_records, data_field_length=999999):
+        records = self._make_fake_records(dummy_records)
+        hits = strax.find_hits(records, min_amplitude=2)
+        hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1), 0, float('inf'))
+        n_samples = min(np.max(hits['length']), data_field_length)
+        hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=n_samples))
+        strax.refresh_hit_to_hitlets(hits, hitlets)
+        return records, hitlets
 
-    records = _make_fake_records(dummy_records)
-    hits = strax.find_hits(records, min_amplitude=2)
-    hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1), 0, float('inf'))
-    hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=np.max(hits['length'])))
-    strax.refresh_hit_to_hitlets(hits, hitlets)
-    strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
+    def test_to_pe_wrong_shape(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets['channel'] = 2000
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(10))
 
-    for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
-        h = hitlets[i]
-        assert h['area'] == a, f'Hitlet {i} has the wrong area'
-        assert np.all(h['data'][:h['length']] == wf), f'Hitlet {i} has the wrong waveform'
-        assert h['time'] == t, f'Hitlet {i} has the wrong starttime'
+    def test_get_hitlets_data_for_single_hitlet(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
 
+        hitlets = strax.get_hitlets_data(hitlets[0], records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
 
-def _make_fake_records(dummy_records):
-    """
-    Creates some specific records to test get_hitlet_data.
-    """
-    nfragments = [len(f) for f in dummy_records]
-    records = np.zeros(np.sum(nfragments), strax.record_dtype(6))
-    records['dt'] = 1
-    time_offset = 10  # Need some start time to avoid negative times
+    def test_data_field_is_empty(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
 
-    fragment_ind = 0
-    for dr, nf in zip(dummy_records, nfragments):
-        for ind, f in enumerate(dr):
-            r = records[fragment_ind]
-            r['time'] = time_offset
-            if ind != (nf - 1):
-                r['length'] = len(f)
-            else:
-                r['length'] = len(f) - _count(f)
-            r['data'] = f
-            r['record_i'] = ind
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
 
-            if ind == (nf - 1):
-                time_offset += r['length'] + 10  # +10 to ensure non-overlap
-            else:
-                time_offset += r['length']
+    def test_get_hitlets_data_without_data_field(self):
+        records, hitlets_with_data = self.make_records_and_hitlets([[self.test_data]])
+        hitlets = np.zeros(len(hitlets_with_data), strax.hitlet_dtype())
+        strax.copy_to_buffer(hitlets_with_data, hitlets, '_copy_hitlets_to_hitlets_without_data')
 
-            fragment_ind += 1
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
 
-    pnf = 0
-    for nf in nfragments:
-        records['pulse_length'][pnf:nf + pnf] = np.sum(records['length'][pnf:nf + pnf])
-        pnf += nf
-    return records
+    def test_to_short_data_field(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]], 2)
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
 
+    def test_get_hitlets_data(self):
+        dummy_records = [  # Contains Hitlet #:
+            [[1, 3, 2, 1, 0, 0], ],  # 0
+            [[0, 0, 0, 0, 1, 3],  # 1
+             [2, 1, 0, 0, 0, 0]],  #
+            [[0, 0, 0, 0, 1, 3],  # 2
+             [2, 1, 0, 1, 3, 2], ],  # 3
+            [[0, 0, 0, 0, 1, 2],  # 4
+             [2, 2, 2, 2, 2, 2],
+             [2, 1, 0, 0, 0, 0]],
+            [[2, 1, 0, 1, 3, 2]],  # 5, 6
+            [[2, 2, 2, 2, 2, 2]]  # 7
+        ]
 
-def _count(data):
-    """
-    Function which returns number of ZLE samples.
-    """
-    data = data[::-1]
-    ZLE = True
-    i = 0
-    while ZLE:
-        if (not data[i] == 0) or (i == len(data)):
-            break
-        i += 1
-    return i
+        # Defining the true parameters of the hitlets:
+        true_area = [7, 7, 7, 6, 18, 3, 6, 12]
+        true_time = [10, 28, 46, 51, 68, 88, 91, 104]
+        true_waveform = [[1, 3, 2, 1],
+                         [1, 3, 2, 1],
+                         [1, 3, 2, 1],
+                         [1, 3, 2],
+                         [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                         [2, 1],
+                         [1, 3, 2],
+                         [2, 2, 2, 2, 2, 2]
+                         ]
+
+        records, hitlets = self.make_records_and_hitlets(dummy_records)
+        strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
+
+        for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
+            h = hitlets[i]
+            assert h['area'] == a, f'Hitlet {i} has the wrong area'
+            assert np.all(h['data'][:h['length']] == wf), f'Hitlet {i} has the wrong waveform'
+            assert h['time'] == t, f'Hitlet {i} has the wrong starttime'
+
+    @staticmethod
+    def _test_data_is_identical(hitlets, data):
+        for h, d in zip(hitlets, data):
+            data_is_identical = np.all(h['data'][:h['length']] == d)
+            assert data_is_identical, "Did not get the correct waveform"
+
+    def _make_fake_records(self, dummy_records):
+        """
+        Creates some specific records to test get_hitlet_data.
+        """
+        n_fragments = [len(pulse_fragemetns) for pulse_fragemetns in dummy_records]
+        records = np.zeros(np.sum(n_fragments), strax.record_dtype(6))
+        records['dt'] = 1
+        time_offset = 10  # Need some start time to avoid negative times
+
+        fragment_ind = 0
+        for dr, number_of_fragements in zip(dummy_records, n_fragments):
+            for record_i, waveform in enumerate(dr):
+                r = records[fragment_ind]
+                r['time'] = time_offset
+
+                is_not_last_fragment = record_i != (number_of_fragements - 1)
+                if is_not_last_fragment:
+                    r['length'] = len(waveform)
+                else:
+                    r['length'] = len(waveform) - self._count_zle_samples(waveform)
+                r['data'] = waveform
+                r['record_i'] = record_i
+
+                is_last_fragment = record_i == (number_of_fragements - 1)
+                if is_last_fragment:
+                    time_offset += r['length'] + 10  # +10 to ensure non-overlap
+                else:
+                    time_offset += r['length']
+                fragment_ind += 1
+
+        pulse_offset = 0
+        for number_of_fragements in n_fragments:
+            pulse_length = np.sum(records['length'][pulse_offset:number_of_fragements + pulse_offset])
+            records['pulse_length'][pulse_offset:number_of_fragements + pulse_offset] = pulse_length
+            pulse_offset += number_of_fragements
+        return records
+
+    @staticmethod
+    def _count_zle_samples(data):
+        """
+        Function which returns number of ZLE samples.
+        """
+        data = data[::-1]
+        ZLE = True
+        i = 0
+        while ZLE:
+            if (not data[i] == 0) or (i == len(data)):
+                break
+            i += 1
+        return i
 
 
 # -----------------------------
@@ -205,6 +254,12 @@ def test_highest_density_region_width():
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
     _test_highest_density_region_width(np.array([1, 0]), truth_dict)
 
+    # Check that negative data does not raise:
+    res = strax.processing.hitlets.highest_density_region_width(np.array([0, -1, -2]),
+                                                          np.array([0.5]),
+                                                          fractionl_edges=True)
+    assert np.all(np.isnan(res)), 'For empty data HDR is not defined, should return np.nan!'
+
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(distribution,
@@ -230,10 +285,10 @@ def test_hitlet_properties(hits_n_data):
 
     hits['time'] += 100
     # Step 1.: Produce fake hits and convert them into hitlets:
+    nsamples = 0
     if len(hits) >= 1:
         nsamples = hits['length'].max()
-    else:
-        nsamples = 2
+    nsamples = np.max((nsamples, 2))
 
     hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
     if len(hitlets):
@@ -311,22 +366,25 @@ def test_hitlet_properties(hits_n_data):
                 assert math.isclose(re - le, h[fwxm], rel_tol=10**-4,
                                     abs_tol=10**-4), f'FWHM does not match for {f}'
 
-    def test_not_defined_get_fhwm():
-        # This is a specific unity test for some edge-cases in which the full
-        # width half maximum is not defined.
-        odd_hitlets = np.zeros(3, dtype=strax.hitlet_with_data_dtype(10))
-        odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
-        odd_hitlets[0]['length'] = 5
-        odd_hitlets[1]['data'][:2] = [5, 5]
-        odd_hitlets[1]['length'] = 2
-        odd_hitlets[2]['length'] = 3
 
-        for oh in odd_hitlets:
-            res = strax.get_fwxm(oh)
-            mes = (f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
-                   'However, the FWHM is not defined and the return should be nan!'
-                   )
-            assert np.all(np.isnan(res)), mes
+def test_not_defined_get_fhwm():
+    # This is a specific unity test for some edge-cases in which the full
+    # width half maximum is not defined.
+    odd_hitlets = np.zeros(4, dtype=strax.hitlet_with_data_dtype(10))
+    odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
+    odd_hitlets[0]['length'] = 5
+    odd_hitlets[1]['data'][:2] = [5, 5]
+    odd_hitlets[1]['length'] = 2
+    odd_hitlets[2]['length'] = 3
+    odd_hitlets[3]['data'][:3] = [-1, -2, 0]
+    odd_hitlets[3]['length'] = 3
+
+    for oh in odd_hitlets:
+        res = strax.get_fwxm(oh)
+        mes = (f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
+               'However, the FWHM is not defined and the return should be nan!'
+               )
+        assert np.all(np.isnan(res)), mes
 
 
 # ------------------------
