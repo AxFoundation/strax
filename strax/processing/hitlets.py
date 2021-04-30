@@ -136,7 +136,7 @@ def refresh_hit_to_hitlets(hits, hitlets):
 
 
 @export
-def get_hitlets_data(hitlets, records, to_pe):
+def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
     """
     Function which searches for every hitlet in a given chunk the 
     corresponding records data. Additionally compute the total area of
@@ -147,6 +147,8 @@ def get_hitlets_data(hitlets, records, to_pe):
     :param to_pe: Array with area conversion factors from adc/sample to
         pe/sample. Please make sure that to_pe has the correct shape.
         The array index should match the channel number.
+    :param min_hitlet_sample: minimal length of the hitlet data field.
+        prevents numba compiling from running into race conditions.
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
@@ -176,7 +178,7 @@ def get_hitlets_data(hitlets, records, to_pe):
 
         hitlets_with_data_field = hitlets
     else:
-        n_samples = max(100, hitlets['length'].max())
+        n_samples = max(min_hitlet_sample, hitlets['length'].max())
         hitlets_with_data_field = np.zeros(len(hitlets), strax.hitlet_with_data_dtype(n_samples))
         strax.copy_to_buffer(hitlets,
                              hitlets_with_data_field,
