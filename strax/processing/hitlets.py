@@ -151,8 +151,7 @@ def get_hitlets_data(hitlets, records, to_pe):
         (if it did not exists before it will be added.)
     """
     # Numba will not raise any exceptions if to_pe is too short, leading
-    # to strange bugs. This check is somewhat not complete, but should
-    # be sufficient in most cases.
+    # to strange bugs.
     to_pe_has_wrong_shape = len(to_pe) < hitlets['channel'].max()
     if to_pe_has_wrong_shape:
         raise ValueError('"to_pe" has a wrong shape. Array index must'
@@ -210,6 +209,12 @@ def _get_hitlets_data(hitlets, records, to_pe):
                 h['length'])
 
             if is_first_record:
+                # We need recorded_samples_offset because hits may extend beyond the boundaries of our recorded data.
+                # As the data is not defined in those regions we have to chop and realign our data. See the following
+                # Example: (fragment 0, 1) [2, 2, 2, 2] [2, 2, 2] with a hitfinder threshold of 1 and left/right
+                # extension of 3. In the first fragment our hitlet would range from 3 to 8 in the second from 8
+                # to 11. Hence we have to subtract from every h_start and h_end the offset of 3 to realign our data.
+                # Time and length of the hitlet are updated accordingly.
                 is_first_record = False
                 recorded_samples_offset = h_start
             h_start -= recorded_samples_offset

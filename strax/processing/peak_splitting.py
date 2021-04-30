@@ -44,8 +44,6 @@ class PeakSplitter:
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_waveform or get_hitlets_data to compute the waveform of the
         new split peaks/hitlets.
-    :param next_ri: Index of next record for current record record_i.
-        None if not needed.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
 
