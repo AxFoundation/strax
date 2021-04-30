@@ -16,8 +16,7 @@ def create_hitlets_from_hits(hits,
                              save_outside_hits,
                              channel_range,
                              chunk_start=0,
-                             chunk_end=np.inf,
-                             min_samples_data_field=100, ):
+                             chunk_end=np.inf,):
     """
     Function which creates hitlets from a bunch of hits.
 
@@ -40,14 +39,9 @@ def create_hitlets_from_hits(hits,
                                          chunk_end, )
     hits = strax.sort_by_time(hits)
 
-    # Now convert hits into temp_hitlets including the data field:
-    nsamples = min_samples_data_field
-    if len(hits):
-        nsamples = max(hits['length'].max(), nsamples)
-
-    temp_hitlets = np.zeros(len(hits), strax.hitlet_dtype())
-    strax.copy_to_buffer(hits, temp_hitlets, '_refresh_hit_to_hitlets')
-    return temp_hitlets
+    hitlets = np.zeros(len(hits), strax.hitlet_dtype())
+    strax.copy_to_buffer(hits, hitlets, '_refresh_hit_to_hitlets')
+    return hitlets
 
 
 @export
