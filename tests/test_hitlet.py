@@ -288,7 +288,7 @@ def test_hitlet_properties(hits_n_data):
     nsamples = 0
     if len(hits) >= 1:
         nsamples = hits['length'].max()
-    nsamples = np.max(nsamples, 2)
+    nsamples = np.max((nsamples, 2))
 
     hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
     if len(hitlets):
