@@ -79,13 +79,10 @@ class TestGetHitletData(unittest.TestCase):
         self.test_data = [1, 3, 2, 1, 0, 0]
         self.test_data_truth = self.test_data[:-2]
 
-    def make_records_and_hitlets(self, dummy_records, data_field_length=999999):
+    def make_records_and_hitlets(self, dummy_records):
         records = self._make_fake_records(dummy_records)
         hits = strax.find_hits(records, min_amplitude=2)
-        hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1), 0, float('inf'))
-        n_samples = min(np.max(hits['length']), data_field_length)
-        hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=n_samples))
-        strax.refresh_hit_to_hitlets(hits, hitlets)
+        hitlets = strax.create_hitlets_from_hits(hits, (1, 1), (0, 1), 0, float('inf'))
         return records, hitlets
 
     def test_to_pe_wrong_shape(self):
@@ -115,8 +112,10 @@ class TestGetHitletData(unittest.TestCase):
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_to_short_data_field(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]], 2)
-        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets_to_short = np.zeros(len(hitlets), dtype=strax.hitlet_with_data_dtype(2))
+        strax.copy_to_buffer(hitlets, hitlets_to_short, '_refresh_hit_to_hitlet')
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets_to_short, records, np.ones(3000))
 
     def test_get_hitlets_data(self):
         dummy_records = [  # Contains Hitlet #:
@@ -146,7 +145,7 @@ class TestGetHitletData(unittest.TestCase):
                          ]
 
         records, hitlets = self.make_records_and_hitlets(dummy_records)
-        strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones([1, 1]))
 
         for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
             h = hitlets[i]
@@ -212,11 +211,6 @@ class TestGetHitletData(unittest.TestCase):
         return i
 
 
-# -----------------------------
-# Test for hitlet_properties.
-# This test includes the fwxm and
-# refresh_hit_to_hitlets.
-# -----------------------------
 @st.composite
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
@@ -293,7 +287,7 @@ def test_hitlet_properties(hits_n_data):
     hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
     if len(hitlets):
         assert hitlets['data'].shape[1] >= 2, 'Data buffer is not at least 2 samples long.'
-    strax.refresh_hit_to_hitlets(hits, hitlets)
+    strax.copy_to_buffer(hits, hitlets, '_refresh_hit_to_hitlet_properties_test')
 
     # Testing refresh_hit_to_hitlets for free:
     assert len(hits) == len(hitlets), 'Somehow hitlets and hits have different sizes'

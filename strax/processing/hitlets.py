@@ -7,12 +7,9 @@ from strax.processing.general import _touching_windows
 export, __all__ = strax.exporter()
 
 # Hardcoded numbers:
-TRIAL_COUNTER_NEIGHBORING_RECORDS = 100  # Trial counter when looking for hitlet data.
 NO_FWXM = -42  # Value in case FWXM cannot be found.
 
-# ----------------------
-# Hitlet building:
-# ----------------------
+
 @export
 def create_hitlets_from_hits(hits,
                              save_outside_hits,
