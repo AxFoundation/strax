@@ -285,10 +285,10 @@ def test_hitlet_properties(hits_n_data):
 
     hits['time'] += 100
     # Step 1.: Produce fake hits and convert them into hitlets:
+    nsamples = 0
     if len(hits) >= 1:
         nsamples = hits['length'].max()
-    else:
-        nsamples = 2
+    nsamples = np.max(nsamples, 2)
 
     hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
     if len(hitlets):
