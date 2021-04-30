@@ -9,9 +9,6 @@ import unittest
 from strax.testutils import fake_hits
 
 
-# -----------------------
-# Concatenated overlapping hits:
-# -----------------------
 @given(fake_hits,
        fake_hits,
        st.integers(min_value=0, max_value=10),
@@ -68,11 +65,12 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
                 assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
 
 
-# -----------------------------
-# Test for get_hitlets_data.
-# This test is done with some predefined
-# records.
-# -----------------------------
+def test_create_hits_from_hitlets_empty_hits():
+    hits = np.zeros(0, dtype=strax.hit_dtype)
+    hitlets = strax.create_hitlets_from_hits(hits, (1, 1), (0, 1))
+    assert len(hitlets) == 0, 'Hitlets should be empty'
+
+
 class TestGetHitletData(unittest.TestCase):
 
     def setUp(self):
