@@ -42,12 +42,8 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
                                                'endtime'), np.int64)]))
 
     if len(hits):
-        hits = _concat_overlapping_hits(hits,
-                                        extensions,
-                                        first_channel,
-                                        last_hit_in_channel,
-                                        start,
-                                        end)
+        hits = _concat_overlapping_hits(
+            hits, extensions, first_channel, last_hit_in_channel, start, end)
     return hits
 
 
