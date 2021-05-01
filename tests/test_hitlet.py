@@ -83,6 +83,20 @@ class TestGetHitletData(unittest.TestCase):
         hitlets = strax.create_hitlets_from_hits(hits, (1, 1), (0, 1), 0, float('inf'))
         return records, hitlets
 
+    def test_inputs_are_empty(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets_empty = np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
+        records_empty = np.zeros(0, dtype=strax.record_dtype(10))
+
+        hitlets_result = strax.get_hitlets_data(hitlets_empty, records, np.ones(3000))
+        assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
+
+        hitlets_result = strax.get_hitlets_data(hitlets_empty, records_empty, np.ones(3000))
+        assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
+
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records_empty, np.ones(3000))
+
+
     def test_to_pe_wrong_shape(self):
         records, hitlets = self.make_records_and_hitlets([[self.test_data]])
         hitlets['channel'] = 2000

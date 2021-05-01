@@ -164,6 +164,12 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
+    if len(hitlets) == 0:
+        return hitlets
+
+    if len(hitlets) > 0 and len(records) == 0:
+        raise ValueError('Cannot get for hitlets if records are empty!')
+
     # Numba will not raise any exceptions if to_pe is too short, leading
     # to strange bugs.
     to_pe_has_wrong_shape = len(to_pe) < hitlets['channel'].max()
