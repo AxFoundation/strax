@@ -165,7 +165,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
         (if it did not exists before it will be added.)
     """
     if len(hitlets) == 0:
-        return hitlets
+        return np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
 
     if len(hitlets) > 0 and len(records) == 0:
         raise ValueError('Cannot get for hitlets if records are empty!')
