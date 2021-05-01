@@ -25,11 +25,11 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     :param hits: Hits in records.
     :param extensions: Tuple of the left and right hit extension.
     :param pmt_channels: Tuple of the detectors first and last PMT
-    :param start: Startime of the chunk
+    :param start: Start time of the chunk
     :param end: Endtime of the chunk
 
     :returns:
-        array with concataneted hits.
+        array with concatenated hits.
     """
     first_channel, last_channel = pmt_channels
     nchannels = last_channel - first_channel + 1
@@ -152,6 +152,9 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
+    if not len(hitlets):
+        return hitlets
+
     # Numba will not raise any exceptions if to_pe is too short, leading
     # to strange bugs.
     to_pe_has_wrong_shape = len(to_pe) < hitlets['channel'].max()
@@ -373,6 +376,7 @@ def _get_fwxm_boundary(data, max_val):
             s = d
             return ind, s
     return len(data)-1, data[-1]
+
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):

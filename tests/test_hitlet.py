@@ -95,13 +95,11 @@ class TestGetHitletData(unittest.TestCase):
 
     def test_get_hitlets_data_for_single_hitlet(self):
         records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-
         hitlets = strax.get_hitlets_data(hitlets[0], records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_data_field_is_empty(self):
         records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-
         hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
         self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
@@ -110,13 +108,17 @@ class TestGetHitletData(unittest.TestCase):
         records, hitlets_with_data = self.make_records_and_hitlets([[self.test_data]])
         hitlets = np.zeros(len(hitlets_with_data), strax.hitlet_dtype())
         strax.copy_to_buffer(hitlets_with_data, hitlets, '_copy_hitlets_to_hitlets_without_data')
-
         hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_to_short_data_field(self):
         records, hitlets = self.make_records_and_hitlets([[self.test_data]], 2)
         self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
+
+    def test_no_hitlet(self):
+        records, _ = self.make_records_and_hitlets([[self.test_data]], 2)
+        hitlets = np.empty(0, strax.hitlet_with_data_dtype(n_samples=2))
+        strax.get_hitlets_data(hitlets, hitlets, records, np.array([1, 1]))
 
     def test_get_hitlets_data(self):
         dummy_records = [  # Contains Hitlet #:
