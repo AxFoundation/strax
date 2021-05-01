@@ -148,7 +148,7 @@ def _concat_overlapping_hits(hits,
 
 
 @export
-def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
+def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
     """
     Function which searches for every hitlet in a given chunk the 
     corresponding records data. Additionally compute the total area of
@@ -165,7 +165,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
         (if it did not exists before it will be added.)
     """
     if len(hitlets) == 0:
-        return np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
+        return np.zeros(0, dtype=strax.hitlet_with_data_dtype(min_hitlet_sample))
 
     if len(hitlets) > 0 and len(records) == 0:
         raise ValueError('Cannot get data for hitlets if records are empty!')
