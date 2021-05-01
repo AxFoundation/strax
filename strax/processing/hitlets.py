@@ -168,7 +168,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
         return np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
 
     if len(hitlets) > 0 and len(records) == 0:
-        raise ValueError('Cannot get for hitlets if records are empty!')
+        raise ValueError('Cannot get data for hitlets if records are empty!')
 
     # Numba will not raise any exceptions if to_pe is too short, leading
     # to strange bugs.
