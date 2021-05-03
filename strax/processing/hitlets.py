@@ -22,12 +22,10 @@ def create_hitlets_from_hits(hits,
     :param hits: Hits found in records.
     :param save_outside_hits: Tuple with left and right hit extension.
     :param channel_range: Detectors change range from channel map.
-    :param chunk_start: Start of either a chunk. Ensures that
-        no hitlet is extended beyond chunk boundaries. You can keep the
-        defaults if not used inside of a plugin.
-    :param chunk_end: End of a chunk Ensures that no hitlet is extended
-        beyond chunk boundaries. You can keep the  defaults if not used
-        inside of a plugin.
+    :param chunk_start: (optional) start time of a chunk. Ensures that
+        no hitlet is earlier than this timestamp.
+    :param chunk_end: (optional) end time of a chunk. Ensures that
+        no hitlet ends later than this timestamp.
 
     :return: Hitlets with temporary fields (data, max_goodness_of_split...)
     """
