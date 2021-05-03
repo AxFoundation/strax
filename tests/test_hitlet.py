@@ -157,7 +157,7 @@ class TestGetHitletData(unittest.TestCase):
                          ]
 
         records, hitlets = self.make_records_and_hitlets(dummy_records)
-        hitlets = strax.get_hitlets_data(hitlets, records, np.ones([1, 1]))
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(2))
 
         for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
             h = hitlets[i]
