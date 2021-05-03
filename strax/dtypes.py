@@ -166,6 +166,10 @@ def hitlet_with_data_dtype(n_samples=2):
     dtype = hitlet_dtype()
     additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                            np.float32, n_samples),
+                         (('Dummy field required for splitting',
+                           'max_gap'), np.int32),
+                         (('Maximum interior goodness of split',
+                           'max_goodness_of_split'), np.float32),
                          ]
 
     return dtype + additional_fields

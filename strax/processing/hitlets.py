@@ -7,12 +7,43 @@ from strax.processing.general import _touching_windows
 export, __all__ = strax.exporter()
 
 # Hardcoded numbers:
-TRIAL_COUNTER_NEIGHBORING_RECORDS = 100  # Trial counter when looking for hitlet data.
 NO_FWXM = -42  # Value in case FWXM cannot be found.
 
-# ----------------------
-# Hitlet building:
-# ----------------------
+
+@export
+def create_hitlets_from_hits(hits,
+                             save_outside_hits,
+                             channel_range,
+                             chunk_start=0,
+                             chunk_end=np.inf,):
+    """
+    Function which creates hitlets from a bunch of hits.
+
+    :param hits: Hits found in records.
+    :param save_outside_hits: Tuple with left and right hit extension.
+    :param channel_range: Detectors change range from channel map.
+    :param chunk_start: (optional) start time of a chunk. Ensures that
+        no hitlet is earlier than this timestamp.
+    :param chunk_end: (optional) end time of a chunk. Ensures that
+        no hitlet ends later than this timestamp.
+
+    :return: Hitlets with temporary fields (data, max_goodness_of_split...)
+    """
+    # Merge concatenate overlapping  within a channel. This is important
+    # in case hits were split by record boundaries. In case we
+    # accidentally concatenate two PMT signals we split them later again.
+    hits = strax.concat_overlapping_hits(hits,
+                                         save_outside_hits,
+                                         channel_range,
+                                         chunk_start,
+                                         chunk_end, )
+    hits = strax.sort_by_time(hits)
+
+    hitlets = np.zeros(len(hits), strax.hitlet_dtype())
+    strax.copy_to_buffer(hits, hitlets, '_refresh_hit_to_hitlets')
+    return hitlets
+
+
 @export
 def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     """
@@ -118,25 +149,7 @@ def _concat_overlapping_hits(hits,
 
 
 @export
-@numba.njit(nogil=True, cache=True)
-def refresh_hit_to_hitlets(hits, hitlets):
-    """
-    Function which copies basic hit information into a new hitlet array.
-    """
-    nhits = len(hits)
-    for ind in range(nhits):
-        h_new = hitlets[ind]
-        h_old = hits[ind]
-
-        h_new['time'] = h_old['time']
-        h_new['length'] = h_old['length']
-        h_new['channel'] = h_old['channel']
-        h_new['area'] = h_old['area']
-        h_new['dt'] = h_old['dt']
-
-
-@export
-def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
+def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
     """
     Function which searches for every hitlet in a given chunk the 
     corresponding records data. Additionally compute the total area of
@@ -152,6 +165,12 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=100):
     :returns: Hitlets including data stored in the "data" field
         (if it did not exists before it will be added.)
     """
+    if len(hitlets) == 0:
+        return np.zeros(0, dtype=strax.hitlet_with_data_dtype(min_hitlet_sample))
+
+    if len(hitlets) > 0 and len(records) == 0:
+        raise ValueError('Cannot get data for hitlets if records are empty!')
+
     # Numba will not raise any exceptions if to_pe is too short, leading
     # to strange bugs.
     to_pe_has_wrong_shape = len(to_pe) < hitlets['channel'].max()
@@ -296,7 +315,6 @@ def hitlet_properties(hitlets):
         h['range_hdr_80p_area'] = resh[1,1]-resh[1,0]
 
 
-
 @export
 @numba.njit(cache=True, nogil=True)
 def get_fwxm(hitlet, fraction=0.5):
@@ -373,6 +391,7 @@ def _get_fwxm_boundary(data, max_val):
             s = d
             return ind, s
     return len(data)-1, data[-1]
+
 
 @export
 def conditional_entropy(hitlets, template='flat', square_data=False):
