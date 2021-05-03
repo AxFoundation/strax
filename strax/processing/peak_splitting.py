@@ -117,9 +117,6 @@ class PeakSplitter:
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
-        # NB: code very similar to _split_hitlets see
-        # github.com/AxFoundation/strax/pull/309 for more info. Keep in mind
-        # that changing one function should also be reflected in the other.
         new_peaks = _result_buffer
         offset = 0
 
