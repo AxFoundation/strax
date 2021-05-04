@@ -1,3 +1,9 @@
+0.15.1 / 2021-05-04
+---------------------
+- Refactor hitlets (#430, #436)
+- Update classifiers for pipy #437
+- Allow Py39 in travis tests (#427) 
+
 0.15.0 / 2021-04-16
 ---------------------
 - Use int32 for peak dt, fix #397 (#403, #426)
