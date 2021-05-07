@@ -14,6 +14,7 @@ from .storage.files import *
 from .storage.rucio import *
 from .storage.mongo import *
 from .storage.zipfiles import *
+from .storage.zarr import *
 
 from .config import *
 from .plugin import *
