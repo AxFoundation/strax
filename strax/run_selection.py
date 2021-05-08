@@ -45,10 +45,10 @@ def keys_for_runs(self,
     Get the data-keys for a multitude of runs. If use_per_run_defaults
         is False which it preferably is (#246), getting many keys should
         be fast as we only only compute the lineage once.
+
     :param run_ids: Runs to get datakeys for
     :param target: datatype requested
     :return: list of datakeys of the target for the given runs.
-    :raises: ValueError if the run_ids provided is an empty list
     """
     run_ids = strax.to_str_tuple(run_ids)
 
@@ -60,7 +60,7 @@ def keys_for_runs(self,
         p = self._get_plugins((target,), run_ids[0])[target]
         return [strax.DataKey(r, target, p.lineage) for r in run_ids]
     else:
-        raise ValueError('No runs provided')
+        return []
 
 
 @strax.Context.add_method
