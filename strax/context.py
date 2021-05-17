@@ -528,7 +528,9 @@ class Context:
     def _per_run_default_allowed_check(self, option_name, option):
         """Check if an option of a registered plugin is allowed"""
         per_run_default = option.default_by_run != strax.OMITTED
-        if per_run_default and not self.context_config['use_per_run_defaults']:
+        not_overwritten = option_name not in self.config
+        per_run_is_forbidden = not self.context_config['use_per_run_defaults']
+        if per_run_default and not_overwritten and per_run_is_forbidden:
             raise strax.InvalidConfiguration(
                 f'{option_name} is specified as a per-run-default which is not '
                 f'allowed by the context')
