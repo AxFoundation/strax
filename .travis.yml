@@ -46,7 +46,7 @@ install:
   - echo "download requirements from base_environment"
   - wget -O pre_requirements.txt https://raw.githubusercontent.com/XENONnT/base_environment/master/requirements.txt &> /dev/null
   - echo "select important dependencies for strax(en)"
-  - cat pre_requirements.txt | grep 'numpy\|numba\|scikit-learn\|coveralls\|pandas' &> sel_pre_requirements.txt
+  - cat pre_requirements.txt | grep 'numpy\|numba\|scikit-learn\|coveralls\|pandas\|zstd' &> sel_pre_requirements.txt
   - echo "Will pre-install:"
   - cat sel_pre_requirements.txt
   - echo "Start preinstall and rm pre-requirements:"
