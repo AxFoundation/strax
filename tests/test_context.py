@@ -2,10 +2,13 @@ import strax
 from strax.testutils import Records, Peaks, run_id
 import tempfile
 import numpy as np
-from hypothesis import given
+from hypothesis import given, settings
 import hypothesis.strategies as st
 import typing as ty
 import os
+import unittest
+import shutil
+import uuid
 
 
 def _apply_function_to_data(function
@@ -45,6 +48,7 @@ def test_apply_pass_to_data():
     assert np.all(r == r_changed)
 
 
+@settings(deadline=None)
 @given(st.integers(min_value=-10, max_value=10))
 def test_apply_ch_shift_to_data(magic_shift: int):
     """
@@ -117,7 +121,9 @@ def _get_context(temp_dir=tempfile.gettempdir()) -> strax.Context:
     context = strax.Context(storage=strax.DataDirectory(
         temp_dir,
         deep_scan=True),
-        register=[Records, Peaks])
+        register=[Records, Peaks],
+        use_per_run_defaults=True,
+    )
     return context
 
 
@@ -166,3 +172,93 @@ def test_copy_to_frontend():
                     os.listdir(os.path.join(temp_dir, rec_folder)) ==
                     os.listdir(os.path.join(temp_dir_2, rec_folder))
             )
+
+
+class TestPerRunDefaults(unittest.TestCase):
+    """Test the per-run defaults options of a context"""
+    def setUp(self):
+        """
+        Get a folder to write (Similar to tempfile.TemporaryDirectory) to get
+        a temp folder in the temp dir. Cleanup after the tests.
+        """
+        temp_folder = uuid.uuid4().hex
+        self.tempdir = os.path.join(tempfile.gettempdir(), temp_folder)
+        assert not os.path.exists(self.tempdir)
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir)
+
+    def test_register_no_defaults(self, runs_default_allowed=False):
+        """Test if we only register a plugin with no run-defaults"""
+        st = self.get_context(runs_default_allowed)
+        assert not self._has_per_run_default(Records)
+        st.register(Records)
+        st.select_runs()
+
+    def test_register_no_defaults_but_allowed(self):
+        self.test_register_no_defaults(runs_default_allowed=True)
+
+    def test_register_with_defaults(self, runs_default_allowed=False):
+        """Test if we register a plugin WITH run-defaults"""
+        st = self.get_context(runs_default_allowed)
+        assert not self._has_per_run_default(Records)
+        assert self._has_per_run_default(Peaks)
+        st.register(Records)
+        if not runs_default_allowed:
+            self.assertRaises(strax.InvalidConfiguration, st.register, Peaks)
+        else:
+            st.select_runs()
+
+    def test_register_with_defaults_and_allowed(self):
+        self.test_register_with_defaults(runs_default_allowed=True)
+
+    def test_register_all_no_defaults(self, runs_default_allowed=False):
+        """Test if we register a plugin with no run-defaults"""
+        st = self.get_context(runs_default_allowed)
+        assert any([self._has_per_run_default(Peaks),
+                    self._has_per_run_default(Records)])
+        st.register(Records)
+
+        if not runs_default_allowed:
+            self.assertRaises(strax.InvalidConfiguration,
+                              st.register_all,
+                              strax.testutils)
+        else:
+            st.register_all(strax.testutils)
+
+            st.select_runs()
+        # Double check that peaks is registered in the context (otherwise the
+        # test does not make sense)
+        assert 'peaks' in st._plugin_class_registry
+
+    def test_register_all_no_defaults_and_allowed(self):
+        self.test_register_all_no_defaults(runs_default_allowed=True)
+
+    def get_context(self, use_defaults):
+        """Get simple context where we have one mock run in the only storage frontend"""
+        assert isinstance(use_defaults, bool)
+        st = strax.Context(storage=self.get_mock_sf(),
+                           check_available=('records',)
+                           )
+        st.set_context_config({'use_per_run_defaults': use_defaults})
+        return st
+
+    def get_mock_sf(self):
+        mock_rundb = [{'name': '0', strax.RUN_DEFAULTS_KEY: dict(base_area=43)}]
+        sf = strax.DataDirectory(path=self.tempdir,
+                                 deep_scan=True,
+                                 provide_run_metadata=True)
+        for d in mock_rundb:
+            sf.write_run_metadata(d['name'], d)
+        return sf
+
+    @staticmethod
+    def _has_per_run_default(plugin) -> bool:
+        """Does the plugin have at least one option that is a per-run default"""
+        has_per_run_defaults = False
+        for option in plugin.takes_config.values():
+            has_per_run_defaults = option.default_by_run != strax.OMITTED
+            if has_per_run_defaults:
+                # Found one option
+                break
+        return has_per_run_defaults

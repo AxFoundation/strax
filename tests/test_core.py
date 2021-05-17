@@ -13,7 +13,9 @@ def test_core():
         for max_workers in [1, 2]:
             mystrax = strax.Context(storage=[],
                                     register=[Records, Peaks],
-                                    allow_multiprocess=allow_multiprocess)
+                                    allow_multiprocess=allow_multiprocess,
+                                    use_per_run_defaults=True,
+                                    )
             bla = mystrax.get_array(run_id=run_id, targets='peaks',
                                     max_workers=max_workers)
             assert len(bla) == recs_per_chunk * n_chunks
@@ -23,7 +25,9 @@ def test_core():
 def test_multirun():
     for max_workers in [1, 2]:
         mystrax = strax.Context(storage=[],
-                                register=[Records, Peaks],)
+                                register=[Records, Peaks],
+                                use_per_run_defaults=True,
+                                )
         bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
                                 max_workers=max_workers)
         n = recs_per_chunk * n_chunks
@@ -37,7 +41,9 @@ def test_filestore():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                             deep_scan=True),
-                                register=[Records, Peaks])
+                                register=[Records, Peaks],
+                                use_per_run_defaults=True,
+                                )
 
         assert not mystrax.is_stored(run_id, 'peaks')
         mystrax.scan_runs()
@@ -83,6 +89,7 @@ def test_filestore():
         assert osp.exists(zf)
 
         mystrax = strax.Context(storage=strax.ZipDirectory(temp_dir),
+                                use_per_run_defaults=True,
                                 register=[Records, Peaks])
         metadata_2 = mystrax.get_meta(run_id, 'peaks')
         assert metadata == metadata_2
@@ -98,7 +105,9 @@ def test_datadirectory_deleted():
 
         mystrax = strax.Context(storage=strax.DataDirectory(data_dir,
                                                             deep_scan=True),
-                                register=[Records, Peaks])
+                                register=[Records, Peaks],
+                                use_per_run_defaults=True,
+                                )
 
         # Delete directory AFTER context is created
         shutil.rmtree(data_dir)
@@ -118,7 +127,9 @@ def test_fuzzy_matching():
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                        deep_scan=True),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks],
+                           use_per_run_defaults=True,
+                           )
 
         st.make(run_id=run_id, targets='peaks')
 
@@ -144,6 +155,7 @@ def test_fuzzy_matching():
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
                            register=[Records, Peaks],
+                           use_per_run_defaults=True,
                            fuzzy_for=('records',))
         st.make(run_id, 'peaks')
         assert not st.is_stored(run_id, 'peaks')
@@ -153,7 +165,9 @@ def test_fuzzy_matching():
 def test_storage_converter():
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks],
+                           use_per_run_defaults=True,
+                           )
         st.make(run_id=run_id, targets='peaks')
 
         with tempfile.TemporaryDirectory() as temp_dir_2:
@@ -162,6 +176,7 @@ def test_storage_converter():
                                              readonly=True),
                          strax.DataDirectory(temp_dir_2)],
                 register=[Records, Peaks],
+                use_per_run_defaults=True,
                 storage_converter=True)
             store_1, store_2 = st.storage
 
@@ -184,7 +199,9 @@ def test_exception():
             st = strax.Context(storage=strax.DataDirectory(temp_dir),
                                register=[Records, Peaks],
                                allow_multiprocess=allow_multiprocess,
-                               config=dict(crash=True))
+                               config=dict(crash=True),
+                               use_per_run_defaults=True,
+                               )
 
             # Check correct exception is thrown
             with pytest.raises(SomeCrash):
@@ -211,7 +228,9 @@ def test_exception_in_saver(caplog):
 
     with tempfile.TemporaryDirectory() as temp_dir:
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks])
+                           register=[Records, Peaks],
+                           use_per_run_defaults=True,
+                           )
 
         def kaboom(*args, **kwargs):
             raise SomeCrash
@@ -234,7 +253,9 @@ def test_random_access():
         Peaks.rechunk_on_save = False
 
         st = strax.Context(storage=strax.DataDirectory(temp_dir),
-                           register=[Records, Peaks, PeakClassification])
+                           register=[Records, Peaks, PeakClassification],
+                           use_per_run_defaults=True,
+                           )
 
         with pytest.raises(strax.DataNotAvailable):
             # Time range selection requires data already available
@@ -281,7 +302,9 @@ def test_rechunk_on_save():
 
         with tempfile.TemporaryDirectory() as temp_dir:
             st = strax.Context(storage=strax.DataDirectory(path=temp_dir),
-                               register=[Records, Peaks])
+                               register=[Records, Peaks],
+                               use_per_run_defaults=True,
+                               )
 
             peaks_0 = st.get_array('0', 'peaks')
             peaks_0a = st.get_array('0', 'peaks')
@@ -329,7 +352,8 @@ def test_run_defaults():
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
         st = strax.Context(storage=sf, register=[Records, Peaks],
-                           use_per_run_defaults=True)
+                           use_per_run_defaults=True,
+                           )
 
         # The run defaults get used
         peaks = st.get_array('0', 'peaks')
@@ -343,6 +367,7 @@ def test_run_defaults():
 def test_dtype_mismatch():
     mystrax = strax.Context(storage=[],
                             register=[Records, Peaks],
+                            use_per_run_defaults=True,
                             config=dict(give_wrong_dtype=True))
     with pytest.raises(strax.PluginGaveWrongOutput):
         mystrax.get_array(run_id=run_id, targets='peaks')
@@ -350,7 +375,9 @@ def test_dtype_mismatch():
 
 def test_get_single_plugin():
     mystrax = strax.Context(storage=[],
-                            register=[Records, Peaks])
+                            register=[Records, Peaks],
+                            use_per_run_defaults=True,
+                            )
     p = mystrax.get_single_plugin('0', 'peaks')
     assert isinstance(p, Peaks)
     assert len(p.config)
@@ -368,11 +395,14 @@ def test_superrun():
         # Test run definition
         sf = strax.DataDirectory(path=temp_dir,
                                  provide_run_metadata=True,
-                                 deep_scan=True)
+                                 deep_scan=True,
+                                 )
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
 
-        st = strax.Context(storage=sf, register=[Records, Peaks])
+        st = strax.Context(storage=sf, register=[Records, Peaks],
+                           use_per_run_defaults=True,
+                           )
         st.define_run('super', ['0', '1'])
 
         md = st.run_metadata('_super')
@@ -410,7 +440,9 @@ def test_allow_multiple(targets=('peaks', 'records')):
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                             deep_scan=True),
-                                register=[Records, Peaks])
+                                register=[Records, Peaks],
+                                use_per_run_defaults=True,
+                                )
         mystrax.set_context_config({'allow_lazy': False,
                                     'timeout': 80})
 
@@ -454,7 +486,9 @@ def test_available_for_run():
     with tempfile.TemporaryDirectory() as temp_dir:
         mystrax = strax.Context(storage=strax.DataDirectory(temp_dir,
                                                             deep_scan=True),
-                                register=[Records, Peaks])
+                                register=[Records, Peaks],
+                                use_per_run_defaults=True,
+                                )
         targets = list(mystrax._plugin_class_registry.keys())
         for exclude_i in range(len(targets)):
             for include_i in range(len(targets)):

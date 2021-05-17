@@ -260,6 +260,7 @@ class Context:
             already_seen.append(plugin)
 
             for option, items in plugin.takes_config.items():
+                self._per_run_default_allowed_check(option, items)
                 try:
                     # Looping over the options of the new plugin and check if
                     # they can be found in the already registered plugins:
@@ -523,6 +524,14 @@ class Context:
             plugins[t] = p
 
         return plugins
+
+    def _per_run_default_allowed_check(self, option_name, option):
+        """Check if an option of a registered plugin is allowed"""
+        per_run_default = option.default_by_run != strax.OMITTED
+        if per_run_default and not self.context_config['use_per_run_defaults']:
+            raise strax.InvalidConfiguration(
+                f'{option_name} is specified as a per-run-default which is not '
+                f'allowed by the context')
 
     @staticmethod
     def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
