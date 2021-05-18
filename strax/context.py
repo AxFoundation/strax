@@ -969,6 +969,7 @@ class Context:
                                                          progress_bar=progress_bar)
             with _p as pbar:
                 pbar.last_print_t = time.time()
+                pbar.mbs = []
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
                     if not isinstance(result, strax.Chunk):
@@ -986,7 +987,7 @@ class Context:
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
-                        pbar, t_start, t_end, n_chunks, result.end)
+                        pbar, t_start, t_end, n_chunks, result.end, result.nbytes)
                     yield result
             _p.close()
 
@@ -1036,7 +1037,7 @@ class Context:
         return pbar, t_start, t_end
 
     @staticmethod
-    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end):
+    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end, nbytes):
         """Do some tqdm voodoo to get the progress bar for st.get_iter"""
         if t_end - t_start > 0:
             fraction_done = (chunk_end - t_start) / (t_end - t_start)
@@ -1050,7 +1051,8 @@ class Context:
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
-        postfix = f'Last chunk: {seconds_per_chunk:.2f} s. #chunks {n_chunks}'
+        pbar.mbs.append((nbytes/1e6)/seconds_per_chunk)
+        postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {np.mean(pbar.mbs):.1f} MB/s'
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
