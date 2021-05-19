@@ -12,7 +12,7 @@ import numba
 __all__ = ('interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype '
            'DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH '
            'time_fields time_dt_fields hitlet_dtype hitlet_with_data_dtype '
-           'copy_to_buffer').split()
+           'copy_to_buffer peak_interval_dtype').split()
 
 DIGITAL_SUM_WAVEFORM_CHANNEL = -1
 DEFAULT_RECORD_LENGTH = 110
@@ -33,11 +33,15 @@ time_dt_fields = [
     (('Width of one sample [ns]',
       'dt'), np.int16)]
 
-# Base dtype for interval-like objects (pulse, peak, hit)
+# Base dtype for interval-like objects (pulse, hit)
 interval_dtype = time_dt_fields + [
     (('Channel/PMT number',
         'channel'), np.int16)]
 
+# Base dtype with interval like objects for long objects (peaks)
+peak_interval_dtype = interval_dtype.copy()
+# Allow peaks to have very long dts
+peak_interval_dtype[2] = (('Width of one sample [ns]', 'dt'), np.int32)
 
 def raw_record_dtype(samples_per_record=DEFAULT_RECORD_LENGTH):
     """Data type for a waveform raw_record.
@@ -148,24 +152,24 @@ def hitlet_dtype():
     return dtype
 
 
-def hitlet_with_data_dtype(n_samples):
+def hitlet_with_data_dtype(n_samples=2):
     """
     Hitlet dtype with data field. Required within the plugins to compute
     hitlet properties. 
     
     :param n_samples: Buffer length of the data field. Make sure it can
         hold the longest hitlet.
-    :param n_widths: Number of area deciles width.
-
-    Note:
-        The data buffer will be at least 2 samples long
     """
+    if n_samples < 2:
+        raise ValueError('n_samples must be at least 2!')
+
     dtype = hitlet_dtype()
-    n_samples = max(n_samples, 2)
     additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                            np.float32, n_samples),
-                         (('Fragment number in the pulse',
-                           'record_i'), np.int32),
+                         (('Dummy field required for splitting',
+                           'max_gap'), np.int32),
+                         (('Maximum interior goodness of split',
+                           'max_goodness_of_split'), np.float32),
                          ]
 
     return dtype + additional_fields
@@ -178,7 +182,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
     if n_channels == 1:
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
-    return interval_dtype + [
+    return peak_interval_dtype + [
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8),
@@ -217,7 +221,7 @@ def copy_to_buffer(source: np.ndarray,
         with the name 'func_name' (should start with "_").
 
     :param source: array of input
-    :param destination: array of buffer to fill with values from input
+    :param buffer: array of buffer to fill with values from input
     :param func_name: how to store the dynamically created function.
         Should start with an _underscore
     :param field_names: dtype names to copy (if none, use all in the

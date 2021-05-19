@@ -34,6 +34,7 @@ You might also find these presentations useful:
     advanced/superrun
     advanced/plugin_dev
     advanced/overview
+    advanced/recompression
 
 .. toctree::
     :maxdepth: 1
