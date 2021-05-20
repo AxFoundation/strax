@@ -1,3 +1,10 @@
+0.15.2 / 2021-05-20
+---------------------
+- Speed up run selection by ~100x for fixed defaults (#440)
+- Use zstd for from base-env for testing (#441)
+- Add MB/s pbar (#442)
+
+
 0.15.1 / 2021-05-04
 ---------------------
 - Refactor hitlets (#430, #436)
