@@ -388,7 +388,7 @@ def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
 
 
 def _tag_match(tag, pattern, pattern_type, ignore_underscore):
-    if ignore_underscore and tag.startswith('_'):
+    if ignore_underscore and tag.startswith('_') and not pattern.startswith('_'):
         tag = tag[1:]
     if pattern_type == 'fnmatch':
         return fnmatch.fnmatch(tag, pattern)
