@@ -15,6 +15,7 @@ def find_peaks(hits, adc_to_pe,
                left_extension=20, right_extension=150,
                min_area=0,
                min_channels=2,
+               max_duration=10_000_000,
                _result_buffer=None, result_dtype=None):
     """Return peaks made from grouping hits together
     Assumes all hits have the same dt
@@ -22,8 +23,9 @@ def find_peaks(hits, adc_to_pe,
     :param left_extension: Extend peaks by this many ns left
     :param right_extension: Extend peaks by this many ns right
     :param gap_threshold: No hits for this much ns means new peak
-    :param min_channels: Peaks with less contributing channels are not returned
     :param min_area: Peaks with less than min_area are not returned
+    :param min_channels: Peaks with less contributing channels are not returned
+    :param max_duration: max duration time of merged peak in ns
     """
     buffer = _result_buffer
     offset = 0
@@ -33,10 +35,12 @@ def find_peaks(hits, adc_to_pe,
     assert min_channels >= 1, "min_channels must be >= 1"
     assert gap_threshold > left_extension + right_extension, \
         "gap_threshold must be larger than left + right extension"
-    # If you write it like below, you get integer wraparound errors
-    # TODO :-( File numba issue?
-    # assert max_duration < np.iinfo(np.int32).max * hits[0]['dt'], \
-    #   "Max duration must fit in a 32-bit signed integer"
+    assert max(hits['channel']) < len(adc_to_pe), "more channels than to_pe"
+    # Magic number comes from
+    #   np.iinfo(p['dt'].dtype).max*np.shape(p['data'])[1] = 429496729400 ns
+    # but numba does not like it
+    assert left_extension+max_duration+right_extension < 429496729400, (
+        "Too large max duration causes integer overflow")
 
     n_channels = len(buffer[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -75,8 +79,20 @@ def find_peaks(hits, adc_to_pe,
 
         # Look at the next hit to see if THIS hit is the last in a peak.
         # If this is the final hit, it is last by definition.
-        if (hit_i == len(hits) - 1
-                or hits[hit_i+1]['time'] - peak_endtime >= gap_threshold):
+        # Finally, make sure that if we include the next hit, we are not
+        # exceeding the max_duration.
+        is_last_hit = hit_i == len(hits) - 1
+        peak_too_long = next_hit_is_far = False
+        if not is_last_hit:
+            # These can only be computed if there is a next hit
+            next_hit = hits[hit_i + 1]
+            next_hit_is_far = next_hit['time'] - peak_endtime >= gap_threshold
+            # Peaks may not extend the max_duration
+            peak_too_long = (next_hit['time'] - p['time']
+                             + next_hit['dt'] * next_hit['length']
+                             + left_extension
+                             + right_extension) > max_duration
+        if is_last_hit or next_hit_is_far or peak_too_long:
             # Next hit (if it exists) will initialize the new peak candidate
             in_peak = False
 
@@ -90,6 +106,7 @@ def find_peaks(hits, adc_to_pe,
             # Compute final quantities
             p['length'] = (peak_endtime - p['time'] + right_extension) / dt
             if p['length'] <= 0:
+                # This is most likely caused by a negative dt
                 raise ValueError(
                     "Caught attempt to save nonpositive peak length?!")
             p['area_per_channel'][:] = area_per_channel
@@ -255,7 +272,9 @@ def sum_waveform(peaks, records, adc_to_pe, n_pmts_top, store_top_waveform=False
 
 @export
 def find_peak_groups(peaks, gap_threshold,
-                     left_extension=0, right_extension=0):
+                     left_extension=0, right_extension=0,
+                     max_duration=int(1e9),
+                     ):
     """Return boundaries of groups of peaks separated by gap_threshold,
     extended left and right.
 
@@ -263,6 +282,7 @@ def find_peak_groups(peaks, gap_threshold,
     :param gap_threshold: Minimum gap between peaks
     :param left_extension: Extend groups by this many ns left
     :param right_extension: " " right
+    :param max_duration: max duration time of merged peak in ns
     :return: time, endtime arrays of group boundaries
     """
     # Mock up a "hits" array so we can just use the existing peakfinder
@@ -272,13 +292,15 @@ def find_peak_groups(peaks, gap_threshold,
     fake_hits['dt'] = 1
     fake_hits['area'] = 1
     fake_hits['time'] = peaks['time']
-    # TODO: could this cause int overrun nonsense anywhere?
     fake_hits['length'] = strax.endtime(peaks) - peaks['time']
+    # Probably int overflow
+    assert np.all(fake_hits['length'] > 0), "Attempt to create invalid hit"
     fake_peaks = strax.find_peaks(
         fake_hits, adc_to_pe=np.ones(1),
         gap_threshold=gap_threshold,
         left_extension=left_extension, right_extension=right_extension,
-        min_channels=1, min_area=0)
+        min_channels=1, min_area=0,
+        max_duration=max_duration)
     return fake_peaks['time'], strax.endtime(fake_peaks)
 
 

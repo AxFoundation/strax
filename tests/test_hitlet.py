@@ -5,12 +5,10 @@ import strax
 from hypothesis import given, settings, example
 import hypothesis.extra.numpy as hnp
 import hypothesis.strategies as st
+import unittest
 from strax.testutils import fake_hits
 
 
-# -----------------------
-# Concatenated overlapping hits:
-# -----------------------
 @given(fake_hits,
        fake_hits,
        st.integers(min_value=0, max_value=10),
@@ -66,107 +64,165 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
                 mask = strax.endtime(concat_hits[m])[:-1] - concat_hits[m]['time'][1:]
                 assert np.all(mask < 0), f'Found two hits within {ch} which are touching or overlapping'
 
-# -----------------------------
-# Test for get_hitlets_data.
-# This test is done with some predefined
-# records.
-# -----------------------------
 
-def test_get_hitlets_data():
-    dummy_records = [  # Contains Hitlet #:
-        [[1, 3, 2, 1, 0, 0], ],  # 0
-        [[0, 0, 0, 0, 1, 3],  # 1
-         [2, 1, 0, 0, 0, 0]],  #
-        [[0, 0, 0, 0, 1, 3],  # 2
-         [2, 1, 0, 1, 3, 2], ],  # 3
-        [[0, 0, 0, 0, 1, 2],  # 4
-         [2, 2, 2, 2, 2, 2],
-         [2, 1, 0, 0, 0, 0]],
-        [[2, 1, 0, 1, 3, 2]],  # 5, 6
-        [[2, 2, 2, 2, 2, 2]]  # 7
-    ]
-
-    # Defining the true parameters of the hitlets:
-    true_area = [7, 7, 7, 6, 18, 3, 6, 12]
-    true_time = [10, 28, 46, 51, 68, 88, 91, 104]
-    true_waveform = [[1, 3, 2, 1],
-                     [1, 3, 2, 1],
-                     [1, 3, 2, 1],
-                     [1, 3, 2],
-                     [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
-                     [2, 1],
-                     [1, 3, 2],
-                     [2, 2, 2, 2, 2, 2]
-                     ]
-
-    records = _make_fake_records(dummy_records)
-    hits = strax.find_hits(records, min_amplitude=2)
-    hits = strax.concat_overlapping_hits(hits, (1, 1), (0, 1), 0, float('inf'))
-    hitlets = np.zeros(len(hits), strax.hitlet_with_data_dtype(n_samples=np.max(hits['length'])))
-    strax.refresh_hit_to_hitlets(hits, hitlets)
-    strax.get_hitlets_data(hitlets, records, np.array([1, 1]))
-
-    for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
-        h = hitlets[i]
-        assert h['area'] == a, f'Hitlet {i} has the wrong area'
-        assert np.all(h['data'][:h['length']] == wf), f'Hitlet {i} has the wrong waveform'
-        assert h['time'] == t, f'Hitlet {i} has the wrong starttime'
+def test_create_hits_from_hitlets_empty_hits():
+    hits = np.zeros(0, dtype=strax.hit_dtype)
+    hitlets = strax.create_hitlets_from_hits(hits, (1, 1), (0, 1))
+    assert len(hitlets) == 0, 'Hitlets should be empty'
 
 
-def _make_fake_records(dummy_records):
-    """
-    Creates some specific records to test get_hitlet_data.
-    """
-    nfragments = [len(f) for f in dummy_records]
-    records = np.zeros(np.sum(nfragments), strax.record_dtype(6))
-    records['dt'] = 1
-    time_offset = 10  # Need some start time to avoid negative times
+class TestGetHitletData(unittest.TestCase):
 
-    fragment_ind = 0
-    for dr, nf in zip(dummy_records, nfragments):
-        for ind, f in enumerate(dr):
-            r = records[fragment_ind]
-            r['time'] = time_offset
-            if ind != (nf - 1):
-                r['length'] = len(f)
-            else:
-                r['length'] = len(f) - _count(f)
-            r['data'] = f
-            r['record_i'] = ind
+    def setUp(self):
+        self.test_data = [1, 3, 2, 1, 0, 0]
+        self.test_data_truth = self.test_data[:-2]
 
-            if ind == (nf - 1):
-                time_offset += r['length'] + 10  # +10 to ensure non-overlap
-            else:
-                time_offset += r['length']
+    def make_records_and_hitlets(self, dummy_records):
+        records = self._make_fake_records(dummy_records)
+        hits = strax.find_hits(records, min_amplitude=2)
+        hitlets = strax.create_hitlets_from_hits(hits, (1, 1), (0, 1), 0, float('inf'))
+        return records, hitlets
 
-            fragment_ind += 1
+    def test_inputs_are_empty(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets_empty = np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
+        records_empty = np.zeros(0, dtype=strax.record_dtype(10))
 
-    pnf = 0
-    for nf in nfragments:
-        records['pulse_length'][pnf:nf + pnf] = np.sum(records['length'][pnf:nf + pnf])
-        pnf += nf
-    return records
+        hitlets_result = strax.get_hitlets_data(hitlets_empty, records, np.ones(3000))
+        assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
+
+        hitlets_result = strax.get_hitlets_data(hitlets_empty, records_empty, np.ones(3000))
+        assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
+
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records_empty, np.ones(3000))
 
 
-def _count(data):
-    """
-    Function which returns number of ZLE samples.
-    """
-    data = data[::-1]
-    ZLE = True
-    i = 0
-    while ZLE:
-        if (not data[i] == 0) or (i == len(data)):
-            break
-        i += 1
-    return i
+    def test_to_pe_wrong_shape(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets['channel'] = 2000
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(10))
+
+    def test_get_hitlets_data_for_single_hitlet(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+
+        hitlets = strax.get_hitlets_data(hitlets[0], records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
+
+    def test_data_field_is_empty(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
+
+    def test_get_hitlets_data_without_data_field(self):
+        records, hitlets_with_data = self.make_records_and_hitlets([[self.test_data]])
+        hitlets = np.zeros(len(hitlets_with_data), strax.hitlet_dtype())
+        strax.copy_to_buffer(hitlets_with_data, hitlets, '_copy_hitlets_to_hitlets_without_data')
+
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
+        self._test_data_is_identical(hitlets, [self.test_data_truth])
+
+    def test_to_short_data_field(self):
+        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
+        hitlets_to_short = np.zeros(len(hitlets), dtype=strax.hitlet_with_data_dtype(2))
+        strax.copy_to_buffer(hitlets, hitlets_to_short, '_refresh_hit_to_hitlet')
+        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets_to_short, records, np.ones(3000))
+
+    def test_get_hitlets_data(self):
+        dummy_records = [  # Contains Hitlet #:
+            [[1, 3, 2, 1, 0, 0], ],  # 0
+            [[0, 0, 0, 0, 1, 3],  # 1
+             [2, 1, 0, 0, 0, 0]],  #
+            [[0, 0, 0, 0, 1, 3],  # 2
+             [2, 1, 0, 1, 3, 2], ],  # 3
+            [[0, 0, 0, 0, 1, 2],  # 4
+             [2, 2, 2, 2, 2, 2],
+             [2, 1, 0, 0, 0, 0]],
+            [[2, 1, 0, 1, 3, 2]],  # 5, 6
+            [[2, 2, 2, 2, 2, 2]]  # 7
+        ]
+
+        # Defining the true parameters of the hitlets:
+        true_area = [7, 7, 7, 6, 18, 3, 6, 12]
+        true_time = [10, 28, 46, 51, 68, 88, 91, 104]
+        true_waveform = [[1, 3, 2, 1],
+                         [1, 3, 2, 1],
+                         [1, 3, 2, 1],
+                         [1, 3, 2],
+                         [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                         [2, 1],
+                         [1, 3, 2],
+                         [2, 2, 2, 2, 2, 2]
+                         ]
+
+        records, hitlets = self.make_records_and_hitlets(dummy_records)
+        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(2))
+
+        for i, (a, wf, t) in enumerate(zip(true_area, true_waveform, true_time)):
+            h = hitlets[i]
+            assert h['area'] == a, f'Hitlet {i} has the wrong area'
+            assert np.all(h['data'][:h['length']] == wf), f'Hitlet {i} has the wrong waveform'
+            assert h['time'] == t, f'Hitlet {i} has the wrong starttime'
+
+    @staticmethod
+    def _test_data_is_identical(hitlets, data):
+        for h, d in zip(hitlets, data):
+            data_is_identical = np.all(h['data'][:h['length']] == d)
+            assert data_is_identical, "Did not get the correct waveform"
+
+    def _make_fake_records(self, dummy_records):
+        """
+        Creates some specific records to test get_hitlet_data.
+        """
+        n_fragments = [len(pulse_fragemetns) for pulse_fragemetns in dummy_records]
+        records = np.zeros(np.sum(n_fragments), strax.record_dtype(6))
+        records['dt'] = 1
+        time_offset = 10  # Need some start time to avoid negative times
+
+        fragment_ind = 0
+        for dr, number_of_fragements in zip(dummy_records, n_fragments):
+            for record_i, waveform in enumerate(dr):
+                r = records[fragment_ind]
+                r['time'] = time_offset
+
+                is_not_last_fragment = record_i != (number_of_fragements - 1)
+                if is_not_last_fragment:
+                    r['length'] = len(waveform)
+                else:
+                    r['length'] = len(waveform) - self._count_zle_samples(waveform)
+                r['data'] = waveform
+                r['record_i'] = record_i
+
+                is_last_fragment = record_i == (number_of_fragements - 1)
+                if is_last_fragment:
+                    time_offset += r['length'] + 10  # +10 to ensure non-overlap
+                else:
+                    time_offset += r['length']
+                fragment_ind += 1
+
+        pulse_offset = 0
+        for number_of_fragements in n_fragments:
+            pulse_length = np.sum(records['length'][pulse_offset:number_of_fragements + pulse_offset])
+            records['pulse_length'][pulse_offset:number_of_fragements + pulse_offset] = pulse_length
+            pulse_offset += number_of_fragements
+        return records
+
+    @staticmethod
+    def _count_zle_samples(data):
+        """
+        Function which returns number of ZLE samples.
+        """
+        data = data[::-1]
+        ZLE = True
+        i = 0
+        while ZLE:
+            if (not data[i] == 0) or (i == len(data)):
+                break
+            i += 1
+        return i
 
 
-# -----------------------------
-# Test for hitlet_properties.
-# This test includes the fwxm and
-# refresh_hit_to_hitlets.
-# -----------------------------
 @st.composite
 def hits_n_data(draw, strategy):
     hits = draw(strategy)
@@ -186,35 +242,36 @@ def hits_n_data(draw, strategy):
     return hd
 
 
-
 def test_highest_density_region_width():
     """
     Some unit test for the HDR width estimate.
     """
-    truth_dict = {0.5: [[2/3, 2+1/3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
-    distribution = np.array([1, 7, 1, 1, 0])
+    truth_dict = {0.5: [[2 / 3, 2 + 1 / 3]], 0.8: [0., 4.], 0.9: [-0.25, 4.25]}
     # Some distribution with offset:
-    _test_highest_density_region_width(distribution, truth_dict)
-        
-    
+    _test_highest_density_region_width(np.array([1, 7, 1, 1, 0]), truth_dict)
+
     # Same but with offset (zero missing):
     _test_highest_density_region_width(np.array([1, 7, 1, 1]), truth_dict)
-    
+
     # Two more nasty cases:
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
-    distribution = np.array([1])
     _test_highest_density_region_width(np.array([1]), truth_dict)
-    
+
     truth_dict = {0.5: [[0, 1]], 0.8: [-0.3, 1.3]}
-    distribution = np.array([1, 0])
     _test_highest_density_region_width(np.array([1, 0]), truth_dict)
-    
+
+    # Check that negative data does not raise:
+    res = strax.processing.hitlets.highest_density_region_width(np.array([0, -1, -2]),
+                                                          np.array([0.5]),
+                                                          fractionl_edges=True)
+    assert np.all(np.isnan(res)), 'For empty data HDR is not defined, should return np.nan!'
+
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(distribution,
-                                                            np.array(list(truth_dict.keys())), 
-                                                            fractionl_edges=True)
-    
+                                                                np.array(list(truth_dict.keys())),
+                                                                fractionl_edges=True)
+
     for ind, (fraction, truth) in enumerate(truth_dict.items()):
         mes = f'Found wrong edges for {fraction} in {distribution} expected {truth} but got {res[ind]}.'
         assert np.all(np.isclose(truth, res[ind])), mes
@@ -234,19 +291,19 @@ def test_hitlet_properties(hits_n_data):
 
     hits['time'] += 100
     # Step 1.: Produce fake hits and convert them into hitlets:
+    nsamples = 0
     if len(hits) >= 1:
         nsamples = hits['length'].max()
-    else:
-        nsamples = 2
+    nsamples = np.max((nsamples, 2))
 
     hitlets = np.zeros(len(hits), dtype=strax.hitlet_with_data_dtype(nsamples))
     if len(hitlets):
         assert hitlets['data'].shape[1] >= 2, 'Data buffer is not at least 2 samples long.'
-    strax.refresh_hit_to_hitlets(hits, hitlets)
+    strax.copy_to_buffer(hits, hitlets, '_refresh_hit_to_hitlet_properties_test')
 
     # Testing refresh_hit_to_hitlets for free:
     assert len(hits) == len(hitlets), 'Somehow hitlets and hits have different sizes'
-    # Tetsing interval fields:
+    # Testing interval fields:
     dummy = np.zeros(0, dtype=strax.interval_dtype)
     for name in dummy.dtype.names:
         assert np.all(hitlets[name] == hits[name]), f'The entry of the field {name} did not match between hit and ' \
@@ -257,9 +314,15 @@ def test_hitlet_properties(hits_n_data):
         h = hitlets[ind]
         h['data'][:h['length']] = d[:h['length']]
 
-    strax.hitlet_properties(hitlets)
+    # Step 3.: Add np.nan in data but outside of length:
+    for h in hitlets:
+        if h['length'] < len(h['data']):
+            h['data'][-1] = np.nan
+            # It is enough to test this for a single hitlet:
+            break
 
-    # Step 4.: Apply tests.
+    # Step 4.: Compute properties and apply tests:
+    strax.hitlet_properties(hitlets)
     for ind, d in enumerate(data):
         h = hitlets[ind]
         d = d[:h['length']]
@@ -281,10 +344,10 @@ def test_hitlet_properties(hits_n_data):
                 fwxm = 'fwtm'
 
             amplitude = np.max(d)
-            if np.all(d[0] == d) or np.all(d > amplitude*f):
+            if np.all(d[0] == d) or np.all(d > amplitude * f):
                 # If all samples are either the same or greater than required height FWXM is not defined:
                 mes = 'All samples are the same or larger than require height.'
-                assert np.isnan(h[left]),  mes + f' Left edge for {f} should have been np.nan.'
+                assert np.isnan(h[left]), mes + f' Left edge for {f} should have been np.nan.'
                 assert np.isnan(h[left]), mes + f' FWXM for X={f} should have been np.nan.'
             else:
                 le = np.argwhere(d[:pos_max] <= amplitude * f)
@@ -309,15 +372,18 @@ def test_hitlet_properties(hits_n_data):
                 assert math.isclose(re - le, h[fwxm], rel_tol=10**-4,
                                     abs_tol=10**-4), f'FWHM does not match for {f}'
 
-    # Step 5.: Unity test for not defined get_fhwm-cases:
+
+def test_not_defined_get_fhwm():
     # This is a specific unity test for some edge-cases in which the full
     # width half maximum is not defined.
-    odd_hitlets = np.zeros(3, dtype=strax.hitlet_with_data_dtype(10))
+    odd_hitlets = np.zeros(4, dtype=strax.hitlet_with_data_dtype(10))
     odd_hitlets[0]['data'][:5] = [2, 2, 3, 2, 2]
     odd_hitlets[0]['length'] = 5
     odd_hitlets[1]['data'][:2] = [5, 5]
     odd_hitlets[1]['length'] = 2
     odd_hitlets[2]['length'] = 3
+    odd_hitlets[3]['data'][:3] = [-1, -2, 0]
+    odd_hitlets[3]['length'] = 3
 
     for oh in odd_hitlets:
         res = strax.get_fwxm(oh)
@@ -325,6 +391,7 @@ def test_hitlet_properties(hits_n_data):
                'However, the FWHM is not defined and the return should be nan!'
                )
         assert np.all(np.isnan(res)), mes
+
 
 # ------------------------
 # Entropy test
@@ -340,19 +407,19 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
 @settings(deadline=None)
 # Example that failed once
 @example(
-    data=np.array([7.9956017,  6.6565537, -7.7413940, -2.8149414, -2.8149414,
+    data=np.array([7.9956017, 6.6565537, -7.7413940, -2.8149414, -2.8149414,
                    9.9609370, -2.8149414, -2.8149414, -2.8149414, -2.8149414],
                   dtype=np.float32),
     size_template_and_ind_max_template=[0, 1])
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
     Test for conditional entropy. For the template larger int value defines
-    size of the tempalte, smaller int value position of the maximum.
+    size of the template, smaller int value position of the maximum.
     """
-    
+
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
     ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
-    
+
     # Make dummy hitlet:
     data = data.astype(np.float32)
     len_data = len(data)
@@ -370,7 +437,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         template = template / np.sum(template)
 
         e2 = - np.sum(d[m] * np.log(d[m] / template))
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2 * 10**-4,
+                            abs_tol=10**-4), f"Test 1.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 2.: Arbitrary template:
         template = np.ones(size_template, dtype=np.float32)
@@ -382,7 +450,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e2 = _align_compute_entropy(d, template)
 
         e1 = strax.conditional_entropy(hitlet, template)[0]
-        assert math.isclose(e1, e2, rel_tol=2*10**-4, abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=2 * 10**-4,
+                            abs_tol=10**-4), f"Test 2.: Entropy function: {e1}, entropy test: {e2}"
 
         # Test 3.: Squared waveform:
         # Same as before but this time we square the template and the
@@ -398,7 +467,8 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e2 = _align_compute_entropy(d, template)
 
         e1 = strax.conditional_entropy(hitlet, template, square_data=True)[0]
-        assert math.isclose(e1, e2, rel_tol=10**-4, abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
+        assert math.isclose(e1, e2, rel_tol=10**-4,
+                            abs_tol=10**-4), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
     else:
         assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
 

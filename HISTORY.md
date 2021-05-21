@@ -1,3 +1,56 @@
+0.15.2 / 2021-05-20
+---------------------
+- Speed up run selection by ~100x for fixed defaults (#440)
+- Use zstd for from base-env for testing (#441)
+- Add MB/s pbar (#442)
+
+
+0.15.1 / 2021-05-04
+---------------------
+- Refactor hitlets (#430, #436)
+- Update classifiers for pipy #437
+- Allow Py39 in travis tests (#427) 
+
+0.15.0 / 2021-04-16
+---------------------
+- Use int32 for peak dt, fix #397 (#403, #426)
+- max peak duration (#420)
+- Loopplugin touching windows + plugin documentation (#424)
+- Move apply selection from context to utils (#425)
+- Context testing functions + copy_to_frontend documented (#423)
+- Apply function to data & test (#422)
+
+0.14.0 / 2021-04-09
+---------------------
+- Check data availability for single run (#416) 
+
+0.13.11 / 2021-04-02
+---------------------
+- Allow re-compression at copy to frontend (#407)
+- Bug fix, in processing hitlets (#411)
+- Cleanup requirements for boto3 (#414)
+
+0.13.10 / 2021-03-24
+---------------------
+- Allow multiple targets to be computed simultaneously (#408, #409)
+- Numbafy split by containment (#402)
+- Infer start/stop from any dtype (#405)
+- Add property provided_dtypes to Context (#404)
+- Updated OverlapWindowPlugin docs (#401)
+
+0.13.9 / 2021-02-22
+---------------------
+- Clip progress progressbar (#399)
+
+0.13.8 / 2021-02-09
+---------------------
+- Specify saver timeout at context level (#394)
+- Allow dynamic function creation for dtype copy (#395)
+- Close inlined savers on exceptions in multiprocessing (#390)
+- Allow option to be overwritten to allow subclassing (#392)
+- Fix availability checks (#389)
+- Don't print for temp plugins (#391)
+
 0.13.7 / 2021-01-29
 ---------------------
 - Warn for non saved plugins in run selection (#387)
