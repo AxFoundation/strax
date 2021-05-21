@@ -213,7 +213,7 @@ class ThreadedMailboxProcessor:
         final_generator = self.mailboxes[target].subscribe()
 
         self.log.debug("Starting threads")
-        for m in self.mailboxes.values():
+        for m in list(self.mailboxes.values()):
             m.start()
 
         self.log.debug(f"Yielding {target}")
