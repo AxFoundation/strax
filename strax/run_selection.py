@@ -167,7 +167,7 @@ def scan_runs(self: strax.Context,
 def select_runs(self, run_mode=None, run_id=None,
                 include_tags=None, exclude_tags=None,
                 available=tuple(),
-                pattern_type='fnmatch', ignore_underscore=True):
+                pattern_type='fnmatch', ignore_underscore=False):
     """Return pandas.DataFrame with basic info from runs
     that match selection criteria.
     :param run_mode: Pattern to match run modes (reader.ini.name)
