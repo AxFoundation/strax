@@ -627,10 +627,29 @@ class OverlapWindowPlugin(Plugin):
         # Again, take a bit of overkill for good measure
         cache_inputs_beyond = int(self.sent_until
                                   - 2 * self.get_window_size() - 1)
-        for k, v in kwargs.items():
-            _, self.cached_input[k] = v.split(t=cache_inputs_beyond,
-                                              allow_early_split=True)
 
+        # Cache inputs, make sure that the chunks start at the same time to
+        # prevent issues in input buffers later on
+        prev_split = cache_inputs_beyond
+        max_trials = 10
+        for counter in range(max_trials):
+            for k, v in kwargs.items():
+                _, self.cached_input[k] = v.split(t=prev_split,
+                                                  allow_early_split=True)
+                prev_split = self.cached_input[k].start
+            n_start_times = len(set([c.start for c in self.cached_input.values()]))
+            if n_start_times == 1:
+                self.log.debug(
+                    f'Success after {counter}. '
+                    f'Extra time = {cache_inputs_beyond-prev_split} ns')
+                break
+            else:
+                self.log.debug(
+                    f'Inconsistent start times of the cashed chunks after'
+                    f' {counter}/{max_trials} passes.\nChunks {self.cached_input}')
+        else:
+            raise ValueError(f'Buffer start time inconsistency cannot be '
+                             f'resolved after {max_trials} tries')
         return result
 
 
