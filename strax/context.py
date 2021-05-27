@@ -1052,7 +1052,12 @@ class Context:
         # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
         pbar.mbs.append((nbytes/1e6)/seconds_per_chunk)
-        postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {np.mean(pbar.mbs):.1f} MB/s'
+        mbs = np.mean(pbar.mbs)
+        if mbs < 1:
+            rate = f'{mbs*1000:.1f} kB/s'
+        else:
+            rate = f'{mbs:.1f} MB/s'
+        postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
