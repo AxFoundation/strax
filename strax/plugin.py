@@ -637,8 +637,8 @@ class OverlapWindowPlugin(Plugin):
                 _, self.cached_input[k] = v.split(t=prev_split,
                                                   allow_early_split=True)
                 prev_split = self.cached_input[k].start
-            n_start_times = len(set([c.start for c in self.cached_input.values()]))
-            if n_start_times == 1:
+            chunk_starts_are_equal = len(set([chunk.start for chunk in self.cached_input.values()])) == 1
+            if chunk_starts_are_equal :
                 self.log.debug(
                     f'Success after {counter}. '
                     f'Extra time = {cache_inputs_beyond-prev_split} ns')
