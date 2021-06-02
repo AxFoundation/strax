@@ -612,7 +612,7 @@ class Context:
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
-        savers = collections.defaultdict(list)
+        savers = dict()
         seen = set()
         to_compute = dict()
 
@@ -736,7 +736,7 @@ class Context:
 
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
-                if d_to_save in savers and len(savers[d_to_save]):
+                if savers.get(d_to_save):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers
                     assert p.multi_output
@@ -762,13 +762,15 @@ class Context:
                             pass
                     # If we get here, we must try to save
                     try:
-                        savers[d_to_save].append(sf.saver(
+                        saver = sf.saver(
                             key,
                             metadata=p.metadata(
                                 run_id,
                                 d_to_save),
-                            saver_timeout=self.context_config['saver_timeout']
-                        ))
+                            saver_timeout=self.context_config['saver_timeout'])
+                        # Now that we are surely saving, make an entry in savers
+                        savers.setdefault(d_to_save, [])
+                        savers[d_to_save].append(saver)
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass

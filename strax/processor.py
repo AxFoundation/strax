@@ -104,7 +104,10 @@ class ThreadedMailboxProcessor:
         #  - we should discard (produced but neither required not saved)
         produced = set(components.loaders)
         required = set(components.targets)
-        saved = set(components.savers.keys())
+        # Do not just take keys from savers, perhaps some have no savers are under them!
+        # (see #444)
+        saved = set([k for k, v in components.savers.items()
+                     if v])
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
