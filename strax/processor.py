@@ -208,6 +208,10 @@ class ThreadedMailboxProcessor:
                 if max_m is not None:
                     m.max_messages = max_m
 
+        # Remove defaultdict-like behaviour; all mailboxes should
+        # have been made by now. See #444
+        self.mailboxes = dict(self.mailboxes)
+
     def iter(self):
         target = self.components.targets[0]
         final_generator = self.mailboxes[target].subscribe()
