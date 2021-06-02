@@ -799,7 +799,7 @@ class Context:
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
-            savers=dict(savers),
+            savers=savers,
             targets=strax.to_str_tuple(final_plugin))
 
     def estimate_run_start_and_end(self, run_id, targets=None):
