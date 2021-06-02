@@ -104,8 +104,8 @@ class ThreadedMailboxProcessor:
         #  - we should discard (produced but neither required not saved)
         produced = set(components.loaders)
         required = set(components.targets)
-        # Do not just take keys from savers, perhaps some have no savers are under them!
-        # (see #444)
+        # Do not just take keys from savers, perhaps some keys
+        # have no savers are under them (see #444)
         saved = set([k for k, v in components.savers.items()
                      if v])
         for p in components.plugins.values():
