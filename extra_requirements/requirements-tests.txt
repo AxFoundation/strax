@@ -1,41 +1,24 @@
-# File for the requirements of straxen with the automated tests
-
-## python 3.x specifics
-# Tensorflow
-tensorflow~=2.5.0 ; python_version=="3.6"
-tensorflow~=2.4 ; python_version>="3.7"
-
-# Dask
-dask~=2021.5; python_version>="3.7"
-dask<=2021.2.0; python_version=="3.6"
-
-# Importlib-metadata
-importlib-metadata==4.4.0; python_version=="3.7"
-
-
-## Other requirements
-blosc==1.10.2      # Strax dependency
+# File for the requirements of strax with the automated tests
+blosc==1.10.2
 boltons==21.0.0
-datashader==0.12.1
-dill==0.3.3        # Strax dependency
+dill==0.3.3
 coveralls==3.1.0
-commentjson==0.9.0
 coverage==5.5
 flake8==3.9.2
-holoviews==1.14.4
-ipywidgets==7.6.3
 hypothesis==6.13.11
-jupyter-client==6.1.12  # (for ipywidgets)
-npshmex==0.2.1     # Strax dependency
-numba==0.53.1      # Strax dependency
+immutabledict==2.0.0
+lz4==3.1.3
+npshmex==0.2.1
+numba==0.53.1
+numexpr==2.7.3
 numpy==1.19.5
-pandas==1.1.5      # Strax dependency
-psutil==5.8.0      # Strax dependency
+pandas==1.1.5
+packaging==20.9
+pdmongo==pdmongo 0.1.0
+psutil==5.8.0
+pymongo=3.11.4
 pytest==6.2.4
 pytest-cov==2.12.1
-scikit-learn==0.24.2
 scipy==1.5.4
 tqdm==4.61.0
-xarray==0.16.2
-utilix==0.6.0
-zstd==1.5.0.2      # Strax dependency
+zstd==1.5.0.2
