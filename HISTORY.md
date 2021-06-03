@@ -1,3 +1,13 @@
+0.15.3 / 2021-06-03
+---------------------
+- Match cached buffer chunk start times OverlapWindowPlugin (#450)
+- Prevent late creation of unattended mailboxes (#452)
+- Temporary patch div/zero in hitlets (#447)
+- Relax zstd requirements again (#443)
+- Don't ignore if pattern also startswith underscore (#445)
+- kB/s pbar (#449)
+
+
 0.15.2 / 2021-05-20
 ---------------------
 - Speed up run selection by ~100x for fixed defaults (#440)
