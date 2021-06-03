@@ -12,7 +12,7 @@ def open_requirements(path):
 
 requires = open_requirements('requirements.txt')
 docs_requires = open_requirements('extra_requirements/requirements-docs.txt')
-tests_requires = open_requirements('extra_requirements/requirements-tests-docs.txt')
+tests_requires = open_requirements('extra_requirements/requirements-tests.txt')
 
 with open('README.md') as file:
     readme = file.read()
