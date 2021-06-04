@@ -22,7 +22,7 @@ jobs:
       fail-fast: true
       matrix:
         python-version: [3.6, 3.7, 3.8, 3.9]
-        coverage: [true, false]
+        test: [coveralls, pytest]
         # Only run coverage on py3.8
         exclude:
           - python-version: 3.6
@@ -44,15 +44,14 @@ jobs:
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
         if:  matrix.coverage == false
-        run: python setup.py test -v
+        run: pytest -v --durations 0
       - name: Coveralls
         if:  matrix.coverage == true
         env:
           NUMBA_DISABLE_JIT: 1
         run: |
-              coverage json --contexts='strax'
-              ls
-              git status
+              coverage run --source=strax setup.py test -v
+              coverage json
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
