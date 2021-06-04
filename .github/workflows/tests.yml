@@ -16,7 +16,7 @@ on:
 
 jobs:
   update:
-    name: Tests
+    name: tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -49,18 +49,9 @@ jobs:
         if:  matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
               coverage run --source=strax setup.py test -v
-              coverage json
-      - name: Coveralls
-        if:  matrix.test == 'coveralls'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run:
-          coveralls --service=github
-#        uses: coverallsapp/github-action@master
-#        with:
-#          path-to-lcov: coverage.json
-#          github-token: ${{ secrets.GITHUB_TOKEN }}
+              coveralls --service=github
       - name: goodbye
         run: echo goodbye
