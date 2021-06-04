@@ -16,10 +16,10 @@ on:
 
 jobs:
   update:
-    name: Pytest
+    name: Tests
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         python-version: [3.6, 3.7, 3.8, 3.9]
         test: ['coveralls', 'pytest']
@@ -54,9 +54,13 @@ jobs:
               coverage json
       - name: Coveralls
         if:  matrix.test == 'coveralls'
-        uses: coverallsapp/github-action@master
-        with:
-          path-to-lcov: coverage.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run:
+          coveralls
+#        uses: coverallsapp/github-action@master
+#        with:
+#          path-to-lcov: coverage.json
+#          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: goodbye
         run: echo goodbye
