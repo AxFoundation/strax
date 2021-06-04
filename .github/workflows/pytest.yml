@@ -50,7 +50,7 @@ jobs:
         env:
           NUMBA_DISABLE_JIT: 1
         run: |
-              coverage run --source=straxen setup.py test -v
+              coverage json --include='strax/*'
               ls
               git status
       - name: Coveralls
