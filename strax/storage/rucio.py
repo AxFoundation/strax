@@ -2,7 +2,6 @@ import os.path as osp
 import strax
 from strax.storage.files import dirname_to_prefix
 export, __all__ = strax.exporter()
-import strax
 import os
 import hashlib
 from bson import json_util
