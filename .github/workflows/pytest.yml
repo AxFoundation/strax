@@ -1,5 +1,5 @@
 # Test strax on each PR
-name: pytest
+name: tests
 
 # Trigger this code when a new release is published
 on:
@@ -16,21 +16,21 @@ on:
 
 jobs:
   update:
-    name: Pytest
+    name: "${{ matrix.test }}_py${{ matrix.python-version }}"
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         python-version: [3.6, 3.7, 3.8, 3.9]
-        coverage: [true, false]
+        test: ['coveralls', 'pytest']
         # Only run coverage on py3.8
         exclude:
           - python-version: 3.6
-            coverage: true
+            test: coveralls
           - python-version: 3.7
-            coverage: true
+            test: coveralls
           - python-version: 3.9
-            coverage: true
+            test: coveralls
     steps:
       - name: Setup python
         uses: actions/setup-python@v2
@@ -43,16 +43,15 @@ jobs:
             pip install -r extra_requirements/requirements-tests.txt
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
-        if:  matrix.coverage == false
-        run: python setup.py test -v
+        if:  matrix.test == 'pytest'
+        run: pytest -v --durations 0
       - name: Coveralls
-        if:  matrix.coverage == true
+        if:  matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
-        run: coverage run --source=straxen setup.py test -v
-      - name: Coveralls
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+              coverage run --source=strax setup.py test -v
+              coveralls --service=github
       - name: goodbye
         run: echo goodbye

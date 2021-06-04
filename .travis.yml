@@ -46,8 +46,3 @@ install:
 
 script:
   - coverage run --source=strax setup.py test
-
-# Upload code coverage information
-# Only do this if not jitting, otherwise we miss those tests.
-after_success:
-  - if [ $NUMBA_DISABLE_JIT ]; then coveralls; fi
