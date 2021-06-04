@@ -50,7 +50,7 @@ jobs:
         env:
           NUMBA_DISABLE_JIT: 1
         run: |
-              coverage json --include='strax/*'
+              coverage json --contexts='strax'
               ls
               git status
       - name: Coveralls
