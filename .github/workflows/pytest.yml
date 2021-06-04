@@ -49,10 +49,11 @@ jobs:
         if:  matrix.coverage == true
         env:
           NUMBA_DISABLE_JIT: 1
-        run: coverage run --source=straxen setup.py test -v
+        run: coverage run --source=straxen setup.py test -v  --output=coverage.json
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
+          path-to-lcov: coverage.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: goodbye
         run: echo goodbye
