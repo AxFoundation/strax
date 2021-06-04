@@ -57,7 +57,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run:
-          coveralls
+          coveralls --service=github
 #        uses: coverallsapp/github-action@master
 #        with:
 #          path-to-lcov: coverage.json
