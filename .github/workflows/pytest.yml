@@ -26,11 +26,11 @@ jobs:
         # Only run coverage on py3.8
         exclude:
           - python-version: 3.6
-            coverage: true
+            test: coveralls
           - python-version: 3.7
-            coverage: true
+            test: coveralls
           - python-version: 3.9
-            coverage: true
+            test: coveralls
     steps:
       - name: Setup python
         uses: actions/setup-python@v2
@@ -43,16 +43,17 @@ jobs:
             pip install -r extra_requirements/requirements-tests.txt
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
-        if:  matrix.coverage == false
+        if:  matrix.test == pytest
         run: pytest -v --durations 0
       - name: Coveralls
-        if:  matrix.coverage == true
+        if:  matrix.coveralls == true
         env:
           NUMBA_DISABLE_JIT: 1
         run: |
               coverage run --source=strax setup.py test -v
               coverage json
       - name: Coveralls
+        if:  matrix.coveralls == true
         uses: coverallsapp/github-action@master
         with:
           path-to-lcov: coverage.json
