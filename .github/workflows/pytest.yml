@@ -49,7 +49,10 @@ jobs:
         if:  matrix.coverage == true
         env:
           NUMBA_DISABLE_JIT: 1
-        run: coverage run --source=straxen setup.py test -v  --output=coverage.json
+        run: |
+              coverage run --source=straxen setup.py test -v
+              ls
+              git status
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
