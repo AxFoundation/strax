@@ -1,5 +1,5 @@
 # Test strax on each PR
-name: pytest
+name: tests
 
 # Trigger this code when a new release is published
 on:
@@ -16,7 +16,6 @@ on:
 
 jobs:
   update:
-    name: tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
