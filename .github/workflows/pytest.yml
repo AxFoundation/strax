@@ -16,6 +16,7 @@ on:
 
 jobs:
   update:
+    name: ${{ matrix.test }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
