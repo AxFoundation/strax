@@ -235,7 +235,7 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
                 p['time'] // dt, n_p)
 
             max_in_record = r['data'][r_start:r_end].max() * multiplier
-            p['saturated_channel'][ch] |= np.int8(max_in_record >= r['baseline'])
+            p['saturated_channel'][ch] |= np.int8(max_in_record >= np.int16(r['baseline']))
 
             bl_fpart = r['baseline'] % 1
             # TODO: check numba does casting correctly here!
