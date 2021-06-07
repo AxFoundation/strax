@@ -69,7 +69,6 @@ class ThreadedMailboxProcessor:
             # Each plugin works completely in its own thread.
             self.process_executor = self.thread_executor = None
             lazy = allow_lazy
-            mp_plugins = {}
         else:
             lazy = False
             # Use executors for parallelization of computations.
@@ -115,8 +114,7 @@ class ThreadedMailboxProcessor:
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
-        to_flow_freely = (produced - required)
-        to_flow_freely |= set(mp_plugins.keys())
+        to_flow_freely = produced - required
         to_discard = to_flow_freely - saved
         self.log.debug(f'to_flow_freely {to_flow_freely}'
                        f'to_discard {to_discard}'
@@ -228,47 +226,52 @@ class ThreadedMailboxProcessor:
 
     def iter(self):
         target = self.components.targets[0]
-        if target not in self.mailboxes:
-            # Not allowed since #452
-            raise KeyError(f'{target} is not in {self.mailboxes}')
-        final_generator = self.mailboxes[target].subscribe()
+
+        if target in self.mailboxes:
+            final_generator = self.mailboxes[target].subscribe()
+        else:
+            # We might not know who is the final generator if everything
+            # is parallel.q
+            final_generator = None
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():
+            self.log.debug(f'start {m}')
             m.start()
 
         self.log.debug(f"Yielding {target}")
         traceback, exc, reason = None, None, None
 
-        try:
-            yield from final_generator
+        if final_generator is not None:
+            try:
+                yield from final_generator
 
-        # GeneratorExit results from exception in caller
-        # (on garbage collection, .close() is called, see PEP342)
-        except (Exception, GeneratorExit) as e:
-            self.log.fatal(f"Target Mailbox ({target}) killed, "
-                           f"exception {type(e)}, message {e}")
-            if isinstance(e, strax.MailboxKilled):
-                _, exc, traceback = reason = e.args[0]
-            else:
-                exc = e
-                reason = (e.__class__, e, sys.exc_info()[2])
-                traceback = reason[2]
+            # GeneratorExit results from exception in caller
+            # (on garbage collection, .close() is called, see PEP342)
+            except (Exception, GeneratorExit) as e:
+                self.log.fatal(f"Target Mailbox ({target}) killed, "
+                               f"exception {type(e)}, message {e}")
+                if isinstance(e, strax.MailboxKilled):
+                    _, exc, traceback = reason = e.args[0]
+                else:
+                    exc = e
+                    reason = (e.__class__, e, sys.exc_info()[2])
+                    traceback = reason[2]
 
-            # We will reraise it in just a moment...
+                # We will reraise it in just a moment...
 
-        if exc is not None:
-            if isinstance(exc, GeneratorExit):
-                print("Main generator exited irregularly?!")
-                reason[2] = (
-                    "Hm, interesting. Most likely an exception was thrown "
-                    "outside strax, but we did not handle it properly.")
+            if exc is not None:
+                if isinstance(exc, GeneratorExit):
+                    print("Main generator exited irregularly?!")
+                    reason[2] = (
+                        "Hm, interesting. Most likely an exception was thrown "
+                        "outside strax, but we did not handle it properly.")
 
-            # Kill the mailboxes
-            for m in self.mailboxes.values():
-                if m != target:
-                    self.log.debug(f"Killing {m}")
-                    m.kill(upstream=True, reason=reason)
+                # Kill the mailboxes
+                for m in self.mailboxes.values():
+                    if m != target:
+                        self.log.debug(f"Killing {m}")
+                        m.kill(upstream=True, reason=reason)
 
         self.log.debug("Closing threads")
         for m in self.mailboxes.values():
