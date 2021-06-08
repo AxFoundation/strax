@@ -68,11 +68,17 @@ def compute_index_of_fraction(peak, fractions_desired, result):
 
 
 @export
-def compute_widths(peaks):
+def compute_widths(peaks, select_peaks_indices=None):
     """Compute widths in ns at desired area fractions for peaks
     returns (n_peaks, n_widths) array
     """
     if not len(peaks):
+        return
+    if select_peaks_indices is None:
+        select_peaks_indices = np.arange(len(peaks))
+    if isinstance(select_peaks_indices, list):
+        select_peaks_indices = np.array(select_peaks_indices, int)
+    if not len(select_peaks_indices):
         return
 
     desired_widths = np.linspace(0, 1, len(peaks[0]['width']))
@@ -86,9 +92,9 @@ def compute_widths(peaks):
     # We lose the 50% fraction with this operation, let's add it back
     desired_fr = np.sort(np.unique(np.append(desired_fr, [0.5])))
 
-    fr_times = index_of_fraction(peaks, desired_fr)
-    fr_times *= peaks['dt'].reshape(-1, 1)
+    fr_times = index_of_fraction(peaks[select_peaks_indices], desired_fr)
+    fr_times *= peaks['dt'][select_peaks_indices].reshape(-1, 1)
 
     i = len(desired_fr) // 2
-    peaks['width'] = fr_times[:, i:] - fr_times[:, ::-1][:, i:]
-    peaks['area_decile_from_midpoint'] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
+    peaks['width'][select_peaks_indices] = fr_times[:, i:] - fr_times[:, ::-1][:, i:]
+    peaks['area_decile_from_midpoint'][select_peaks_indices] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
