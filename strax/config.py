@@ -9,7 +9,7 @@ export, __all__ = strax.exporter()
 # Placeholder value for omitted values.
 # Use instead of None since None might be a proper value/default
 OMITTED = '<OMITTED>'
-__all__.append('OMITTED')
+__all__ += 'OMITTED InvalidConfiguration'.split()
 
 
 @export
@@ -74,6 +74,8 @@ class Option:
          - Callable. Will be called with run_id, must return value for run.
          - List [(start_run_id, value), ..,] for values specified by range of
            runs.
+         "default_by_run" can only be usd in contexts where the context option
+         "use_per_run_defaults" is set to True
         :param child_option: If true option is marked as a child_option. All
             options which are marked as a child overwrite the corresponding parent
             option. Removes also the corresponding parent option from the lineage.

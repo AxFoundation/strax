@@ -1,3 +1,26 @@
+0.15.3 / 2021-06-03
+---------------------
+- Match cached buffer chunk start times OverlapWindowPlugin (#450)
+- Prevent late creation of unattended mailboxes (#452)
+- Temporary patch div/zero in hitlets (#447)
+- Relax zstd requirements again (#443)
+- Don't ignore if pattern also startswith underscore (#445)
+- kB/s pbar (#449)
+
+
+0.15.2 / 2021-05-20
+---------------------
+- Speed up run selection by ~100x for fixed defaults (#440)
+- Use zstd for from base-env for testing (#441)
+- Add MB/s pbar (#442)
+
+
+0.15.1 / 2021-05-04
+---------------------
+- Refactor hitlets (#430, #436)
+- Update classifiers for pipy #437
+- Allow Py39 in travis tests (#427) 
+
 0.15.0 / 2021-04-16
 ---------------------
 - Use int32 for peak dt, fix #397 (#403, #426)

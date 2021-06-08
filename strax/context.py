@@ -260,6 +260,7 @@ class Context:
             already_seen.append(plugin)
 
             for option, items in plugin.takes_config.items():
+                self._per_run_default_allowed_check(option, items)
                 try:
                     # Looping over the options of the new plugin and check if
                     # they can be found in the already registered plugins:
@@ -524,6 +525,16 @@ class Context:
 
         return plugins
 
+    def _per_run_default_allowed_check(self, option_name, option):
+        """Check if an option of a registered plugin is allowed"""
+        per_run_default = option.default_by_run != strax.OMITTED
+        not_overwritten = option_name not in self.config
+        per_run_is_forbidden = not self.context_config['use_per_run_defaults']
+        if per_run_default and not_overwritten and per_run_is_forbidden:
+            raise strax.InvalidConfiguration(
+                f'{option_name} is specified as a per-run-default which is not '
+                f'allowed by the context')
+
     @staticmethod
     def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
         """
@@ -601,7 +612,7 @@ class Context:
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
-        savers = collections.defaultdict(list)
+        savers = dict()
         seen = set()
         to_compute = dict()
 
@@ -725,7 +736,7 @@ class Context:
 
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
-                if d_to_save in savers and len(savers[d_to_save]):
+                if savers.get(d_to_save):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers
                     assert p.multi_output
@@ -751,13 +762,15 @@ class Context:
                             pass
                     # If we get here, we must try to save
                     try:
-                        savers[d_to_save].append(sf.saver(
+                        saver = sf.saver(
                             key,
                             metadata=p.metadata(
                                 run_id,
                                 d_to_save),
-                            saver_timeout=self.context_config['saver_timeout']
-                        ))
+                            saver_timeout=self.context_config['saver_timeout'])
+                        # Now that we are surely saving, make an entry in savers
+                        savers.setdefault(d_to_save, [])
+                        savers[d_to_save].append(saver)
                     except strax.DataNotAvailable:
                         # This frontend cannot save. Too bad.
                         pass
@@ -786,7 +799,7 @@ class Context:
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
-            savers=dict(savers),
+            savers=savers,
             targets=strax.to_str_tuple(final_plugin))
 
     def estimate_run_start_and_end(self, run_id, targets=None):
@@ -958,6 +971,7 @@ class Context:
                                                          progress_bar=progress_bar)
             with _p as pbar:
                 pbar.last_print_t = time.time()
+                pbar.mbs = []
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
                     if not isinstance(result, strax.Chunk):
@@ -975,7 +989,7 @@ class Context:
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
-                        pbar, t_start, t_end, n_chunks, result.end)
+                        pbar, t_start, t_end, n_chunks, result.end, result.nbytes)
                     yield result
             _p.close()
 
@@ -1025,7 +1039,7 @@ class Context:
         return pbar, t_start, t_end
 
     @staticmethod
-    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end):
+    def _update_progress_bar(pbar, t_start, t_end, n_chunks, chunk_end, nbytes):
         """Do some tqdm voodoo to get the progress bar for st.get_iter"""
         if t_end - t_start > 0:
             fraction_done = (chunk_end - t_start) / (t_end - t_start)
@@ -1039,7 +1053,13 @@ class Context:
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
-        postfix = f'Last chunk: {seconds_per_chunk:.2f} s. #chunks {n_chunks}'
+        pbar.mbs.append((nbytes/1e6)/seconds_per_chunk)
+        mbs = np.mean(pbar.mbs)
+        if mbs < 1:
+            rate = f'{mbs*1000:.1f} kB/s'
+        else:
+            rate = f'{mbs:.1f} MB/s'
+        postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
