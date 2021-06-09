@@ -160,6 +160,7 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             lazy=lazy,
+                            # make sure to subscribe the outputs of the mp_plugins
                             mailboxes={k: self.mailboxes[k] for k in p.provides},
                             flow_freely=to_flow_freely,
                             outputs=p.provides))
@@ -242,36 +243,36 @@ class ThreadedMailboxProcessor:
         self.log.debug(f"Yielding {target}")
         traceback, exc, reason = None, None, None
 
-        if final_generator is not None:
-            try:
-                yield from final_generator
 
-            # GeneratorExit results from exception in caller
-            # (on garbage collection, .close() is called, see PEP342)
-            except (Exception, GeneratorExit) as e:
-                self.log.fatal(f"Target Mailbox ({target}) killed, "
-                               f"exception {type(e)}, message {e}")
-                if isinstance(e, strax.MailboxKilled):
-                    _, exc, traceback = reason = e.args[0]
-                else:
-                    exc = e
-                    reason = (e.__class__, e, sys.exc_info()[2])
-                    traceback = reason[2]
+        try:
+            yield from final_generator
 
-                # We will reraise it in just a moment...
+        # GeneratorExit results from exception in caller
+        # (on garbage collection, .close() is called, see PEP342)
+        except (Exception, GeneratorExit) as e:
+            self.log.fatal(f"Target Mailbox ({target}) killed, "
+                           f"exception {type(e)}, message {e}")
+            if isinstance(e, strax.MailboxKilled):
+                _, exc, traceback = reason = e.args[0]
+            else:
+                exc = e
+                reason = (e.__class__, e, sys.exc_info()[2])
+                traceback = reason[2]
 
-            if exc is not None:
-                if isinstance(exc, GeneratorExit):
-                    print("Main generator exited irregularly?!")
-                    reason[2] = (
-                        "Hm, interesting. Most likely an exception was thrown "
-                        "outside strax, but we did not handle it properly.")
+            # We will reraise it in just a moment...
 
-                # Kill the mailboxes
-                for m in self.mailboxes.values():
-                    if m != target:
-                        self.log.debug(f"Killing {m}")
-                        m.kill(upstream=True, reason=reason)
+        if exc is not None:
+            if isinstance(exc, GeneratorExit):
+                print("Main generator exited irregularly?!")
+                reason[2] = (
+                    "Hm, interesting. Most likely an exception was thrown "
+                    "outside strax, but we did not handle it properly.")
+
+            # Kill the mailboxes
+            for m in self.mailboxes.values():
+                if m != target:
+                    self.log.debug(f"Killing {m}")
+                    m.kill(upstream=True, reason=reason)
 
         self.log.debug("Closing threads")
         for m in self.mailboxes.values():
