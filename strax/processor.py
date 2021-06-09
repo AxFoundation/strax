@@ -104,7 +104,10 @@ class ThreadedMailboxProcessor:
         #  - we should discard (produced but neither required not saved)
         produced = set(components.loaders)
         required = set(components.targets)
-        saved = set(components.savers.keys())
+        # Do not just take keys from savers, perhaps some keys
+        # have no savers are under them (see #444)
+        saved = set([k for k, v in components.savers.items()
+                     if v])
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
@@ -207,6 +210,10 @@ class ThreadedMailboxProcessor:
                 max_m = components.plugins[d].max_messages
                 if max_m is not None:
                     m.max_messages = max_m
+
+        # Remove defaultdict-like behaviour; all mailboxes should
+        # have been made by now. See #444
+        self.mailboxes = dict(self.mailboxes)
 
     def iter(self):
         target = self.components.targets[0]

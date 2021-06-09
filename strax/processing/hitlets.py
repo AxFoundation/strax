@@ -352,6 +352,9 @@ def get_fwxm(hitlet, fraction=0.5):
         # before maximum and go left
         lbi = (index_maximum - 1) - lbi  # start sample minus samples we went to the left
         m = data[lbi + 1] - lbs  # divided by 1 sample
+        if m == 0:
+            # TODO No idea how this happened, we need to fix this
+            return np.nan, np.nan
         left_edge = lbi + (max_val - lbs) / m + 0.5
     else:
         # There is no data before the maximum:
@@ -362,6 +365,9 @@ def get_fwxm(hitlet, fraction=0.5):
         rbi, rbs = _get_fwxm_boundary(post_max, max_val)  # Starting after maximum and go right
         rbi += 1 + index_maximum  # sample to the right plus start
         m = data[rbi - 1] - rbs
+        if m == 0:
+            # TODO No idea how this happened, we need to fix this
+            return np.nan, np.nan
         right_edge = rbi - (max_val - rbs) / m + 0.5
     else:
         right_edge = len(data)

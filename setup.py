@@ -1,9 +1,18 @@
 import setuptools
 
+
 # Get requirements from requirements.txt, stripping the version tags
-with open('requirements.txt') as f:
-    requires = [x.strip()
-                for x in f.readlines()]
+def open_requirements(path):
+    with open(path) as f:
+        requires = [
+            r.split('/')[-1] if r.startswith('git+') else r
+            for r in f.read().splitlines()]
+    return requires
+
+
+requires = open_requirements('requirements.txt')
+docs_requires = open_requirements('extra_requirements/requirements-docs.txt')
+tests_requires = open_requirements('extra_requirements/requirements-tests.txt')
 
 with open('README.md') as file:
     readme = file.read()
@@ -12,25 +21,23 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='0.15.1',
+                 version='0.15.3',
                  description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
                  url='https://github.com/AxFoundation/strax',
                  setup_requires=['pytest-runner'],
                  install_requires=requires,
-                 tests_require=requires + ['pytest',
-                                           'boltons',
-                                           'hypothesis'],
+                 tests_require=requires + tests_requires,
                  long_description=readme + '\n\n' + history,
                  python_requires=">=3.6",
                  extras_require={
-                     'docs': ['sphinx',
-                              'sphinx_rtd_theme',
-                              'nbsphinx',
-                              'recommonmark']
+                     'docs': docs_requires
                  },
                  long_description_content_type="text/markdown",
-                 packages=setuptools.find_packages(),
+                 packages=setuptools.find_packages() + ['extra_requirements'],
+                 package_dir={'extra_requirements': 'extra_requirements'},
+                 package_data={'extra_requirements': ['requirements-docs.txt',
+                                                      'requirements-tests.txt']},
                  classifiers=[
                      'Development Status :: 5 - Production/Stable',
                      'License :: OSI Approved :: BSD License',

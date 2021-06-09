@@ -591,10 +591,10 @@ class OverlapWindowPlugin(Plugin):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
         # Add cached inputs to compute arguments
-        for k, v in kwargs.items():
+        for data_kind, chunk in kwargs.items():
             if len(self.cached_input):
-                kwargs[k] = strax.Chunk.concatenate(
-                    [self.cached_input[k], v])
+                kwargs[data_kind] = strax.Chunk.concatenate(
+                    [self.cached_input[data_kind], chunk])
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -604,7 +604,7 @@ class OverlapWindowPlugin(Plugin):
                                  allow_early_split=False)
 
         # When does this batch of inputs end?
-        ends = [v.end for v in kwargs.values()]
+        ends = [c.end for c in kwargs.values()]
         if not len(set(ends)) == 1:
             raise RuntimeError(
                 f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
@@ -627,10 +627,32 @@ class OverlapWindowPlugin(Plugin):
         # Again, take a bit of overkill for good measure
         cache_inputs_beyond = int(self.sent_until
                                   - 2 * self.get_window_size() - 1)
-        for k, v in kwargs.items():
-            _, self.cached_input[k] = v.split(t=cache_inputs_beyond,
-                                              allow_early_split=True)
 
+        # Cache inputs, make sure that the chunks start at the same time to
+        # prevent issues in input buffers later on
+        prev_split = cache_inputs_beyond
+        max_trials = 10
+        for try_counter in range(max_trials):
+            for data_kind, chunk in kwargs.items():
+                _, self.cached_input[data_kind] = chunk.split(
+                    t=prev_split,
+                    allow_early_split=True)
+                prev_split = self.cached_input[data_kind].start
+
+            unique_starts = set([c.start for c in self.cached_input.values()])
+            chunk_starts_are_equal = len(unique_starts) == 1
+            if chunk_starts_are_equal:
+                self.log.debug(
+                    f'Success after {try_counter}. '
+                    f'Extra time = {cache_inputs_beyond-prev_split} ns')
+                break
+            else:
+                self.log.debug(
+                    f'Inconsistent start times of the cashed chunks after'
+                    f' {try_counter}/{max_trials} passes.\nChunks {self.cached_input}')
+        else:
+            raise ValueError(f'Buffer start time inconsistency cannot be '
+                             f'resolved after {max_trials} tries')
         return result
 
 
