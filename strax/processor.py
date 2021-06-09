@@ -227,13 +227,7 @@ class ThreadedMailboxProcessor:
 
     def iter(self):
         target = self.components.targets[0]
-
-        if target in self.mailboxes:
-            final_generator = self.mailboxes[target].subscribe()
-        else:
-            # We might not know who is the final generator if everything
-            # is in the ParallelSourcePlugin.
-            final_generator = None
+        final_generator = self.mailboxes[target].subscribe()
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():
