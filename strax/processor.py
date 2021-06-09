@@ -152,7 +152,7 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             lazy=lazy,
-                            mailboxes=self.mailboxes,
+                            mailboxes={k: self.mailboxes[k] for k in p.provides},
                             flow_freely=to_flow_freely,
                             outputs=p.provides))
 
