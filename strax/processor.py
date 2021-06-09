@@ -231,7 +231,7 @@ class ThreadedMailboxProcessor:
             final_generator = self.mailboxes[target].subscribe()
         else:
             # We might not know who is the final generator if everything
-            # is parallel.q
+            # is in the ParallelSourcePlugin.
             final_generator = None
 
         self.log.debug("Starting threads")
