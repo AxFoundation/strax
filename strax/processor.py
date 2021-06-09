@@ -9,12 +9,10 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 import strax
-
 export, __all__ = strax.exporter()
 
 try:
     import npshmex
-
     SHMExecutor = npshmex.ProcessPoolExecutor
     npshmex.register_array_wrapper(strax.Chunk, 'data')
 except ImportError:
@@ -206,7 +204,6 @@ class ThreadedMailboxProcessor:
         def discarder(source):
             for _ in source:
                 pass
-
         for d in to_discard:
             self.mailboxes[d].add_reader(
                 discarder, name=f'discard_{d}')
@@ -236,7 +233,6 @@ class ThreadedMailboxProcessor:
 
         self.log.debug(f"Yielding {target}")
         traceback, exc, reason = None, None, None
-
 
         try:
             yield from final_generator
