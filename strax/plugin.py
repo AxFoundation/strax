@@ -780,7 +780,7 @@ class LoopPlugin(Plugin):
 @export
 class CutPlugin(Plugin):
     """Generate a plugin that provides a boolean for a given cut specified by 'cut_by'"""
-    save_when = SaveWhen.NEVER
+    save_when = SaveWhen.TARGET
 
     def __init__(self):
         super().__init__()
