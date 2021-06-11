@@ -6,6 +6,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import pytz
 
 import strax
 export, __all__ = strax.exporter()
@@ -260,23 +261,33 @@ def define_run(self: strax.Context,
                data: ty.Union[np.ndarray, pd.DataFrame, dict],
                from_run: ty.Union[str, None] = None):
     if isinstance(data, (pd.DataFrame, np.ndarray)):
+        if isinstance(data, np.ndarray):
+            data = pd.DataFrame.from_records(data)
+      
+        # strax.endtime does not work with DataFrames due to numba
+        if 'endtime' in data.columns:
+            end = data['endtime']
+        else:
+            end = data['time'] + data['length'] * data['dt']
+            
         # Array of events / regions of interest
-        start, end = data['time'], strax.endtime(data)
+        start, end = data['time'], end
         if from_run is not None:
             return self.define_run(
                 name,
                 {from_run: np.transpose([start, end])})
-        elif not 'run_id' in data:
+        elif not 'run_id' in data.columns:
             raise ValueError(
                 "Must provide from_run or data with a run_id column "
                 "to define a superrun")
         else:
-            df = pd.DataFrame(dict(starts=start, ends=end,
+            df = pd.DataFrame(dict(start=start, end=end,
                                    run_id=data['run_id']))
+            print(df)
             return self.define_run(
                 name,
-                {run_id: rs[['start', 'stop']].values.transpose()
-                 for run_id, rs in df.groupby('fromrun')})
+                {run_id: rs[['start', 'end']].values.transpose()
+                 for run_id, rs in df.groupby('run_id')})
 
     if isinstance(data, (list, tuple)):
         # list of runids
@@ -292,9 +303,16 @@ def define_run(self: strax.Context,
     run_md = dict(start=float('inf'), end=0, livetime=0)
     for _subrunid in data:
         doc = self.run_metadata(_subrunid, ['start', 'end'])
-        run_md['start'] = min(run_md['start'], doc['start'])
-        run_md['end'] = max(run_md['end'], doc['end'])
-        run_md['livetime'] += doc['end'] - doc['start']
+        # TODO add check if run_doc is in seconds!
+        run_doc_start = pytz.utc.localize(doc['start'])
+        run_doc_start = run_doc_start.timestamp()*10**9
+        
+        run_doc_end = pytz.utc.localize(doc['end'])
+        run_doc_end = run_doc_end.timestamp()*10**9
+        
+        run_md['start'] = min(run_md['start'], run_doc_start)
+        run_md['end'] = max(run_md['end'], run_doc_end)
+        run_md['livetime'] += run_doc_end - run_doc_start
 
     # Superrun names must start with an underscore
     if not name.startswith('_'):
