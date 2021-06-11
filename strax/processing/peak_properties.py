@@ -70,7 +70,9 @@ def compute_index_of_fraction(peak, fractions_desired, result):
 @export
 def compute_widths(peaks, select_peaks_indices=None):
     """Compute widths in ns at desired area fractions for peaks
-    returns (n_peaks, n_widths) array
+    :param peaks: single strax peak(let) or other data-bearing dtype
+    :param select_peaks_indices: array of integers informing which peaks to compute
+        default to None in which case compute for all peaks
     """
     if not len(peaks):
         return
