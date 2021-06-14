@@ -1,7 +1,7 @@
 # File for the requirements of strax with the automated tests
 blosc==1.10.4
 boltons==21.0.0
-dill==0.3.3
+dill==0.3.4
 coveralls==3.1.0
 coverage==5.5
 flake8==3.9.2
