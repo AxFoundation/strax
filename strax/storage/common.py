@@ -552,8 +552,10 @@ class Saver:
         exhausted = False
         chunk_i = 0
         try:
+            last_chunk_end = None
             while not exhausted:
                 chunk = None
+
                 try:
                     if rechunk and self.allow_rechunk:
                         while (chunk is None or
@@ -568,6 +570,13 @@ class Saver:
                 if chunk is None:
                     break
 
+                if chunk.superrun_run_id and last_chunk_end:
+                    # If the chunks was created via a super run there
+                    # might be gaps in the data between two runs. Hence
+                    # we have to adjust the chunk boundaries here.
+                    chunk.start = last_chunk_end
+                last_chunk_end = chunk.end
+                
                 new_f = self.save(chunk=chunk,
                                   chunk_i=chunk_i, executor=executor)
                 pending = [f for f in pending if not f.done()]
