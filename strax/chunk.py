@@ -21,6 +21,7 @@ class Chunk:
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
+    superrun_run_id: str
     start: int
     end: int
 
@@ -43,6 +44,7 @@ class Chunk:
         self.run_id = run_id
         self.start = start
         self.end = end
+        self.superrun_run_id = '_super_run_test'
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
@@ -233,11 +235,18 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
-        if len(set(run_ids)) != 1:
+        superrun_run_id = chunks[0].superrun_run_id
+        if len(set(run_ids)) != 1 and not superrun_run_id:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with "
                 f"different run ids: {run_ids}")
-        run_id = run_ids[0]
+        if not superrun_run_id:
+            run_id = run_ids[0]
+        else:
+            run_id = superrun_run_id
+            start_times = [c.start for c in chunks]
+            sorted_ind = np.argsort(start_times)
+            chunks = [chunks[i] for i in sorted_ind]
 
         prev_end = 0
         for c in chunks:
