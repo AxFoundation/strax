@@ -577,7 +577,7 @@ class Saver:
                 if chunk is None:
                     break
 
-                if chunk.superrun_run_id and last_chunk_end:
+                if _is_super_run and last_chunk_end:
                     # If the chunks was created via a super run there
                     # might be gaps in the data between two runs. Hence
                     # we have to adjust the chunk boundaries here.
