@@ -631,15 +631,25 @@ class Context:
                 key,
                 chunk_number=chunk_number,
                 time_range=time_range)
-
-            if not ldr and run_id.startswith('_'):
+            
+            is_not_merge_only_plugin = not p.__class__.__bases__[0] == strax.plugin.MergeOnlyPlugin
+            
+            if not ldr and run_id.startswith('_') and is_not_merge_only_plugin:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
 
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
+                                
+                # Make subruns if they do not exist, since we do not 
+                # want to store data twice we have to deactivate the storage 
+                # converter mode.  
+                stc_mode = self.context_config['storage_converter']
+                self.context_config['storage_converter'] = False
                 self.make(list(sub_run_spec.keys()), d)
+                self.context_config['storage_converter'] = stc_mode
+                
 
                 ldrs = []
                 for subrun in sub_run_spec:
@@ -920,7 +930,7 @@ class Context:
         # Keep a copy of the list of targets for apply_function
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
-
+        
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:

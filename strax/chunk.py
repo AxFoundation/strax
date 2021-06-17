@@ -237,6 +237,7 @@ class Chunk:
 
         run_ids = [c.run_id for c in chunks]
         superrun_id = chunks[0].superrun_id
+
         if len(set(run_ids)) != 1 and not superrun_id:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with "
@@ -264,6 +265,7 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
+            superrun_id=superrun_id,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
