@@ -51,7 +51,8 @@ class ThreadedMailboxProcessor:
                  allow_lazy=True,
                  max_workers=None,
                  max_messages=4,
-                 timeout=60):
+                 timeout=60,
+                 is_superrun=False,):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
 
@@ -178,7 +179,7 @@ class ThreadedMailboxProcessor:
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
                     can_drive = True
-                    rechunk = True
+                    rechunk = is_superrun
 
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,

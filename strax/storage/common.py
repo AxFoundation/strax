@@ -551,6 +551,10 @@ class Saver:
         pending = []
         exhausted = False
         chunk_i = 0
+
+        run_id = self.md['run_id']
+        _is_super_run = run_id.startswith('_')
+
         try:
             last_chunk_end = None
             while not exhausted:
@@ -560,8 +564,11 @@ class Saver:
                     if rechunk and self.allow_rechunk:
                         while (chunk is None or
                                 chunk.data.nbytes < chunk.target_size_mb*1e6):
+                            next_chunk = next(source)
+                            if _is_super_run:
+                                next_chunk.superrun_id = run_id
                             chunk = strax.Chunk.concatenate(
-                                [chunk, next(source)])
+                                [chunk, next_chunk])
                     else:
                         chunk = next(source)
                 except StopIteration:

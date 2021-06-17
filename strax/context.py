@@ -909,6 +909,8 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
+        is_superrun = run_id.startswith('_')
+
         # Convert alternate time arguments to absolute range
         time_range = self.to_absolute_time_range(
             run_id=run_id, targets=targets,
@@ -963,7 +965,8 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()
+                timeout=self.context_config['timeout'],
+                is_superrun=is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
