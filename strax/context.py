@@ -632,9 +632,9 @@ class Context:
                 chunk_number=chunk_number,
                 time_range=time_range)
             
-            is_not_merge_only_plugin = not p.__class__.__bases__[0] == strax.plugin.MergeOnlyPlugin
-            
-            if not ldr and run_id.startswith('_') and is_not_merge_only_plugin:
+            is_temp_merge_only_plugin = p.provides[0].startswith('_temp')
+
+            if not ldr and run_id.startswith('_') and not is_temp_merge_only_plugin:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
