@@ -11,6 +11,6 @@ To write documentation, please refer to the existing for examples. To add new pa
 
 Updating ``docs/reference``
 ---------------------------
-The ``docs/reference`` is automatically updated with ``bash make_docs.sh``.
+The ``docs/reference`` is only updated with ``bash make_docs.sh``.
 In case modules are added/removed, one needs to rerun this script to and commit
 the changes to the files in ``docs/reference``.
