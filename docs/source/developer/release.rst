@@ -1,7 +1,6 @@
 Release procedure
 ==================
 
-- Merge pyup PR updating the dependencies
 - Update personal fork & local master to Axfoundation fork
 - Edit and commit HISTORY.md
 - bumpversion patch (or minor/major, as appropriate)
