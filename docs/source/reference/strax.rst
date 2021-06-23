@@ -5,6 +5,7 @@ Subpackages
 -----------
 
 .. toctree::
+   :maxdepth: 4
 
    strax.processing
    strax.storage
@@ -12,10 +13,10 @@ Subpackages
 Submodules
 ----------
 
-strax.chunk\_arrays module
---------------------------
+strax.chunk module
+------------------
 
-.. automodule:: strax.chunk_arrays
+.. automodule:: strax.chunk
    :members:
    :undoc-members:
    :show-inheritance:
@@ -32,6 +33,14 @@ strax.context module
 --------------------
 
 .. automodule:: strax.context
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+strax.corrections module
+------------------------
+
+.. automodule:: strax.corrections
    :members:
    :undoc-members:
    :show-inheritance:
@@ -80,6 +89,14 @@ strax.run\_selection module
 ---------------------------
 
 .. automodule:: strax.run_selection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+strax.testutils module
+----------------------
+
+.. automodule:: strax.testutils
    :members:
    :undoc-members:
    :show-inheritance:
