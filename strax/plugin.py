@@ -801,7 +801,7 @@ class CutPlugin(Plugin):
     def infer_dtype(self):
         dtype = [(self.cut_name, np.bool_, self.cut_description)]
         # Alternatively one could use time_dt_fields for low level plugins.
-        dtype = dtype + strax.time_fields
+        dtype = strax.time_fields + dtype
         return dtype
 
     def compute(self, **kwargs):
