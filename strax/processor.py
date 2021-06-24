@@ -98,18 +98,27 @@ class ThreadedMailboxProcessor:
             else:
                 self.process_executor = self.thread_executor
 
-        # Figure which ouputs
+        # Figure which outputs
         #  - we should exclude from the flow control in lazy mode,
         #    because they are produced but not required.
         #  - we should discard (produced but neither required not saved)
         produced = set(components.loaders)
         required = set(components.targets)
-        saved = set(components.savers.keys())
+        # Do not just take keys from savers, perhaps some keys
+        # have no savers are under them (see #444)
+        saved = set([k for k, v in components.savers.items()
+                     if v])
+
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
         to_flow_freely = produced - required
         to_discard = to_flow_freely - saved
+        self.log.debug(f'to_flow_freely {to_flow_freely}'
+                       f'to_discard {to_discard}'
+                       f'produced {produced}'
+                       f'required {required}'
+                       f'saved {saved}')
 
         self.mailboxes = MailboxDict(lazy=lazy)
 
@@ -149,7 +158,8 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             lazy=lazy,
-                            mailboxes=self.mailboxes,
+                            # make sure to subscribe the outputs of the mp_plugins
+                            mailboxes={k: self.mailboxes[k] for k in p.provides},
                             flow_freely=to_flow_freely,
                             outputs=p.provides))
 
@@ -208,12 +218,17 @@ class ThreadedMailboxProcessor:
                 if max_m is not None:
                     m.max_messages = max_m
 
+        # Remove defaultdict-like behaviour; all mailboxes should
+        # have been made by now. See #444
+        self.mailboxes = dict(self.mailboxes)
+
     def iter(self):
         target = self.components.targets[0]
         final_generator = self.mailboxes[target].subscribe()
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():
+            self.log.debug(f'start {m}')
             m.start()
 
         self.log.debug(f"Yielding {target}")

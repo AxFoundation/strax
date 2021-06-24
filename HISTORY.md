@@ -1,3 +1,26 @@
+0.16.0 / 2021-06-23
+---------------------
+- Add select index to compute width (#465)
+- int blaseline (#464)
+- Fix #452 assert there is a mailbox for the final generator (#463)
+- Document fuzzy-for and documentation itself (#471)
+- Re ordered time field in cut plugins (#473)
+- Github actions for CI (#454, #460)
+- Remove travis for testing (#474)
+- Remove outdated files/configs (#462)
+- Remove overwrite from options (#467)
+
+ 
+0.15.3 / 2021-06-03
+---------------------
+- Match cached buffer chunk start times OverlapWindowPlugin (#450)
+- Prevent late creation of unattended mailboxes (#452)
+- Temporary patch div/zero in hitlets (#447)
+- Relax zstd requirements again (#443)
+- Don't ignore if pattern also startswith underscore (#445)
+- kB/s pbar (#449)
+
+
 0.15.2 / 2021-05-20
 ---------------------
 - Speed up run selection by ~100x for fixed defaults (#440)

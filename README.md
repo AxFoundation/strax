@@ -2,7 +2,7 @@
 Streaming analysis for xenon experiments
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1340632.svg)](https://doi.org/10.5281/zenodo.1340632)
-[![Build Status](https://travis-ci.org/AxFoundation/strax.svg?branch=master)](https://travis-ci.org/AxFoundation/strax)
+[![tests](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml/badge.svg?branch=master)](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml)
 [![Readthedocs Badge](https://readthedocs.org/projects/strax/badge/?version=latest)](https://strax.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/AxFoundation/strax?branch=master)
 [![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
