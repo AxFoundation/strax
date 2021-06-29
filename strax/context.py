@@ -894,7 +894,7 @@ class Context:
                  selection_str=None,
                  keep_columns=None,
                  allow_multiple=False,
-                 progress_bar=True,
+                 progress_bar=False,
                  _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
