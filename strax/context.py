@@ -594,6 +594,7 @@ class Context:
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None, chunk_number=None,
+                       _check_lineage_per_run_id=False,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -649,14 +650,23 @@ class Context:
                 self.context_config['storage_converter'] = False
                 self.make(list(sub_run_spec.keys()), d)
                 self.context_config['storage_converter'] = stc_mode
-                
 
                 ldrs = []
+                if not _check_lineage_per_run_id:
+                    lineage = self._get_plugins((d,), sub_run_spec.keys()[0])[d].lineage
+
                 for subrun in sub_run_spec:
-                    sub_key = strax.DataKey(
-                        subrun,
-                        d,
-                        self._get_plugins((d,), subrun)[d].lineage)
+                    if _check_lineage_per_run_id:
+                        sub_key = strax.DataKey(
+                            subrun,
+                            d,
+                            self._get_plugins((d,), subrun)[d].lineage)
+                    else:
+                        sub_key = strax.DataKey(
+                            subrun,
+                            d,
+                            lineage)
+
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
                     else:
