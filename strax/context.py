@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import strax
 import sys
+import copy
 if any('jupyter' in arg for arg in sys.argv):
     # In some cases we are not using any notebooks,
     # Taken from 44952863 on stack overflow thanks!
@@ -595,6 +596,7 @@ class Context:
                        targets=tuple(), save=tuple(),
                        time_range=None, chunk_number=None,
                        _check_lineage_per_run_id=False,
+                       _subrun_plugin=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -607,7 +609,12 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        plugins = self._get_plugins(targets, run_id)
+        if _subrun_plugin and not _check_lineage_per_run_id:
+            plugins = copy.copy(_subrun_plugin)
+            for plugin in plugins.keys():
+                plugin.run_id = run_id
+        else:
+            plugins = self._get_plugins(targets, run_id)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -644,21 +651,19 @@ class Context:
 
                 if not _check_lineage_per_run_id:
                     subrun_id = list(sub_run_spec.keys())[0]
-                    self._superrun_lineage = self._get_plugins((d,),
-                                                               subrun_id)[d].lineage
+                    _subrun_plugins = self._get_plugins((d,),
+                                                        subrun_id)
+                    _superrun_lineage = _subrun_plugins.lineage
 
                 # Make subruns if they do not exist, since we do not 
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d)
+                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
-                if not _check_lineage_per_run_id:
-                    subrun_id = list(sub_run_spec.keys())[0]
-                    lineage = self._get_plugins((d,), subrun_id)[d].lineage
                 for subrun in sub_run_spec:
                     if _check_lineage_per_run_id:
                         sub_key = strax.DataKey(
@@ -669,7 +674,7 @@ class Context:
                         sub_key = strax.DataKey(
                             subrun,
                             d,
-                            self._superrun_lineage)
+                            _superrun_lineage)
 
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
@@ -920,6 +925,7 @@ class Context:
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
+                 _subrun_plugin=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -973,7 +979,8 @@ class Context:
                                          targets=targets,
                                          save=save,
                                          time_range=time_range,
-                                         chunk_number=_chunk_number)
+                                         chunk_number=_chunk_number,
+                                         _subrun_plugin=_subrun_plugin)
 
         # Cleanup the temp plugins
         for k in list(self._plugin_class_registry.keys()):
