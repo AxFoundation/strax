@@ -653,7 +653,8 @@ class Context:
 
                 ldrs = []
                 if not _check_lineage_per_run_id:
-                    lineage = self._get_plugins((d,), sub_run_spec.keys()[0])[d].lineage
+                    subrun_id = list(sub_run_spec.keys())[0]
+                    lineage = self._get_plugins((d,), subrun_id)[d].lineage
 
                 for subrun in sub_run_spec:
                     if _check_lineage_per_run_id:
