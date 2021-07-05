@@ -607,13 +607,7 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        if self._is_superrun:
-            # In case of a superun the plugin and lineage stays the same only the run_id changes.
-            for plugin in self._superrun_plugins:
-                plugin.run_id = run_id
-            plugins = self._superrun_plugins
-        else:
-            plugins = self._get_plugins(targets, run_id)
+        plugins = self._get_plugins(targets, run_id)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -639,8 +633,8 @@ class Context:
                 chunk_number=chunk_number,
                 time_range=time_range)
 
-            self._is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
-            if not ldr and self._is_superrun:
+            _is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
+            if not ldr and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
@@ -649,9 +643,9 @@ class Context:
                     run_id, 'sub_run_spec')['sub_run_spec']
 
                 if not _check_lineage_per_run_id:
+                    subrun_id = list(sub_run_spec.keys())[0]
                     self._superrun_lineage = self._get_plugins((d,),
-                                                               sub_run_spec.keys()[0])[d].lineage
-                    self._superrun_plugins = plugins
+                                                               subrun_id)[d].lineage
 
                 # Make subruns if they do not exist, since we do not 
                 # want to store data twice in case we store the superrun
@@ -949,6 +943,8 @@ class Context:
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
         
+        _is_superrun = run_id.startswith('_')
+        
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -994,7 +990,7 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout'],
-                is_superrun=self._is_superrun,).iter()
+                is_superrun=_is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
