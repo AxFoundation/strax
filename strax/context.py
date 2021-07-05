@@ -607,7 +607,13 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        plugins = self._get_plugins(targets, run_id)
+        if self._is_superrun:
+            # In case of a superun the plugin and lineage stays the same only the run_id changes.
+            for plugin in self._superrun_plugins:
+                plugin.run_id = run_id
+            plugins = self._superrun_plugins
+        else:
+            plugins = self._get_plugins(targets, run_id)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -632,20 +638,24 @@ class Context:
                 key,
                 chunk_number=chunk_number,
                 time_range=time_range)
-            
-            is_temp_merge_only_plugin = p.provides[0].startswith('_temp')
 
-            if not ldr and run_id.startswith('_') and not is_temp_merge_only_plugin:
+            self._is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
+            if not ldr and self._is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
 
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
-                                
+
+                if not _check_lineage_per_run_id:
+                    self._superrun_lineage = self._get_plugins((d,),
+                                                               sub_run_spec.keys()[0])[d].lineage
+                    self._superrun_plugins = plugins
+
                 # Make subruns if they do not exist, since we do not 
-                # want to store data twice we have to deactivate the storage 
-                # converter mode.  
+                # want to store data twice in case we store the superrun
+                # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
                 self.make(list(sub_run_spec.keys()), d)
@@ -655,7 +665,6 @@ class Context:
                 if not _check_lineage_per_run_id:
                     subrun_id = list(sub_run_spec.keys())[0]
                     lineage = self._get_plugins((d,), subrun_id)[d].lineage
-
                 for subrun in sub_run_spec:
                     if _check_lineage_per_run_id:
                         sub_key = strax.DataKey(
@@ -666,7 +675,7 @@ class Context:
                         sub_key = strax.DataKey(
                             subrun,
                             d,
-                            lineage)
+                            self._superrun_lineage)
 
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
@@ -930,8 +939,6 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        is_superrun = run_id.startswith('_')
-
         # Convert alternate time arguments to absolute range
         time_range = self.to_absolute_time_range(
             run_id=run_id, targets=targets,
@@ -987,7 +994,7 @@ class Context:
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
                 timeout=self.context_config['timeout'],
-                is_superrun=is_superrun,).iter()
+                is_superrun=self._is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
