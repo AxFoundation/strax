@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import pytz
+import datetime
 
 import strax
 export, __all__ = strax.exporter()
@@ -103,10 +104,11 @@ def scan_runs(self: strax.Context,
                 if 'name' not in doc:
                     raise ValueError(f"Invalid run doc {doc}, contains "
                                      f"neither name nor number.")
-                doc['number'] = int(doc['name'])
-
-            # If there is no name, make one from the number
-            doc.setdefault('name', f"{doc['number']:06d}")
+                _is_superrun = doc['name'].startswith('_')
+                if not _is_superrun:
+                    doc['number'] = int(doc['name'])
+                    # If there is no name, make one from the number
+                    doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
@@ -300,24 +302,27 @@ def define_run(self: strax.Context,
         raise ValueError(f"Can't define run from {type(data)}")
 
     # Find start and end time of the new run = earliest start time of other runs
-    run_md = dict(start=float('inf'), end=0, livetime=0)
+    run_md = dict(start=datetime.datetime.max.replace(tzinfo=pytz.utc), 
+                  end=datetime.datetime.min.replace(tzinfo=pytz.utc), 
+                  livetime=0)
     for _subrunid in data:
         doc = self.run_metadata(_subrunid, ['start', 'end'])
-        # TODO add check if run_doc is in seconds!
-        run_doc_start = pytz.utc.localize(doc['start'])
-        run_doc_start = run_doc_start.timestamp()*10**9
         
-        run_doc_end = pytz.utc.localize(doc['end'])
-        run_doc_end = run_doc_end.timestamp()*10**9
+        run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
+        #run_doc_start = run_doc_start.timestamp()*10**9
+        
+        run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
+        #run_doc_end = run_doc_end.timestamp()*10**9
         
         run_md['start'] = min(run_md['start'], run_doc_start)
         run_md['end'] = max(run_md['end'], run_doc_end)
-        run_md['livetime'] += run_doc_end - run_doc_start
+        time_delta = run_doc_end - run_doc_start
+        run_md['livetime'] += time_delta.total_seconds()*10**9
 
     # Superrun names must start with an underscore
     if not name.startswith('_'):
         name = '_' + name
-
+    
     # Dict mapping run_id: array of time ranges or all
     for sf in self.storage:
         if not sf.readonly and sf.can_define_runs:
