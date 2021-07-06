@@ -595,7 +595,7 @@ class Context:
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None, chunk_number=None,
-                       _check_lineage_per_run_id=False,
+                       _check_lineage_per_run_id=True,
                        _subrun_plugin=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
@@ -611,7 +611,7 @@ class Context:
 
         if _subrun_plugin and not _check_lineage_per_run_id:
             plugins = copy.copy(_subrun_plugin)
-            for plugin in plugins.keys():
+            for plugin in plugins.values():
                 plugin.run_id = run_id
         else:
             plugins = self._get_plugins(targets, run_id)
@@ -653,14 +653,14 @@ class Context:
                     subrun_id = list(sub_run_spec.keys())[0]
                     _subrun_plugins = self._get_plugins((d,),
                                                         subrun_id)
-                    _superrun_lineage = _subrun_plugins.lineage
+                    _superrun_lineage = _subrun_plugins[d].lineage
 
                 # Make subruns if they do not exist, since we do not 
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=)
+                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=plugins)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
@@ -926,6 +926,7 @@ class Context:
                  progress_bar=True,
                  _chunk_number=None,
                  _subrun_plugin=None,
+                 _check_lineage_per_run_id=True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -980,6 +981,7 @@ class Context:
                                          save=save,
                                          time_range=time_range,
                                          chunk_number=_chunk_number,
+                                         _check_lineage_per_run_id=_check_lineage_per_run_id,
                                          _subrun_plugin=_subrun_plugin)
 
         # Cleanup the temp plugins
@@ -1580,6 +1582,11 @@ the start of the run to load.
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
+:param _check_lineage_per_run_id: For internal use: If False uses already
+    initlized plugins from _subrun_plugin to create/load data. 
+:param _subrun_plugin: For internal use: Dictionary of already initilized 
+    plugins which should be used to create the data. Is used together with
+    _check_lineage_per_run_id.
 :param progress_bar: Display a progress bar if metedata exists.
 """
 
