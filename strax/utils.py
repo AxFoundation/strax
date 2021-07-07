@@ -433,17 +433,17 @@ def multi_run(exec_function, run_ids, *args,
               throw_away_result=False,
               multi_run_progress_bar=True,
               **kwargs):
-    """Execute f(run_id, **kwargs) over multiple runs,
+    """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
 
     :param exec_function: Function to run
-    :param run_ids: list/tuple of runids
+    :param run_ids: list/tuple of run_ids
     :param max_workers: number of worker threads/processes to spawn.
-    If set to None, defaults to 1.
+        If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
 
-    Other (kw)args will be passed to the function
+    Other (kw)args will be passed to the exec_function.
     """
     if max_workers is None:
         max_workers = 1
