@@ -15,8 +15,6 @@ import dill
 import numba
 import numpy as np
 import pandas as pd
-# Use the notebook progressbar as loaded in context.py
-from .context import tqdm
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -26,6 +24,13 @@ try:
 except AttributeError:
     # Numba < 0.49
     numba.caching.pickle = dill
+
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 
 def exporter(export_self=False):

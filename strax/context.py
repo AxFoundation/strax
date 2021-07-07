@@ -1,4 +1,3 @@
-import collections
 import datetime
 import logging
 import fnmatch
@@ -11,18 +10,14 @@ import time
 import numpy as np
 import pandas as pd
 import strax
-import sys
-if any('jupyter' in arg for arg in sys.argv):
-    # In some cases we are not using any notebooks,
-    # Taken from 44952863 on stack overflow thanks!
-    from tqdm.notebook import tqdm
-else:
-    from tqdm import tqdm
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
 
 RUN_DEFAULTS_KEY = 'strax_defaults'
+
+# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+tqdm = strax.utils.tqdm
 
 
 @strax.takes_config(
