@@ -1095,6 +1095,8 @@ class Context:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
+        kwargs.setdefault('progress_bar', False)
+
         # Multi-run support
         run_ids = strax.to_str_tuple(run_id)
         if len(run_ids) == 0:
