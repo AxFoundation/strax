@@ -1095,7 +1095,7 @@ class Context:
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
-             progress_bar=False, _skip_if_built=True,
+             _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
@@ -1108,14 +1108,12 @@ class Context:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True,
-                progress_bar=progress_bar,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets,
-                               progress_bar=progress_bar,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
@@ -1547,6 +1545,7 @@ the start of the run to load.
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
 :param progress_bar: Display a progress bar if metedata exists.
+:param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
 get_docs = """
