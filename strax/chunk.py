@@ -21,7 +21,8 @@ class Chunk:
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
-    superrun_id: str
+    superrun_id: str  #TODO remove me
+    subruns: dict
     start: int
     end: int
 
@@ -37,7 +38,8 @@ class Chunk:
                  start,
                  end,
                  data,
-                 superrun_id=None,
+                 superrun_id=None,  #TODO: Remove me
+                 subruns=None,
                  target_size_mb=default_chunk_size_mb):
         self.data_type = data_type
         self.data_kind = data_kind
@@ -45,7 +47,8 @@ class Chunk:
         self.run_id = run_id
         self.start = start
         self.end = end
-        self.superrun_id = superrun_id
+        self.superrun_id = superrun_id #TODO remove me
+        self.subruns
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
@@ -236,19 +239,32 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
-        superrun_id = chunks[0].superrun_id
+        is_superrun = np.all([r.startswith('_') for r in run_ids])
 
-        if len(set(run_ids)) != 1 and not superrun_id:
+        if len(set(run_ids)) != 1:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with "
                 f"different run ids: {run_ids}")
-        if not superrun_id:
-            run_id = run_ids[0]
-        else:
-            run_id = superrun_id
+
+        run_id = run_ids[0]
+        if is_superrun:
             start_times = [c.start for c in chunks]
             sorted_ind = np.argsort(start_times)
             chunks = [chunks[i] for i in sorted_ind]
+            subruns = dict()
+            for c_i, c in enumerate(chunks):
+                if not c_i:
+                    subruns = c.subruns
+                    continue
+                for subrun_id, subrun_start_end in c.subruns.items():
+                    if subrun_id in subruns:
+                        subruns[subrun_id] = {'start': min(subruns[subrun_id]['start'],
+                                                           subrun_start_end['start']),
+                                              'end': max(subruns[subrun_id]['end'],
+                                                         subrun_start_end['end'])
+                                              }
+                    else:
+                        subruns[subrun_id] = subrun_start_end
 
         prev_end = 0
         for c in chunks:
@@ -265,7 +281,8 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
-            superrun_id=superrun_id,
+            superrun_id=run_id,  #TODO: Reove me
+            subruns=subruns,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
@@ -344,3 +361,25 @@ def split_array(data, t, allow_early_split=False):
         t = min(data[splittable_i]['time'], t)
 
     return data[:splittable_i], data[splittable_i:], t
+
+
+@export
+def transform_chunk_to_superrun_chunk(superrun_id, chunk):
+    """
+    Function which transformes a strax chunk from a subrun to a superun
+    chunk.
+
+    :param superrun_id: id/name of the superrun.
+    :param chunk: strax.Chunk of a superrun subrun.
+    :return: strax.Chunk
+    """
+    if chunk is None:
+        return chunk
+
+    subrun_id = chunk.run_id
+    subrun_start = chunk.start
+    subrun_end = chunk.end
+    chunk.subruns = {subrun_id: {'start': subrun_start,
+                                 'end': subrun_end}}
+    chunk.run_id = superrun_id
+    return chunk
