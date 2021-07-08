@@ -566,11 +566,19 @@ class Saver:
                                 chunk.data.nbytes < chunk.target_size_mb*1e6):
                             next_chunk = next(source)
                             if _is_super_run:
-                                next_chunk.superrun_id = run_id
+                                # If we are creating a superrun, we load data from subruns
+                                # and the loaded subrun chunk becomes a superun chunk:
+                                next_chunk = strax.transform_chunk_to_superrun_chunk(next_chunk)
+
                             chunk = strax.Chunk.concatenate(
                                 [chunk, next_chunk])
                     else:
                         chunk = next(source)
+                        if _is_super_run:
+                            # If we are creating a superrun, we load data from subruns
+                            # and the loaded subrun chunk becomes a superun chunk:
+                            chunk = strax.transform_chunk_to_superrun_chunk(chunk)
+
                 except StopIteration:
                     exhausted = True
 
