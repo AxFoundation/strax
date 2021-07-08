@@ -14,7 +14,6 @@ import numexpr
 import dill
 import numba
 import numpy as np
-from tqdm import tqdm
 import pandas as pd
 
 # Change numba's caching backend from pickle to dill
@@ -25,6 +24,13 @@ try:
 except AttributeError:
     # Numba < 0.49
     numba.caching.pickle = dill
+
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 
 def exporter(export_self=False):
@@ -422,19 +428,22 @@ def dict_to_rec(x, dtype=None):
 
 
 @export
-def multi_run(fun, run_ids, *args, max_workers=None,
+def multi_run(exec_function, run_ids, *args,
+              max_workers=None,
               throw_away_result=False,
+              multi_run_progress_bar=True,
               **kwargs):
-    """Execute f(run_id, **kwargs) over multiple runs,
+    """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
 
-    :param fun: Function to run
-    :param run_ids: list/tuple of runids
+    :param exec_function: Function to run
+    :param run_ids: list/tuple of run_ids
     :param max_workers: number of worker threads/processes to spawn.
-    If set to None, defaults to 1.
+        If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
+    :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
 
-    Other (kw)args will be passed to f
+    Other (kw)args will be passed to the exec_function.
     """
     if max_workers is None:
         max_workers = 1
@@ -442,14 +451,18 @@ def multi_run(fun, run_ids, *args, max_workers=None,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
 
+    # Generally we don't want a per run pbar because of multi_run_progress_bar
+    kwargs.setdefault('progress_bar', False)
+
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(fun, r, *args, **kwargs)
+        futures = [exc.submit(exec_function, r, *args, **kwargs)
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
-                      desc="Loading %d runs" % len(run_ids)):
+                      desc="Loading %d runs" % len(run_ids),
+                      disable=not multi_run_progress_bar):
             pass
 
         result = []

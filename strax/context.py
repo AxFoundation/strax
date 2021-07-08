@@ -1,4 +1,3 @@
-import collections
 import datetime
 import logging
 import fnmatch
@@ -11,18 +10,14 @@ import time
 import numpy as np
 import pandas as pd
 import strax
-import sys
-if any('jupyter' in arg for arg in sys.argv):
-    # In some cases we are not using any notebooks,
-    # Taken from 44952863 on stack overflow thanks!
-    from tqdm.notebook import tqdm
-else:
-    from tqdm import tqdm
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
 
 RUN_DEFAULTS_KEY = 'strax_defaults'
+
+# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+tqdm = strax.utils.tqdm
 
 
 @strax.takes_config(
@@ -1095,11 +1090,13 @@ class Context:
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
-             progress_bar=False, _skip_if_built=True,
+             _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
         {get_docs}
         """
+        kwargs.setdefault('progress_bar', False)
+
         # Multi-run support
         run_ids = strax.to_str_tuple(run_id)
         if len(run_ids) == 0:
@@ -1108,14 +1105,12 @@ class Context:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True,
-                progress_bar=progress_bar,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets,
-                               progress_bar=progress_bar,
                                save=save, max_workers=max_workers, **kwargs):
             pass
 
@@ -1547,6 +1542,7 @@ the start of the run to load.
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
 :param progress_bar: Display a progress bar if metedata exists.
+:param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
 get_docs = """
