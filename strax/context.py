@@ -660,9 +660,7 @@ class Context:
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d,
-                          _check_lineage_per_run_id=_check_lineage_per_run_id,
-                          _subrun_plugin=plugins)
+                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=plugins)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
@@ -1142,11 +1140,6 @@ class Context:
         run_ids = strax.to_str_tuple(run_id)
         if len(run_ids) == 0:
             raise ValueError("Cannot build empty list of runs")
-        
-        run_ids = [r for r in run_ids if not _skip_if_built and self.is_stored(run_id, targets)]
-        if len(run_ids) == 0:
-            return
-        
         if len(run_ids) > 1:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
@@ -1154,7 +1147,9 @@ class Context:
                 progress_bar=progress_bar,
                 save=save, max_workers=max_workers, **kwargs)
 
-        
+        if _skip_if_built and self.is_stored(run_id, targets):
+            return
+
         for _ in self.get_iter(run_ids[0], targets,
                                progress_bar=progress_bar,
                                save=save, max_workers=max_workers, **kwargs):
