@@ -63,7 +63,7 @@ def inherit_docstring_from(cls):
 
 
 @export
-def growing_result(dtype=np.int, chunk_size=10000):
+def growing_result(dtype=np.int64, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
 
     Functions must obey following API:
