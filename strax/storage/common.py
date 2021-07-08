@@ -553,6 +553,7 @@ class Saver:
         chunk_i = 0
 
         run_id = self.md['run_id']
+        print(self.md)
         _is_super_run = run_id.startswith('_')
 
         try:
@@ -565,6 +566,9 @@ class Saver:
                         while (chunk is None or
                                 chunk.data.nbytes < chunk.target_size_mb*1e6):
                             next_chunk = next(source)
+                            if chunk:
+                                print('chunk:', chunk.run_id, chunk.superrun_id)
+                            print('next chunk:', next_chunk.run_id, next_chunk.superrun_id)
                             if _is_super_run:
                                 next_chunk.superrun_id = run_id
                             chunk = strax.Chunk.concatenate(
