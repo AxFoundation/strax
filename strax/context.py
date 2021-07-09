@@ -974,7 +974,7 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = ('_temp_'
                              + ''.join(
-                            random.choices(string.ascii_lowercase, k=10)))
+                                random.choices(string.ascii_lowercase, k=10)))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
@@ -1004,14 +1004,14 @@ class Context:
 
         seen_a_chunk = False
         generator = strax.ThreadedMailboxProcessor(
-            components,
-            max_workers=max_workers,
-            allow_shm=self.context_config['allow_shm'],
-            allow_multiprocess=self.context_config['allow_multiprocess'],
-            allow_rechunk=self.context_config['allow_rechunk'],
-            allow_lazy=self.context_config['allow_lazy'],
-            max_messages=self.context_config['max_messages'],
-            timeout=self.context_config['timeout']).iter()
+                components,
+                max_workers=max_workers,
+                allow_shm=self.context_config['allow_shm'],
+                allow_multiprocess=self.context_config['allow_multiprocess'],
+                allow_rechunk=self.context_config['allow_rechunk'],
+                allow_lazy=self.context_config['allow_lazy'],
+                max_messages=self.context_config['max_messages'],
+                timeout=self.context_config['timeout']).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
@@ -1101,10 +1101,10 @@ class Context:
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
-        pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
+        pbar.mbs.append((nbytes/1e6)/seconds_per_chunk)
         mbs = np.mean(pbar.mbs)
         if mbs < 1:
-            rate = f'{mbs * 1000:.1f} kB/s'
+            rate = f'{mbs*1000:.1f} kB/s'
         else:
             rate = f'{mbs:.1f} MB/s'
         postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
@@ -1295,8 +1295,8 @@ class Context:
             else:
                 # Function returned a scalar or flat array
                 result['result'] = (
-                        np.sum(data, axis=0)
-                        + result.get('result', 0))
+                    np.sum(data, axis=0)
+                    + result.get('result', 0))
 
             n_chunks += 1
 
@@ -1512,7 +1512,7 @@ class Context:
 
         if target_compressor is not None:
             self.log.info(f'Changing compressor from {md["compressor"]} '
-                          f'to {target_compressor}.')
+                           f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
 
         for t_sf in target_sf:
@@ -1570,8 +1570,8 @@ class Context:
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
         hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
-                      for p in self._plugin_class_registry.values()
-                      for d in p.provides])
+                  for p in self._plugin_class_registry.values()
+                  for d in p.provides])
 
         return {dtype: dict(hash=h, save_when=save_when.name, version=version)
                 for dtype, h, save_when, version in hashes}
