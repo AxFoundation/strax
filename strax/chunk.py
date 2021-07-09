@@ -48,7 +48,7 @@ class Chunk:
         self.start = start
         self.end = end
         self.superrun_id = superrun_id #TODO remove me
-        self.subruns
+        self.subruns = subruns
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
