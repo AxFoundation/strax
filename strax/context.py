@@ -660,7 +660,8 @@ class Context:
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=plugins)
+                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=plugins,
+                         _check_lineage_per_run_id=_check_lineage_per_run_id)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
