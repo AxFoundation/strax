@@ -974,7 +974,7 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = ('_temp_'
                              + ''.join(
-                                random.choices(string.ascii_lowercase, k=10)))
+                               random.choices(string.ascii_lowercase, k=10)))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
