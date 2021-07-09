@@ -21,7 +21,6 @@ class Chunk:
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
-    superrun_id: str  #TODO remove me
     subruns: dict
     start: int
     end: int
@@ -38,7 +37,6 @@ class Chunk:
                  start,
                  end,
                  data,
-                 superrun_id=None,  #TODO: Remove me
                  subruns=None,
                  target_size_mb=default_chunk_size_mb):
         self.data_type = data_type
@@ -47,7 +45,6 @@ class Chunk:
         self.run_id = run_id
         self.start = start
         self.end = end
-        self.superrun_id = superrun_id #TODO remove me
         self.subruns = subruns
         if data is None:
             data = np.empty(0, dtype)
@@ -283,7 +280,6 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
-            superrun_id=run_id,  #TODO: Reove me
             subruns=subruns,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
