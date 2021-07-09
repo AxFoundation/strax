@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
+import hashlib
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
@@ -91,7 +92,7 @@ class Context:
 
     runs: ty.Union[pd.DataFrame, type(None)] = None
     _run_defaults_cache: dict = None
-
+    _fixed_plugin_cache: dict = None
     storage: ty.List[strax.StorageFrontend]
 
     def __init__(self,
@@ -415,11 +416,51 @@ class Context:
                     parent_name = opt.parent_option_name
 
                     mes = (f'Cannot find "{parent_name}" among the options of the parent.'
-                           f' Either you specified by accident {option_name} as child option' 
+                           f' Either you specified by accident {option_name} as child option'
                            f' or you specified the wrong parent_option_name. Have you specified '
                            'the correct parent option name?')
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
+
+    def _context_hash(self):
+        return hashlib.sha1(str(self.config).encode('ascii')).hexdigest()
+        # return strax.deterministic_hash(self.config)
+
+    def _plugins_are_cached(self, targets):
+        if self.context_config['use_per_run_defaults']:
+            # There is no point in caching if plugins (lineage) can change per run
+            return False
+
+        if self._fixed_plugin_cache is None:
+            return False
+
+        config_hash = self._context_hash()
+        if config_hash in self._fixed_plugin_cache:
+            targets_in_cache = [t in self._fixed_plugin_cache[config_hash] for t in targets]
+            if all(targets_in_cache):
+                return True
+
+        return False
+
+    def _plugins_to_cache(self, plugins: dict) -> None:
+        if self.context_config['use_per_run_defaults']:
+            # There is no point in caching if plugins (lineage) can change per run
+            return
+        if self._fixed_plugin_cache is None or self._context_hash() not in self._fixed_plugin_cache:
+            self._fixed_plugin_cache = {self._context_hash(): dict()}
+        for target, plugin in plugins.items():
+            self._fixed_plugin_cache[self._context_hash()][target] = plugin
+
+    def __get_plugins_from_cache(self,
+                                 targets: ty.Tuple[str],
+                                 run_id: str) -> ty.Dict[str, strax.Plugin]:
+        """Load requested plugins from the plugin_cache"""
+        requested_plugins = {}
+        for target in targets:
+            plugin = self._fixed_plugin_cache[self._context_hash()][target]
+            plugin.run_id = run_id
+            requested_plugins[target] = plugin
+        return requested_plugins
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -429,6 +470,9 @@ class Context:
         For a plugin that produces multiple outputs, we make only a single
         instance, which is referenced under multiple keys in the output dict.
         """
+        if self._plugins_are_cached(targets):
+            return self.__get_plugins_from_cache(targets, run_id)
+
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
         all_opts = set().union(*[
@@ -487,15 +531,15 @@ class Context:
 
                 # Also adding name and version of the parent to the lineage:
                 configs[parent_class.__name__] = parent_class.__version__
-                        
+
                 p.lineage = {last_provide: (p.__class__.__name__,
-                                 p.version(run_id),
-                                 configs)}
+                                            p.version(run_id),
+                                            configs)}
             else:
                 p.lineage = {last_provide: (p.__class__.__name__,
-                                 p.version(run_id),
-                                 {q: v for q, v in p.config.items()
-                                  if p.takes_config[q].track})}
+                                            p.version(run_id),
+                                            {q: v for q, v in p.config.items()
+                                             if p.takes_config[q].track})}
             for d_depends in p.depends_on:
                 p.lineage.update(p.deps[d_depends].lineage)
 
@@ -514,10 +558,11 @@ class Context:
             return p
 
         plugins = {}
-        for t in targets: 
+        for t in targets:
             p = get_plugin(t)
             plugins[t] = p
 
+        self._plugins_to_cache(plugins)
         return plugins
 
     def _per_run_default_allowed_check(self, option_name, option):
@@ -659,7 +704,8 @@ class Context:
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
-                ldr = lambda *args, **kwargs : concat_loader(*args, **kwargs)
+
+                ldr = lambda *args, **kwargs: concat_loader(*args, **kwargs)
 
             if ldr:
                 # Found it! No need to make it or look in other frontends
@@ -856,7 +902,7 @@ class Context:
         :param time_within: row of strax data (e.g. eent)
         :param full_range: If True returns full time_range of the run.
         """
-        
+
         selection = ((time_range is None) +
                      (seconds_range is None) +
                      (time_within is None) +
@@ -875,7 +921,7 @@ class Context:
             # Force time range to be integers, since float math on large numbers
             # in not precise
             time_range = tuple([int(x) for x in time_range])
-            
+
         if full_range:
             time_range = self.estimate_run_start_and_end(run_id, targets)
         return time_range
@@ -921,7 +967,7 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = ('_temp_'
                              + ''.join(
-                               random.choices(string.ascii_lowercase, k=10)))
+                            random.choices(string.ascii_lowercase, k=10)))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
@@ -951,14 +997,14 @@ class Context:
 
         seen_a_chunk = False
         generator = strax.ThreadedMailboxProcessor(
-                components,
-                max_workers=max_workers,
-                allow_shm=self.context_config['allow_shm'],
-                allow_multiprocess=self.context_config['allow_multiprocess'],
-                allow_rechunk=self.context_config['allow_rechunk'],
-                allow_lazy=self.context_config['allow_lazy'],
-                max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()
+            components,
+            max_workers=max_workers,
+            allow_shm=self.context_config['allow_shm'],
+            allow_multiprocess=self.context_config['allow_multiprocess'],
+            allow_rechunk=self.context_config['allow_rechunk'],
+            allow_lazy=self.context_config['allow_lazy'],
+            max_messages=self.context_config['max_messages'],
+            timeout=self.context_config['timeout']).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
@@ -1048,10 +1094,10 @@ class Context:
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
         seconds_per_chunk = time.time() - pbar.last_print_t
-        pbar.mbs.append((nbytes/1e6)/seconds_per_chunk)
+        pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
         mbs = np.mean(pbar.mbs)
         if mbs < 1:
-            rate = f'{mbs*1000:.1f} kB/s'
+            rate = f'{mbs * 1000:.1f} kB/s'
         else:
             rate = f'{mbs:.1f} MB/s'
         postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
@@ -1195,6 +1241,7 @@ class Context:
         if function is None:
             def function(arr):
                 return arr
+
             function_takes_fields = False
 
         for chunk in self.get_iter(run_id, targets,
@@ -1236,8 +1283,8 @@ class Context:
                 # Function returned record array or dict
                 for field in fields:
                     result[field] = (
-                        result.get(field, 0)
-                        + np.sum(data[field], axis=0))
+                            result.get(field, 0)
+                            + np.sum(data[field], axis=0))
             else:
                 # Function returned a scalar or flat array
                 result['result'] = (
@@ -1369,7 +1416,7 @@ class Context:
         Otherwise, try to make it a tuple"""
         self.context_config['forbid_creation_of'] = strax.to_str_tuple(
             self.context_config['forbid_creation_of'])
-    
+
     def _apply_function(self,
                         chunk_data: np.ndarray,
                         run_id: ty.Union[str, tuple, list],
@@ -1458,7 +1505,7 @@ class Context:
 
         if target_compressor is not None:
             self.log.info(f'Changing compressor from {md["compressor"]} '
-                           f'to {target_compressor}.')
+                          f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
 
         for t_sf in target_sf:
@@ -1516,8 +1563,8 @@ class Context:
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
         hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
-                    for p in self._plugin_class_registry.values()
-                    for d in p.provides])
+                      for p in self._plugin_class_registry.values()
+                      for d in p.provides])
 
         return {dtype: dict(hash=h, save_when=save_when.name, version=version)
                 for dtype, h, save_when, version in hashes}
@@ -1559,7 +1606,6 @@ get_docs = """
     datakind. Don't try to use this in get_array or get_df because the
     data is not returned.
 """ + select_docs
-
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)
