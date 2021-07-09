@@ -9,6 +9,7 @@ import datetime
 import pytz
 import json
 from bson import json_util
+import re
 
 
 class TestSuperRuns(unittest.TestCase):
@@ -20,8 +21,12 @@ class TestSuperRuns(unittest.TestCase):
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
                                                                   deep_scan=True)],
-                                     register=[Records],
+                                     register=[Records, RecordsExtension],
                                      use_per_run_defaults=False)
+        logger = self.context.log
+        logger.addFilter(lambda s: not re.match(".*Could not estimate run start and end time.*",
+                                                s.getMessage()))
+
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)  # Define superrun
 
@@ -99,6 +104,43 @@ class TestSuperRuns(unittest.TestCase):
         df = self.context.select_runs(available=('records',))
         assert self.superrun_name in df['name'].values
 
+    def test_superrun_chunk_and_meta(self):
+        """
+        Superrun chunks and meta data should contain information about
+        its constituent subruns.
+        """
+        self.context.set_context_config({'storage_converter': True})
+        self.context.make(self.superrun_name,
+                          'records',
+                          _check_lineage_per_run_id=False
+                          )
+
+        meta = self.context.get_meta(self.superrun_name, 'records')
+
+        n_chunks = 0
+        for chunk in self.context.get_iter(self.superrun_name, 'records'):
+            n_chunks += 1
+
+        assert len(meta['chunks']) == n_chunks
+        assert meta['chunks'][0]['subruns'] == chunk.subruns
+
+        for subrun_id, start_and_end in chunk.subruns.items():
+            rr = self.context.get_array(subrun_id, 'records')
+            mes = f'Start time did not match for subrun: {subrun_id}'
+            assert rr['time'].min() == start_and_end['start'], mes
+            mes = f'End time did not match for subrun: {subrun_id}'
+            assert np.max(strax.endtime(rr)) == start_and_end['end'], mes
+
+    def test_merger_plugin_subruns(self):
+        """
+        Tests if merge plugins for subruns work. This test is needed to
+        ensure that superruns do not interfer with merge plguns.
+        (both are using underscores as identification).
+        """
+        rr = self.context.get_array(self.subrun_ids, ('records', 'records_extension'))
+        p = self.context.get_single_plugin(self.subrun_ids[0], 'records_extension')
+        assert np.all(rr['additional_field'] == p.config['some_additional_value'])
+
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
@@ -129,3 +171,26 @@ class TestSuperRuns(unittest.TestCase):
         run_doc = {'name': run_id, 'start': time, 'end': endtime}
         with open(context.storage[0]._run_meta_path(str(run_id)), 'w') as fp:
             json.dump(run_doc, fp, sort_keys=True, indent=4, default=json_util.default)
+
+
+@strax.takes_config(
+    strax.Option(
+        name='some_additional_value',
+        default=42,
+        help="Some additional value for merger",
+    )
+)
+class RecordsExtension(strax.Plugin):
+
+    depends_on = 'records'
+    provides = 'records_extension'
+    dtype = strax.time_dt_fields + [(('Some additional field', 'additional_field'), np.int16)]
+
+    def compute(self, records):
+
+        res = np.zeros(len(records), self.dtype)
+        res['time'] = records['time']
+        res['length'] = records['length']
+        res['dt'] = records['dt']
+        res['additional_field'] = self.config['some_additional_value']
+        return res
