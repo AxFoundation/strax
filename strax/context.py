@@ -1290,13 +1290,13 @@ class Context:
                 # Function returned record array or dict
                 for field in fields:
                     result[field] = (
-                            result.get(field, 0)
-                            + np.sum(data[field], axis=0))
+                        result.get(field, 0)
+                        + np.sum(data[field], axis=0))
             else:
                 # Function returned a scalar or flat array
                 result['result'] = (
-                    np.sum(data, axis=0)
-                    + result.get('result', 0))
+                        np.sum(data, axis=0)
+                        + result.get('result', 0))
 
             n_chunks += 1
 
