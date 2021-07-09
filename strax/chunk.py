@@ -239,7 +239,7 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
-        is_superrun = np.all([r.startswith('_') for r in run_ids])
+        is_superrun = np.all([r.startswith('_') and not r.startswith('_temp_') for r in run_ids])
 
         if len(set(run_ids)) != 1:
             raise ValueError(
@@ -247,6 +247,8 @@ class Chunk:
                 f"different run ids: {run_ids}")
 
         run_id = run_ids[0]
+        
+        subruns=None
         if is_superrun:
             start_times = [c.start for c in chunks]
             sorted_ind = np.argsort(start_times)
