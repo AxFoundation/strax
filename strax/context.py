@@ -422,19 +422,23 @@ class Context:
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
 
-    def _context_hash(self):
+    def _config_hash(self):
+        """
+        Dump the current config to a hash as a sanity check for building
+        the _fixed_plugin_cache. If any item changes in the config, so
+        does this hash.
+        """
         return hashlib.sha1(str(self.config).encode('ascii')).hexdigest()
         # return strax.deterministic_hash(self.config)
 
-    def _plugins_are_cached(self, targets):
-        if self.context_config['use_per_run_defaults']:
-            # There is no point in caching if plugins (lineage) can change per run
+    def _plugins_are_cached(self, targets:  ty.Tuple[str]) -> bool:
+        """Check if all the requested targets are in the _fixed_plugin_cache"""
+        if self.context_config['use_per_run_defaults'] or self._fixed_plugin_cache is None:
+            # There is no point in caching if plugins (lineage) can
+            # change per run or the cache is empty.
             return False
 
-        if self._fixed_plugin_cache is None:
-            return False
-
-        config_hash = self._context_hash()
+        config_hash = self._config_hash()
         if config_hash in self._fixed_plugin_cache:
             targets_in_cache = [t in self._fixed_plugin_cache[config_hash] for t in targets]
             if all(targets_in_cache):
@@ -446,18 +450,18 @@ class Context:
         if self.context_config['use_per_run_defaults']:
             # There is no point in caching if plugins (lineage) can change per run
             return
-        if self._fixed_plugin_cache is None or self._context_hash() not in self._fixed_plugin_cache:
-            self._fixed_plugin_cache = {self._context_hash(): dict()}
+        if self._fixed_plugin_cache is None or self._config_hash() not in self._fixed_plugin_cache:
+            self._fixed_plugin_cache = {self._config_hash(): dict()}
         for target, plugin in plugins.items():
-            self._fixed_plugin_cache[self._context_hash()][target] = plugin
+            self._fixed_plugin_cache[self._config_hash()][target] = plugin
 
     def __get_plugins_from_cache(self,
-                                 targets: ty.Tuple[str],
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
+        # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache"""
         requested_plugins = {}
-        for target in targets:
-            plugin = self._fixed_plugin_cache[self._context_hash()][target]
+        for target, plugin in self._fixed_plugin_cache[self._config_hash()].items():
+            # Lineage is fixed, just replace the run_id
             plugin.run_id = run_id
             requested_plugins[target] = plugin
         return requested_plugins
@@ -471,7 +475,7 @@ class Context:
         instance, which is referenced under multiple keys in the output dict.
         """
         if self._plugins_are_cached(targets):
-            return self.__get_plugins_from_cache(targets, run_id)
+            return self.__get_plugins_from_cache(run_id)
 
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
@@ -485,85 +489,88 @@ class Context:
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
         # to get lineages and dependency info.
-        def get_plugin(data_kind):
-            nonlocal plugins
+        def get_plugin(data_type):
+            nonlocal non_local_plugins
 
-            if data_kind not in self._plugin_class_registry:
-                raise KeyError(f"No plugin class registered that provides {data_kind}")
+            if data_type not in self._plugin_class_registry:
+                raise KeyError(f"No plugin class registered that provides {data_type}")
 
-            p = self._plugin_class_registry[data_kind]()
+            plugin = self._plugin_class_registry[data_type]()
 
             d_provides = None  # just to make codefactor happy
-            for d_provides in p.provides:
-                plugins[d_provides] = p
+            for d_provides in plugin.provides:
+                non_local_plugins[d_provides] = plugin
 
-            p.run_id = run_id
+            plugin.run_id = run_id
 
             # The plugin may not get all the required options here
             # but we don't know if we need the plugin yet
-            self._set_plugin_config(p, run_id, tolerant=True)
+            self._set_plugin_config(plugin, run_id, tolerant=True)
 
-            p.deps = {d_depends: get_plugin(d_depends) for d_depends in p.depends_on}
+            plugin.deps = {d_depends: get_plugin(d_depends) for d_depends in plugin.depends_on}
 
             last_provide = d_provides
 
-            if p.child_plugin:
+            if plugin.child_plugin:
                 # Plugin is a child of another plugin, hence we have to
                 # drop the parents config from the lineage
                 configs = {}
 
                 # Getting information about the parent:
-                parent_class = p.__class__.__bases__[0]
+                parent_class = plugin.__class__.__bases__[0]
                 # Get all parent options which are overwritten by a child:
-                parent_options = [option.parent_option_name for option in p.takes_config.values()
+                parent_options = [option.parent_option_name for option in plugin.takes_config.values()
                                   if option.child_option]
 
-                for option_name, v in p.config.items():
+                for option_name, v in plugin.config.items():
                     # Looping over all settings, option_name is either the option name of the
                     # parent or the child.
                     if option_name in parent_options:
                         # In case it is the parent we continue
                         continue
 
-                    if p.takes_config[option_name].track:
+                    if plugin.takes_config[option_name].track:
                         # Add all options which should be tracked:
                         configs[option_name] = v
 
                 # Also adding name and version of the parent to the lineage:
                 configs[parent_class.__name__] = parent_class.__version__
 
-                p.lineage = {last_provide: (p.__class__.__name__,
-                                            p.version(run_id),
-                                            configs)}
+                plugin.lineage = {last_provide: (
+                    plugin.__class__.__name__,
+                    plugin.version(run_id),
+                    configs)}
             else:
-                p.lineage = {last_provide: (p.__class__.__name__,
-                                            p.version(run_id),
-                                            {q: v for q, v in p.config.items()
-                                             if p.takes_config[q].track})}
-            for d_depends in p.depends_on:
-                p.lineage.update(p.deps[d_depends].lineage)
+                plugin.lineage = {last_provide: (
+                    plugin.__class__.__name__,
+                    plugin.version(run_id),
+                    {option: setting for option, setting
+                     in plugin.config.items()
+                     if plugin.takes_config[option].track})}
+            for d_depends in plugin.depends_on:
+                plugin.lineage.update(plugin.deps[d_depends].lineage)
 
-            if not hasattr(p, 'data_kind') and not p.multi_output:
-                if len(p.depends_on):
+            if not hasattr(plugin, 'data_kind') and not plugin.multi_output:
+                if len(plugin.depends_on):
                     # Assume data kind is the same as the first dependency
-                    first_dep = p.depends_on[0]
-                    p.data_kind = p.deps[first_dep].data_kind_for(first_dep)
+                    first_dep = plugin.depends_on[0]
+                    plugin.data_kind = plugin.deps[first_dep].data_kind_for(first_dep)
                 else:
                     # No dependencies: assume provided data kind and
                     # data type are synonymous
-                    p.data_kind = p.provides[0]
+                    plugin.data_kind = plugin.provides[0]
 
-            p.fix_dtype()
+            plugin.fix_dtype()
 
-            return p
+            return plugin
 
-        plugins = {}
+        non_local_plugins = {}
         for t in targets:
             p = get_plugin(t)
-            plugins[t] = p
+            non_local_plugins[t] = p
 
-        self._plugins_to_cache(plugins)
-        return plugins
+        self._plugins_to_cache(non_local_plugins)
+        return non_local_plugins
 
     def _per_run_default_allowed_check(self, option_name, option):
         """Check if an option of a registered plugin is allowed"""
