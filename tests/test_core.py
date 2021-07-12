@@ -278,7 +278,7 @@ def test_random_access():
         df = st.get_array(run_id, 'peaks', time_range=(3, 5))
         # Also test without the progress-bar
         df_pbar = st.get_array(run_id, 'peaks', time_range=(3, 5), progress_bar = False)
-        p = mystrax.get_single_plugin(run_id, 'records')
+        p = st.get_single_plugin(run_id, 'records')
         assert len(df) == 2 * p.config['recs_per_chunk']
         assert df['time'].min() == 3
         assert df['time'].max() == 4
@@ -287,7 +287,7 @@ def test_random_access():
         # Try again with unaligned chunks
         df = st.get_array(run_id, ['peaks', 'peak_classification'],
                           time_range=(3, 5))
-        assert len(df) == 2 * recs_per_chunk
+        assert len(df) == 2 * p.config['recs_per_chunk']
         assert df['time'].min() == 3
         assert df['time'].max() == 4
 

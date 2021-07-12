@@ -4,7 +4,7 @@ import shutil
 import strax
 import numpy as np
 import tempfile
-from strax.testutils import Records
+from strax.testutils import Records, PeaksWoByRunDefault
 import datetime
 import pytz
 import json
@@ -174,7 +174,7 @@ class TestSuperRuns(unittest.TestCase):
         rr_superrun = self.context.get_array('_superrun_test_rechunking', 'records')    
         rr_subruns = self.context.get_array(self.subrun_ids, 'records')    
         
-        chunks = [chunk for chunk in st.get_iter('_superrun_test_rechunking', 'records')]
+        chunks = [chunk for chunk in self.context.get_iter('_superrun_test_rechunking', 'records')]
         assert len(chunks) > 1, 'Number of chunks should be larger 1. Has the default chunksize changed?'
         assert np.all(rr_superrun['time'] == rr_subruns['time'])
 
@@ -182,14 +182,13 @@ class TestSuperRuns(unittest.TestCase):
         """
         Tests if superrun processing can trigger subrun processing.
         """
-        self.context.set_config({'dummy_tracked_option': -42})
-        assert not self.is_stored(self.superrun_name, 'records')
-        assert not self.is_stored(self.subrun_ids[0], 'records')
+        self.context.register(PeaksWoByRunDefault)
+        assert not self.context.is_stored(self.superrun_name, 'peaks')
+        assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
 
-        st.make(self.superrun_name, 'records')
-        assert self.is_stored(self.superrun_name, 'records')
-        assert self.is_stored(self.subrun_ids[0], 'records')
-
+        self.context.make(self.superrun_name, 'peaks')
+        assert self.context.is_stored(self.superrun_name, 'peaks')
+        assert self.context.is_stored(self.subrun_ids[0], 'peaks')
 
     def tearDown(self):
         if os.path.exists(self.tempdir):
