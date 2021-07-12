@@ -252,9 +252,10 @@ class Chunk:
             chunks = [chunks[i] for i in sorted_ind]
             subruns = dict()
             for c_i, c in enumerate(chunks):
-                if not c_i:
+                if not subruns:
                     subruns = c.subruns
                     continue
+                    
                 for subrun_id, subrun_start_end in c.subruns.items():
                     if subrun_id in subruns:
                         subruns[subrun_id] = {'start': min(subruns[subrun_id]['start'],
@@ -362,13 +363,15 @@ def split_array(data, t, allow_early_split=False):
 
 
 @export
-def transform_chunk_to_superrun_chunk(superrun_id, chunk):
+def transform_chunk_to_superrun_chunk(superrun_id, chunk, prev_chunk_end=None):
     """
     Function which transformes a strax chunk from a subrun to a superun
-    chunk.
+    chunk. In order to make the data continuous the chunk start is updated 
+    with the endtime of a previous subrun chunk if any.
 
     :param superrun_id: id/name of the superrun.
     :param chunk: strax.Chunk of a superrun subrun.
+    :param prev_chunk_end: End of the previous chunk.
     :return: strax.Chunk
     """
     if chunk is None:
@@ -380,4 +383,6 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     chunk.subruns = {subrun_id: {'start': subrun_start,
                                  'end': subrun_end}}
     chunk.run_id = superrun_id
+    if prev_chunk_end is not None:
+        chunk.start = prev_chunk_end
     return chunk
