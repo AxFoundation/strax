@@ -87,10 +87,8 @@ def test_sum_waveform(records, peak_left, peak_length):
     assert np.all(p['data'][:peak_length] == sum_wv)
 
     # Finally check that we also can use a selection of peaks to sum
-<<<<<<< HEAD
+
     strax.sum_waveform(peaks, records, np.ones(n_ch), n_top_pmts, store_top_waveform, select_peaks_indices=np.array([0]))
-=======
-    strax.sum_waveform(peaks, records, np.ones(n_ch), select_peaks_indices=np.array([0]))
 
 
 @settings(deadline=None)
@@ -257,4 +255,3 @@ def test_peak_overflow(records,
     assert len(peaklets) <= len(r)
     # Integer overflow will manifest itself here again:
     assert np.all(peaklets['dt'] > 0)
->>>>>>> c347764a9fe22d709e28542c1c2267d3981c796e
