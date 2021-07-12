@@ -15,6 +15,7 @@ import re
 class TestSuperRuns(unittest.TestCase):
 
     def setUp(self, superrun_name='_superrun_test'):
+        self.offset_between_subruns = 10
         self.superrun_name = superrun_name
         self.tempdir = tempfile.mkdtemp()
         self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
@@ -23,6 +24,8 @@ class TestSuperRuns(unittest.TestCase):
                                                                   deep_scan=True)],
                                      register=[Records, RecordsExtension],
                                      use_per_run_defaults=False)
+        self.context.set_context_config({'storage_converter': True})
+        
         logger = self.context.log
         logger.addFilter(lambda s: not re.match(".*Could not estimate run start and end time.*",
                                                 s.getMessage()))
@@ -50,6 +53,7 @@ class TestSuperRuns(unittest.TestCase):
         Load superruns from already existing subruns. Does not write
         "new" data.
         """
+        self.context.set_context_config({'storage_converter': False})
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
                                              progress_bar=False)
@@ -69,7 +73,7 @@ class TestSuperRuns(unittest.TestCase):
         Creates "new" superrun data from already existing data. Loads
         and compare data afterwards.
         """
-        self.context.set_context_config({'storage_converter': True})
+        
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
                                              progress_bar=False)
@@ -96,7 +100,6 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_select_runs(self):
         self.context.select_runs()
-        self.context.set_context_config({'storage_converter': True})
         self.context.make(self.superrun_name,
                           'records',
                           _check_lineage_per_run_id=False
@@ -109,7 +112,6 @@ class TestSuperRuns(unittest.TestCase):
         Superrun chunks and meta data should contain information about
         its constituent subruns.
         """
-        self.context.set_context_config({'storage_converter': True})
         self.context.make(self.superrun_name,
                           'records',
                           _check_lineage_per_run_id=False
@@ -126,6 +128,8 @@ class TestSuperRuns(unittest.TestCase):
 
         for subrun_id, start_and_end in chunk.subruns.items():
             rr = self.context.get_array(subrun_id, 'records')
+            # Tests below only true for records as we have not rechunked yet.
+            # After rechunking in general data start can be different from chunk start
             mes = f'Start time did not match for subrun: {subrun_id}'
             assert rr['time'].min() == start_and_end['start'], mes
             mes = f'End time did not match for subrun: {subrun_id}'
@@ -140,14 +144,47 @@ class TestSuperRuns(unittest.TestCase):
         rr = self.context.get_array(self.subrun_ids, ('records', 'records_extension'))
         p = self.context.get_single_plugin(self.subrun_ids[0], 'records_extension')
         assert np.all(rr['additional_field'] == p.config['some_additional_value'])
+        
+    def test_rechnunking_and_loading(self):
+        """
+        Tests rechunking and loading of superruns with multiple chunks.
+        
+        The test is required since it was possible to run into race conditions with 
+        chunk.continuity_check in context.get_iter and transform_chunk_to_superrun_chunk 
+        in storage.common.Saver.save_from.
+        """
+        self.context.set_config({'recs_per_chunk': 100000}) # Make chunks > 200 MB
+        
+        rr = self.context.get_array(self.subrun_ids, 'records')
+        endtime = np.max(strax.endtime(rr))
+
+        last_subrun_id = int(self.subrun_ids[-1])+1
+        for run_id in range(last_subrun_id, last_subrun_id+2):
+            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
+            rr = self.context.get_array(str(run_id), 'records')
+            self._write_run_doc(self.context, run_id, 
+                               self.now + datetime.timedelta(0, int(rr['time'].min())),
+                               self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
+            endtime = np.max(strax.endtime(rr))
+            self.subrun_ids.append(str(run_id))
+            
+        self.context.define_run('_superrun_test_rechunking', self.subrun_ids)
+        self.context.make('_superrun_test_rechunking', 'records')
+        
+        rr_superrun = self.context.get_array('_superrun_test_rechunking', 'records')    
+        rr_subruns = self.context.get_array(self.subrun_ids, 'records')    
+        
+        chunks = [chunk for chunk in st.get_iter('_superrun_test_rechunking', 'records')]
+        assert len(chunks) > 1, 'Number of chunks should be larger 1. Has the default chunksize changed?'
+        assert np.all(rr_superrun['time'] == rr_subruns['time'])
 
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
 
-    def _create_subruns(self, n_subruns=3, offset_between_subruns=2):
-        now = datetime.datetime.now()
-        now.replace(tzinfo=pytz.utc)
+    def _create_subruns(self, n_subruns=3):
+        self.now = datetime.datetime.now()
+        self.now.replace(tzinfo=pytz.utc)
         self.subrun_ids = [str(r) for r in range(n_subruns)]
 
         for run_id in self.subrun_ids:
@@ -157,11 +194,11 @@ class TestSuperRuns(unittest.TestCase):
 
             self._write_run_doc(self.context,
                                 run_id,
-                                now + datetime.timedelta(0, int(time)),
-                                now + datetime.timedelta(0, int(endtime)),
+                                self.now + datetime.timedelta(0, int(time)),
+                                self.now + datetime.timedelta(0, int(endtime)),
                                 )
 
-            self.context.set_config({'secret_time_offset': endtime + offset_between_subruns})
+            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
             assert self.context.is_stored(run_id, 'records')
 
     @staticmethod

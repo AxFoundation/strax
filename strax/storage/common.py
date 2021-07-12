@@ -560,7 +560,6 @@ class Saver:
 
         run_id = self.md['run_id']
         _is_super_run = run_id.startswith('_')
-
         try:
             last_chunk_end = None
             while not exhausted:
@@ -571,12 +570,15 @@ class Saver:
                         while (chunk is None or
                                 chunk.data.nbytes < chunk.target_size_mb*1e6):
                             next_chunk = next(source)
-                            
+
                             if _is_super_run:
                                 # If we are creating a superrun, we load data from subruns
                                 # and the loaded subrun chunk becomes a superun chunk:
-                                next_chunk = strax.transform_chunk_to_superrun_chunk(run_id, next_chunk)
-
+                                next_chunk = strax.transform_chunk_to_superrun_chunk(run_id, 
+                                                                                     next_chunk, 
+                                                                                     last_chunk_end)
+                                last_chunk_end = next_chunk.end
+                            
                             chunk = strax.Chunk.concatenate(
                                 [chunk, next_chunk])
                     else:
@@ -584,20 +586,16 @@ class Saver:
                         if _is_super_run:
                             # If we are creating a superrun, we load data from subruns
                             # and the loaded subrun chunk becomes a superun chunk:
-                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, chunk)
+                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, 
+                                                                            chunk, 
+                                                                            last_chunk_end)
+                            last_chunk_end = chunk.end
 
                 except StopIteration:
                     exhausted = True
 
                 if chunk is None:
                     break
-
-                if _is_super_run and last_chunk_end:
-                    # If the chunks was created via a super run there
-                    # might be gaps in the data between two runs. Hence
-                    # we have to adjust the chunk boundaries here.
-                    chunk.start = last_chunk_end
-                last_chunk_end = chunk.end
                 
                 new_f = self.save(chunk=chunk,
                                   chunk_i=chunk_i, executor=executor)
