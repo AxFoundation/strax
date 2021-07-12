@@ -140,6 +140,7 @@ several_fake_records_one_channel = sorted_bounds(
 ##
 @strax.takes_config(
     strax.Option('crash', default=False),
+    strax.Option('dummy_tracked_option', default=42),
     strax.Option('secret_time_offset', default=0, track=False),
     strax.Option('n_chunks', default=10, track=False),
     strax.Option('recs_per_chunk', default=10, track=False),
@@ -210,9 +211,8 @@ class PeakClassification(strax.Plugin):
                     time=peaks['time'],
                     endtime=strax.endtime(peaks))
 
-
+# Used in test_core.py
 run_id = '0'
-
 
 ##
 # Some test plugins to check

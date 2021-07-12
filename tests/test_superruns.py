@@ -178,6 +178,19 @@ class TestSuperRuns(unittest.TestCase):
         assert len(chunks) > 1, 'Number of chunks should be larger 1. Has the default chunksize changed?'
         assert np.all(rr_superrun['time'] == rr_subruns['time'])
 
+    def test_superrun_triggers_subrun_processing(self):
+        """
+        Tests if superrun processing can trigger subrun processing.
+        """
+        self.context.set_config({'dummy_tracked_option': -42})
+        assert not self.is_stored(self.superrun_name, 'records')
+        assert not self.is_stored(self.subrun_ids[0], 'records')
+
+        st.make(self.superrun_name, 'records')
+        assert self.is_stored(self.superrun_name, 'records')
+        assert self.is_stored(self.subrun_ids[0], 'records')
+
+
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
