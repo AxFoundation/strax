@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
+import copy
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']

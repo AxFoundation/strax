@@ -18,7 +18,8 @@ def test_core():
                                     )
             bla = mystrax.get_array(run_id=run_id, targets='peaks',
                                     max_workers=max_workers)
-            assert len(bla) == recs_per_chunk * n_chunks
+            p = mystrax.get_single_plugin(run_id, 'records')
+            assert len(bla) == p.config['recs_per_chunk'] * p.config['n_chunks']
             assert bla.dtype == strax.peak_dtype()
 
 
@@ -30,7 +31,8 @@ def test_multirun():
                                 )
         bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
                                 max_workers=max_workers)
-        n = recs_per_chunk * n_chunks
+        p = mystrax.get_single_plugin(run_id, 'records')
+        n = p.config['recs_per_chunk'] * p.config['n_chunks']
         assert len(bla) == n * 2
         np.testing.assert_equal(
             bla['run_id'],
@@ -51,7 +53,8 @@ def test_filestore():
 
         # Create it
         peaks_1 = mystrax.get_array(run_id=run_id, targets='peaks')
-        assert len(peaks_1) == recs_per_chunk * n_chunks
+        p = mystrax.get_single_plugin(run_id, 'records')
+        assert len(peaks_1) == p.config['recs_per_chunk'] * p.config['n_chunks']
 
         assert mystrax.is_stored(run_id, 'peaks')
         mystrax.scan_runs()
@@ -275,7 +278,8 @@ def test_random_access():
         df = st.get_array(run_id, 'peaks', time_range=(3, 5))
         # Also test without the progress-bar
         df_pbar = st.get_array(run_id, 'peaks', time_range=(3, 5), progress_bar = False)
-        assert len(df) == 2 * recs_per_chunk
+        p = mystrax.get_single_plugin(run_id, 'records')
+        assert len(df) == 2 * p.config['recs_per_chunk']
         assert df['time'].min() == 3
         assert df['time'].max() == 4
         assert np.all(df == df_pbar), 'progress-bar changes the result?!?'
