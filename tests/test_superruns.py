@@ -24,7 +24,7 @@ class TestSuperRuns(unittest.TestCase):
                                                                   deep_scan=True)],
                                      register=[Records, RecordsExtension],
                                      use_per_run_defaults=False)
-        self.context.set_context_config({'storage_converter': True})
+        self.context.set_context_config({'write_superruns': True})
         
         logger = self.context.log
         logger.addFilter(lambda s: not re.match(".*Could not estimate run start and end time.*",
@@ -53,7 +53,7 @@ class TestSuperRuns(unittest.TestCase):
         Load superruns from already existing subruns. Does not write
         "new" data.
         """
-        self.context.set_context_config({'storage_converter': False})
+        self.context.set_context_config({'write_superruns': False})
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
                                              progress_bar=False)

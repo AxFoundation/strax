@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
+import copy
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
@@ -74,7 +75,9 @@ tqdm = strax.utils.tqdm
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
-                      'func(<data>, <run_id>, <targets>).')
+                      'func(<data>, <run_id>, <targets>).'),
+    strax.Option(name='write_superruns', default=False,
+                 help='If True, save superruns as rechunked "new" data.'),
 )
 @export
 class Context:
@@ -776,6 +779,10 @@ class Context:
                         if not self.context_config['storage_converter']:
                             continue
                         # ... but in storage converter mode we do:
+                        if not self.context_config['write_superruns'] and _is_superrun:
+                            continue
+                            # ... or we want to write a new superrun. This is different from
+                            # storage converter mode as we do not want to write the subruns again.
                         try:
                             sf.find(key,
                                     **self._find_options)
