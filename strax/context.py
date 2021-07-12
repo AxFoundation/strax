@@ -720,10 +720,15 @@ class Context:
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
-
+            
             # Should we save this data? If not, return.
             if (loading_this_data
-                    and not self.context_config['storage_converter']):
+                    and not self.context_config['storage_converter']
+                    and not self.context_config['write_superruns']):
+                return
+            if (loading_this_data 
+                    and not self.context_config['write_superruns'] 
+                    and _is_superrun):
                 return
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
@@ -760,7 +765,7 @@ class Context:
                 self.log.warning(f"Not saving {d} while loading incomplete"
                                  f" data is allowed.")
                 return
-
+            
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
                 if savers.get(d_to_save):
@@ -776,11 +781,10 @@ class Context:
                         continue
                     if loading_this_data:
                         # Usually, we don't save if we're loading
-                        if not self.context_config['storage_converter']:
+                        if (not self.context_config['storage_converter'] 
+                                and (not self.context_config['write_superruns'] and _is_superrun)):
                             continue
-                        # ... but in storage converter mode we do:
-                        if not self.context_config['write_superruns'] and _is_superrun:
-                            continue
+                            # ... but in storage converter mode we do,
                             # ... or we want to write a new superrun. This is different from
                             # storage converter mode as we do not want to write the subruns again.
                         try:
