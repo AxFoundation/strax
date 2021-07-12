@@ -20,10 +20,26 @@ strax.processing.general module
    :undoc-members:
    :show-inheritance:
 
+strax.processing.hitlets module
+-------------------------------
+
+.. automodule:: strax.processing.hitlets
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 strax.processing.peak\_building module
 --------------------------------------
 
 .. automodule:: strax.processing.peak_building
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+strax.processing.peak\_merging module
+-------------------------------------
+
+.. automodule:: strax.processing.peak_merging
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,6 +64,14 @@ strax.processing.pulse\_processing module
 -----------------------------------------
 
 .. automodule:: strax.processing.pulse_processing
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+strax.processing.statistics module
+----------------------------------
+
+.. automodule:: strax.processing.statistics
    :members:
    :undoc-members:
    :show-inheritance:
