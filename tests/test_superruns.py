@@ -24,7 +24,7 @@ class TestSuperRuns(unittest.TestCase):
                                                                   deep_scan=True)],
                                      register=[Records, RecordsExtension],
                                      use_per_run_defaults=False)
-        self.context.set_context_config({'storage_converter': True})
+        self.context.set_context_config({'write_superruns': True})
         
         logger = self.context.log
         logger.addFilter(lambda s: not re.match(".*Could not estimate run start and end time.*",
@@ -53,7 +53,7 @@ class TestSuperRuns(unittest.TestCase):
         Load superruns from already existing subruns. Does not write
         "new" data.
         """
-        self.context.set_context_config({'storage_converter': False})
+        self.context.set_context_config({'write_superruns': False})
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
                                              progress_bar=False)
@@ -177,6 +177,19 @@ class TestSuperRuns(unittest.TestCase):
         chunks = [chunk for chunk in st.get_iter('_superrun_test_rechunking', 'records')]
         assert len(chunks) > 1, 'Number of chunks should be larger 1. Has the default chunksize changed?'
         assert np.all(rr_superrun['time'] == rr_subruns['time'])
+
+    def test_superrun_triggers_subrun_processing(self):
+        """
+        Tests if superrun processing can trigger subrun processing.
+        """
+        self.context.set_config({'dummy_tracked_option': -42})
+        assert not self.is_stored(self.superrun_name, 'records')
+        assert not self.is_stored(self.subrun_ids[0], 'records')
+
+        st.make(self.superrun_name, 'records')
+        assert self.is_stored(self.superrun_name, 'records')
+        assert self.is_stored(self.subrun_ids[0], 'records')
+
 
     def tearDown(self):
         if os.path.exists(self.tempdir):
