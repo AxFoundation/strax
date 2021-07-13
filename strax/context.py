@@ -424,12 +424,16 @@ class Context:
 
     def _config_hash(self):
         """
-        Dump the current config to a hash as a sanity check for building
-        the _fixed_plugin_cache. If any item changes in the config, so
-        does this hash.
+        Dump the current config + plugin class registry to a hash as a
+        sanity check for building the _fixed_plugin_cache. If any item
+        changes in the config, so does this hash.
         """
-        return hashlib.sha1(str(self.config).encode('ascii')).hexdigest()
-        # return strax.deterministic_hash(self.config)
+        base_hash_on_config = self.config.copy()
+        # Also take into account the versions of the plugins registered
+        base_hash_on_config.update({data_type: plugin.__version__
+                                    for data_type, plugin in
+                                    self._plugin_class_registry.items()})
+        return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets:  ty.Tuple[str]) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache"""
@@ -451,6 +455,9 @@ class Context:
             # There is no point in caching if plugins (lineage) can change per run
             return
         if self._fixed_plugin_cache is None or self._config_hash() not in self._fixed_plugin_cache:
+            # Create a new cache every time the hash is not matching to
+            # save memory. If a config changes, building the cache again
+            # should be fast, we just need to track which cache to use.
             self._fixed_plugin_cache = {self._config_hash(): dict()}
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[self._config_hash()][target] = plugin
