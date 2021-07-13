@@ -650,8 +650,6 @@ class Context:
     def get_components(self, run_id: str,
                        targets=tuple(), save=tuple(),
                        time_range=None, chunk_number=None,
-                       _check_lineage_per_run_id=True,
-                       _subrun_plugin=None,
                        ) -> strax.ProcessorComponents:
         """Return components for setting up a processor
         {get_docs}
@@ -664,12 +662,7 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        if _subrun_plugin and not _check_lineage_per_run_id:
-            plugins = copy.copy(_subrun_plugin)
-            for plugin in plugins.values():
-                plugin.run_id = run_id
-        else:
-            plugins = self._get_plugins(targets, run_id)
+        plugins = self._get_plugins(targets, run_id)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -704,33 +697,21 @@ class Context:
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
 
-                if not _check_lineage_per_run_id:
-                    subrun_id = list(sub_run_spec.keys())[0]
-                    _subrun_plugins = self._get_plugins((d,),
-                                                        subrun_id)
-                    _superrun_lineage = _subrun_plugins[d].lineage
 
                 # Make subruns if they do not exist, since we do not 
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d, _subrun_plugin=plugins,
-                         _check_lineage_per_run_id=_check_lineage_per_run_id)
+                self.make(list(sub_run_spec.keys()), d)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
                 for subrun in sub_run_spec:
-                    if _check_lineage_per_run_id:
-                        sub_key = strax.DataKey(
-                            subrun,
-                            d,
-                            self._get_plugins((d,), subrun)[d].lineage)
-                    else:
-                        sub_key = strax.DataKey(
-                            subrun,
-                            d,
-                            _superrun_lineage)
+                    sub_key = strax.DataKey(
+                        subrun,
+                        d,
+                        self._get_plugins((d,), subrun)[d].lineage)
 
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
@@ -990,8 +971,6 @@ class Context:
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
-                 _subrun_plugin=None,
-                 _check_lineage_per_run_id=True,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
@@ -1045,9 +1024,7 @@ class Context:
                                          targets=targets,
                                          save=save,
                                          time_range=time_range,
-                                         chunk_number=_chunk_number,
-                                         _check_lineage_per_run_id=_check_lineage_per_run_id,
-                                         _subrun_plugin=_subrun_plugin)
+                                         chunk_number=_chunk_number)
 
         # Cleanup the temp plugins
         for k in list(self._plugin_class_registry.keys()):
@@ -1648,11 +1625,6 @@ the start of the run to load.
 - touching: select things that (partially) overlap with the range
 - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
-:param _check_lineage_per_run_id: For internal use: If False uses already
-    initlized plugins from _subrun_plugin to create/load data. 
-:param _subrun_plugin: For internal use: Dictionary of already initilized 
-    plugins which should be used to create the data. Is used together with
-    _check_lineage_per_run_id.
 :param progress_bar: Display a progress bar if metedata exists.
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
