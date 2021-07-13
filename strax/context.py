@@ -697,7 +697,6 @@ class Context:
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
 
-
                 # Make subruns if they do not exist, since we do not 
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
