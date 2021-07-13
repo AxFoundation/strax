@@ -435,7 +435,7 @@ class Context:
                                     self._plugin_class_registry.items()})
         return strax.deterministic_hash(base_hash_on_config)
 
-    def _plugins_are_cached(self) -> bool:
+    def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache"""
         if self.context_config['use_per_run_defaults'] or self._fixed_plugin_cache is None:
             # There is no point in caching if plugins (lineage) can
@@ -443,7 +443,10 @@ class Context:
             return False
 
         context_hash = self._context_hash()
-        return context_hash in self._fixed_plugin_cache
+        if context_hash not in self._fixed_plugin_cache:
+            return False
+        plugin_cache = self._fixed_plugin_cache[context_hash]
+        return all([t in plugin_cache for t in targets])
 
     def _plugins_to_cache(self, plugins: dict) -> None:
         if self.context_config['use_per_run_defaults']:
@@ -477,7 +480,7 @@ class Context:
         For a plugin that produces multiple outputs, we make only a single
         instance, which is referenced under multiple keys in the output dict.
         """
-        if self._plugins_are_cached():
+        if self._plugins_are_cached(targets):
             return self.__get_plugins_from_cache(run_id)
 
         # Check all config options are taken by some registered plugin class
