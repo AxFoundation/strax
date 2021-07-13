@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
-import hashlib
+
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
@@ -461,6 +461,15 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
+    def _fix_dependency(self, register, end_plugin):
+        """
+        Starting from end-plugin, fix the dtype until there is nothing
+        left to fix. Keep in mind that dtypes can be chained.
+        """
+        for go_to in register[end_plugin].depends_on:
+            self._fix_dependency(register, go_to)
+        register[end_plugin].fix_dtype()
+
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
@@ -468,8 +477,21 @@ class Context:
         requested_plugins = {}
         for target, plugin in self._fixed_plugin_cache[self._context_hash()].items():
             # Lineage is fixed, just replace the run_id
-            plugin.run_id = run_id
-            requested_plugins[target] = plugin
+            requested_plugins[target] = plugin.__copy__()
+            requested_plugins[target].run_id = run_id
+
+        # At this stage, all the plugins should be in requested_plugins
+        # To prevent infinite copying, we are only now linking the
+        # dependencies of each plugin to another where needed.
+        for target, plugin in requested_plugins.items():
+            plugin.deps = {dependency: requested_plugins[dependency]
+                           for dependency in plugin.depends_on
+                           }
+        # Finally, fix the dtype. Since infer_dtype may depend on the
+        # entire deps chain, we need to start at the last plugin and go
+        # all the way down to the lowest level.
+        for final_plugins in self._get_end_targets(requested_plugins):
+            self._fix_dependency(requested_plugins, final_plugins)
         return requested_plugins
 
     def _get_plugins(self,
@@ -1328,7 +1350,8 @@ class Context:
             raise
 
     def key_for(self, run_id, target):
-        """Get the DataKey for a given run and a given target plugin. The
+        """
+        Get the DataKey for a given run and a given target plugin. The
         DataKey is inferred from the plugin lineage.
 
         :param run_id: run id to get
