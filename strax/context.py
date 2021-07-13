@@ -477,7 +477,7 @@ class Context:
         For a plugin that produces multiple outputs, we make only a single
         instance, which is referenced under multiple keys in the output dict.
         """
-        if self._plugins_are_cached(targets):
+        if self._plugins_are_cached():
             return self.__get_plugins_from_cache(run_id)
 
         # Check all config options are taken by some registered plugin class
