@@ -96,8 +96,12 @@ def _loop_test_inner(big_data,
         depends_on = 'big_thing'
         provides = 'small_thing'
         data_kind = 'small_kinda_data'
-        dtype = _dtype
+
         rechunk_on_save = True
+
+        def infer_dtype(self):
+            dtype = _dtype
+            return dtype
 
         def compute(self, big_kinda_data):
             # Drop some of the data in big_kinda_data
