@@ -98,7 +98,7 @@ class TestContextFixedPluginCache(unittest.TestCase):
         # Compute the key/hash under which we will store the plugins
         st.key_for('0', 'peaks')
         assert st._fixed_plugin_cache[st._context_hash()]['peaks'].dtype_is_set
-        
+
         # Now recreate for a new run
         st.key_for('1', 'peaks')
         assert st._fixed_plugin_cache[st._context_hash()]['peaks'].dtype_is_set
