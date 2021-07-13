@@ -422,7 +422,7 @@ class Context:
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
 
-    def _config_hash(self):
+    def _context_hash(self):
         """
         Dump the current config + plugin class registry to a hash as a
         sanity check for building the _fixed_plugin_cache. If any item
@@ -435,39 +435,35 @@ class Context:
                                     self._plugin_class_registry.items()})
         return strax.deterministic_hash(base_hash_on_config)
 
-    def _plugins_are_cached(self, targets:  ty.Tuple[str]) -> bool:
+    def _plugins_are_cached(self) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache"""
         if self.context_config['use_per_run_defaults'] or self._fixed_plugin_cache is None:
             # There is no point in caching if plugins (lineage) can
             # change per run or the cache is empty.
             return False
 
-        config_hash = self._config_hash()
-        if config_hash in self._fixed_plugin_cache:
-            targets_in_cache = [t in self._fixed_plugin_cache[config_hash] for t in targets]
-            if all(targets_in_cache):
-                return True
-
-        return False
+        context_hash = self._context_hash()
+        return context_hash in self._fixed_plugin_cache
 
     def _plugins_to_cache(self, plugins: dict) -> None:
         if self.context_config['use_per_run_defaults']:
             # There is no point in caching if plugins (lineage) can change per run
             return
-        if self._fixed_plugin_cache is None or self._config_hash() not in self._fixed_plugin_cache:
+        context_hash = self._context_hash()
+        if self._fixed_plugin_cache is None or context_hash not in self._fixed_plugin_cache:
             # Create a new cache every time the hash is not matching to
             # save memory. If a config changes, building the cache again
             # should be fast, we just need to track which cache to use.
-            self._fixed_plugin_cache = {self._config_hash(): dict()}
+            self._fixed_plugin_cache = {context_hash: dict()}
         for target, plugin in plugins.items():
-            self._fixed_plugin_cache[self._config_hash()][target] = plugin
+            self._fixed_plugin_cache[context_hash][target] = plugin
 
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache"""
         requested_plugins = {}
-        for target, plugin in self._fixed_plugin_cache[self._config_hash()].items():
+        for target, plugin in self._fixed_plugin_cache[self._context_hash()].items():
             # Lineage is fixed, just replace the run_id
             plugin.run_id = run_id
             requested_plugins[target] = plugin
