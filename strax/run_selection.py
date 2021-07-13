@@ -393,7 +393,7 @@ def available_for_run(self: strax.Context,
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
-    result = np.zeros(len(dsets), dtype=np.bool)
+    result = np.zeros(len(dsets), dtype=np.bool_)
 
     if isinstance(patterns, str):
         patterns = [patterns]

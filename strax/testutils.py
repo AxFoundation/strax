@@ -187,7 +187,7 @@ class Peaks(strax.Plugin):
 
     def compute(self, records):
         if self.config['give_wrong_dtype']:
-            return np.zeros(5, [('a', np.int), ('b', np.float)])
+            return np.zeros(5, [('a', np.int64), ('b', np.float64)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
         p['length'] = p['dt'] = 1
