@@ -120,13 +120,15 @@ class TestSuperRuns(unittest.TestCase):
         meta = self.context.get_meta(self.superrun_name, 'records')
 
         n_chunks = 0
+        superrun_chunk = None
         for chunk in self.context.get_iter(self.superrun_name, 'records'):
+            superrun_chunk = chunk
             n_chunks += 1
 
-        assert len(meta['chunks']) == n_chunks
-        assert meta['chunks'][0]['subruns'] == chunk.subruns
+        assert len(meta['chunks']) == n_chunks == 1
+        assert meta['chunks'][0]['subruns'] == superrun_chunk.subruns
 
-        for subrun_id, start_and_end in chunk.subruns.items():
+        for subrun_id, start_and_end in superrun_chunk.subruns.items():
             rr = self.context.get_array(subrun_id, 'records')
             # Tests below only true for records as we have not rechunked yet.
             # After rechunking in general data start can be different from chunk start
