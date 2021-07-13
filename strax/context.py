@@ -494,6 +494,7 @@ class Context:
             self._fix_dependency(requested_plugins, final_plugins)
         return requested_plugins
 
+
     def _get_plugins(self,
                      targets: ty.Tuple[str],
                      run_id: str) -> ty.Dict[str, strax.Plugin]:
@@ -1352,14 +1353,20 @@ class Context:
     def key_for(self, run_id, target):
         """
         Get the DataKey for a given run and a given target plugin. The
-        DataKey is inferred from the plugin lineage.
+        DataKey is inferred from the plugin lineage. The lineage can
+        come either from the _fixed_plugin_cache or computed on the fly.
 
         :param run_id: run id to get
         :param target: data type to get
         :return: strax.DataKey of the target
         """
-        p = self._get_plugins((target,), run_id)[target]
-        return strax.DataKey(run_id, target, p.lineage)
+        if self._plugins_are_cached((target,)):
+            plugins = self._fixed_plugin_cache[self._context_hash()]
+        else:
+            plugins = self._get_plugins((target,), run_id)
+
+        lineage = plugins[target].lineage
+        return strax.DataKey(run_id, target, lineage)
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable
