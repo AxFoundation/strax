@@ -15,6 +15,7 @@ import dill
 import numba
 import numpy as np
 import pandas as pd
+from collections.abc import Mapping
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -248,6 +249,9 @@ def hashablize(obj):
     """Convert a container hierarchy into one that can be hashed.
     See http://stackoverflow.com/questions/985294
     """
+    if isinstance(obj, Mapping):
+        # Convert immutabledict etc for json decoding
+        obj = dict(obj)
     try:
         hash(obj)
     except TypeError:
