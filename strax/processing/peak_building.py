@@ -154,10 +154,12 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
+def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
+    :param hits: Hits which are inside peaks. Must be sorted according
+        to record_i.
     :arg select_peaks_indices: Indices of the peaks for partial
     processing. In the form of np.array([np.int, np.int, ..]). If
     None (default), all the peaks are used for the summation.
@@ -181,6 +183,8 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
     # Index of first record that could still contribute to subsequent peaks
     # Records before this do not need to be considered anymore
     left_r_i = 0
+    # Same but for hits:
+    last_hit_seen = 0
 
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -239,11 +243,27 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
 
             bl_fpart = r['baseline'] % 1
             # TODO: check numba does casting correctly here!
-            pe_waveform = adc_to_pe[ch] * (
-                    multiplier * r['data'][r_start:r_end]
-                    + bl_fpart)
 
-            swv_buffer[p_start:p_end] += pe_waveform
+            pe_waveform = np.zeros(len(r['data']))
+            for h_i in range(last_hit_seen, len(hits)):
+                # Loop over hits only sum waveform on region inside hits.
+                # This is needed as we would otherwise add up baseline
+                # leading to some bias.
+                h = hits[h_i]
+                
+                if h['record_i'] < right_r_i:
+                    last_hit_seen += 1
+                    continue
+                if h['record_i'] > right_r_i:
+                    break
+                
+                h_start = h['left_integration']
+                h_end = h['right_integration']
+                pe_waveform[h_start:h_end] += (multiplier * r['data'][h_start:h_end] + bl_fpart)
+                last_hit_seen += 1
+
+            pe_waveform *= adc_to_pe[ch]
+            swv_buffer[p_start:p_end] += pe_waveform[r_start:r_end]
 
             area_pe = pe_waveform.sum()
             area_per_channel[ch] += area_pe
