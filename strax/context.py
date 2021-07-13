@@ -804,7 +804,6 @@ class Context:
                 self.log.warning(f"Not saving {d} while loading incomplete"
                                  f" data is allowed.")
                 return
-            
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
                 if savers.get(d_to_save):
