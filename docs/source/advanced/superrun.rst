@@ -51,6 +51,33 @@ for exmaple event_info via::
 
     st.make('_awesome_superrun', 'event_info)
 
+For bookkeeping each stored superrun chunk contains information of its constituents in a field
+called subruns e.g.:
+
+    {'0': {'end': 10, 'start': 0},
+     '1': {'end': 30, 'start': 20},
+     '2': {'end': 50, 'start': 40}}
+
+Where the keys represent the subrun_ids and start/end the start and end of the corresponding
+first/last chunk included in the superrun chunk. The same information can also be found in the
+metadata of the individual chunks:
+
+    {'chunk_i': 0,
+     'end': 50,
+     'filename': 'records-j3nd2fjbiq-000000',
+     'filesize': 2343,
+     'first_endtime': 1,
+     'first_time': 0,
+     'last_endtime': 50,
+     'last_time': 49,
+     'n': 300,
+     'nbytes': 77100,
+     'run_id': '_superrun_test',
+     'start': 0,
+     'subruns': {'0': {'end': 10, 'start': 0},
+                 '1': {'end': 30, 'start': 20},
+                 '2': {'end': 50, 'start': 40}}}
+
 After creating data we can load the superrun as we are used to and combine it with other data_types
 of the same kind too.
 
