@@ -126,12 +126,19 @@ class Plugin:
         Note:
             self.deps is NOT copied for it is recursive and therefor slow.
             Instead, this is better handled within the context after all
-            plugins are coppied.
+            plugins are copied.
         """
         plugin_copy = self.__class__()
         plugin_copy.__init__()
-
-        for attribute in ['dtype', 'lineage', 'takes_config', '__version__', 'config', 'data_kind']:
+        # As explained in PR #485 only copy attributes whereof we know
+        # don't depend on the run_id (for use_per_run_defaults == False).
+        # Otherwise we might copy run-dependent things like to_pe.
+        for attribute in ['dtype',
+                          'lineage',
+                          'takes_config',
+                          '__version__',
+                          'config',
+                          'data_kind']:
             source_value = getattr(self, attribute)
             if _deep_copy:
                 plugin_copy.__setattr__(attribute, deepcopy(source_value))
