@@ -175,7 +175,7 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_superrun_triggers_subrun_processing(self):
         """
-        Tests if superrun processing can trigger subrun processing.
+        Tests if superrun processing can trigger subrun processing. Which it should.
         """
         assert not self.context.is_stored(self.superrun_name, 'peaks')
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')

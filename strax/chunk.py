@@ -364,7 +364,7 @@ def split_array(data, t, allow_early_split=False):
 @export
 def transform_chunk_to_superrun_chunk(superrun_id, chunk, prev_chunk_end=None):
     """
-    Function which transformes a strax chunk from a subrun to a superun
+    Function which transforms a strax chunk from a subrun to a superrun
     chunk. In order to make the data continuous the chunk start is updated 
     with the endtime of a previous subrun chunk if any.
 

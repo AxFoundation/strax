@@ -596,7 +596,6 @@ class Saver:
 
                 if chunk is None:
                     break
-                
                 new_f = self.save(chunk=chunk,
                                   chunk_i=chunk_i, executor=executor)
                 pending = [f for f in pending if not f.done()]

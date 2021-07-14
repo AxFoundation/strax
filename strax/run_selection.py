@@ -336,7 +336,6 @@ def define_run(self: strax.Context,
     # Superrun names must start with an underscore
     if not name.startswith('_'):
         name = '_' + name
-    
     # Dict mapping run_id: array of time ranges or all
     for sf in self.storage:
         if not sf.readonly and sf.can_define_runs:
