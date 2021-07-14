@@ -461,14 +461,14 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
-    def _fix_dependency(self, register, end_plugin):
+    def _fix_dependency(self, plugin_resistry: dict, end_plugin: str):
         """
         Starting from end-plugin, fix the dtype until there is nothing
         left to fix. Keep in mind that dtypes can be chained.
         """
-        for go_to in register[end_plugin].depends_on:
-            self._fix_dependency(register, go_to)
-        register[end_plugin].fix_dtype()
+        for go_to in plugin_resistry[end_plugin].depends_on:
+            self._fix_dependency(plugin_resistry, go_to)
+        plugin_resistry[end_plugin].fix_dtype()
 
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
