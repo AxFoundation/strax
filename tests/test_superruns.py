@@ -4,7 +4,7 @@ import shutil
 import strax
 import numpy as np
 import tempfile
-from strax.testutils import Records, PeaksWoByRunDefault
+from strax.testutils import Records, Peaks
 import datetime
 import pytz
 import json
@@ -17,19 +17,24 @@ class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name='_superrun_test'):
         self.offset_between_subruns = 10
         self.superrun_name = superrun_name
+        # Temp directory for storing record data for the tests.
+        # Will be removed during TearDown.
         self.tempdir = tempfile.mkdtemp()
         self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
                                                                   deep_scan=True)],
-                                     register=[Records, RecordsExtension],
-                                     use_per_run_defaults=False)
-        self.context.set_context_config({'write_superruns': True})
+                                     register=[Records, RecordsExtension, Peaks],
+                                     config={'bonus_area': 42}
+                                     )
+        self.context.set_context_config({'write_superruns': True,
+                                         'use_per_run_defaults': False
+                                         })
         
         logger = self.context.log
         logger.addFilter(lambda s: not re.match(".*Could not estimate run start and end time.*",
                                                 s.getMessage()))
-
+        self.context._plugin_class_registry['records'].chunk_target_size_mb = 1
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)  # Define superrun
 
@@ -60,14 +65,6 @@ class TestSuperRuns(unittest.TestCase):
         superrun_data = self.context.get_array(self.superrun_name, 'records')
         assert np.all(subrun_data['time'] == superrun_data['time'])
 
-        # Deactivate the lineage check for subruns:
-        superrun_data = self.context.get_array(self.superrun_name,
-                                               'records',
-                                               _check_lineage_per_run_id=False
-                                               )
-        assert np.all(subrun_data['time'] == superrun_data['time'])
-        assert not self.context.is_stored(self.superrun_name, 'records')
-
     def test_create_and_load_superruns(self):
         """
         Creates "new" superrun data from already existing data. Loads
@@ -79,13 +76,9 @@ class TestSuperRuns(unittest.TestCase):
                                              progress_bar=False)
 
         self.context.make(self.superrun_name,
-                          'records',
-                          _check_lineage_per_run_id=False
-                          )
+                          'records',)
         superrun_data = self.context.get_array(self.superrun_name,
-                                               'records',
-                                               _check_lineage_per_run_id=False
-                                               )
+                                               'records',)
 
         assert self.context.is_stored(self.superrun_name, 'records')
         assert np.all(subrun_data['time'] == superrun_data['time'])
@@ -101,9 +94,7 @@ class TestSuperRuns(unittest.TestCase):
     def test_select_runs(self):
         self.context.select_runs()
         self.context.make(self.superrun_name,
-                          'records',
-                          _check_lineage_per_run_id=False
-                          )
+                          'records',)
         df = self.context.select_runs(available=('records',))
         assert self.superrun_name in df['name'].values
 
@@ -113,9 +104,7 @@ class TestSuperRuns(unittest.TestCase):
         its constituent subruns.
         """
         self.context.make(self.superrun_name,
-                          'records',
-                          _check_lineage_per_run_id=False
-                          )
+                          'records',)
 
         meta = self.context.get_meta(self.superrun_name, 'records')
 
@@ -155,13 +144,16 @@ class TestSuperRuns(unittest.TestCase):
         chunk.continuity_check in context.get_iter and transform_chunk_to_superrun_chunk 
         in storage.common.Saver.save_from.
         """
-        self.context.set_config({'recs_per_chunk': 100000}) # Make chunks > 200 MB
+
+        self.context.set_config({'recs_per_chunk': 5000}) # Make chunks > 1 MB
         
         rr = self.context.get_array(self.subrun_ids, 'records')
         endtime = np.max(strax.endtime(rr))
 
-        last_subrun_id = int(self.subrun_ids[-1])+1
-        for run_id in range(last_subrun_id, last_subrun_id+2):
+        # Make two additional chunks which are large comapred to the first
+        # three chunks
+        next_subrun_id = int(self.subrun_ids[-1])+1
+        for run_id in range(next_subrun_id, next_subrun_id+2):
             self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
             rr = self.context.get_array(str(run_id), 'records')
             self._write_run_doc(self.context, run_id, 
@@ -169,7 +161,7 @@ class TestSuperRuns(unittest.TestCase):
                                self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
             endtime = np.max(strax.endtime(rr))
             self.subrun_ids.append(str(run_id))
-            
+
         self.context.define_run('_superrun_test_rechunking', self.subrun_ids)
         self.context.make('_superrun_test_rechunking', 'records')
         
@@ -177,14 +169,14 @@ class TestSuperRuns(unittest.TestCase):
         rr_subruns = self.context.get_array(self.subrun_ids, 'records')    
         
         chunks = [chunk for chunk in self.context.get_iter('_superrun_test_rechunking', 'records')]
-        assert len(chunks) > 1, 'Number of chunks should be larger 1. Has the default chunksize changed?'
+        assert len(chunks) > 1, f'Number of chunks should be larger 1. ' \
+                                f'{chunks[0].target_size_mb, chunks[0].nbytes/10**6}'
         assert np.all(rr_superrun['time'] == rr_subruns['time'])
 
     def test_superrun_triggers_subrun_processing(self):
         """
         Tests if superrun processing can trigger subrun processing.
         """
-        self.context.register(PeaksWoByRunDefault)
         assert not self.context.is_stored(self.superrun_name, 'peaks')
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
 

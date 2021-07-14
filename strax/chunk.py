@@ -250,7 +250,6 @@ class Chunk:
             start_times = [c.start for c in chunks]
             sorted_ind = np.argsort(start_times)
             chunks = [chunks[i] for i in sorted_ind]
-            subruns = dict()
             for c_i, c in enumerate(chunks):
                 if not subruns:
                     subruns = c.subruns

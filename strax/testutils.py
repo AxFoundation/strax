@@ -194,26 +194,6 @@ class Peaks(strax.Plugin):
         p['area'] = self.config['base_area'] + self.config['bonus_area']
         return p
 
-# Same as Peaks but without any default_by_run options.
-@strax.takes_config(
-    strax.Option('base_area', default=0),
-    strax.Option('give_wrong_dtype', default=False),
-    strax.Option('bonus_area', default=42))
-class PeaksWoByRunDefault(strax.Plugin):
-    provides = 'peaks'
-    data_kind = 'peaks'
-    depends_on = ('records',)
-    dtype = strax.peak_dtype()
-    parallel = True
-
-    def compute(self, records):
-        if self.config['give_wrong_dtype']:
-            return np.zeros(5, [('a', np.int), ('b', np.float)])
-        p = np.zeros(len(records), self.dtype)
-        p['time'] = records['time']
-        p['length'] = p['dt'] = 1
-        p['area'] = self.config['base_area'] + self.config['bonus_area']
-        return p
 
 # Another peak-kind plugin, to test time_range selection
 # with unaligned chunks

@@ -260,8 +260,24 @@ def select_runs(self, run_mode=None, run_id=None,
 @strax.Context.add_method
 def define_run(self: strax.Context,
                name: str,
-               data: ty.Union[np.ndarray, pd.DataFrame, dict],
+               data: ty.Union[np.ndarray, pd.DataFrame, dict, list, tuple],
                from_run: ty.Union[str, None] = None):
+    """
+    Function for defining new superruns from a list of run_ids.
+
+    Note:
+        The function also allows to create a superrun from data
+        (numpy.arrays/pandas.DataFframrs). However, this is currently
+        not supported from the data loading side.
+
+    :param name: Name/run_id of the superrun. Suoerrun names must start
+        with an underscore.
+    :param data: Data from which the superrun should be created. Can be
+        either one of the following: a tuple/list of run_ids or a
+        numpy.array/pandas.DataFrame containing some data.
+    :param from_run: List of run_ids which were used to create the
+        numpy.array/pandas.DataFrame passed in data.
+    """
     if isinstance(data, (pd.DataFrame, np.ndarray)):
         if isinstance(data, np.ndarray):
             data = pd.DataFrame.from_records(data)
