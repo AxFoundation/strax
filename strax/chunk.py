@@ -113,6 +113,10 @@ class Chunk:
     def duration(self):
         return self.end - self.start
 
+    @property
+    def is_superrun(self):
+        return bool(self.subruns)
+
     def _mbs(self):
         if self.duration:
             return (self.nbytes / 1e6) / (self.duration / 1e9)
@@ -236,7 +240,6 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
-        is_superrun = np.all([c.subruns for c in chunks])
 
         if len(set(run_ids)) != 1:
             raise ValueError(
@@ -244,23 +247,7 @@ class Chunk:
                 f"different run ids: {run_ids}")
 
         run_id = run_ids[0]
-        
-        subruns=None
-        if is_superrun:
-            for c_i, c in enumerate(chunks):
-                if not subruns:
-                    subruns = c.subruns
-                    continue
-                    
-                for subrun_id, subrun_start_end in c.subruns.items():
-                    if subrun_id in subruns:
-                        subruns[subrun_id] = {'start': min(subruns[subrun_id]['start'],
-                                                           subrun_start_end['start']),
-                                              'end': max(subruns[subrun_id]['end'],
-                                                         subrun_start_end['end'])
-                                              }
-                    else:
-                        subruns[subrun_id] = subrun_start_end
+        subruns = _update_subruns_in_chunk(chunks)
 
         prev_end = 0
         for c in chunks:
@@ -382,3 +369,26 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk, prev_chunk_end=None):
     if prev_chunk_end is not None:
         chunk.start = prev_chunk_end
     return chunk
+
+
+def _update_subruns_in_chunk(chunks):
+    """
+    Updates list of subruns in a superrun chunk during concatenation
+    Updates also their start/ends too.
+    """
+    subruns = None
+    for c_i, c in enumerate(chunks):
+        if not subruns:
+            subruns = c.subruns
+            continue
+
+        for subrun_id, subrun_start_end in c.subruns.items():
+            if subrun_id in subruns:
+                subruns[subrun_id] = {'start': min(subruns[subrun_id]['start'],
+                                                   subrun_start_end['start']),
+                                      'end': max(subruns[subrun_id]['end'],
+                                                 subrun_start_end['end'])
+                                      }
+            else:
+                subruns[subrun_id] = subrun_start_end
+    return subruns
