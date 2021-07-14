@@ -52,7 +52,6 @@ def sorted_bounds(disjoint=False,
 # Fake intervals
 ##
 
-# TODO: isn't this duplicated with bounds_to_records??
 
 def bounds_to_intervals(bs, dtype=strax.interval_dtype):
     x = np.zeros(len(bs), dtype=dtype)

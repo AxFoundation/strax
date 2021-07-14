@@ -9,7 +9,7 @@ import strax
 
 def _find_hits(r):
     # Test pulses have dt=1 and time=0
-    # TODO: hm, maybe this doesn't test everything
+    # hm, maybe this doesn't test everything?
 
     hits = strax.find_hits(r, min_amplitude=1)
 

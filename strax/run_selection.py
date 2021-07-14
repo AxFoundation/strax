@@ -15,7 +15,6 @@ export, __all__ = strax.exporter()
 def list_available(self, target, **kwargs):
     """Return sorted list of run_id's for which target is available
     """
-    # TODO duplicated code with with get_iter
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)

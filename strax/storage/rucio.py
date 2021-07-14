@@ -42,6 +42,7 @@ def rucio_path(root_dir, filename, dirname):
     """Convert target to path according to rucio convention"""
     scope = "xnt_"+dirname.split('-')[0]
     rucio_did = "{0}:{1}".format(scope, filename)
+    # disable bandit
     rucio_md5 = hashlib.md5(rucio_did.encode('utf-8')).hexdigest()
     t1 = rucio_md5[0:2]
     t2 = rucio_md5[2:4]

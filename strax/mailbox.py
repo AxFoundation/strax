@@ -1,3 +1,4 @@
+# pylint: redefined-builtin
 from concurrent.futures import Future, TimeoutError
 import heapq
 import sys
@@ -319,7 +320,6 @@ class Mailbox:
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
                                " for room for new messages.")
-                # TODO: this is duplicated from above...
                 if self.force_killed:
                     raise MailboxKilled(self.killed_because)
                 return

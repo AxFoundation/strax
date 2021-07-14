@@ -265,7 +265,6 @@ def continuity_check(chunk_iter):
     last_runid = None
     for s in chunk_iter:
         if s.run_id != last_runid:
-            # TODO: can we do better?
             last_end = None
         if last_end is not None:
             if s.start != last_end:

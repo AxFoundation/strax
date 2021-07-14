@@ -147,7 +147,6 @@ class Context:
         :param replace: If True, replaces settings rather than adding them.
         See Context.__init__ for documentation on other parameters.
         """
-        # TODO: Clone rather than pass on storage front-ends ??
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -717,7 +716,7 @@ class Context:
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
-
+                # pylint: disable=unnecessary-lambda
                 ldr = lambda *args, **kwargs: concat_loader(*args, **kwargs)
 
             if ldr:
@@ -1305,6 +1304,7 @@ class Context:
                         + result.get('result', 0))
 
             n_chunks += 1
+            n_chunks += 1
 
         result['n_chunks'] = n_chunks
         return result
@@ -1412,7 +1412,6 @@ class Context:
 
         # If any new options given, replace the current context
         # with a temporary one
-        # TODO duplicated code with with get_iter
         if len(kwargs):
             # Comment below disables pycharm from inspecting the line below it
             # noinspection PyMethodFirstArgAssignment

@@ -296,6 +296,7 @@ def deterministic_hash(thing, length=10):
     """
     hashable = hashablize(thing)
     jsonned = json.dumps(hashable, cls=NumpyJSONEncoder)
+    # disable bandit
     digest = sha1(jsonned.encode('ascii')).digest()
     return b32encode(digest)[:length].decode('ascii').lower()
 
@@ -311,9 +312,6 @@ def formatted_exception():
     For MailboxKilled exceptions, we return the original
     exception instead.
     """
-    # Can't do this at the top level, utils is one of the
-    # first files of the strax package
-    import strax
     exc_info = sys.exc_info()
     if exc_info[0] == strax.MailboxKilled:
         # Get the original exception back out

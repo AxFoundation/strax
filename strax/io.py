@@ -39,8 +39,8 @@ def load_file(f, compressor, dtype):
     :param dtype: numpy dtype of data to load
     """
     if isinstance(f, str):
-        with open(f, mode='rb') as f:
-            return _load_file(f, compressor, dtype)
+        with open(f, mode='rb') as write_file:
+            return _load_file(write_file, compressor, dtype)
     else:
         return _load_file(f, compressor, dtype)
 
@@ -74,8 +74,8 @@ def save_file(f, data, compressor='zstd'):
     if isinstance(f, str):
         final_fn = f
         temp_fn = f + '_temp'
-        with open(temp_fn, mode='wb') as f:
-            result = _save_file(f, data, compressor)
+        with open(temp_fn, mode='wb') as write_file:
+            result = _save_file(write_file, data, compressor)
         os.rename(temp_fn, final_fn)
         return result
     else:
