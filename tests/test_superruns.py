@@ -40,7 +40,8 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_run_meta_data(self):
         """
-        Check if superrun has the correct run start/end and livetime.
+        Check if superrun has the correct run start/end and livetime
+        and subruns are sroted by start times.
         """
         superrun_meta = self.context.run_metadata(self.superrun_name)
         subrun_meta = [self.context.run_metadata(r) for r in self.subrun_ids]
@@ -52,6 +53,13 @@ class TestSuperRuns(unittest.TestCase):
             time_delta = meta['end'] - meta['start']
             livetime += time_delta.total_seconds()*10**9
         assert superrun_meta['livetime'] == livetime
+
+        prev_start = datetime.datetime.min.replace(tzinfo=pytz.utc)
+        for subrun_id in superrun_meta['sub_run_spec']:
+            start = self.context.run_metadata(subrun_id)['start']
+            assert start > prev_start, "Subruns should be sorted by run starts"
+            prev_start = start
+
 
     def test_load_superruns(self):
         """
