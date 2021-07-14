@@ -81,6 +81,9 @@ metadata of the individual chunks:
 After creating data we can load the superrun as we are used to and combine it with other data_types
 of the same kind too.
 
+To work more easily with superruns all chunks have also the properties `chunk.is_superun` as well as
+`chunk.first_subrun` and `chunk.last_subrun`.
+
 How superruns work
 --------------------
 

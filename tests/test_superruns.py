@@ -60,7 +60,6 @@ class TestSuperRuns(unittest.TestCase):
             assert start > prev_start, "Subruns should be sorted by run starts"
             prev_start = start
 
-
     def test_load_superruns(self):
         """
         Load superruns from already existing subruns. Does not write
@@ -72,6 +71,29 @@ class TestSuperRuns(unittest.TestCase):
                                              progress_bar=False)
         superrun_data = self.context.get_array(self.superrun_name, 'records')
         assert np.all(subrun_data['time'] == superrun_data['time'])
+
+    def test_superrun_chunk_properties(self):
+        self.context.make(self.superrun_name, 'records')
+
+        # Load subrun and see if propeties work:
+        for chunk in self.context.get_iter(self.subrun_ids[0], 'records'):
+            assert not chunk.is_superrun
+            assert not chunk.first_subrun
+            assert not chunk.last_subrun
+
+        # Now for a superrun
+        for chunk in self.context.get_iter(self.superrun_name, 'records'):
+            assert chunk.is_superrun
+            subruns = chunk.subruns
+            run_ids = list(subruns.keys())
+            first_subrun = chunk.first_subrun
+            last_subrun = chunk.last_subrun
+            _is_ordered = first_subrun['run_id'] == run_ids[0]
+            _is_ordered &= last_subrun['run_id'] == run_ids[-1]
+            assert _is_ordered, 'Subruns dictionary appears to be not ordered correctly!'
+            for ind, _subruns in zip([0, -1], [first_subrun, last_subrun]):
+                assert _subruns['start'] == subruns[run_ids[ind]]['start']
+                assert _subruns['end'] == subruns[run_ids[ind]]['end']
 
     def test_create_and_load_superruns(self):
         """
