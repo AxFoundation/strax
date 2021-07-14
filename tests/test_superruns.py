@@ -153,7 +153,7 @@ class TestSuperRuns(unittest.TestCase):
         in storage.common.Saver.save_from.
         """
 
-        self.context.set_config({'recs_per_chunk': 5000}) # Make chunks > 1 MB
+        self.context.set_config({'recs_per_chunk': 500}) # Make chunks > 1 MB
         
         rr = self.context.get_array(self.subrun_ids, 'records')
         endtime = np.max(strax.endtime(rr))

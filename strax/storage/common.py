@@ -561,7 +561,6 @@ class Saver:
         run_id = self.md['run_id']
         _is_super_run = run_id.startswith('_')
         try:
-            last_chunk_end = None
             while not exhausted:
                 chunk = None
 
@@ -575,27 +574,21 @@ class Saver:
                                 # If we are creating a superrun, we load data from subruns
                                 # and the loaded subrun chunk becomes a superun chunk:
                                 next_chunk = strax.transform_chunk_to_superrun_chunk(run_id, 
-                                                                                     next_chunk, 
-                                                                                     last_chunk_end)
-                                last_chunk_end = next_chunk.end
-                            
-                            chunk = strax.Chunk.concatenate(
-                                [chunk, next_chunk])
+                                                                                     next_chunk)  
+                            chunk = strax.Chunk.concatenate([chunk, next_chunk])
                     else:
                         chunk = next(source)
                         if _is_super_run:
                             # If we are creating a superrun, we load data from subruns
                             # and the loaded subrun chunk becomes a superun chunk:
-                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, 
-                                                                            chunk, 
-                                                                            last_chunk_end)
-                            last_chunk_end = chunk.end
+                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, chunk)
 
                 except StopIteration:
                     exhausted = True
 
                 if chunk is None:
                     break
+
                 new_f = self.save(chunk=chunk,
                                   chunk_i=chunk_i, executor=executor)
                 pending = [f for f in pending if not f.done()]

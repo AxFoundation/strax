@@ -115,8 +115,32 @@ class Chunk:
 
     @property
     def is_superrun(self):
-        return bool(self.subruns)
-
+        return bool(self.subruns) and self.run_id.startswith('_')
+    
+    @property
+    def first_subrun(self):
+        _subrun = None
+        if self.is_superrun:
+            _subrun = self._get_subrun(0)
+        return _subrun 
+    
+    @property
+    def last_subrun(self):
+        _subrun = None
+        if self.is_superrun:
+            _subrun = self._get_subrun(-1)
+        return _subrun     
+    
+    def _get_subrun(self, index):
+        """
+        Returns subrun according to position in chunk.
+        """
+        subrun_id = list(self.subruns.keys())[index]
+        _subrun = {'run_id': subrun_id, 
+                   'start': self.subruns[subrun_id]['start'],
+                   'end': self.subruns[subrun_id]['end']}
+        return _subrun
+    
     def _mbs(self):
         if self.duration:
             return (self.nbytes / 1e6) / (self.duration / 1e9)
@@ -274,19 +298,29 @@ def continuity_check(chunk_iter):
     """Check continuity of chunks yielded by chunk_iter as they are yielded"""
     last_end = None
     last_runid = None
-    for s in chunk_iter:
-        if s.run_id != last_runid:
+    last_subrun = {'run_id': None}
+    for chunk in chunk_iter:
+        if chunk.run_id != last_runid:
             # TODO: can we do better?
             last_end = None
+            last_subrun = {'run_id': None} 
+        
+        if chunk.is_superrun:
+            _subrun = chunk.first_subrun
+            if _subrun['run_id'] != last_subrun['run_id']:
+                last_end = None
+            else:
+                last_end = last_subrun['end']
+            
         if last_end is not None:
-            if s.start != last_end:
+            if chunk.start != last_end:
                 raise ValueError("Data is not continuous. "
-                                 f"Chunk {s} should have started at {last_end}")
-        yield s
+                                 f"Chunk {chunk} should have started at {last_end}")
+        yield chunk
 
-        last_end = s.end
-        last_runid = s.run_id
-
+        last_end = chunk.end
+        last_runid = chunk.run_id
+        last_subrun = chunk.last_subrun
 
 @export
 class CannotSplit(Exception):
@@ -346,29 +380,28 @@ def split_array(data, t, allow_early_split=False):
 
 
 @export
-def transform_chunk_to_superrun_chunk(superrun_id, chunk, prev_chunk_end=None):
+def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     """
-    Function which transforms a strax chunk from a subrun to a superrun
-    chunk. In order to make the data continuous the chunk start is updated 
-    with the endtime of a previous subrun chunk if any.
+    Function which transforms/creates a new superrun chunk from subrun chunk. 
 
     :param superrun_id: id/name of the superrun.
     :param chunk: strax.Chunk of a superrun subrun.
-    :param prev_chunk_end: End of the previous chunk.
     :return: strax.Chunk
     """
     if chunk is None:
         return chunk
-
-    subrun_id = chunk.run_id
-    subrun_start = chunk.start
-    subrun_end = chunk.end
-    chunk.subruns = {subrun_id: {'start': subrun_start,
-                                 'end': subrun_end}}
-    chunk.run_id = superrun_id
-    if prev_chunk_end is not None:
-        chunk.start = prev_chunk_end
-    return chunk
+    subruns = {chunk.run_id: {'start': chunk.start,
+                              'end': chunk.end}}
+    
+    return Chunk(start=chunk.start,
+                 end=chunk.end,
+                 dtype=chunk.dtype,
+                 data_type=chunk.data_type,
+                 data_kind=chunk.data_kind,
+                 run_id=superrun_id,
+                 subruns=subruns,
+                 data=chunk.data,
+                 target_size_mb=chunk.target_size_mb)
 
 
 def _update_subruns_in_chunk(chunks):
