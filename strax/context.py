@@ -430,9 +430,9 @@ class Context:
         """
         base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update({data_type: plugin.__version__
-                                    for data_type, plugin in
-                                    self._plugin_class_registry.items()})
+        base_hash_on_config.update(
+            {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+             for data_type, plugin in self._plugin_class_registry.items()})
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
