@@ -236,7 +236,7 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
-        is_superrun = np.all([r.startswith('_') and not r.startswith('_temp_') for r in run_ids])
+        is_superrun = np.all([c.subruns for c in chunks])
 
         if len(set(run_ids)) != 1:
             raise ValueError(
@@ -247,9 +247,6 @@ class Chunk:
         
         subruns=None
         if is_superrun:
-            start_times = [c.start for c in chunks]
-            sorted_ind = np.argsort(start_times)
-            chunks = [chunks[i] for i in sorted_ind]
             for c_i, c in enumerate(chunks):
                 if not subruns:
                     subruns = c.subruns

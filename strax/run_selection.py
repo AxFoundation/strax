@@ -310,7 +310,6 @@ def define_run(self: strax.Context,
     if isinstance(data, (list, tuple)):
         # list of runids
         data = strax.to_str_tuple(data)
-        data = np.sort(data)  # Make sure subruns are sorted in "time"
         return self.define_run(
             name,
             {run_id: 'all' for run_id in data})
@@ -322,16 +321,24 @@ def define_run(self: strax.Context,
     run_md = dict(start=datetime.datetime.max.replace(tzinfo=pytz.utc), 
                   end=datetime.datetime.min.replace(tzinfo=pytz.utc), 
                   livetime=0)
+    keys = []
+    starts = []
     for _subrunid in data:
         doc = self.run_metadata(_subrunid, ['start', 'end'])
-        
+
         run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
         run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
-        
+
         run_md['start'] = min(run_md['start'], run_doc_start)
         run_md['end'] = max(run_md['end'], run_doc_end)
         time_delta = run_doc_end - run_doc_start
         run_md['livetime'] += time_delta.total_seconds()*10**9
+        keys.append(_subrunid)
+        starts.append(run_doc_start)
+
+    # Make sure subruns are sorted in time
+    sort_index = np.argsort(starts)
+    data = {keys[i]: data[keys[i]] for i in sort_index}
 
     # Superrun names must start with an underscore
     if not name.startswith('_'):
