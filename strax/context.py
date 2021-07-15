@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
+import copy
 import hashlib
 
 export, __all__ = strax.exporter()
@@ -75,7 +76,9 @@ tqdm = strax.utils.tqdm
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
-                      'func(<data>, <run_id>, <targets>).')
+                      'func(<data>, <run_id>, <targets>).'),
+    strax.Option(name='write_superruns', default=False,
+                 help='If True, save superruns as rechunked "new" data.'),
 )
 @export
 class Context:
@@ -685,14 +688,22 @@ class Context:
                 chunk_number=chunk_number,
                 time_range=time_range)
 
-            if not ldr and run_id.startswith('_'):
+            _is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
+            if not ldr and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
 
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
+
+                # Make subruns if they do not exist, since we do not 
+                # want to store data twice in case we store the superrun
+                # we have to deactivate the storage converter mode.
+                stc_mode = self.context_config['storage_converter']
+                self.context_config['storage_converter'] = False
                 self.make(list(sub_run_spec.keys()), d)
+                self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
                 for subrun in sub_run_spec:
@@ -700,6 +711,7 @@ class Context:
                         subrun,
                         d,
                         self._get_plugins((d,), subrun)[d].lineage)
+
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
                     else:
@@ -747,10 +759,15 @@ class Context:
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
-
+            
             # Should we save this data? If not, return.
             if (loading_this_data
-                    and not self.context_config['storage_converter']):
+                    and not self.context_config['storage_converter']
+                    and not self.context_config['write_superruns']):
+                return
+            if (loading_this_data 
+                    and not self.context_config['write_superruns'] 
+                    and _is_superrun):
                 return
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
@@ -787,7 +804,6 @@ class Context:
                 self.log.warning(f"Not saving {d} while loading incomplete"
                                  f" data is allowed.")
                 return
-
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
                 if savers.get(d_to_save):
@@ -803,9 +819,12 @@ class Context:
                         continue
                     if loading_this_data:
                         # Usually, we don't save if we're loading
-                        if not self.context_config['storage_converter']:
+                        if (not self.context_config['storage_converter'] 
+                                and (not self.context_config['write_superruns'] and _is_superrun)):
                             continue
-                        # ... but in storage converter mode we do:
+                            # ... but in storage converter mode we do,
+                            # ... or we want to write a new superrun. This is different from
+                            # storage converter mode as we do not want to write the subruns again.
                         try:
                             sf.find(key,
                                     **self._find_options)
@@ -972,7 +991,9 @@ class Context:
         # Keep a copy of the list of targets for apply_function
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
-
+        
+        _is_superrun = run_id.startswith('_')
+        
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -1017,7 +1038,8 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()
+                timeout=self.context_config['timeout'],
+                is_superrun=_is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,

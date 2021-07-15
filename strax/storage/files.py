@@ -62,6 +62,8 @@ class DataDirectory(StorageFrontend):
 
     def write_run_metadata(self, run_id, metadata):
         with open(self._run_meta_path(run_id), mode='w') as f:
+            if not 'name' in metadata:
+                metadata['name'] = run_id
             f.write(json.dumps(metadata, default=json_util.default))
 
     def _scan_runs(self, store_fields):
