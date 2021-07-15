@@ -186,7 +186,7 @@ class ThreadedMailboxProcessor:
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
                     can_drive = True
-                    rechunk = is_superrun
+                    rechunk = is_superrun and allow_rechunk
 
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,
