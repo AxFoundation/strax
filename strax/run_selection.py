@@ -99,7 +99,7 @@ def scan_runs(self: strax.Context,
         _temp_docs = []
         for doc in sf._scan_runs(store_fields=store_fields):
             # If there is no number, make one from the name
-            _is_superrun = doc['name'].startswith('_')
+            _is_superrun = doc.get('name', 'not_a_superrun_if_no_name').startswith('_')
             if 'number' not in doc:
                 if 'name' not in doc:
                     raise ValueError(f"Invalid run doc {doc}, contains "
@@ -107,8 +107,7 @@ def scan_runs(self: strax.Context,
                 if not _is_superrun:
                     # If there is no name, make one from the number
                     doc['number'] = int(doc['name'])
-            if not _is_superrun:
-                doc.setdefault('name', f"{doc['number']:06d}")
+            doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
