@@ -107,7 +107,8 @@ def scan_runs(self: strax.Context,
                 if not _is_superrun:
                     # If there is no name, make one from the number
                     doc['number'] = int(doc['name'])
-            doc.setdefault('name', f"{doc['number']:06d}")
+            if not _is_superrun:
+                doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
