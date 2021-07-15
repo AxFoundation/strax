@@ -3,7 +3,6 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
-from concurrent.futures import wait
 from enum import IntEnum
 import inspect
 import itertools
@@ -13,7 +12,7 @@ import typing
 from warnings import warn
 from immutabledict import immutabledict
 import numpy as np
-
+from copy import copy, deepcopy
 import strax
 export, __all__ = strax.exporter()
 
@@ -64,7 +63,6 @@ class Plugin:
     # How large (uncompressed) should re-chunked chunks be?
     # Meaningless if rechunk_on_save is False
     chunk_target_size_mb = strax.default_chunk_size_mb
-
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -121,9 +119,44 @@ class Plugin:
         self.compute_pars = compute_pars
         self.input_buffer = dict()
 
+    def __copy__(self, _deep_copy=False):
+        """
+        Copy main attributes that are set after __init__ by the context.
+
+        Note:
+            self.deps is NOT copied for it is recursive and therefor slow.
+            Instead, this is better handled within the context after all
+            plugins are copied.
+        """
+        plugin_copy = self.__class__()
+        plugin_copy.__init__()
+        # As explained in PR #485 only copy attributes whereof we know
+        # don't depend on the run_id (for use_per_run_defaults == False).
+        # Otherwise we might copy run-dependent things like to_pe.
+        for attribute in ['dtype',
+                          'lineage',
+                          'takes_config',
+                          '__version__',
+                          'config',
+                          'data_kind']:
+            source_value = getattr(self, attribute)
+            if _deep_copy:
+                plugin_copy.__setattr__(attribute, deepcopy(source_value))
+            else:
+                plugin_copy.__setattr__(attribute, copy(source_value))
+        return plugin_copy
+
+    def __deepcopy__(self):
+        return self.__copy__(_deep_copy=True)
+
     def fix_dtype(self):
-        if not hasattr(self, 'dtype'):
+        try:
+            # Infer dtype should always precede self.dtype (e.g. due to
+            # copying)
             self.dtype = self.infer_dtype()
+        except RuntimeError:
+            if not hasattr(self, 'dtype'):
+                raise NotImplementedError(f'No dtype or infer_dtype specified')
 
         if self.multi_output:
             # Convert to a dict of numpy dtypes
