@@ -10,8 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
-import copy
-import hashlib
+
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
@@ -432,9 +431,9 @@ class Context:
         """
         base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update({data_type: plugin.__version__
-                                    for data_type, plugin in
-                                    self._plugin_class_registry.items()})
+        base_hash_on_config.update(
+            {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+             for data_type, plugin in self._plugin_class_registry.items()})
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -463,6 +462,15 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
+    def _fix_dependency(self, plugin_resistry: dict, end_plugin: str):
+        """
+        Starting from end-plugin, fix the dtype until there is nothing
+        left to fix. Keep in mind that dtypes can be chained.
+        """
+        for go_to in plugin_resistry[end_plugin].depends_on:
+            self._fix_dependency(plugin_resistry, go_to)
+        plugin_resistry[end_plugin].fix_dtype()
+
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
@@ -470,9 +478,23 @@ class Context:
         requested_plugins = {}
         for target, plugin in self._fixed_plugin_cache[self._context_hash()].items():
             # Lineage is fixed, just replace the run_id
-            plugin.run_id = run_id
-            requested_plugins[target] = plugin
+            requested_plugins[target] = plugin.__copy__()
+            requested_plugins[target].run_id = run_id
+
+        # At this stage, all the plugins should be in requested_plugins
+        # To prevent infinite copying, we are only now linking the
+        # dependencies of each plugin to another where needed.
+        for target, plugin in requested_plugins.items():
+            plugin.deps = {dependency: requested_plugins[dependency]
+                           for dependency in plugin.depends_on
+                           }
+        # Finally, fix the dtype. Since infer_dtype may depend on the
+        # entire deps chain, we need to start at the last plugin and go
+        # all the way down to the lowest level.
+        for final_plugins in self._get_end_targets(requested_plugins):
+            self._fix_dependency(requested_plugins, final_plugins)
         return requested_plugins
+
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -1350,15 +1372,22 @@ class Context:
             raise
 
     def key_for(self, run_id, target):
-        """Get the DataKey for a given run and a given target plugin. The
-        DataKey is inferred from the plugin lineage.
+        """
+        Get the DataKey for a given run and a given target plugin. The
+        DataKey is inferred from the plugin lineage. The lineage can
+        come either from the _fixed_plugin_cache or computed on the fly.
 
         :param run_id: run id to get
         :param target: data type to get
         :return: strax.DataKey of the target
         """
-        p = self._get_plugins((target,), run_id)[target]
-        return strax.DataKey(run_id, target, p.lineage)
+        if self._plugins_are_cached((target,)):
+            plugins = self._fixed_plugin_cache[self._context_hash()]
+        else:
+            plugins = self._get_plugins((target,), run_id)
+
+        lineage = plugins[target].lineage
+        return strax.DataKey(run_id, target, lineage)
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable
