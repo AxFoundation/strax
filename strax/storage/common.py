@@ -475,11 +475,17 @@ class StorageBackend:
                                     chunk_info=chunk_info,
                                     dtype=dtype,
                                     compressor=metadata['compressor'])
-
+        
+        _is_superrun = chunk_info['run_id'].startswith('_')
+        subruns=None
+        if _is_superrun:
+            subruns=chunk_info['subruns']
+            
         result = strax.Chunk(
             start=chunk_info['start'],
             end=chunk_info['end'],
             run_id=chunk_info['run_id'],
+            subruns=subruns,
             data=data,
             **chunk_construction_kwargs)
 
@@ -551,17 +557,32 @@ class Saver:
         pending = []
         exhausted = False
         chunk_i = 0
+
+        run_id = self.md['run_id']
+        _is_super_run = run_id.startswith('_')
         try:
             while not exhausted:
                 chunk = None
+
                 try:
                     if rechunk and self.allow_rechunk:
                         while (chunk is None or
                                 chunk.data.nbytes < chunk.target_size_mb*1e6):
-                            chunk = strax.Chunk.concatenate(
-                                [chunk, next(source)])
+                            next_chunk = next(source)
+
+                            if _is_super_run:
+                                # If we are creating a superrun, we load data from subruns
+                                # and the loaded subrun chunk becomes a superun chunk:
+                                next_chunk = strax.transform_chunk_to_superrun_chunk(run_id, 
+                                                                                     next_chunk)  
+                            chunk = strax.Chunk.concatenate([chunk, next_chunk])
                     else:
                         chunk = next(source)
+                        if _is_super_run:
+                            # If we are creating a superrun, we load data from subruns
+                            # and the loaded subrun chunk becomes a superun chunk:
+                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, chunk)
+
                 except StopIteration:
                     exhausted = True
 
@@ -603,6 +624,7 @@ class Saver:
                           start=chunk.start,
                           end=chunk.end,
                           run_id=chunk.run_id,
+                          subruns=chunk.subruns,
                           nbytes=chunk.nbytes)
         if len(chunk) != 0 and 'time' in chunk.dtype.names:
             for desc, i in (('first', 0), ('last', -1)):
