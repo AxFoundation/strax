@@ -103,6 +103,19 @@ def _loop_test_inner(big_data,
             # Drop some of the data in big_kinda_data
             return drop_random(big_kinda_data)
 
+    def _compute_loop_inner(res, k, big_kinda_data, small_kinda_data):
+        if k == _dtype_name:
+            res[k] = big_kinda_data[k]
+            for small_bit in small_kinda_data[k]:
+                if np.iterable(res[k]):
+                    for i in range(len(res[k])):
+                        res[k][i] += small_bit
+                else:
+                    res[k] += small_bit
+        else:
+            res[k] = big_kinda_data[k]
+
+
     class AddBigToSmall(strax.LoopPlugin):
         """
         Test loop plugin by looping big_thing and adding whatever is in small_thing
@@ -121,16 +134,7 @@ def _loop_test_inner(big_data,
         def compute_loop(self, big_kinda_data, small_kinda_data):
             res = {}
             for k in self.dtype.names:
-                if k == _dtype_name:
-                    res[k] = big_kinda_data[k]
-                    for small_bit in small_kinda_data[k]:
-                        if np.iterable(res[k]):
-                            for i in range(len(res[k])):
-                                res[k][i] += small_bit
-                        else:
-                            res[k] += small_bit
-                else:
-                    res[k] = big_kinda_data[k]
+                _compute_loop_inner(res, k, big_kinda_data, small_kinda_data)
             return res
 
     class AddBigToSmallMultiOutput(strax.LoopPlugin):
@@ -146,16 +150,7 @@ def _loop_test_inner(big_data,
         def compute_loop(self, big_kinda_data, small_kinda_data):
             res = {}
             for k in self.dtype['some_combined_things'].names:
-                if k == _dtype_name:
-                    res[k] = big_kinda_data[k]
-                    for small_bit in small_kinda_data[k]:
-                        if np.iterable(res[k]):
-                            for i in range(len(res[k])):
-                                res[k][i] += small_bit
-                        else:
-                            res[k] += small_bit
-                else:
-                    res[k] = big_kinda_data[k]
+                _compute_loop_inner(res, k, big_kinda_data, small_kinda_data)
             return {k: res for k in self.provides}
 
     with tempfile.TemporaryDirectory() as temp_dir:

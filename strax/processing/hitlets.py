@@ -353,7 +353,6 @@ def get_fwxm(hitlet, fraction=0.5):
         lbi = (index_maximum - 1) - lbi  # start sample minus samples we went to the left
         m = data[lbi + 1] - lbs  # divided by 1 sample
         if m == 0:
-            # TODO No idea how this happened, we need to fix this
             return np.nan, np.nan
         left_edge = lbi + (max_val - lbs) / m + 0.5
     else:
@@ -366,7 +365,6 @@ def get_fwxm(hitlet, fraction=0.5):
         rbi += 1 + index_maximum  # sample to the right plus start
         m = data[rbi - 1] - rbs
         if m == 0:
-            # TODO No idea how this happened, we need to fix this
             return np.nan, np.nan
         right_edge = rbi - (max_val - rbs) / m + 0.5
     else:

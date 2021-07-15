@@ -298,10 +298,10 @@ def continuity_check(chunk_iter):
     """Check continuity of chunks yielded by chunk_iter as they are yielded"""
     last_end = None
     last_runid = None
+
     last_subrun = {'run_id': None}
     for chunk in chunk_iter:
         if chunk.run_id != last_runid:
-            # TODO: can we do better?
             last_end = None
             last_subrun = {'run_id': None} 
         
