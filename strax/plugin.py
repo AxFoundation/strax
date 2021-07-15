@@ -354,7 +354,7 @@ class Plugin:
                     # If any of the inputs were trimmed due to early splits,
                     # trim the others too.
                     # In very hairy cases this can take multiple passes.
-                    # TODO: can we optimize this, or code it more elegantly?
+                    # can we optimize this, or code it more elegantly?
                     max_passes_left = 10
                     while max_passes_left > 0:
                         this_chunk_end = min([x.end for x in inputs.values()]
