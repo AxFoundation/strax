@@ -18,7 +18,8 @@ def test_core():
                                     )
             bla = mystrax.get_array(run_id=run_id, targets='peaks',
                                     max_workers=max_workers)
-            assert len(bla) == recs_per_chunk * n_chunks
+            p = mystrax.get_single_plugin(run_id, 'records')
+            assert len(bla) == p.config['recs_per_chunk'] * p.config['n_chunks']
             assert bla.dtype == strax.peak_dtype()
 
 
@@ -30,7 +31,8 @@ def test_multirun():
                                 )
         bla = mystrax.get_array(run_id=['0', '1'], targets='peaks',
                                 max_workers=max_workers)
-        n = recs_per_chunk * n_chunks
+        p = mystrax.get_single_plugin(run_id, 'records')
+        n = p.config['recs_per_chunk'] * p.config['n_chunks']
         assert len(bla) == n * 2
         np.testing.assert_equal(
             bla['run_id'],
@@ -51,7 +53,8 @@ def test_filestore():
 
         # Create it
         peaks_1 = mystrax.get_array(run_id=run_id, targets='peaks')
-        assert len(peaks_1) == recs_per_chunk * n_chunks
+        p = mystrax.get_single_plugin(run_id, 'records')
+        assert len(peaks_1) == p.config['recs_per_chunk'] * p.config['n_chunks']
 
         assert mystrax.is_stored(run_id, 'peaks')
         mystrax.scan_runs()
@@ -275,7 +278,8 @@ def test_random_access():
         df = st.get_array(run_id, 'peaks', time_range=(3, 5))
         # Also test without the progress-bar
         df_pbar = st.get_array(run_id, 'peaks', time_range=(3, 5), progress_bar = False)
-        assert len(df) == 2 * recs_per_chunk
+        p = st.get_single_plugin(run_id, 'records')
+        assert len(df) == 2 * p.config['recs_per_chunk']
         assert df['time'].min() == 3
         assert df['time'].max() == 4
         assert np.all(df == df_pbar), 'progress-bar changes the result?!?'
@@ -283,7 +287,7 @@ def test_random_access():
         # Try again with unaligned chunks
         df = st.get_array(run_id, ['peaks', 'peak_classification'],
                           time_range=(3, 5))
-        assert len(df) == 2 * recs_per_chunk
+        assert len(df) == 2 * p.config['recs_per_chunk']
         assert df['time'].min() == 3
         assert df['time'].max() == 4
 
@@ -382,57 +386,6 @@ def test_get_single_plugin():
     assert isinstance(p, Peaks)
     assert len(p.config)
     assert p.config['base_area'] == 0
-
-
-def test_superrun():
-    # TODO: duplicated init with test_run_selection
-    mock_rundb = [
-        dict(name='0', start=0, end=int(1e9)),
-        dict(name='1', start=int(2e9), end=int(3e9))
-    ]
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Test run definition
-        sf = strax.DataDirectory(path=temp_dir,
-                                 provide_run_metadata=True,
-                                 deep_scan=True,
-                                 )
-        for d in mock_rundb:
-            sf.write_run_metadata(d['name'], d)
-
-        st = strax.Context(storage=sf, register=[Records, Peaks],
-                           use_per_run_defaults=True,
-                           )
-        st.define_run('super', ['0', '1'])
-
-        md = st.run_metadata('_super')
-        assert md['start'] == 0
-        assert md['end'] == int(3e9)
-        assert md['livetime'] == int(2e9)
-        assert md['sub_run_spec'] == {'0': 'all', '1': 'all'}
-
-        # Test superrun loading
-        r1 = st.get_array('0', 'records')
-        r2 = st.get_array('1', 'records', config=dict(secret_time_offset=int(1e9)))
-        rs = st.get_array('_super', 'records')
-        np.testing.assert_array_equal(rs, np.concatenate([r1, r2]))
-
-        # Test that superrun loading triggers subrun processing
-        ps = st.get_array('_super', 'peaks')
-        p1 = st.get_array('0', 'peaks')
-        p2 = st.get_array('1', 'peaks')
-        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
-        np.testing.assert_array_equal(p2['area'], np.ones(len(p2)))
-        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
-
-        # Test superrun processing can override run-dependent options
-        st.set_config(config=dict(bonus_area=0))
-        ps = st.get_array('_super', 'peaks')
-        p1 = st.get_array('0', 'peaks')
-        p2 = st.get_array('1', 'peaks')
-        np.testing.assert_array_equal(p1['area'], np.zeros(len(p1)))
-        np.testing.assert_array_equal(p2['area'], np.zeros(len(p2)))
-        np.testing.assert_array_equal(ps, np.concatenate([p1, p2]))
 
 
 def test_allow_multiple(targets=('peaks', 'records')):

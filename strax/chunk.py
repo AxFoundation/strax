@@ -21,6 +21,7 @@ class Chunk:
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
+    subruns: dict
     start: int
     end: int
 
@@ -36,6 +37,7 @@ class Chunk:
                  start,
                  end,
                  data,
+                 subruns=None,
                  target_size_mb=default_chunk_size_mb):
         self.data_type = data_type
         self.data_kind = data_kind
@@ -43,6 +45,7 @@ class Chunk:
         self.run_id = run_id
         self.start = start
         self.end = end
+        self.subruns = subruns
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
@@ -110,6 +113,34 @@ class Chunk:
     def duration(self):
         return self.end - self.start
 
+    @property
+    def is_superrun(self):
+        return bool(self.subruns) and self.run_id.startswith('_')
+    
+    @property
+    def first_subrun(self):
+        _subrun = None
+        if self.is_superrun:
+            _subrun = self._get_subrun(0)
+        return _subrun 
+    
+    @property
+    def last_subrun(self):
+        _subrun = None
+        if self.is_superrun:
+            _subrun = self._get_subrun(-1)
+        return _subrun     
+    
+    def _get_subrun(self, index):
+        """
+        Returns subrun according to position in chunk.
+        """
+        subrun_id = list(self.subruns.keys())[index]
+        _subrun = {'run_id': subrun_id, 
+                   'start': self.subruns[subrun_id]['start'],
+                   'end': self.subruns[subrun_id]['end']}
+        return _subrun
+    
     def _mbs(self):
         if self.duration:
             return (self.nbytes / 1e6) / (self.duration / 1e9)
@@ -233,11 +264,14 @@ class Chunk:
         data_type = data_types[0]
 
         run_ids = [c.run_id for c in chunks]
+
         if len(set(run_ids)) != 1:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with "
                 f"different run ids: {run_ids}")
+
         run_id = run_ids[0]
+        subruns = _update_subruns_in_chunk(chunks)
 
         prev_end = 0
         for c in chunks:
@@ -254,6 +288,7 @@ class Chunk:
             data_type=data_type,
             data_kind=chunks[0].data_kind,
             run_id=run_id,
+            subruns=subruns,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
@@ -263,19 +298,29 @@ def continuity_check(chunk_iter):
     """Check continuity of chunks yielded by chunk_iter as they are yielded"""
     last_end = None
     last_runid = None
-    for s in chunk_iter:
-        if s.run_id != last_runid:
+    last_subrun = {'run_id': None}
+    for chunk in chunk_iter:
+        if chunk.run_id != last_runid:
             # TODO: can we do better?
             last_end = None
+            last_subrun = {'run_id': None} 
+        
+        if chunk.is_superrun:
+            _subrun = chunk.first_subrun
+            if _subrun['run_id'] != last_subrun['run_id']:
+                last_end = None
+            else:
+                last_end = last_subrun['end']
+            
         if last_end is not None:
-            if s.start != last_end:
+            if chunk.start != last_end:
                 raise ValueError("Data is not continuous. "
-                                 f"Chunk {s} should have started at {last_end}")
-        yield s
+                                 f"Chunk {chunk} should have started at {last_end}")
+        yield chunk
 
-        last_end = s.end
-        last_runid = s.run_id
-
+        last_end = chunk.end
+        last_runid = chunk.run_id
+        last_subrun = chunk.last_subrun
 
 @export
 class CannotSplit(Exception):
@@ -332,3 +377,51 @@ def split_array(data, t, allow_early_split=False):
         t = min(data[splittable_i]['time'], t)
 
     return data[:splittable_i], data[splittable_i:], t
+
+
+@export
+def transform_chunk_to_superrun_chunk(superrun_id, chunk):
+    """
+    Function which transforms/creates a new superrun chunk from subrun chunk. 
+
+    :param superrun_id: id/name of the superrun.
+    :param chunk: strax.Chunk of a superrun subrun.
+    :return: strax.Chunk
+    """
+    if chunk is None:
+        return chunk
+    subruns = {chunk.run_id: {'start': chunk.start,
+                              'end': chunk.end}}
+    
+    return Chunk(start=chunk.start,
+                 end=chunk.end,
+                 dtype=chunk.dtype,
+                 data_type=chunk.data_type,
+                 data_kind=chunk.data_kind,
+                 run_id=superrun_id,
+                 subruns=subruns,
+                 data=chunk.data,
+                 target_size_mb=chunk.target_size_mb)
+
+
+def _update_subruns_in_chunk(chunks):
+    """
+    Updates list of subruns in a superrun chunk during concatenation
+    Updates also their start/ends too.
+    """
+    subruns = None
+    for c_i, c in enumerate(chunks):
+        if not subruns:
+            subruns = c.subruns
+            continue
+
+        for subrun_id, subrun_start_end in c.subruns.items():
+            if subrun_id in subruns:
+                subruns[subrun_id] = {'start': min(subruns[subrun_id]['start'],
+                                                   subrun_start_end['start']),
+                                      'end': max(subruns[subrun_id]['end'],
+                                                 subrun_start_end['end'])
+                                      }
+            else:
+                subruns[subrun_id] = subrun_start_end
+    return subruns

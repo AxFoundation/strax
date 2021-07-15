@@ -6,6 +6,8 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import pytz
+import datetime
 
 import strax
 export, __all__ = strax.exporter()
@@ -102,10 +104,11 @@ def scan_runs(self: strax.Context,
                 if 'name' not in doc:
                     raise ValueError(f"Invalid run doc {doc}, contains "
                                      f"neither name nor number.")
-                doc['number'] = int(doc['name'])
-
-            # If there is no name, make one from the number
-            doc.setdefault('name', f"{doc['number']:06d}")
+                _is_superrun = doc['name'].startswith('_')
+                if not _is_superrun:
+                    doc['number'] = int(doc['name'])
+                    # If there is no name, make one from the number
+                    doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
 
@@ -257,26 +260,52 @@ def select_runs(self, run_mode=None, run_id=None,
 @strax.Context.add_method
 def define_run(self: strax.Context,
                name: str,
-               data: ty.Union[np.ndarray, pd.DataFrame, dict],
+               data: ty.Union[np.ndarray, pd.DataFrame, dict, list, tuple],
                from_run: ty.Union[str, None] = None):
+    """
+    Function for defining new superruns from a list of run_ids.
+
+    Note:
+        The function also allows to create a superrun from data
+        (numpy.arrays/pandas.DataFframrs). However, this is currently
+        not supported from the data loading side.
+
+    :param name: Name/run_id of the superrun. Suoerrun names must start
+        with an underscore.
+    :param data: Data from which the superrun should be created. Can be
+        either one of the following: a tuple/list of run_ids or a
+        numpy.array/pandas.DataFrame containing some data.
+    :param from_run: List of run_ids which were used to create the
+        numpy.array/pandas.DataFrame passed in data.
+    """
     if isinstance(data, (pd.DataFrame, np.ndarray)):
+        if isinstance(data, np.ndarray):
+            data = pd.DataFrame.from_records(data)
+      
+        # strax.endtime does not work with DataFrames due to numba
+        if 'endtime' in data.columns:
+            end = data['endtime']
+        else:
+            end = data['time'] + data['length'] * data['dt']
+            
         # Array of events / regions of interest
-        start, end = data['time'], strax.endtime(data)
+        start, end = data['time'], end
         if from_run is not None:
             return self.define_run(
                 name,
                 {from_run: np.transpose([start, end])})
-        elif not 'run_id' in data:
+        elif not 'run_id' in data.columns:
             raise ValueError(
                 "Must provide from_run or data with a run_id column "
                 "to define a superrun")
         else:
-            df = pd.DataFrame(dict(starts=start, ends=end,
+            df = pd.DataFrame(dict(start=start, end=end,
                                    run_id=data['run_id']))
+            print(df)
             return self.define_run(
                 name,
-                {run_id: rs[['start', 'stop']].values.transpose()
-                 for run_id, rs in df.groupby('fromrun')})
+                {run_id: rs[['start', 'end']].values.transpose()
+                 for run_id, rs in df.groupby('run_id')})
 
     if isinstance(data, (list, tuple)):
         # list of runids
@@ -289,17 +318,31 @@ def define_run(self: strax.Context,
         raise ValueError(f"Can't define run from {type(data)}")
 
     # Find start and end time of the new run = earliest start time of other runs
-    run_md = dict(start=float('inf'), end=0, livetime=0)
+    run_md = dict(start=datetime.datetime.max.replace(tzinfo=pytz.utc), 
+                  end=datetime.datetime.min.replace(tzinfo=pytz.utc), 
+                  livetime=0)
+    keys = []
+    starts = []
     for _subrunid in data:
         doc = self.run_metadata(_subrunid, ['start', 'end'])
-        run_md['start'] = min(run_md['start'], doc['start'])
-        run_md['end'] = max(run_md['end'], doc['end'])
-        run_md['livetime'] += doc['end'] - doc['start']
+
+        run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
+        run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
+
+        run_md['start'] = min(run_md['start'], run_doc_start)
+        run_md['end'] = max(run_md['end'], run_doc_end)
+        time_delta = run_doc_end - run_doc_start
+        run_md['livetime'] += time_delta.total_seconds()*10**9
+        keys.append(_subrunid)
+        starts.append(run_doc_start)
+
+    # Make sure subruns are sorted in time
+    sort_index = np.argsort(starts)
+    data = {keys[i]: data[keys[i]] for i in sort_index}
 
     # Superrun names must start with an underscore
     if not name.startswith('_'):
         name = '_' + name
-
     # Dict mapping run_id: array of time ranges or all
     for sf in self.storage:
         if not sf.readonly and sf.can_define_runs:
