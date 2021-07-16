@@ -52,7 +52,6 @@ def sorted_bounds(disjoint=False,
 # Fake intervals
 ##
 
-# TODO: isn't this duplicated with bounds_to_records??
 
 def bounds_to_intervals(bs, dtype=strax.interval_dtype):
     x = np.zeros(len(bs), dtype=dtype)
@@ -140,7 +139,10 @@ several_fake_records_one_channel = sorted_bounds(
 ##
 @strax.takes_config(
     strax.Option('crash', default=False),
-    strax.Option('secret_time_offset', default=0, track=False)
+    strax.Option('dummy_tracked_option', default=42),
+    strax.Option('secret_time_offset', default=0, track=False),
+    strax.Option('n_chunks', default=10, track=False),
+    strax.Option('recs_per_chunk', default=10, track=False),
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -154,12 +156,12 @@ class Records(strax.Plugin):
         return True
 
     def is_ready(self, chunk_i):
-        return chunk_i < n_chunks
+        return chunk_i < self.config['n_chunks']
 
     def compute(self, chunk_i):
         if self.config['crash']:
             raise SomeCrash("CRASH!!!!")
-        r = np.zeros(recs_per_chunk, self.dtype)
+        r = np.zeros(self.config['recs_per_chunk'], self.dtype)
         t0 = chunk_i + self.config['secret_time_offset']
         r['time'] = t0
         r['length'] = r['dt'] = 1
@@ -184,7 +186,7 @@ class Peaks(strax.Plugin):
 
     def compute(self, records):
         if self.config['give_wrong_dtype']:
-            return np.zeros(5, [('a', np.int), ('b', np.float)])
+            return np.zeros(5, [('a', np.int64), ('b', np.float64)])
         p = np.zeros(len(records), self.dtype)
         p['time'] = records['time']
         p['length'] = p['dt'] = 1
@@ -208,11 +210,8 @@ class PeakClassification(strax.Plugin):
                     time=peaks['time'],
                     endtime=strax.endtime(peaks))
 
-
-recs_per_chunk = 10
-n_chunks = 10
+# Used in test_core.py
 run_id = '0'
-
 
 ##
 # Some test plugins to check

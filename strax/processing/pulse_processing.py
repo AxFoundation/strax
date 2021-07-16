@@ -125,7 +125,6 @@ def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next
     record in the same pulse, or -1 if this is not applicable
     """
-    # TODO: needs tests
     if not len(records):
         return (
             np.ones(0, dtype=np.int32) * NO_RECORD_LINK,
@@ -176,7 +175,8 @@ def find_hits(records,
               min_amplitude: ty.Union[int, np.ndarray] = 15,
               min_height_over_noise: ty.Union[int, np.ndarray] = 0):
     """Return hits (intervals >= threshold) found in records.
-    Hits that straddle record boundaries are split (TODO: fix this?)
+    Hits that straddle record boundaries are split (perhaps we should
+    fix this?)
 
     NB: returned hits are NOT sorted yet!
     """
