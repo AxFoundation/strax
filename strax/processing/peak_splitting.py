@@ -89,7 +89,6 @@ class PeakSplitter:
             min_area=min_area,
             args_options=tuple(args_options),
             result_dtype=peaks.dtype)
-
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
@@ -97,8 +96,8 @@ class PeakSplitter:
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
-                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
-
+                new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)           
             # ... and recurse (if needed)
             new_peaks = self(new_peaks, records, to_pe, data_type,
                              do_iterations=do_iterations - 1,
