@@ -896,6 +896,8 @@ class ParallelSourcePlugin(Plugin):
     while multiprocessing.
     """
     parallel = 'process'
+    # should we set this here?
+    input_timeout = 300
 
     @classmethod
     def inline_plugins(cls, components, start_from, log):
