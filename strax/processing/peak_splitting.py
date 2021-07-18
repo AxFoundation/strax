@@ -89,6 +89,7 @@ class PeakSplitter:
             min_area=min_area,
             args_options=tuple(args_options),
             result_dtype=peaks.dtype)
+
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
