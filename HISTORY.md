@@ -1,3 +1,12 @@
+0.16.1 / 2021-07-16
+---------------------
+- Cached lineage if per run default is not allowed (#483, #485)
+- Fix define runs and allow storing of superruns (#472, #488)
+- Change default pbar behavior (for multiple runs) (#480)
+- Reduce numpy warnings (#481, #484)
+- Reduce codefactor (#487)
+
+
 0.16.0 / 2021-06-23
 ---------------------
 - Add select index to compute width (#465)
