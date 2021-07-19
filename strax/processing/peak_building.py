@@ -184,7 +184,7 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
     # Records before this do not need to be considered anymore
     left_r_i = 0
     # Same but for hits:
-    last_hit_seen = 0
+    first_hit_outside_peak = 0
 
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -211,7 +211,9 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
             # Records exhausted before peaks exhausted
             # TODO: this is a strange case, maybe raise warning/error?
             break
-
+        
+        last_hit_seen = first_hit_outside_peak
+        found_next_start = False
         # Scan over records that overlap
         for right_r_i in range(left_r_i, len(records)):
             r = records[right_r_i]
@@ -251,24 +253,36 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
                 # leading to some bias.
                 h = hits[h_i]
                 
+                if h['time'] > (p['time'] + p['length'] * p['dt']):
+                    if not found_next_start:
+                        # Records may overlapp with two peaks in that case we have to loop over the 
+                        # corresponding hits twice. Hence set last_hit_seen for the next peak to the first
+                        # hit which is not in this peak anymore.
+                        first_hit_outside_peak = h_i
+                        found_next_start = True
+                    # Can move to next record as hits should be sorted by record_i and then by 
+                    # time.
+                    break
+                                 
                 if h['record_i'] < right_r_i:
                     last_hit_seen += 1
                     continue
                 if h['record_i'] > right_r_i:
                     break
-                
+                    
+                n_hits += 1
                 h_start = h['left_integration']
                 h_end = h['right_integration']
                 pe_waveform[h_start:h_end] += (multiplier * r['data'][h_start:h_end] + bl_fpart)
                 last_hit_seen += 1
-
+            
             pe_waveform *= adc_to_pe[ch]
             swv_buffer[p_start:p_end] += pe_waveform[r_start:r_end]
 
             area_pe = pe_waveform.sum()
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
-
+            
         store_downsampled_waveform(p, swv_buffer)
 
         p['n_saturated_channels'] = p['saturated_channel'].sum()
