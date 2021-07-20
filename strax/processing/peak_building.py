@@ -270,16 +270,16 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
                 if h['record_i'] > right_r_i:
                     break
                     
-                n_hits += 1
                 h_start = h['left_integration']
                 h_end = h['right_integration']
                 pe_waveform[h_start:h_end] += (multiplier * r['data'][h_start:h_end] + bl_fpart)
                 last_hit_seen += 1
             
+            pe_waveform = pe_waveform[r_start:r_end]  # Take only fraction overlapping with peak
             pe_waveform *= adc_to_pe[ch]
-            swv_buffer[p_start:p_end] += pe_waveform[r_start:r_end]
+            swv_buffer[p_start:p_end] += pe_waveform
 
-            area_pe = pe_waveform.sum()
+            area_pe = pe_waveform.sum()  
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
             
