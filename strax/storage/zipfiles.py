@@ -75,7 +75,7 @@ class ZipDirectory(strax.StorageFrontend):
     def _zipname(self, key):
         zipname = osp.join(self.path, key.run_id + '.zip')
         # Since we're never writing, this check can be here
-        # TODO: sounds like a bad idea?
+        # is this a bad idea?
         if not osp.exists(zipname):
             raise strax.DataNotAvailable
         return zipname

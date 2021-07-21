@@ -21,9 +21,6 @@ def test_growing_result():
 
     result = np.array([0, 1, 2, 3, 4], dtype=np.int64)
     np.testing.assert_equal(bla(), result)
-    # TODO: re-enable chunk size spec?
-    # np.testing.assert_equal(bla(chunk_size=1), result)
-    # np.testing.assert_equal(bla(chunk_size=7), result)
     should_get = result.astype(np.float64)
     got = bla(result_dtype=np.float64)
     np.testing.assert_equal(got, should_get)

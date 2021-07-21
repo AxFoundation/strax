@@ -317,7 +317,7 @@ def find_peak_groups(peaks, gap_threshold,
     """
     # Mock up a "hits" array so we can just use the existing peakfinder
     # It doesn't work on raw peaks, since they might have different dts
-    # TODO: is there no cleaner way?
+    # Maybe there is a cleaner way?
     fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
     fake_hits['dt'] = 1
     fake_hits['area'] = 1

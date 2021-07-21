@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import strax
-import hashlib
+
 
 export, __all__ = strax.exporter()
 __all__ += ['RUN_DEFAULTS_KEY']
@@ -75,7 +75,9 @@ tqdm = strax.utils.tqdm
     strax.Option(name='apply_data_function', default=tuple(),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
-                      'func(<data>, <run_id>, <targets>).')
+                      'func(<data>, <run_id>, <targets>).'),
+    strax.Option(name='write_superruns', default=False,
+                 help='If True, save superruns as rechunked "new" data.'),
 )
 @export
 class Context:
@@ -147,7 +149,6 @@ class Context:
         :param replace: If True, replaces settings rather than adding them.
         See Context.__init__ for documentation on other parameters.
         """
-        # TODO: Clone rather than pass on storage front-ends ??
         if not isinstance(storage, (list, tuple)):
             storage = [storage]
         if config is None:
@@ -430,9 +431,9 @@ class Context:
         """
         base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update({data_type: plugin.__version__
-                                    for data_type, plugin in
-                                    self._plugin_class_registry.items()})
+        base_hash_on_config.update(
+            {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+             for data_type, plugin in self._plugin_class_registry.items()})
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -461,6 +462,15 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
+    def _fix_dependency(self, plugin_resistry: dict, end_plugin: str):
+        """
+        Starting from end-plugin, fix the dtype until there is nothing
+        left to fix. Keep in mind that dtypes can be chained.
+        """
+        for go_to in plugin_resistry[end_plugin].depends_on:
+            self._fix_dependency(plugin_resistry, go_to)
+        plugin_resistry[end_plugin].fix_dtype()
+
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
@@ -468,9 +478,23 @@ class Context:
         requested_plugins = {}
         for target, plugin in self._fixed_plugin_cache[self._context_hash()].items():
             # Lineage is fixed, just replace the run_id
-            plugin.run_id = run_id
-            requested_plugins[target] = plugin
+            requested_plugins[target] = plugin.__copy__()
+            requested_plugins[target].run_id = run_id
+
+        # At this stage, all the plugins should be in requested_plugins
+        # To prevent infinite copying, we are only now linking the
+        # dependencies of each plugin to another where needed.
+        for target, plugin in requested_plugins.items():
+            plugin.deps = {dependency: requested_plugins[dependency]
+                           for dependency in plugin.depends_on
+                           }
+        # Finally, fix the dtype. Since infer_dtype may depend on the
+        # entire deps chain, we need to start at the last plugin and go
+        # all the way down to the lowest level.
+        for final_plugins in self._get_end_targets(requested_plugins):
+            self._fix_dependency(requested_plugins, final_plugins)
         return requested_plugins
+
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -685,14 +709,22 @@ class Context:
                 chunk_number=chunk_number,
                 time_range=time_range)
 
-            if not ldr and run_id.startswith('_'):
+            _is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
+            if not ldr and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
 
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
+
+                # Make subruns if they do not exist, since we do not 
+                # want to store data twice in case we store the superrun
+                # we have to deactivate the storage converter mode.
+                stc_mode = self.context_config['storage_converter']
+                self.context_config['storage_converter'] = False
                 self.make(list(sub_run_spec.keys()), d)
+                self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
                 for subrun in sub_run_spec:
@@ -700,6 +732,7 @@ class Context:
                         subrun,
                         d,
                         self._get_plugins((d,), subrun)[d].lineage)
+
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
                     else:
@@ -717,7 +750,7 @@ class Context:
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
-
+                # pylint: disable=unnecessary-lambda
                 ldr = lambda *args, **kwargs: concat_loader(*args, **kwargs)
 
             if ldr:
@@ -747,10 +780,15 @@ class Context:
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
-
+            
             # Should we save this data? If not, return.
             if (loading_this_data
-                    and not self.context_config['storage_converter']):
+                    and not self.context_config['storage_converter']
+                    and not self.context_config['write_superruns']):
+                return
+            if (loading_this_data 
+                    and not self.context_config['write_superruns'] 
+                    and _is_superrun):
                 return
             if p.save_when == strax.SaveWhen.NEVER:
                 if d in save:
@@ -787,7 +825,6 @@ class Context:
                 self.log.warning(f"Not saving {d} while loading incomplete"
                                  f" data is allowed.")
                 return
-
             # Save the target and any other outputs of the plugin.
             for d_to_save in set([d] + list(p.provides)):
                 if savers.get(d_to_save):
@@ -803,9 +840,12 @@ class Context:
                         continue
                     if loading_this_data:
                         # Usually, we don't save if we're loading
-                        if not self.context_config['storage_converter']:
+                        if (not self.context_config['storage_converter'] 
+                                and (not self.context_config['write_superruns'] and _is_superrun)):
                             continue
-                        # ... but in storage converter mode we do:
+                            # ... but in storage converter mode we do,
+                            # ... or we want to write a new superrun. This is different from
+                            # storage converter mode as we do not want to write the subruns again.
                         try:
                             sf.find(key,
                                     **self._find_options)
@@ -972,7 +1012,9 @@ class Context:
         # Keep a copy of the list of targets for apply_function
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
-
+        
+        _is_superrun = run_id.startswith('_')
+        
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -1017,7 +1059,8 @@ class Context:
                 allow_rechunk=self.context_config['allow_rechunk'],
                 allow_lazy=self.context_config['allow_lazy'],
                 max_messages=self.context_config['max_messages'],
-                timeout=self.context_config['timeout']).iter()
+                timeout=self.context_config['timeout'],
+                is_superrun=_is_superrun,).iter()
 
         try:
             _p, t_start, t_end = self._make_progress_bar(run_id,
@@ -1305,6 +1348,7 @@ class Context:
                         + result.get('result', 0))
 
             n_chunks += 1
+            n_chunks += 1
 
         result['n_chunks'] = n_chunks
         return result
@@ -1328,15 +1372,22 @@ class Context:
             raise
 
     def key_for(self, run_id, target):
-        """Get the DataKey for a given run and a given target plugin. The
-        DataKey is inferred from the plugin lineage.
+        """
+        Get the DataKey for a given run and a given target plugin. The
+        DataKey is inferred from the plugin lineage. The lineage can
+        come either from the _fixed_plugin_cache or computed on the fly.
 
         :param run_id: run id to get
         :param target: data type to get
         :return: strax.DataKey of the target
         """
-        p = self._get_plugins((target,), run_id)[target]
-        return strax.DataKey(run_id, target, p.lineage)
+        if self._plugins_are_cached((target,)):
+            plugins = self._fixed_plugin_cache[self._context_hash()]
+        else:
+            plugins = self._get_plugins((target,), run_id)
+
+        lineage = plugins[target].lineage
+        return strax.DataKey(run_id, target, lineage)
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable
@@ -1412,7 +1463,6 @@ class Context:
 
         # If any new options given, replace the current context
         # with a temporary one
-        # TODO duplicated code with with get_iter
         if len(kwargs):
             # Comment below disables pycharm from inspecting the line below it
             # noinspection PyMethodFirstArgAssignment
