@@ -194,6 +194,7 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
+        p_end = (p['time'] + p['length'] * p['dt'])
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
 
         # Clear area and area per channel
@@ -258,17 +259,19 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
                     continue
                 if h['record_i'] > right_r_i:
                     break
-                                    
-                if h['time'] > (p['time'] + p['length'] * p['dt']):
-                    if not found_next_start:
-                        # Records may overlapp with two peaks in that case we have to loop over the 
-                        # corresponding hits twice. Hence set last_hit_seen for the next peak to the first
-                        # hit which is not in this peak anymore.
-                        first_hit_outside_peak = h_i
-                        found_next_start = True
-                    # Can move to next record as hits should be sorted by record_i and then by 
-                    # time.
-                    break
+                
+                # Compute hit endtime which has to include the LE/RE extension:
+                # start = h['time'] - (h['left'] - h['left_integration']) * dt 
+                # length = (h['right_integration'] - h['left_integration']) * dt
+                # =>
+                hit_endtime = h['time'] + (h['right_integration'] - h['left']) * h['dt']
+                _is_first_hit_reaching_beyond_peak = hit_endtime  > p_end and not found_next_start 
+                if _is_first_hit_reaching_beyond_peak:
+                    # Records may overlapp with two peaks in that case we have to loop over the 
+                    # corresponding hits twice. Also due to peak splitting hits may be found in two
+                    # peaks, same applies here.
+                    first_hit_outside_peak = h_i
+                    found_next_start = True
                 
                 h_start = h['left_integration']
                 h_end = h['right_integration']
