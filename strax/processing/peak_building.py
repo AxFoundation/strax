@@ -283,7 +283,14 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
             area_pe = pe_waveform.sum()  
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
-            
+        
+        if not found_next_start:
+            # If we arrive here we found all hits for the peak and non of them were beyond its boundaries
+            # Hence start from the current hit again.
+            first_hit_outside_peak = h_i
+            found_next_start = True 
+        
+        
         store_downsampled_waveform(p, swv_buffer)
 
         p['n_saturated_channels'] = p['saturated_channel'].sum()
