@@ -253,6 +253,12 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
                 # leading to some bias.
                 h = hits[h_i]
                 
+                if h['record_i'] < right_r_i:
+                    last_hit_seen += 1
+                    continue
+                if h['record_i'] > right_r_i:
+                    break
+                                    
                 if h['time'] > (p['time'] + p['length'] * p['dt']):
                     if not found_next_start:
                         # Records may overlapp with two peaks in that case we have to loop over the 
@@ -263,17 +269,12 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
                     # Can move to next record as hits should be sorted by record_i and then by 
                     # time.
                     break
-                                 
-                if h['record_i'] < right_r_i:
-                    last_hit_seen += 1
-                    continue
-                if h['record_i'] > right_r_i:
-                    break
-                    
+                
                 h_start = h['left_integration']
                 h_end = h['right_integration']
                 pe_waveform[h_start:h_end] += (multiplier * r['data'][h_start:h_end] + bl_fpart)
                 last_hit_seen += 1
+            
             
             pe_waveform = pe_waveform[r_start:r_end]  # Take only fraction overlapping with peak
             pe_waveform *= adc_to_pe[ch]
