@@ -60,8 +60,11 @@ def test_sum_waveform(records, peak_left, peak_length):
     p['time'] = peak_left
     p['length'] = peak_length
     p['dt'] = 1
-
-    strax.sum_waveform(peaks, records, np.ones(n_ch))
+    
+    hits = strax.find_hits(records, np.ones(10000))
+    hits['left_integration'] = hits['left']
+    hits['right_integration'] = hits['right'] 
+    strax.sum_waveform(peaks, hits, records, np.ones(n_ch))
 
     # Area measures must be consistent
     area = p['area']
@@ -85,7 +88,7 @@ def test_sum_waveform(records, peak_left, peak_length):
     assert np.all(p['data'][:peak_length] == sum_wv)
 
     # Finally check that we also can use a selection of peaks to sum
-    strax.sum_waveform(peaks, records, np.ones(n_ch), select_peaks_indices=np.array([0]))
+    strax.sum_waveform(peaks, hits, records, np.ones(n_ch), select_peaks_indices=np.array([0]))
 
 
 @settings(deadline=None)
@@ -219,13 +222,16 @@ def test_peak_overflow(records,
                          f'{gap_threshold} {left_extension + right_extension}')
 
     # Compute basics
-    strax.sum_waveform(p, r, to_pe)
+    hits = strax.find_hits(r, np.ones(10000))
+    hits['left_integration'] = hits['left']
+    hits['right_integration'] = hits['right'] 
+    strax.sum_waveform(p, hits, r, to_pe)
     strax.compute_widths(p)
 
     try:
         print('Split peaks')
         peaklets = strax.split_peaks(
-            p, r, to_pe,
+            p, hits, r, to_pe,
             algorithm='natural_breaks',
             threshold=retrun_1,
             split_low=True,
