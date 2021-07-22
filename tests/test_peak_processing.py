@@ -44,7 +44,7 @@ def test_find_peaks(hits, min_channels, min_area):
 
     assert np.all(peaks['time'] < strax.endtime(peaks)), "Non+ peak length"
 
-    # TODO: add more tests, preferably test against a second algorithm
+    # Should, add more tests, preferably test against a second algorithm
 
 
 @settings(deadline=None)
