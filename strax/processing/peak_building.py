@@ -184,6 +184,7 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
     # Records before this do not need to be considered anymore
     left_r_i = 0
     # Same but for hits:
+    h_i = 0 
     first_hit_outside_peak = 0
 
     n_channels = len(peaks[0]['area_per_channel'])
