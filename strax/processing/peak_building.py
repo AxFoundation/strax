@@ -244,7 +244,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 p['time'] // dt, n_samples_peak)
 
             # Create hit waveform
-            hit_waveform = np.zeros(len(n_samples_hit))
+            hit_waveform = np.zeros(n_samples_hit)
 
             # Get record which belongs to main part of hit (wo integration bounds):
             r = records[record_i]
@@ -253,13 +253,13 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
 
             # Now check if we also have to go to prev/next record due to integration bounds.
             # If bounds are outside of peak we chop when building the summed waveform later.
-            if h['left_integration'] < 0 and prev_record_i[record_i] != -1:
-                r = records[prev_record_i[record_i]]
-                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+            #if h['left_integration'] < 0 and prev_record_i[record_i] != -1:
+            #    r = records[prev_record_i[record_i]]
+            #    is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
-            if h['right_integration'] > n_samples_record and next_record_i[record_i] != -1:
-                r = records[next_record_i[record_i]]
-                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+            #if h['right_integration'] > n_samples_record and next_record_i[record_i] != -1:
+            #    r = records[next_record_i[record_i]]
+             #   is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
             p['saturated_channel'][ch] = is_saturated
 
@@ -285,7 +285,14 @@ def _build_hit_waveform(hit, record, hit_waveform):
     (h_start_record, h_end_record), (r_start, r_end) = strax.overlap_indices(
         hit['time'] // hit['dt'], hit['length'],
         record['time'] // record['dt'], record['length'])
-
+    
+    if not (r_end - r_start):
+        print(r_start, r_end)
+        print(hit['record_i'])
+        print(hit['time'], hit['length'], hit['dt'], hit['channel'], hit['left'], hit['left_integration'],  hit['right'], hit['right_integration'])
+        print(record['time'], record['length'], record['dt'], record['channel'])
+        raise ValueError('Hit and record do not overlap although they should!')
+    
     # Get record properties:
     record_data = record['data'][r_start:r_end]
     multiplier = 2**record['amplitude_bit_shift']

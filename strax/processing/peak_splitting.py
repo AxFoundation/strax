@@ -102,7 +102,7 @@ class PeakSplitter:
                 new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
 
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, hits, records, to_pe, data_type,
+            new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
