@@ -188,12 +188,14 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
 
+    # Hit index for hits in peaks
+    left_h_i = 0
+
     for peak_i in select_peaks_indices:
         p = peaks[peak_i]
         # Clear the relevant part of the swv buffer for use
         # (we clear a bit extra for use in downsampling)
         p_length = p['length']
-        p_end = (p['time'] + p['length'] * p['dt'])
         swv_buffer[:min(2 * p_length, len(swv_buffer))] = 0
 
         # Clear area and area per channel
