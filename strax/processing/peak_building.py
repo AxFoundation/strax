@@ -154,7 +154,7 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, hits, records, hit_extensions, adc_to_pe, select_peaks_indices=None):
+def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_indices=None):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
@@ -162,7 +162,7 @@ def sum_waveform(peaks, hits, records, hit_extensions, adc_to_pe, select_peaks_i
     :param hits: Hits which are inside peaks. Must be sorted according
         to record_i.
     :param records: Records to be used to build peaks.
-    :param hit_extensions: Left and right hit extension in TODO Add unit.
+    :param record_links: Tuple of previous and next records.
     :arg select_peaks_indices: Indices of the peaks for partial
     processing. In the form of np.array([np.int, np.int, ..]). If
     None (default), all the peaks are used for the summation.
@@ -178,17 +178,12 @@ def sum_waveform(peaks, hits, records, hit_extensions, adc_to_pe, select_peaks_i
     if not len(select_peaks_indices):
         return
     dt = records[0]['dt']
+    n_samples_record = len(records[0]['data'])
+    prev_record_i, next_record_i = record_links
 
     # Big buffer to hold even largest sum waveforms
     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-
-    # Index of first record that could still contribute to subsequent peaks
-    # Records before this do not need to be considered anymore
-    left_r_i = 0
-    # Same but for hits:
-    h_i = 0 
-    first_hit_outside_peak = 0
 
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -207,101 +202,99 @@ def sum_waveform(peaks, hits, records, hit_extensions, adc_to_pe, select_peaks_i
         p['area'] = 0
 
         # Find first hit that contributes to this peak
-        for left_r_i in range(left_r_i, len(records)):
-            r = records[left_r_i]
+        for left_h_i in range(left_h_i, len(hits)):
+            h = hits[left_h_i]
             # TODO: need test that fails if we replace < with <= here
-            if p['time'] < r['time'] + r['length'] * dt:
+            if p['time'] < h['time'] + h['length'] * dt:
                 break
         else:
-            # Records exhausted before peaks exhausted
+            # Hits exhausted before peaks exhausted
             # TODO: this is a strange case, maybe raise warning/error?
             break
-        
-        last_hit_seen = first_hit_outside_peak
-        found_next_start = False
-        # Scan over records that overlap
-        for right_r_i in range(left_r_i, len(records)):
-            r = records[right_r_i]
-            ch = r['channel']
-            multiplier = 2**r['amplitude_bit_shift']
-            assert p['dt'] == r['dt'], "Records and peaks must have same dt"
 
-            shift = (p['time'] - r['time']) // dt
-            n_r = r['length']
-            n_p = p_length
+        # Scan over hits that overlap with peak
+        for right_h_i in range(left_h_i, len(hits)):
+            h = hits[right_h_i]
+            record_i = h['record_i']
+            ch = h['channel']
+            assert p['dt'] == h['dt'], "Hits and peaks must have same dt"
 
-            if shift <= -n_p:
-                # Record is completely to the right of the peak;
+            shift = (p['time'] - h['time']) // dt
+            n_samples_hit = h['length']
+            n_samples_peak = p_length
+
+            if shift <= -n_samples_peak:
+                # Hit is completely to the right of the peak;
                 # we've seen all overlapping records
                 break
 
-            if n_r <= shift:
+            if n_samples_hit <= shift:
                 # The (real) data in this record does not actually overlap
                 # with the peak
-                # (although a previous, longer record did overlap)
+                # (although a previous, longer hit did overlap)
                 continue
 
-            (r_start, r_end), (p_start, p_end) = strax.overlap_indices(
-                r['time'] // dt, n_r,
-                p['time'] // dt, n_p)
+            # Get overlapping samples between hit and peak:
+            # TODO updated hit time and length field, what would this mean
+            #   for tight_coincidence?
+            (h_start, h_end), (p_start, p_end) = strax.overlap_indices(
+                h['time'] // dt, n_samples_hit,
+                p['time'] // dt, n_samples_peak)
 
-            max_in_record = r['data'][r_start:r_end].max() * multiplier
-            p['saturated_channel'][ch] |= np.int8(max_in_record >= np.int16(r['baseline']))
+            # Create hit waveform
+            hit_waveform = np.zeros(len(n_samples_hit))
 
-            bl_fpart = r['baseline'] % 1
-            # TODO: check numba does casting correctly here!
+            # Get record which belongs to main part of hit (wo integration bounds):
+            r = records[record_i]
 
-            pe_waveform = np.zeros(len(r['data']))
-            for h_i in range(last_hit_seen, len(hits)):
-                # Loop over hits only sum waveform on region inside hits.
-                # This is needed as we would otherwise add up baseline
-                # leading to some bias.
-                h = hits[h_i]
-                
-                if h['record_i'] < right_r_i:
-                    last_hit_seen += 1
-                    continue
-                if h['record_i'] > right_r_i:
-                    break
-                
-                # Compute hit endtime which has to include the LE/RE extension:
-                # start = h['time'] - (h['left'] - h['left_integration']) * dt 
-                # length = (h['right_integration'] - h['left_integration']) * dt
-                # =>
-                hit_endtime = h['time'] + (h['right_integration'] - h['left']) * h['dt']
-                _is_first_hit_reaching_beyond_peak = hit_endtime  > p_end and not found_next_start 
-                if _is_first_hit_reaching_beyond_peak:
-                    # Records may overlapp with two peaks in that case we have to loop over the 
-                    # corresponding hits twice. Also due to peak splitting hits may be found in two
-                    # peaks, same applies here.
-                    first_hit_outside_peak = h_i
-                    found_next_start = True
-                
-                h_start = h['left_integration']
-                h_end = h['right_integration']
-                pe_waveform[h_start:h_end] += (multiplier * r['data'][h_start:h_end] + bl_fpart)
-                last_hit_seen += 1
-            
-            
-            pe_waveform = pe_waveform[r_start:r_end]  # Take only fraction overlapping with peak
-            pe_waveform *= adc_to_pe[ch]
-            swv_buffer[p_start:p_end] += pe_waveform
+            is_saturated = _build_hit_waveform(h, r, hit_waveform)
 
-            area_pe = pe_waveform.sum()  
+            # Now check if we also have to go to prev/next record due to integration bounds.
+            # If bounds are outside of peak we chop when building the summed waveform later.
+            if h['left_integration'] < 0 and prev_record_i[record_i] != -1:
+                r = records[prev_record_i[record_i]]
+                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+
+            if h['right_integration'] > n_samples_record and next_record_i[record_i] != -1:
+                r = records[next_record_i[record_i]]
+                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+
+            p['saturated_channel'][ch] = is_saturated
+
+            hit_waveform *= adc_to_pe[ch]
+            swv_buffer[p_start:p_end] += hit_waveform[h_start:h_end]
+
+            area_pe = hit_waveform.sum()
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
-        
-        if not found_next_start:
-            # If we arrive here we found all hits for the peak and non of them were beyond its boundaries
-            # Hence start from the current hit again.
-            first_hit_outside_peak = h_i
-            found_next_start = True 
-        
-        
+
         store_downsampled_waveform(p, swv_buffer)
 
         p['n_saturated_channels'] = p['saturated_channel'].sum()
         p['area_per_channel'][:] = area_per_channel
+
+
+@numba.njit(cache=True, nogil=True)
+def _build_hit_waveform(hit, record, hit_waveform):
+    """
+    Adds information for overlapping record and hit to hit_waveform in
+    place. Result is still in ADC counts.
+    """
+    (h_start_record, h_end_record), (r_start, r_end) = strax.overlap_indices(
+        hit['time'] // hit['dt'], hit['length'],
+        record['time'] // record['dt'], record['length'])
+
+    # Get record properties:
+    record_data = record['data'][r_start:r_end]
+    multiplier = 2**record['amplitude_bit_shift']
+    bl_fpart = record['baseline'] % 1
+    # TODO: check numba does casting correctly here!
+    max_in_record = record_data.max() * multiplier
+
+    # Build hit waveform:
+    hit_waveform[h_start_record:h_end_record] = (multiplier * record_data + bl_fpart)
+
+    return np.int8(max_in_record >= np.int16(record['baseline']))
 
 
 @export
