@@ -253,13 +253,13 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
 
             # Now check if we also have to go to prev/next record due to integration bounds.
             # If bounds are outside of peak we chop when building the summed waveform later.
-            #if h['left_integration'] < 0 and prev_record_i[record_i] != -1:
-            #    r = records[prev_record_i[record_i]]
-            #    is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+            if h['left_integration'] < 0 and prev_record_i[record_i] != -1:
+                r = records[prev_record_i[record_i]]
+                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
-            #if h['right_integration'] > n_samples_record and next_record_i[record_i] != -1:
-            #    r = records[next_record_i[record_i]]
-             #   is_saturated |= _build_hit_waveform(h, r, hit_waveform)
+            if h['right_integration'] > n_samples_record and next_record_i[record_i] != -1:
+                r = records[next_record_i[record_i]]
+                is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
             p['saturated_channel'][ch] = is_saturated
 
