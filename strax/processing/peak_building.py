@@ -366,7 +366,7 @@ def find_hit_integration_bounds(
     """
     result = np.zeros((len(lone_hits), 2), dtype=np.int64)
     if not len(lone_hits):
-        return result
+        return lone_hits
 
     # By default, use save_outside_hits to determine bounds
     result[:, 0] = lone_hits['time'] - save_outside_hits[0]
