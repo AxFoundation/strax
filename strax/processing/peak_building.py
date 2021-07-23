@@ -341,14 +341,28 @@ def find_peak_groups(peaks, gap_threshold,
 ##
 # Lone hit integration
 ##
-
+@export
 @numba.njit(nogil=True, cache=True)
-def _find_hit_integration_bounds(
+def find_hit_integration_bounds(
         lone_hits, peaks, records, save_outside_hits, n_channels,
         allow_bounds_beyond_records=False):
-    """"Update lone hits to include integration bounds
+    """"Update (lone) hits to include integration bounds. Please note
+    that time and length of the original hit are not changed!
 
-    save_outside_hits: in ns!!
+    :param lone_hits: Hits or lone hits which should be extended by
+        integration bounds.
+    :param peaks: Regions in which hits should not extend to. E.g. Peaks
+        for lone hits. If not needed just put a zero length
+        strax.time_fields array.
+    :param records: Records in which hits were found.
+    :param save_outside_hits: Hit extension to the left and right in ns
+        not samples!!
+    :param n_channels: Number of channels for given detector.
+    :param allow_bounds_beyond_records: If true extend left/
+        right_integration beyond record boundaries. E.g. to negative
+        samples for left side.
+
+    :return: (lone) hits
     """
     result = np.zeros((len(lone_hits), 2), dtype=np.int64)
     if not len(lone_hits):
@@ -412,6 +426,7 @@ def _find_hit_integration_bounds(
         h['left_integration'] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
         h['right_integration'] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
 
+    return lone_hits
 
 @export
 @numba.njit(nogil=True, cache=True)
@@ -429,8 +444,8 @@ def integrate_lone_hits(
 
     TODO: this doesn't extend the integration range beyond record boundaries
     """
-    _find_hit_integration_bounds(
-        lone_hits, peaks, records, save_outside_hits, n_channels)
+    lone_hits = find_hit_integration_bounds(lone_hits, peaks, records, save_outside_hits,
+                                            n_channels)
     for hit_i, h in enumerate(lone_hits):
         r = records[h['record_i']]
         start, end = h['left_integration'], h['right_integration']
