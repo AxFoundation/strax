@@ -154,12 +154,15 @@ def store_downsampled_waveform(p, wv_buffer):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
+def sum_waveform(peaks, hits, records, hit_extensions, adc_to_pe, select_peaks_indices=None):
     """Compute sum waveforms for all peaks in peaks
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
+    :param peaks: Peaks for which the summed waveform should be build.
     :param hits: Hits which are inside peaks. Must be sorted according
         to record_i.
+    :param records: Records to be used to build peaks.
+    :param hit_extensions: Left and right hit extension in TODO Add unit.
     :arg select_peaks_indices: Indices of the peaks for partial
     processing. In the form of np.array([np.int, np.int, ..]). If
     None (default), all the peaks are used for the summation.
@@ -203,7 +206,7 @@ def sum_waveform(peaks, hits, records, adc_to_pe, select_peaks_indices=None):
         area_per_channel *= 0
         p['area'] = 0
 
-        # Find first record that contributes to this peak
+        # Find first hit that contributes to this peak
         for left_r_i in range(left_r_i, len(records)):
             r = records[left_r_i]
             # TODO: need test that fails if we replace < with <= here
@@ -341,7 +344,8 @@ def find_peak_groups(peaks, gap_threshold,
 
 @numba.njit(nogil=True, cache=True)
 def _find_hit_integration_bounds(
-        lone_hits, peaks, records, save_outside_hits, n_channels):
+        lone_hits, peaks, records, save_outside_hits, n_channels,
+        allow_bounds_beyond_records=False):
     """"Update lone hits to include integration bounds
 
     save_outside_hits: in ns!!
@@ -376,12 +380,18 @@ def _find_hit_integration_bounds(
         # Ensure we do not integrate parts of peaks
         # or (at least for now) beyond the record in which the hit was found
         r = records[h['record_i']]
-        result[hit_i][0] = max(prev_p_end,
-                               r['time'],
-                               result[hit_i][0])
-        result[hit_i][1] = min(next_p_start,
-                               strax.endtime(r),
-                               result[hit_i][1])
+        if allow_bounds_beyond_records:
+            result[hit_i][0] = max(prev_p_end,
+                                   result[hit_i][0])
+            result[hit_i][1] = min(next_p_start,
+                                   result[hit_i][1])
+        else:
+            result[hit_i][0] = max(prev_p_end,
+                                   r['time'],
+                                   result[hit_i][0])
+            result[hit_i][1] = min(next_p_start,
+                                   strax.endtime(r),
+                                   result[hit_i][1])
 
         if last_hit_index[ch] != NO_EARLIER_HIT:
             # Ensure previous hit does not integrate the over-threshold region
