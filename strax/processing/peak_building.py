@@ -361,12 +361,10 @@ def find_hit_integration_bounds(
     :param allow_bounds_beyond_records: If true extend left/
         right_integration beyond record boundaries. E.g. to negative
         samples for left side.
-
-    :return: (lone) hits
     """
     result = np.zeros((len(lone_hits), 2), dtype=np.int64)
     if not len(lone_hits):
-        return lone_hits
+        return result
 
     # By default, use save_outside_hits to determine bounds
     result[:, 0] = lone_hits['time'] - save_outside_hits[0]
@@ -426,7 +424,6 @@ def find_hit_integration_bounds(
         h['left_integration'] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
         h['right_integration'] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
 
-    return lone_hits
 
 @export
 @numba.njit(nogil=True, cache=True)
@@ -444,8 +441,8 @@ def integrate_lone_hits(
 
     TODO: this doesn't extend the integration range beyond record boundaries
     """
-    lone_hits = find_hit_integration_bounds(lone_hits, peaks, records, save_outside_hits,
-                                            n_channels)
+    find_hit_integration_bounds(lone_hits, peaks, records, save_outside_hits,
+                                n_channels)
     for hit_i, h in enumerate(lone_hits):
         r = records[h['record_i']]
         start, end = h['left_integration'], h['right_integration']
