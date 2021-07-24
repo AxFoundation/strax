@@ -262,9 +262,10 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
             p['saturated_channel'][ch] = is_saturated
-
+            
+            hit_waveform = hit_waveform[h_start:h_end]
             hit_waveform *= adc_to_pe[ch]
-            swv_buffer[p_start:p_end] += hit_waveform[h_start:h_end]
+            swv_buffer[p_start:p_end] += hit_waveform
 
             area_pe = hit_waveform.sum()
             area_per_channel[ch] += area_pe
@@ -289,7 +290,7 @@ def _build_hit_waveform(hit, record, hit_waveform):
     if not (r_end - r_start):
         print(r_start, r_end)
         print(hit['record_i'])
-        print(hit['time'], hit['length'], hit['dt'], hit['channel'], hit['left'], hit['left_integration'],  hit['right'], hit['right_integration'])
+        print(hit['time'], hit['length'], hit['dt'], hit['channel'])
         print(record['time'], record['length'], record['dt'], record['channel'])
         raise ValueError('Hit and record do not overlap although they should!')
     
