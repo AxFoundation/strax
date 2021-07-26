@@ -52,9 +52,10 @@ def test__build_hit_waveform(records):
     hits = strax.find_hits(records, np.ones(10000))
 
     for h in hits:
-        hit_waveform = np.zero(len(records['data']))
+        hit_waveform = np.zeros(len(records[0]['data']))
         _ = strax.processing.peak_building._build_hit_waveform(h,
-                                                               records[h['record_i']])
+                                                               records[h['record_i']],
+                                                              hit_waveform)
         assert h['area'] == np.sum(hit_waveform), 'Got worng area!'
 
 @settings(deadline=None)
