@@ -46,6 +46,16 @@ def test_find_peaks(hits, min_channels, min_area):
 
     # Should, add more tests, preferably test against a second algorithm
 
+@settings(deadline=None)
+@given(several_fake_records,)
+def test__build_hit_waveform(records):
+    hits = strax.find_hits(records, np.ones(10000))
+
+    for h in hits:
+        hit_waveform = np.zero(len(records['data']))
+        _ = strax.processing.peak_building._build_hit_waveform(h,
+                                                               records[h['record_i']])
+        assert h['area'] == np.sum(hit_waveform), 'Got worng area!'
 
 @settings(deadline=None)
 @given(several_fake_records,

@@ -237,8 +237,6 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 continue
 
             # Get overlapping samples between hit and peak:
-            # TODO updated hit time and length field, what would this mean
-            #   for tight_coincidence?
             (h_start, h_end), (p_start, p_end) = strax.overlap_indices(
                 h['time'] // dt, n_samples_hit,
                 p['time'] // dt, n_samples_peak)
@@ -262,7 +260,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
             p['saturated_channel'][ch] |= is_saturated
-            
+
             hit_waveform = hit_waveform[h_start:h_end]
             hit_waveform *= adc_to_pe[ch]
             swv_buffer[p_start:p_end] += hit_waveform
@@ -280,8 +278,10 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
 @numba.njit(cache=True, nogil=True)
 def _build_hit_waveform(hit, record, hit_waveform):
     """
-    Adds information for overlapping record and hit to hit_waveform in
-    place. Result is still in ADC counts.
+    Adds information for overlapping record and hit to hit_waveform.
+    Updates hit_waveform inplace. Result is still in ADC counts.
+
+    :returns: Boolean if record saturated within the hit.
     """
     (h_start_record, h_end_record), (r_start, r_end) = strax.overlap_indices(
         hit['time'] // hit['dt'], hit['length'],
