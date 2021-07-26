@@ -15,6 +15,7 @@ import dill
 import numba
 import numpy as np
 import pandas as pd
+from collections.abc import Mapping
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -248,6 +249,9 @@ def hashablize(obj):
     """Convert a container hierarchy into one that can be hashed.
     See http://stackoverflow.com/questions/985294
     """
+    if isinstance(obj, Mapping):
+        # Convert immutabledict etc for json decoding
+        obj = dict(obj)
     try:
         hash(obj)
     except TypeError:
@@ -292,6 +296,7 @@ def deterministic_hash(thing, length=10):
     """
     hashable = hashablize(thing)
     jsonned = json.dumps(hashable, cls=NumpyJSONEncoder)
+    # disable bandit
     digest = sha1(jsonned.encode('ascii')).digest()
     return b32encode(digest)[:length].decode('ascii').lower()
 
@@ -307,9 +312,6 @@ def formatted_exception():
     For MailboxKilled exceptions, we return the original
     exception instead.
     """
-    # Can't do this at the top level, utils is one of the
-    # first files of the strax package
-    import strax
     exc_info = sys.exc_info()
     if exc_info[0] == strax.MailboxKilled:
         # Get the original exception back out

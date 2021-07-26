@@ -29,7 +29,7 @@ class ReductionLevel(IntEnum):
 def cut_baseline(records, n_before=48, n_after=30):
     """"Replace first n_before and last n_after samples of pulses by 0
     """
-    # TODO: records.data.shape[1] gives a numba error (file issue?)
+    # records.data.shape[1] gives a numba error (file issue?)
     if not len(records):
         return
     samples_per_record = len(records[0]['data'])
