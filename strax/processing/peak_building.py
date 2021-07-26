@@ -261,7 +261,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 r = records[next_record_i[record_i]]
                 is_saturated |= _build_hit_waveform(h, r, hit_waveform)
 
-            p['saturated_channel'][ch] = is_saturated
+            p['saturated_channel'][ch] |= is_saturated
             
             hit_waveform = hit_waveform[h_start:h_end]
             hit_waveform *= adc_to_pe[ch]
