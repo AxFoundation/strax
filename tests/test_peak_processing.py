@@ -222,13 +222,14 @@ def test_peak_overflow(records,
                          f'{gap_threshold} {left_extension + right_extension}')
 
     # Compute basics
-    strax.sum_waveform(p, r, to_pe)
+    strax.sum_waveform(p, r, to_pe, n_pmts_top=0, store_top_waveform=False)
     strax.compute_widths(p)
 
     try:
         print('Split peaks')
         peaklets = strax.split_peaks(
             p, r, to_pe,
+            n_top_pmts=0, store_top_waveform=False,
             algorithm='natural_breaks',
             threshold=retrun_1,
             split_low=True,

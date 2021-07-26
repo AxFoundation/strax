@@ -139,11 +139,15 @@ def test_splitter_outer():
         data_type['data'][0, :len(data)] = data
         data_type['length'] = len(data)
 
-    peaks = strax.split_peaks(peaks, records,  to_pe, algorithm='local_minimum',
-                              data_type='peaks', min_height=1, min_ratio=0)
+    peaks = strax.split_peaks(peaks, records,  to_pe,
+                              n_top_pmts=1, store_top_waveform=False, 
+                              algorithm='local_minimum', data_type='peaks', 
+                              min_height=1, min_ratio=0)
 
-    hitlets = strax.split_peaks(hitlets, records, to_pe, algorithm='local_minimum',
-                                data_type='hitlets', min_height=1, min_ratio=0)
+    hitlets = strax.split_peaks(hitlets, records, to_pe, 
+                                n_top_pmts=1, store_top_waveform=False, 
+                                algorithm='local_minimum',data_type='hitlets',
+                                min_height=1, min_ratio=0)
 
     for name, data_type in zip(('peaks', 'hitlets'), (peaks, hitlets)):
         data = data_type[0]['data'][:data_type[0]['length']]
