@@ -36,7 +36,7 @@ def test_concat_overlapping_hits(hits0, hits1, le, re):
         tmax = strax.endtime(hits).max()  # Since dt is one this is the last sample
         tmax += re
 
-        dummy_array = np.zeros((2, tmax), np.int)
+        dummy_array = np.zeros((2, tmax), np.int64)
         for h in hits:
             # Filling samples with 1 if inside a hit:
             st = h['time'] - le

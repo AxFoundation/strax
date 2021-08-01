@@ -1,3 +1,25 @@
+0.16.1 / 2021-07-16
+---------------------
+- Cached lineage if per run default is not allowed (#483, #485)
+- Fix define runs and allow storing of superruns (#472, #488)
+- Change default pbar behavior (for multiple runs) (#480)
+- Reduce numpy warnings (#481, #484)
+- Reduce codefactor (#487)
+
+
+0.16.0 / 2021-06-23
+---------------------
+- Add select index to compute width (#465)
+- int blaseline (#464)
+- Fix #452 assert there is a mailbox for the final generator (#463)
+- Document fuzzy-for and documentation itself (#471)
+- Re ordered time field in cut plugins (#473)
+- Github actions for CI (#454, #460)
+- Remove travis for testing (#474)
+- Remove outdated files/configs (#462)
+- Remove overwrite from options (#467)
+
+ 
 0.15.3 / 2021-06-03
 ---------------------
 - Match cached buffer chunk start times OverlapWindowPlugin (#450)

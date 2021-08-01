@@ -62,6 +62,8 @@ class DataDirectory(StorageFrontend):
 
     def write_run_metadata(self, run_id, metadata):
         with open(self._run_meta_path(run_id), mode='w') as f:
+            if not 'name' in metadata:
+                metadata['name'] = run_id
             f.write(json.dumps(metadata, default=json_util.default))
 
     def _scan_runs(self, store_fields):
@@ -261,6 +263,8 @@ class FileSytemBackend(strax.StorageBackend):
 class FileSaver(strax.Saver):
     """Saves data to compressed binary files"""
     json_options = dict(sort_keys=True, indent=4)
+    # When writing chunks, rewrite the json file every time we write a chunk
+    _flush_md_for_every_chunk = True
 
     def __init__(self, dirname, metadata, **kwargs):
         super().__init__(metadata, **kwargs)
@@ -325,11 +329,11 @@ class FileSaver(strax.Saver):
 
         if not self.is_forked or is_first:
             # Just append and flush the metadata
-            # (maybe not super-efficient to write the json everytime...
+            # (maybe not super-efficient to write the json every time...
             # just don't use thousands of chunks)
-            # TODO: maybe make option to turn this off?
             self.md['chunks'].append(chunk_info)
-            self._flush_metadata()
+            if self._flush_md_for_every_chunk:
+                self._flush_metadata()
 
     def _close(self):
         if not os.path.exists(self.tempdirname):

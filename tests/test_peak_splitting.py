@@ -96,7 +96,7 @@ def _test_splitter_inner(min_heights,
             # Use min-height here as threshold (>1 meaningless)
             threshold = np.array([min_height])
             my_splits = test_splitter.find_split_points(
-                waveform, dt=1, peak_i=np.int(0), threshold=threshold, normalize=0,
+                waveform, dt=1, peak_i=np.int64(0), threshold=threshold, normalize=0,
                 split_low=0, filter_wing_width=0)
 
         my_splits = np.array(list(my_splits))
