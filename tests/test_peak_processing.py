@@ -60,48 +60,42 @@ def test__build_hit_waveform(records):
 
 @settings(deadline=None)
 @given(several_fake_records,
-       st.integers(min_value=0, max_value=100),
-       st.integers(min_value=1, max_value=100)
-       )
-def test_sum_waveform(records, peak_left, peak_length):
+      )
+def test_sum_waveform(records):
     # Make a single big peak to contain all the records
     n_ch = 100
-    peaks = np.zeros(1, strax.peak_dtype(n_ch, n_sum_wv_samples=200))
-    p = peaks[0]
-    p['time'] = peak_left
-    p['length'] = peak_length
-    p['dt'] = 1
-    
+  
     rlinks = strax.record_links(records)
-    hits = strax.find_hits(records, np.ones(10000))
+    hits = strax.find_hits(records, np.ones(n_ch))
     hits['left_integration'] = hits['left']
     hits['right_integration'] = hits['right'] 
+    hits = strax.sort_by_time(hits)
+    
+    peaks = strax.find_peaks(hits, np.ones(n_ch),
+                             gap_threshold=6,
+                             left_extension=2, right_extension=3,
+                             min_area=0,
+                             min_channels=1,
+                             max_duration=10_000_000)
     strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch))
-
-    # Area measures must be consistent
-    area = p['area']
-    assert area >= 0
-    assert p['data'].sum() == area
-    assert p['area_per_channel'].sum() == area
-
-    # Create a simple sum waveform
-    if not len(records):
-        max_sample = 3  # Whatever
-    else:
-        max_sample = (records['time'] + records['length']).max()
-    max_sample = max(max_sample, peak_left + peak_length)
-    sum_wv = np.zeros(max_sample + 1, dtype=np.float32)
-    for r in records:
-        sum_wv[r['time']:r['time'] + r['length']] += r['data'][:r['length']]
-    # Select the part inside the peak
-    sum_wv = sum_wv[peak_left:peak_left + peak_length]
-
-    assert len(sum_wv) == peak_length
-    assert np.all(p['data'][:peak_length] == sum_wv)
     
-    
-    # Finally check that we also can use a selection of peaks to sum
-    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), select_peaks_indices=np.array([0]))
+    for p in peaks:
+        # Area measures must be consistent
+        area = p['area']
+        assert area >= 0
+        assert p['data'].sum() == area
+        assert p['area_per_channel'].sum() == area
+
+        sum_wv = np.zeros(p['length'], dtype=np.float32)
+        for r in records:
+            (rs, re), (ps, pe) = strax.overlap_indices(r['time'], r['length'], p['time'], p['length'])
+            sum_wv[ps:pe] += r['data'][rs:re]
+
+        assert np.all(p['data'][:p['length']] == sum_wv)
+
+
+        # Finally check that we also can use a selection of peaks to sum
+        strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), select_peaks_indices=np.array([0]))
 
 
 @settings(deadline=None)
