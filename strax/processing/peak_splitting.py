@@ -99,12 +99,15 @@ class PeakSplitter:
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
-                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
-
+                new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)           
             # ... and recurse (if needed)
             new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
+            if np.any(new_peaks['length'] == 0):
+                raise ValueError('Want to add a new zero-length peak after splitting!')
+
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
                                                        new_peaks]))
 
