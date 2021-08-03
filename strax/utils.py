@@ -16,6 +16,8 @@ import numba
 import numpy as np
 import pandas as pd
 from collections.abc import Mapping
+from warnings import warn
+
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -32,6 +34,11 @@ if any('jupyter' in arg for arg in sys.argv):
     from tqdm.notebook import tqdm
 else:
     from tqdm import tqdm
+
+# Throw a warning on import for python3.6
+if sys.version_info.minor == 6:
+    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
+         'upgrading to python 3.8.')
 
 
 def exporter(export_self=False):
