@@ -160,18 +160,32 @@ class CorrectionsInterface:
         for req in required_columns:
             if req not in df.columns:
                 raise ValueError(f'Must specify {req} in dataframe')
-        # Compare against
+        # Compare against existing data
+        # We can change OFFLINE values in the past
+        # We cannot change ONLINE values in the past
+        # We can add a new date(row) in the past(ONLINE) as long as it is the same value as in the past
         logging.info('Reading old values for comparison')
-        df2 = self.read(correction)
+        df_old = self.read(correction)
 
-        if df2 is not None:
+        now = datetime.now(tz=timezone.utc)
+        if df_old is not None:
             logging.info('Checking if columns unchanged in past')
-            now = datetime.now(tz=timezone.utc)
-            for column in df2.columns:
-                logging.debug(f'Checking {column}')
-                if not (df2.loc[df2.index < now, column] ==
-                        df.loc[df.index < now, column]).all():
-                    raise ValueError(f'{column} changed in past, not allowed')
+            if len(df_old) < len(df):
+                new_date = df.index.difference(df_old.index)
+                logging.info(f'A new date(row) was added {new_date}, lets check past values')
+                for column in df_old.columns:
+                    if 'ONLINE' in column:
+                        if new_date < now:
+                            for i in range(0, len(new_date)):
+                                new_value = df.loc[df.index == new_date[i].to_pydatetime(), column].values[0]
+                                old_value = df_old.loc[df_old.index < new_date[i].to_pydatetime(), column][-1]
+                                if new_value != old_value:
+                                    raise ValueError(f'{column} changed in past, not allowed')
+            else:
+                for column in df_old.columns:
+                    if 'ONLINE' in column:
+                        if not (df.loc[df.index < now, column] == df_old.loc[df_old.index < now, column]).all():
+                            raise ValueError(f'{column} changed in past, not allowed')
 
         df = df.reset_index()
         logging.info('Writing')
