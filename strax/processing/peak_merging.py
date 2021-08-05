@@ -137,7 +137,8 @@ def _replace_merged(result, orig, merge, skip_windows):
     assert result_i == len(result)
     assert window_i == len(skip_windows)
 
-
+    
+@export
 @numba.njit(cache=True, nogil=True)
 def add_lone_hits(peaks, lone_hits, to_pe):
     """
