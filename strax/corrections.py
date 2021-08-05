@@ -176,7 +176,7 @@ class CorrectionsInterface:
                 for column in df_old.columns:
                     if 'ONLINE' in column:
                         if new_date < now:
-                            for i in range(0, len(new_date)):
+                            for i, item in enumerate(new_date):
                                 new_value = df.loc[df.index == new_date[i].to_pydatetime(), column].values[0]
                                 old_value = df_old.loc[df_old.index < new_date[i].to_pydatetime(), column][-1]
                                 if new_value != old_value:
