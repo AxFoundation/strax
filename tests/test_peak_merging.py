@@ -58,12 +58,19 @@ def test_add_lone_hits(hits, peak_length):
     peak['length'] = peak_length
     peak['dt'] = 1
 
-    to_pe = np.ones(hist['channel'].max()+1)
+    to_pe = np.ones(10000)
     strax.add_lone_hits(peak, hits, to_pe)
+
+    if not peak_length:
+        assert peak['area'] == 0
+        assert peak['data'].sum() == 0
+        return
 
     split_hits = strax.split_by_containment(hits, peak)[0]
     dummy_peak = np.zeros(peak_length)
-    for h in hits:
+
+    for h in split_hits:
         dummy_peak[h['time']] += h['area']
+    peak = peak[0]
     assert peak['area'] == np.sum(split_hits['area'])
-    assert np.all(peak['data'] == dummy_peak)
+    assert np.all(peak['data'][:peak['length']] == dummy_peak)
