@@ -723,7 +723,7 @@ class Context:
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d)
+                self.make(list(sub_run_spec.keys()), d, save=(d,))
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
@@ -744,7 +744,8 @@ class Context:
                     if not ldr:
                         raise RuntimeError(
                             f"Could not load {d} for subrun {subrun} "
-                            f"even though we made it??")
+                             "even though we made it? Is the plugin "
+                             "you are requesting a SaveWhen.NEVER-plguin?")
                     ldrs.append(ldr)
 
                 def concat_loader(*args, **kwargs):
@@ -777,6 +778,7 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{d} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
+                    
                 to_compute[d] = p
                 for dep_d in p.depends_on:
                     check_cache(dep_d)
@@ -798,7 +800,9 @@ class Context:
                 if d not in targets:
                     return
             elif p.save_when == strax.SaveWhen.EXPLICIT:
-                if d not in save:
+                # If we arrive here in case of a superrun the user want to save
+                # as self.context_config['write_superruns'] is true.
+                if d not in save and not _is_superrun:
                     return
             else:
                 assert p.save_when == strax.SaveWhen.ALWAYS
