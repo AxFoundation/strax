@@ -694,6 +694,7 @@ class Context:
         to_compute = dict()
 
         def check_cache(target_i):
+            """For some target, add loaders, and savers where appropriate"""
             nonlocal plugins, loaders, savers, seen
             if target_i in seen:
                 return
