@@ -7,7 +7,7 @@ import tempfile
 
 
 class TestPerRunDefaults(unittest.TestCase):
-    """Test the saving behavoir  of the context"""
+    """Test the saving behavior of the context"""
     def setUp(self):
         self.test_run_id = '0'
         self.target = 'records'
@@ -56,4 +56,5 @@ class TestPerRunDefaults(unittest.TestCase):
     def set_save_when(self, mode: str):
         if not hasattr(strax.SaveWhen, mode.upper()):
             raise ValueError(f'No such saving mode {mode}')
-        self.st._plugin_class_registry[self.target].save_when = getattr(strax.SaveWhen, mode.upper())
+        save_mode = getattr(strax.SaveWhen, mode.upper())
+        self.st._plugin_class_registry[self.target].save_when = save_mode

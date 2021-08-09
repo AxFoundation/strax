@@ -698,19 +698,20 @@ class Context:
             if target_i in seen:
                 return
             seen.add(target_i)
-            p = plugins[target_i]
+            target_plugin = plugins[target_i]
 
             # Can we load this data?
             loading_this_data = False
             key = self.key_for(run_id, target_i)
 
-            ldr = self._get_partial_loader_for(
+            loader = self._get_partial_loader_for(
                 key,
                 chunk_number=chunk_number,
                 time_range=time_range)
 
-            _is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
-            if not ldr and _is_superrun:
+            _is_superrun = (run_id.startswith('_') and
+                            not target_plugin.provides[0].startswith('_temp'))
+            if not loader and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
@@ -734,26 +735,26 @@ class Context:
                         _subrun_time_range = None
                     else:
                         _subrun_time_range = sub_run_spec[subrun]
-                    ldr = self._get_partial_loader_for(
+                    loader = self._get_partial_loader_for(
                         sub_key,
                         time_range=_subrun_time_range,
                         chunk_number=chunk_number)
-                    if not ldr:
+                    if not loader:
                         raise RuntimeError(
                             f"Could not load {target_i} for subrun {subrun} "
                             f"even though we made it??")
-                    ldrs.append(ldr)
+                    ldrs.append(loader)
 
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
                 # pylint: disable=unnecessary-lambda
-                ldr = lambda *args, **kwargs: concat_loader(*args, **kwargs)
+                loader = lambda *args, **kwargs: concat_loader(*args, **kwargs)
 
-            if ldr:
+            if loader:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
-                loaders[target_i] = ldr
+                loaders[target_i] = loader
                 del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
@@ -774,8 +775,8 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                to_compute[target_i] = p
-                for dep_d in p.depends_on:
+                to_compute[target_i] = target_plugin
+                for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
             
             # Should we save this data? If not, return.
@@ -787,18 +788,18 @@ class Context:
                     and not self.context_config['write_superruns'] 
                     and _is_superrun):
                 return
-            if p.save_when == strax.SaveWhen.NEVER:
+            if target_plugin.save_when == strax.SaveWhen.NEVER:
                 if target_i in save:
                     raise ValueError(f"Plugin forbids saving of {target_i}")
                 return
-            elif p.save_when == strax.SaveWhen.TARGET:
+            elif target_plugin.save_when == strax.SaveWhen.TARGET:
                 if target_i not in targets:
                     return
-            elif p.save_when == strax.SaveWhen.EXPLICIT:
+            elif target_plugin.save_when == strax.SaveWhen.EXPLICIT:
                 if target_i not in save:
                     return
             else:
-                assert p.save_when == strax.SaveWhen.ALWAYS
+                assert target_plugin.save_when == strax.SaveWhen.ALWAYS
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
@@ -823,14 +824,14 @@ class Context:
                                  f" data is allowed.")
                 return
             # Save the target and any other outputs of the plugin.
-            for d_to_save in set([target_i] + list(p.provides)):
+            for d_to_save in set([target_i] + list(target_plugin.provides)):
                 if savers.get(d_to_save):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers
-                    assert p.multi_output
+                    assert target_plugin.multi_output
                     continue
 
-                key = strax.DataKey(run_id, d_to_save, p.lineage)
+                key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
 
                 for sf in self.storage:
                     if sf.readonly:
@@ -855,9 +856,7 @@ class Context:
                     try:
                         saver = sf.saver(
                             key,
-                            metadata=p.metadata(
-                                run_id,
-                                d_to_save),
+                            metadata=target_plugin.metadata(run_id, d_to_save),
                             saver_timeout=self.context_config['saver_timeout'])
                         # Now that we are surely saving, make an entry in savers
                         savers.setdefault(d_to_save, [])
