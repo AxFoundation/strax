@@ -57,4 +57,3 @@ class TestPerRunDefaults(unittest.TestCase):
         if not hasattr(strax.SaveWhen, mode.upper()):
             raise ValueError(f'No such saving mode {mode}')
         self.st._plugin_class_registry[self.target].save_when = getattr(strax.SaveWhen, mode.upper())
-
