@@ -155,7 +155,9 @@ def store_downsampled_waveform(p, wv_buffer):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_indices=None):
-    """Compute sum waveforms for all peaks in peaks
+    """Compute sum waveforms for all peaks in peaks. Only builds summed
+    waveform other regions in which hits were found. This is required
+    to avoid any bias due to zero-padding and baselining.
     Will downsample sum waveforms if they do not fit in per-peak buffer
 
     :param peaks: Peaks for which the summed waveform should be build.
