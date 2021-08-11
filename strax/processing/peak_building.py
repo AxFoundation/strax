@@ -190,6 +190,8 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
 
     # Hit index for hits in peaks
     left_h_i = 0
+    # Create hit waveform buffer
+    hit_waveform = np.zeros(hits['length'].max(), dtype=np.float32)
 
     for peak_i in select_peaks_indices:
         p = peaks[peak_i]
@@ -241,8 +243,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
                 h['time'] // dt, n_samples_hit,
                 p['time'] // dt, n_samples_peak)
 
-            # Create hit waveform
-            hit_waveform = np.zeros(n_samples_hit)
+            hit_waveform[:] = 0
 
             # Get record which belongs to main part of hit (wo integration bounds):
             r = records[record_i]
