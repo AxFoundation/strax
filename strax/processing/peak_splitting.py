@@ -11,10 +11,17 @@ def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
 
+    Note:
+        Can also be used for hitlets splitting with local_minimum
+        splitter. Just put hitlets instead of peaks.
+
     :param peaks: Original peaks. Sum waveform must have been built
     and properties must have been computed (if you use them)
+    :param hits: Hits found in records. (or None in case of hitlets
+        splitting.)
     :param records: Records from which peaks were built
-    :param rlinks: strax.record_links for given records.
+    :param rlinks: strax.record_links for given records
+        (or None in case of hitlets splitting.)
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
