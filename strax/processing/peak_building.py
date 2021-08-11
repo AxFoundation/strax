@@ -264,11 +264,11 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
 
             p['saturated_channel'][ch] |= is_saturated
 
-            hit_waveform = hit_waveform[h_start:h_end]
-            hit_waveform *= adc_to_pe[ch]
-            swv_buffer[p_start:p_end] += hit_waveform
+            hit_data = hit_waveform[h_start:h_end]
+            hit_data *= adc_to_pe[ch]
+            swv_buffer[p_start:p_end] += hit_data
 
-            area_pe = hit_waveform.sum()
+            area_pe = hit_data.sum()
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
 
