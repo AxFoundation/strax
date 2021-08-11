@@ -286,14 +286,7 @@ def _build_hit_waveform(hit, record, hit_waveform):
     (h_start_record, h_end_record), (r_start, r_end) = strax.overlap_indices(
         hit['time'] // hit['dt'], hit['length'],
         record['time'] // record['dt'], record['length'])
-    
-    if not (r_end - r_start):
-        print(r_start, r_end)
-        print(hit['record_i'])
-        print(hit['time'], hit['length'], hit['dt'], hit['channel'])
-        print(record['time'], record['length'], record['dt'], record['channel'])
-        raise ValueError('Hit and record do not overlap although they should!')
-    
+
     # Get record properties:
     record_data = record['data'][r_start:r_end]
     multiplier = 2**record['amplitude_bit_shift']
