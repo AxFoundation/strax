@@ -1,6 +1,12 @@
 import tempfile
 
+import numpy as np
+import strax
 from strax.testutils import *
+
+import unittest
+import os
+import shutil
 
 
 class EvenOddSplit(strax.Plugin):
@@ -31,6 +37,15 @@ class EvenOddSplit(strax.Plugin):
                                    endtime=strax.endtime(records[-1])))
 
 
+class ZipRecords(strax.Plugin):
+    provides = 'zipped_records'
+    depends_on = ('even_recs', 'odd_recs')
+    dtype = Records.dtype
+
+    def compute(self, even_recs, odd_recs):
+        return strax.sort_by_time(np.concatenate((even_recs, odd_recs)))
+
+
 class FunnyPeaks(strax.Plugin):
     parallel = True
     provides = 'peaks'
@@ -43,41 +58,50 @@ class FunnyPeaks(strax.Plugin):
         return p
 
 
-def test_multi_output():
-    for max_workers in [1, 2]:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            mystrax = strax.Context(
-                storage=strax.DataDirectory(temp_dir),
-                register=[Records, EvenOddSplit, FunnyPeaks],
-                allow_multiprocess=True)
-            assert not mystrax.is_stored(run_id, 'rec_count')
+class TestMultiOutputs(unittest.TestCase):
 
+    def setUp(self, superrun_name='_superrun_test'):
+        # Temp directory for storing record data for the tests.
+        # Will be removed during TearDown.
+        self.temp_dir = tempfile.mkdtemp()
+        self.mystrax = strax.Context(
+            storage=strax.DataDirectory(self.temp_dir),
+            register=[Records, EvenOddSplit, ZipRecords, FunnyPeaks],
+            allow_multiprocess=True)
+        assert not self.mystrax.is_stored(run_id, 'rec_count')
+
+    def tearDown(self):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_multi_output(self):
+        for max_workers in [1, 2]:
             # Create stuff
-            funny_ps = mystrax.get_array(
+            funny_ps = self.mystrax.get_array(
                 run_id=run_id,
                 targets='peaks',
                 max_workers=max_workers)
-            p = mystrax.get_single_plugin(run_id, 'records')
-            assert mystrax.is_stored(run_id, 'peaks')
-            assert mystrax.is_stored(run_id, 'even_recs')
+            p = self.mystrax.get_single_plugin(run_id, 'records')
+            assert self.mystrax.is_stored(run_id, 'peaks')
+            assert self.mystrax.is_stored(run_id, 'even_recs')
 
             # Peaks are correct
             assert np.all(funny_ps['time'] % 2 == 0)
             assert len(funny_ps) == p.config['n_chunks'] * p.config['recs_per_chunk'] / 2
 
             # Unnecessary things also got stored
-            assert mystrax.is_stored(run_id, 'rec_count')
-            assert mystrax.is_stored(run_id, 'odd_recs')
+            assert self.mystrax.is_stored(run_id, 'rec_count')
+            assert self.mystrax.is_stored(run_id, 'odd_recs')
 
             # Record count is correct
-            rec_count = mystrax.get_array(run_id, 'rec_count')
+            rec_count = self.mystrax.get_array(run_id, 'rec_count')
             print(rec_count)
             assert len(rec_count) == p.config['n_chunks']
             np.testing.assert_array_equal(rec_count['n_records'], p.config['recs_per_chunk'])
 
             # Even and odd records are correct
-            r_even = mystrax.get_array(run_id, 'even_recs')
-            r_odd = mystrax.get_array(run_id, 'odd_recs')
+            r_even = self.mystrax.get_array(run_id, 'even_recs')
+            r_odd = self.mystrax.get_array(run_id, 'odd_recs')
             assert np.all(r_even['time'] % 2 == 0)
             assert np.all(r_odd['time'] % 2 == 1)
             assert len(r_even) == p.config['n_chunks'] * p.config['recs_per_chunk'] / 2
