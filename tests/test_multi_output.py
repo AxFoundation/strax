@@ -60,7 +60,7 @@ class FunnyPeaks(strax.Plugin):
 
 class TestMultiOutputs(unittest.TestCase):
 
-    def setUp(self, superrun_name='_superrun_test'):
+    def setUp(self):
         # Temp directory for storing record data for the tests.
         # Will be removed during TearDown.
         self.temp_dir = tempfile.mkdtemp()
@@ -73,6 +73,21 @@ class TestMultiOutputs(unittest.TestCase):
     def tearDown(self):
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+
+    def test_double_dependency(self):
+        """
+        Tests if double dependency of a plugin on another plugin leads
+        to dead lock in processing.
+        """
+        self.mystrax.set_context_config({'timeout': 120})  # Set time out to 2 min
+
+        assert not self.mystrax.is_stored(run_id, 'even_recs')
+        assert not self.mystrax.is_stored(run_id, 'odd_recs')
+
+        zipped_records = self.mystrax.get_array(run_id, 'zipped_records')
+        records = self.mystrax.get_array(run_id, 'records')
+
+        assert np.all(zipped_records == records)
 
     def test_multi_output(self):
         for max_workers in [1, 2]:
