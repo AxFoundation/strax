@@ -689,6 +689,7 @@ class Context:
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
+        loader_plugins = dict()
         savers = dict()
         seen = set()
         to_compute = dict()
@@ -757,6 +758,7 @@ class Context:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
                 loaders[d] = ldr
+                loader_plugins[d] = plugins[d]
                 del plugins[d]
             else:
                 # Data not found anywhere. We will be computing it.
@@ -893,6 +895,7 @@ class Context:
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
+            loader_plugins=loader_plugins,
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
 

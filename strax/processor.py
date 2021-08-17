@@ -25,6 +25,7 @@ class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
     loaders: ty.Dict[str, callable]
+    loader_plugins: ty.Dict[str, strax.Plugin]  # Required for inline ParallelSource plugin.
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
