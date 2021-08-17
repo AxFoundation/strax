@@ -493,13 +493,14 @@ def divide_outputs(source,
     # TODO: this code duplicates exception handling and cleanup
     # from Mailbox.send_from! Can we avoid that somehow?
     i = 0
+    counter = 0
     try:
         while True:
             for d in outputs:
-                if d in flow_freely:
+                if d in flow_freely or counter < 1:
                     # Do not block on account of these guys
                     continue
-
+                counter += 1
                 m = mailboxes[d]
                 if lazy:
                     with m._lock:
