@@ -902,7 +902,9 @@ class ParallelSourcePlugin(Plugin):
     @classmethod
     def inline_plugins(cls, components, start_from, log):
         plugins = components.plugins.copy()
-
+        loader_plugins = components.loader_plugins.copy()
+        log.debug(f'Try to inline plugins starting from {start_from}')
+        
         sub_plugins = {start_from: plugins[start_from]}
         del plugins[start_from]
 
@@ -923,7 +925,7 @@ class ParallelSourcePlugin(Plugin):
             else:
                 # No more plugins we can inline
                 break
-
+        log.debug(f'Trying to inline the following sub-plugins: {sub_plugins}')
         if len(set(list(sub_plugins.values()))) == 1:
             # Just one plugin to inline: no use
             log.debug("Just one plugin to inline: skipping")
@@ -994,13 +996,16 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
         for d in p.provides:
             plugins[d] = p
-        p.deps = {d: plugins[d] for d in p.depends_on}
+        
+        log.debug(f'Trying to find plugins for dependencies: {p.depends_on}')
+        
+        p.deps = {d: plugins[d] if plugins.get(d, None) else loader_plugins[d] for d in p.depends_on}
 
         log.debug(f"Inlined plugins: {p.sub_plugins}."
                   f"Inlined savers: {p.sub_savers}")
 
         return strax.ProcessorComponents(
-            plugins, components.loaders, savers, components.targets)
+            plugins, components.loaders, components.loader_plugins, savers, components.targets)
 
     def __init__(self, depends_on):
         self.depends_on = depends_on
