@@ -675,7 +675,6 @@ class Context:
         """Return components for setting up a processor
         {get_docs}
         """
-
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
@@ -801,7 +800,7 @@ class Context:
             elif target_plugin.save_when == strax.SaveWhen.EXPLICIT:
                 # If we arrive here in case of a superrun the user want to save
                 # as self.context_config['write_superruns'] is true.
-                if target_plugin not in save and not _is_superrun:
+                if target_i not in save:# and not _is_superrun:
                     return
             else:
                 assert target_plugin.save_when == strax.SaveWhen.ALWAYS
