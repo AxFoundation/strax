@@ -756,9 +756,9 @@ class Context:
             if loader:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
-                loaders[d] = loader
-                loader_plugins[d] = plugins[d]
-                del plugins[d]
+                loaders[target_i] = loader
+                loader_plugins[target_i] = plugins[target_i]
+                del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
