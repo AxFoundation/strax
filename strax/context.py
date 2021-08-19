@@ -756,7 +756,7 @@ class Context:
             if loader:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
-                loaders[d] = ldr
+                loaders[d] = loader
                 loader_plugins[d] = plugins[d]
                 del plugins[d]
             else:
@@ -868,8 +868,8 @@ class Context:
                         # This frontend cannot save. Too bad.
                         pass
 
-        for d in targets:
-            check_cache(d)
+        for target_i in targets:
+            check_cache(target_i)
         plugins = to_compute
 
         intersec = list(plugins.keys() & loaders.keys())
