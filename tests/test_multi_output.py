@@ -47,6 +47,7 @@ class ZipRecords(strax.Plugin):
     def compute(self, even_recs, odd_recs):
         return strax.sort_by_time(np.concatenate((even_recs, odd_recs)))
 
+
 class EvenRecsClassified(strax.Plugin):
     """
     Plugin required to test inline plugins for double dependency.
@@ -67,7 +68,8 @@ class EvenRecsClassified(strax.Plugin):
         res['dt'] = even_recs['dt']
         res['length'] = even_recs['length']
         return res
-    
+
+
 class ZipRecordsAdditionalDependency(strax.Plugin):
     """
     Plugin required to test inline plugins for double dependency.
@@ -93,6 +95,7 @@ class ZipRecordsAdditionalDependency(strax.Plugin):
         res['channel'][n_even:] = odd_recs['channel']
         
         return strax.sort_by_time(res)
+
 
 class FunnyPeaks(strax.Plugin):
     parallel = True
@@ -160,7 +163,7 @@ class TestMultiOutputs(unittest.TestCase):
                                          'allow_lazy': False,
                                          'allow_multiprocess': True})  
         self._test_double_dependency(max_workers=2, make_data_type='zipped_records_classified')
-        
+        self.mystrax.is_stored(run_id, 'even_recs_classified')
 
     def test_multi_output(self):
         for max_workers in [1, 2]:
@@ -203,3 +206,6 @@ class TestMultiOutputs(unittest.TestCase):
         zipped_records = self.mystrax.get_array(run_id, make_data_type, **kwargs)
         records = self.mystrax.get_array(run_id, 'records')
         assert np.all(zipped_records == records)
+        assert self.mystrax.is_stored(run_id, 'even_recs')
+        assert self.mystrax.is_stored(run_id, 'odd_recs')
+        assert self.mystrax.is_stored(run_id, make_data_type)
