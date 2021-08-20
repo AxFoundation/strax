@@ -165,7 +165,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, select_peaks_ind
         to record_i.
     :param records: Records to be used to build peaks.
     :param record_links: Tuple of previous and next records.
-    :arg select_peaks_indices: Indices of the peaks for partial
+    :param select_peaks_indices: Indices of the peaks for partial
     processing. In the form of np.array([np.int, np.int, ..]). If
     None (default), all the peaks are used for the summation.
 
