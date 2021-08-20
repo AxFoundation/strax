@@ -675,7 +675,6 @@ class Context:
         """Return components for setting up a processor
         {get_docs}
         """
-
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
@@ -725,7 +724,7 @@ class Context:
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), target_i)
+                self.make(list(sub_run_spec.keys()), target_i, save=(target_i,))
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
@@ -743,7 +742,8 @@ class Context:
                     if not loader:
                         raise RuntimeError(
                             f"Could not load {target_i} for subrun {subrun} "
-                            f"even though we made it??")
+                             "even though we made it? Is the plugin "
+                             "you are requesting a SaveWhen.NEVER-plguin?")
                     ldrs.append(loader)
 
                 def concat_loader(*args, **kwargs):
@@ -776,6 +776,7 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
+                    
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
@@ -797,7 +798,9 @@ class Context:
                 if target_i not in targets:
                     return
             elif target_plugin.save_when == strax.SaveWhen.EXPLICIT:
-                if target_i not in save:
+                # If we arrive here in case of a superrun the user want to save
+                # as self.context_config['write_superruns'] is true.
+                if target_i not in save and not _is_superrun:
                     return
             else:
                 assert target_plugin.save_when == strax.SaveWhen.ALWAYS
