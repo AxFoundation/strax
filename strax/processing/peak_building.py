@@ -294,7 +294,6 @@ def _build_hit_waveform(hit, record, hit_waveform):
     record_data = record['data'][r_start:r_end]
     multiplier = 2**record['amplitude_bit_shift']
     bl_fpart = record['baseline'] % 1
-    # TODO: check numba does casting correctly here!
     max_in_record = record_data.max() * multiplier
 
     # Build hit waveform:
@@ -343,14 +342,14 @@ def find_peak_groups(peaks, gap_threshold,
 @export
 @numba.njit(nogil=True, cache=True)
 def find_hit_integration_bounds(
-        lone_hits, peaks, records, save_outside_hits, n_channels,
+        hits, excluded_intervals, records, save_outside_hits, n_channels,
         allow_bounds_beyond_records=False):
     """"Update (lone) hits to include integration bounds. Please note
     that time and length of the original hit are not changed!
 
-    :param lone_hits: Hits or lone hits which should be extended by
+    :param hits: Hits or lone hits which should be extended by
         integration bounds.
-    :param peaks: Regions in which hits should not extend to. E.g. Peaks
+    :param excluded_intervals: Regions in which hits should not extend to. E.g. Peaks
         for lone hits. If not needed just put a zero length
         strax.time_fields array.
     :param records: Records in which hits were found.
@@ -361,46 +360,53 @@ def find_hit_integration_bounds(
         right_integration beyond record boundaries. E.g. to negative
         samples for left side.
     """
-    result = np.zeros((len(lone_hits), 2), dtype=np.int64)
-    if not len(lone_hits):
+    result = np.zeros((len(hits), 2), dtype=np.int64)
+    if not len(hits):
         return result
 
     # By default, use save_outside_hits to determine bounds
-    result[:, 0] = lone_hits['time'] - save_outside_hits[0]
-    result[:, 1] = strax.endtime(lone_hits) + save_outside_hits[1]
+    result[:, 0] = hits['time'] - save_outside_hits[0]
+    result[:, 1] = strax.endtime(hits) + save_outside_hits[1]
 
     NO_EARLIER_HIT = -1
     last_hit_index = np.ones(n_channels, dtype=np.int32) * NO_EARLIER_HIT
 
-    n_peaks = len(peaks)
+    n_intervals = len(excluded_intervals)
     FAR_AWAY = 9223372036_854775807   # np.iinfo(np.int64).max, April 2262
-    peak_i = 0
+    interval_i = 0
 
-    for hit_i, h in enumerate(lone_hits):
+    for hit_i, h in enumerate(hits):
         ch = h['channel']
 
         # Find end of previous peak and start of next peak
         # (note peaks are disjoint from any lone hit, even though
         # lone hits may not be disjoint from each other)
-        while peak_i < n_peaks and peaks[peak_i]['time'] < h['time']:
-            peak_i += 1
-        prev_p_end = strax.endtime(peaks[peak_i - 1]) if peak_i != 0 else 0
-        next_p_start = peaks[peak_i]['time'] if peak_i != n_peaks else FAR_AWAY
+        while interval_i < n_intervals and excluded_intervals[interval_i]['time'] < h['time']:
+            interval_i += 1
 
+        if interval_i != 0:
+            prev_interval_end = strax.endtime(excluded_intervals[interval_i - 1])
+        else:
+            prev_interval_end = 0
+
+        if interval_i != n_intervals:
+            next_interval_start = excluded_intervals[interval_i]['time']
+        else:
+            next_interval_start = FAR_AWAY
 
         # Ensure we do not integrate parts of peaks
         # or (at least for now) beyond the record in which the hit was found
         r = records[h['record_i']]
         if allow_bounds_beyond_records:
-            result[hit_i][0] = max(prev_p_end,
+            result[hit_i][0] = max(prev_interval_end,
                                    result[hit_i][0])
-            result[hit_i][1] = min(next_p_start,
+            result[hit_i][1] = min(next_interval_start,
                                    result[hit_i][1])
         else:
-            result[hit_i][0] = max(prev_p_end,
+            result[hit_i][0] = max(prev_interval_end,
                                    r['time'],
                                    result[hit_i][0])
-            result[hit_i][1] = min(next_p_start,
+            result[hit_i][1] = min(next_interval_start,
                                    strax.endtime(r),
                                    result[hit_i][1])
 
@@ -417,9 +423,9 @@ def find_hit_integration_bounds(
         last_hit_index[ch] = hit_i
 
     # Convert to index in record and store
-    t0 = records[lone_hits['record_i']]['time']
-    dt = records[lone_hits['record_i']]['dt']
-    for hit_i, h in enumerate(lone_hits):
+    t0 = records[hits['record_i']]['time']
+    dt = records[hits['record_i']]['dt']
+    for hit_i, h in enumerate(hits):
         h['left_integration'] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
         h['right_integration'] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
 
