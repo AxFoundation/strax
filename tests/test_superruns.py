@@ -24,7 +24,7 @@ class TestSuperRuns(unittest.TestCase):
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
                                                                   deep_scan=True)],
-                                     register=[Records, RecordsExtension, Peaks],
+                                     register=[Records, RecordsExtension, Peaks, PeaksExtension],
                                      config={'bonus_area': 42}
                                      )
         self.context.set_context_config({'write_superruns': True,
@@ -213,7 +213,24 @@ class TestSuperRuns(unittest.TestCase):
         self.context.make(self.superrun_name, 'peaks')
         assert self.context.is_stored(self.superrun_name, 'peaks')
         assert self.context.is_stored(self.subrun_ids[0], 'peaks')
-
+    
+    def test_superruns_and_save_when(self):
+        """
+        Tests if only the highest level for save_when.EXPLICIT plugins is stored.
+        """
+        assert not self.context.is_stored(self.superrun_name, 'peaks')
+        assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
+        assert not self.context.is_stored(self.subrun_ids[0], 'peaks_extension')
+        assert not self.context.is_stored(self.superrun_name, 'peaks_extension')
+        self.context._plugin_class_registry['peaks'].save_when = strax.SaveWhen.EXPLICIT
+        
+        self.context.make(self.superrun_name, 'peaks_extension')
+        assert not self.context.is_stored(self.superrun_name, 'peaks')
+        assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
+        assert self.context.is_stored(self.superrun_name, 'peaks_extension')
+        assert self.context.is_stored(self.subrun_ids[0], 'peaks_extension')
+        
+    
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
@@ -266,4 +283,28 @@ class RecordsExtension(strax.Plugin):
         res['length'] = records['length']
         res['dt'] = records['dt']
         res['additional_field'] = self.config['some_additional_value']
+        return res
+  
+
+@strax.takes_config(
+    strax.Option(
+        name='some_additional_peak_value',
+        default=42,
+        help="Some additional value for merger",
+    )
+)
+class PeaksExtension(strax.Plugin):
+
+    depends_on = 'peaks'
+    provides = 'peaks_extension'
+    save_when = strax.SaveWhen.EXPLICIT
+    dtype = strax.time_dt_fields + [(('Some additional field', 'some_additional_peak_field'), np.int16)]
+
+    def compute(self, peaks):
+
+        res = np.zeros(len(peaks), self.dtype)
+        res['time'] = peaks['time']
+        res['length'] = peaks['length']
+        res['dt'] = peaks['dt']
+        res['some_additional_peak_field'] = self.config['some_additional_peak_value']
         return res
