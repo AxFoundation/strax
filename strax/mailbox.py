@@ -500,13 +500,13 @@ def divide_outputs(source,
     try:
         while True:
             for d in outputs:
+                m = mailboxes[d]
                 if d in flow_freely or is_first:
                     # Do not block on account of these guys
                     not_block_reason = 'flow_freely' if flow_freely else 'is first data_type'
                     m.log.debug(f'Not locking {d} because it {not_block_reason}')
                     is_first = False
                     continue
-                m = mailboxes[d]
                 if lazy:
                     with m._lock:
                         if not m._can_fetch():
