@@ -394,8 +394,6 @@ def find_hit_integration_bounds(
         else:
             next_interval_start = FAR_AWAY
 
-        # Ensure we do not integrate parts of peaks
-        # or (at least for now) beyond the record in which the hit was found
         r = records[h['record_i']]
         if allow_bounds_beyond_records:
             result[hit_i][0] = max(prev_interval_end,
