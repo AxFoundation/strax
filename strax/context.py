@@ -693,24 +693,26 @@ class Context:
         seen = set()
         to_compute = dict()
 
-        def check_cache(d):
+        def check_cache(target_i):
+            """For some target, add loaders, and savers where appropriate"""
             nonlocal plugins, loaders, savers, seen
-            if d in seen:
+            if target_i in seen:
                 return
-            seen.add(d)
-            p = plugins[d]
+            seen.add(target_i)
+            target_plugin = plugins[target_i]
 
             # Can we load this data?
             loading_this_data = False
-            key = strax.DataKey(run_id, d, p.lineage)
+            key = self.key_for(run_id, target_i)
 
-            ldr = self._get_partial_loader_for(
+            loader = self._get_partial_loader_for(
                 key,
                 chunk_number=chunk_number,
                 time_range=time_range)
 
-            _is_superrun = run_id.startswith('_') and not p.provides[0].startswith('_temp')
-            if not ldr and _is_superrun:
+            _is_superrun = (run_id.startswith('_') and
+                            not target_plugin.provides[0].startswith('_temp'))
+            if not loader and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet "
                                               "supported for superruns")
@@ -723,62 +725,59 @@ class Context:
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
                 self.context_config['storage_converter'] = False
-                self.make(list(sub_run_spec.keys()), d)
+                self.make(list(sub_run_spec.keys()), target_i)
                 self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
                 for subrun in sub_run_spec:
-                    sub_key = strax.DataKey(
-                        subrun,
-                        d,
-                        self._get_plugins((d,), subrun)[d].lineage)
+                    sub_key = self.key_for(subrun, target_i)
 
                     if sub_run_spec[subrun] == 'all':
                         _subrun_time_range = None
                     else:
                         _subrun_time_range = sub_run_spec[subrun]
-                    ldr = self._get_partial_loader_for(
+                    loader = self._get_partial_loader_for(
                         sub_key,
                         time_range=_subrun_time_range,
                         chunk_number=chunk_number)
-                    if not ldr:
+                    if not loader:
                         raise RuntimeError(
-                            f"Could not load {d} for subrun {subrun} "
+                            f"Could not load {target_i} for subrun {subrun} "
                             f"even though we made it??")
-                    ldrs.append(ldr)
+                    ldrs.append(loader)
 
                 def concat_loader(*args, **kwargs):
                     for x in ldrs:
                         yield from x(*args, **kwargs)
                 # pylint: disable=unnecessary-lambda
-                ldr = lambda *args, **kwargs: concat_loader(*args, **kwargs)
+                loader = lambda *args, **kwargs: concat_loader(*args, **kwargs)
 
-            if ldr:
+            if loader:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
-                loaders[d] = ldr
-                del plugins[d]
+                loaders[target_i] = loader
+                del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
                 if (time_range is not None
-                        and plugins[d].save_when != strax.SaveWhen.NEVER):
+                        and plugins[target_i].save_when != strax.SaveWhen.NEVER):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
                     raise strax.DataNotAvailable(
                         f"Time range selection assumes data is already "
-                        f"available, but {d} for {run_id} is not.")
+                        f"available, but {target_i} for {run_id} is not.")
                 if '*' in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
-                        f"{d} for {run_id} not found in any storage, and "
+                        f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies no new data can be created.")
-                if d in self.context_config['forbid_creation_of']:
+                if target_i in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
-                        f"{d} for {run_id} not found in any storage, and "
+                        f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                to_compute[d] = p
-                for dep_d in p.depends_on:
+                to_compute[target_i] = target_plugin
+                for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
             
             # Should we save this data? If not, return.
@@ -790,18 +789,18 @@ class Context:
                     and not self.context_config['write_superruns'] 
                     and _is_superrun):
                 return
-            if p.save_when == strax.SaveWhen.NEVER:
-                if d in save:
-                    raise ValueError(f"Plugin forbids saving of {d}")
+            if target_plugin.save_when == strax.SaveWhen.NEVER:
+                if target_i in save:
+                    raise ValueError(f"Plugin forbids saving of {target_i}")
                 return
-            elif p.save_when == strax.SaveWhen.TARGET:
-                if d not in targets:
+            elif target_plugin.save_when == strax.SaveWhen.TARGET:
+                if target_i not in targets:
                     return
-            elif p.save_when == strax.SaveWhen.EXPLICIT:
-                if d not in save:
+            elif target_plugin.save_when == strax.SaveWhen.EXPLICIT:
+                if target_i not in save:
                     return
             else:
-                assert p.save_when == strax.SaveWhen.ALWAYS
+                assert target_plugin.save_when == strax.SaveWhen.ALWAYS
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
@@ -809,7 +808,7 @@ class Context:
                 # We're not even getting the whole data.
                 # Without this check, saving could be attempted if the
                 # storage converter mode is enabled.
-                self.log.warning(f"Not saving {d} while "
+                self.log.warning(f"Not saving {target_i} while "
                                  f"selecting a time range in the run")
                 return
             if any([len(v) > 0
@@ -818,22 +817,22 @@ class Context:
                 # In fuzzy matching mode, we cannot (yet) derive the
                 # lineage of any data we are creating. To avoid creating
                 # false data entries, we currently do not save at all.
-                self.log.warning(f"Not saving {d} while fuzzy matching is"
+                self.log.warning(f"Not saving {target_i} while fuzzy matching is"
                                  f" turned on.")
                 return
             if self.context_config['allow_incomplete']:
-                self.log.warning(f"Not saving {d} while loading incomplete"
+                self.log.warning(f"Not saving {target_i} while loading incomplete"
                                  f" data is allowed.")
                 return
             # Save the target and any other outputs of the plugin.
-            for d_to_save in set([d] + list(p.provides)):
+            for d_to_save in set([target_i] + list(target_plugin.provides)):
                 if savers.get(d_to_save):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers
-                    assert p.multi_output
+                    assert target_plugin.multi_output
                     continue
 
-                key = strax.DataKey(run_id, d_to_save, p.lineage)
+                key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
 
                 for sf in self.storage:
                     if sf.readonly:
@@ -858,9 +857,7 @@ class Context:
                     try:
                         saver = sf.saver(
                             key,
-                            metadata=p.metadata(
-                                run_id,
-                                d_to_save),
+                            metadata=target_plugin.metadata(run_id, d_to_save),
                             saver_timeout=self.context_config['saver_timeout'])
                         # Now that we are surely saving, make an entry in savers
                         savers.setdefault(d_to_save, [])
