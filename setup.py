@@ -21,7 +21,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='0.15.3',
+                 version='0.16.1',
                  description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
                  url='https://github.com/AxFoundation/strax',
@@ -29,6 +29,7 @@ setuptools.setup(name='strax',
                  install_requires=requires,
                  tests_require=requires + tests_requires,
                  long_description=readme + '\n\n' + history,
+                 # We don't test 3.6 anymore, see #503
                  python_requires=">=3.6",
                  extras_require={
                      'docs': docs_requires

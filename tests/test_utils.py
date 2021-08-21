@@ -5,7 +5,7 @@ import strax
 
 
 def test_growing_result():
-    @strax.growing_result(np.int, chunk_size=2)
+    @strax.growing_result(np.int64, chunk_size=2)
     def bla(_result_buffer=None, result_dtype=None):
         buffer = _result_buffer
         offset = 0
@@ -19,13 +19,10 @@ def test_growing_result():
                 offset = 0
         yield offset
 
-    result = np.array([0, 1, 2, 3, 4], dtype=np.int)
+    result = np.array([0, 1, 2, 3, 4], dtype=np.int64)
     np.testing.assert_equal(bla(), result)
-    # TODO: re-enable chunk size spec?
-    # np.testing.assert_equal(bla(chunk_size=1), result)
-    # np.testing.assert_equal(bla(chunk_size=7), result)
-    should_get = result.astype(np.float)
-    got = bla(result_dtype=np.float)
+    should_get = result.astype(np.float64)
+    got = bla(result_dtype=np.float64)
     np.testing.assert_equal(got, should_get)
     assert got.dtype == should_get.dtype
 
@@ -49,7 +46,7 @@ def get_dummy_data(draw,
     dt = draw(hst.integers(*dt))
     max_time = draw(hst.integers(*max_time))
 
-    data = np.zeros(data_length, dtype=strax.time_fields + [('data', np.float)])
+    data = np.zeros(data_length, dtype=strax.time_fields + [('data', np.float64)])
     data['time'] = np.random.randint(0, max_time + 1, data_length)
     data['endtime'] = data['time'] + dt
     data['data'] = np.random.random(data_length)

@@ -33,8 +33,9 @@ You might also find these presentations useful:
     advanced/chunking
     advanced/superrun
     advanced/plugin_dev
-    advanced/overview
     advanced/recompression
+    advanced/fuzzy_for
+    advanced/overview
 
 .. toctree::
     :maxdepth: 1
@@ -45,6 +46,7 @@ You might also find these presentations useful:
     developer/overlaps
     developer/storage
     developer/contributing
+    developer/documentation
     developer/release
 
 The above pages describe how strax's processing framework works under the hood, and explains some implementation choices. It's meant for people who want to do core development on strax; users or even plugin developers should not need it.

@@ -37,7 +37,7 @@ def takes_config(*options):
             # Already have some options set, e.g. because of subclassing
             # where both child and parent have a takes_config decorator
             for opt in result.values():
-                if opt.name in plugin_class.takes_config and not opt.overwrite:
+                if opt.name in plugin_class.takes_config:
                     raise RuntimeError(
                         f"Attempt to specify option {opt.name} twice")
             plugin_class.takes_config = immutabledict({
@@ -62,7 +62,6 @@ class Option:
                  default_by_run=OMITTED,
                  child_option: bool = False,
                  parent_option_name: str = None,
-                 overwrite: bool = False,
                  track: bool = True,
                  help: str = ''):
         """
@@ -82,9 +81,6 @@ class Option:
         :param parent_option_name: Name of the parent option of child option.
             Required to find the key of the parent option so it can be overwritten
             by the value of the child option.
-        :param overwrite: allow this option to overwrite if there is
-            another option already registered with the same name with a
-            different value. Only use for subclassing plugins.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
         :param help: Human-readable description of the option.
@@ -94,7 +90,6 @@ class Option:
         self.default = default
         self.default_by_run = default_by_run
         self.default_factory = default_factory
-        self.overwrite = overwrite
         self.track = track
         self.help = help
 

@@ -47,7 +47,7 @@ def mailbox_tester(messages,
                              reader_sleeps=reader_sleeps)
                    for _ in range(n_readers)]
 
-        for i in range(len(messages)):
+        for i, _ in enumerate(messages):
             mb.send(messages[i], msg_number=numbers[i])
             print(f"Sent message {i}. Now {len(mb._mailbox)} ms in mailbox.")
 

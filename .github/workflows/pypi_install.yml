@@ -1,13 +1,11 @@
-# Pipy upload straxen manually. NB: Don't do this when it's not needed! This
-# should normally work fine with travis. However, sometimes something goes
-# wrong with travis upon uploading, then it will not continue until the next
-# release is made.
+# Pipy upload strax after a release (or manually).
 # Mostly based on https://github.com/marketplace/actions/pypi-publish
-name: Manual pipy install
+name: Pipy
 
 on:
   workflow_dispatch:
-
+  release:
+    types: [created]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,7 +14,7 @@ jobs:
       - name: Setup python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.6'
+          python-version: '3.8'
       - name: Checkout repo
         uses: actions/checkout@v2
       - name: Install dependencies

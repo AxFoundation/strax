@@ -57,12 +57,13 @@ def test_multi_output():
                 run_id=run_id,
                 targets='peaks',
                 max_workers=max_workers)
+            p = mystrax.get_single_plugin(run_id, 'records')
             assert mystrax.is_stored(run_id, 'peaks')
             assert mystrax.is_stored(run_id, 'even_recs')
 
             # Peaks are correct
             assert np.all(funny_ps['time'] % 2 == 0)
-            assert len(funny_ps) == n_chunks * recs_per_chunk / 2
+            assert len(funny_ps) == p.config['n_chunks'] * p.config['recs_per_chunk'] / 2
 
             # Unnecessary things also got stored
             assert mystrax.is_stored(run_id, 'rec_count')
@@ -71,13 +72,13 @@ def test_multi_output():
             # Record count is correct
             rec_count = mystrax.get_array(run_id, 'rec_count')
             print(rec_count)
-            assert len(rec_count) == n_chunks
-            np.testing.assert_array_equal(rec_count['n_records'], recs_per_chunk)
+            assert len(rec_count) == p.config['n_chunks']
+            np.testing.assert_array_equal(rec_count['n_records'], p.config['recs_per_chunk'])
 
             # Even and odd records are correct
             r_even = mystrax.get_array(run_id, 'even_recs')
             r_odd = mystrax.get_array(run_id, 'odd_recs')
             assert np.all(r_even['time'] % 2 == 0)
             assert np.all(r_odd['time'] % 2 == 1)
-            assert len(r_even) == n_chunks * recs_per_chunk / 2
+            assert len(r_even) == p.config['n_chunks'] * p.config['recs_per_chunk'] / 2
             assert len(r_even) == len(r_odd)

@@ -51,7 +51,8 @@ class ThreadedMailboxProcessor:
                  allow_lazy=True,
                  max_workers=None,
                  max_messages=4,
-                 timeout=60):
+                 timeout=60,
+                 is_superrun=False,):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
 
@@ -98,7 +99,7 @@ class ThreadedMailboxProcessor:
             else:
                 self.process_executor = self.thread_executor
 
-        # Figure which ouputs
+        # Figure which outputs
         #  - we should exclude from the flow control in lazy mode,
         #    because they are produced but not required.
         #  - we should discard (produced but neither required not saved)
@@ -108,11 +109,17 @@ class ThreadedMailboxProcessor:
         # have no savers are under them (see #444)
         saved = set([k for k, v in components.savers.items()
                      if v])
+
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
         to_flow_freely = produced - required
         to_discard = to_flow_freely - saved
+        self.log.debug(f'to_flow_freely {to_flow_freely}'
+                       f'to_discard {to_discard}'
+                       f'produced {produced}'
+                       f'required {required}'
+                       f'saved {saved}')
 
         self.mailboxes = MailboxDict(lazy=lazy)
 
@@ -152,7 +159,8 @@ class ThreadedMailboxProcessor:
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             lazy=lazy,
-                            mailboxes=self.mailboxes,
+                            # make sure to subscribe the outputs of the mp_plugins
+                            mailboxes={k: self.mailboxes[k] for k in p.provides},
                             flow_freely=to_flow_freely,
                             outputs=p.provides))
 
@@ -178,7 +186,7 @@ class ThreadedMailboxProcessor:
                     # TODO: Don't know how to get this info, for now,
                     # be conservative and don't rechunk
                     can_drive = True
-                    rechunk = False
+                    rechunk = is_superrun and allow_rechunk
 
                 self.mailboxes[d].add_reader(
                     partial(saver.save_from,
@@ -221,6 +229,7 @@ class ThreadedMailboxProcessor:
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():
+            self.log.debug(f'start {m}')
             m.start()
 
         self.log.debug(f"Yielding {target}")

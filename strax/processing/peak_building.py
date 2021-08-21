@@ -235,7 +235,7 @@ def sum_waveform(peaks, records, adc_to_pe, select_peaks_indices=None):
                 p['time'] // dt, n_p)
 
             max_in_record = r['data'][r_start:r_end].max() * multiplier
-            p['saturated_channel'][ch] |= np.int8(max_in_record >= r['baseline'])
+            p['saturated_channel'][ch] |= np.int8(max_in_record >= np.int16(r['baseline']))
 
             bl_fpart = r['baseline'] % 1
             # TODO: check numba does casting correctly here!
@@ -272,7 +272,7 @@ def find_peak_groups(peaks, gap_threshold,
     """
     # Mock up a "hits" array so we can just use the existing peakfinder
     # It doesn't work on raw peaks, since they might have different dts
-    # TODO: is there no cleaner way?
+    # Maybe there is a cleaner way?
     fake_hits = np.zeros(len(peaks), dtype=strax.hit_dtype)
     fake_hits['dt'] = 1
     fake_hits['area'] = 1
