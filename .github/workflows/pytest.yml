@@ -21,12 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9, "3.10"]
+        python-version: [3.7, 3.8, 3.9, "3.10"]
         test: ['coveralls', 'pytest']
         # Only run coverage on py3.8
         exclude:
-          - python-version: 3.6
-            test: coveralls
           - python-version: 3.7
             test: coveralls
           - python-version: 3.9
