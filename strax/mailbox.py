@@ -493,9 +493,6 @@ def divide_outputs(source,
     # TODO: this code duplicates exception handling and cleanup
     # from Mailbox.send_from! Can we avoid that somehow?
     i = 0
-    # Flag which prevents the first data type of a divide_outputs plugin
-    # to lock the threads. Otherwise this may lead to a dead-lock in
-    # case of a double dependency plugins (e.g. merged_s2s).
     try:
         while True:
             for d in outputs:
