@@ -164,7 +164,7 @@ class ThreadedMailboxProcessor:
                 reader_data_types = set(strax.to_str_tuple(d))
                 _flow_freely = (to_flow_freely | ((provided_data_types - reader_data_types) -
                                                   to_flow_freely))
-                self.log.debug(f'Updating flow freely for mname to be {_flow_freely}')
+                self.log.debug(f'Updating flow freely for {mname} to be {_flow_freely}')
 
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
