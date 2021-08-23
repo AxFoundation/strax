@@ -496,16 +496,13 @@ def divide_outputs(source,
     # Flag which prevents the first data type of a divide_outputs plugin
     # to lock the threads. Otherwise this may lead to a dead-lock in
     # case of a double dependency plugins (e.g. merged_s2s).
-    is_first = True
     try:
         while True:
             for d in outputs:
                 m = mailboxes[d]
-                if d in flow_freely or is_first:
+                if d in flow_freely:
                     # Do not block on account of these guys
-                    not_block_reason = 'flow_freely' if flow_freely else 'is first data_type'
-                    m.log.debug(f'Not locking {d} because it {not_block_reason}')
-                    is_first = False
+                    m.log.debug(f'Not locking {d}')
                     continue
                 if lazy:
                     with m._lock:
