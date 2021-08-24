@@ -106,6 +106,7 @@ class PeakSplitter:
                 orig_dt = records[0]['dt']
                 new_peaks['length'] = new_peaks['length'] * new_peaks['dt'] / orig_dt
                 new_peaks['dt'] = orig_dt
+                new_peaks['data'][:] = 0
                 new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
                 new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
             elif data_type == 'merged_s2s':
