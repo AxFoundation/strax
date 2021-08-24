@@ -92,7 +92,7 @@ def replace_merged(orig, merge):
         return orig
 
     skip_windows = strax.touching_windows(orig, merge)
-    skip_n = len(np.unique(np.concatenate([np.arange(l, r) for l, r in skip_windows])))
+    skip_n = np.diff(skip_windows, axis=1).sum()
     result = np.zeros(len(orig) - skip_n + len(merge),
                       dtype=orig.dtype)
     _replace_merged(result, orig, merge, skip_windows)

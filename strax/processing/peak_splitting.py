@@ -58,7 +58,7 @@ class PeakSplitter:
 
     def __call__(self, peaks, records, to_pe, data_type, concat_orig,
                  do_iterations=1, min_area=0, **kwargs):
-        if not len(peaks) or not do_iterations:
+        if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
         # Build the *args tuple for self.find_split_points from kwargs
