@@ -89,24 +89,19 @@ class PeakSplitter:
             split_finder=self.find_split_points,
             peaks=peaks,
             is_split=is_split,
+            orig_dt=records[0]['dt'],
             min_area=min_area,
             args_options=tuple(args_options),
-            result_dtype=peaks.dtype)
+            result_dtype=peaks.dtype,
+            data_type=data_type,)
 
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
-                orig_dt = records[0]['dt']
-                new_peaks['length'] = new_peaks['length'] * new_peaks['dt'] / orig_dt
-                new_peaks['dt'] = orig_dt
                 strax.sum_waveform(new_peaks, records, to_pe)
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
-                orig_dt = records[0]['dt']
-                new_peaks['length'] = new_peaks['length'] * new_peaks['dt'] / orig_dt
-                new_peaks['dt'] = orig_dt
-                new_peaks['data'][:] = 0
                 new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
                 new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
             elif data_type == 'merged_s2s':
@@ -129,14 +124,15 @@ class PeakSplitter:
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def _split_peaks(split_finder, peaks, is_split, min_area,
-                     args_options,
+    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+                     args_options, data_type,
                      _result_buffer=None, result_dtype=None):
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
         new_peaks = _result_buffer
         offset = 0
+        reset_dt = data_type != 'merged_s2s'
 
         for p_i, p in enumerate(peaks):
             if p['area'] < min_area:
@@ -158,10 +154,14 @@ class PeakSplitter:
                 # Set the dt to the original (lowest) dt first;
                 # this may change when the sum waveform of the new peak
                 # is computed
-                r['dt'] = p['dt']
-                r['length'] = (split_i - prev_split_i)
-                r['data'][:r['length']] = p['data'][prev_split_i: split_i]
-                r['area'] = p['data'][prev_split_i: split_i].sum()
+                if reset_dt:
+                    r['dt'] = orig_dt
+                    r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+                else:
+                    r['dt'] = p['dt']
+                    r['length'] = (split_i - prev_split_i)
+                    r['data'][:r['length']] = p['data'][prev_split_i: split_i]
+                    r['area'] = p['data'][prev_split_i: split_i].sum()
                 r['max_gap'] = -1  # Too lazy to compute this
                 if r['length'] <= 0:
                     print(p['data'])
