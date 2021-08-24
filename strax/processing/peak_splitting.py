@@ -45,6 +45,9 @@ class PeakSplitter:
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_waveform or get_hitlets_data to compute the waveform of the
         new split peaks/hitlets.
+    :param concat_orig: Return original peaks and new peaks from 
+        splitting concatenated together. Otherwise, return as a tuple
+        (original peaks, new peaks)
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
 
