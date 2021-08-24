@@ -26,10 +26,11 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
 
-    data_type_is_not_supported = data_type not in ('hitlets', 'peaks')
+    data_type_is_not_supported = data_type not in ('hitlets', 'peaks', 'merged_s2s')
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, records, to_pe, data_type, **kwargs)
+    concat_orig = data_type != 'merged_s2s'
+    return splitter(peaks, records, to_pe, data_type, concat_orig, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -55,9 +56,9 @@ class PeakSplitter:
     """
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, data_type,
+    def __call__(self, peaks, records, to_pe, data_type, concat_orig,
                  do_iterations=1, min_area=0, **kwargs):
-        if not len(records) or not len(peaks) or not do_iterations:
+        if not len(peaks) or not do_iterations:
             return peaks
 
         # Build the *args tuple for self.find_split_points from kwargs
@@ -85,7 +86,6 @@ class PeakSplitter:
             split_finder=self.find_split_points,
             peaks=peaks,
             is_split=is_split,
-            orig_dt=records[0]['dt'],
             min_area=min_area,
             args_options=tuple(args_options),
             result_dtype=peaks.dtype)
@@ -93,28 +93,39 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
+                orig_dt = records[0]['dt']
+                new_peaks['length'] = new_peaks['length'] * new_peaks['dt'] / orig_dt
+                new_peaks['dt'] = orig_dt
                 strax.sum_waveform(new_peaks, records, to_pe)
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
+                orig_dt = records[0]['dt']
+                new_peaks['length'] = new_peaks['length'] * new_peaks['dt'] / orig_dt
+                new_peaks['dt'] = orig_dt
                 new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
-                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)           
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
+            elif data_type == 'merged_s2s':
+                strax.compute_widths(new_peaks)
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe, data_type,
+            new_peaks = self(new_peaks, records, to_pe, data_type, concat_orig=True,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
             if np.any(new_peaks['length'] == 0):
                 raise ValueError('Want to add a new zero-length peak after splitting!')
 
-            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
-                                                       new_peaks]))
+            if concat_orig:
+                peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
+                                                           new_peaks]))
+            else:
+                peaks = peaks[~is_split], strax.sort_by_time(new_peaks)
 
         return peaks
 
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
+    def _split_peaks(split_finder, peaks, is_split, min_area,
                      args_options,
                      _result_buffer=None, result_dtype=None):
         """Loop over peaks, pass waveforms to algorithm, construct
@@ -143,8 +154,10 @@ class PeakSplitter:
                 # Set the dt to the original (lowest) dt first;
                 # this may change when the sum waveform of the new peak
                 # is computed
-                r['dt'] = orig_dt
-                r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+                r['dt'] = p['dt']
+                r['length'] = (split_i - prev_split_i)
+                r['data'][:r['length']] = p['data'][prev_split_i: split_i]
+                r['area'] = p['data'][prev_split_i: split_i].sum()
                 r['max_gap'] = -1  # Too lazy to compute this
                 if r['length'] <= 0:
                     print(p['data'])
