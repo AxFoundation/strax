@@ -688,6 +688,7 @@ class Context:
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
+        loader_plugins = dict()
         savers = dict()
         seen = set()
         to_compute = dict()
@@ -756,6 +757,7 @@ class Context:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
                 loaders[target_i] = loader
+                loader_plugins[target_i] = plugins[target_i]
                 del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
@@ -869,8 +871,8 @@ class Context:
                         # This frontend cannot save. Too bad.
                         pass
 
-        for d in targets:
-            check_cache(d)
+        for target_i in targets:
+            check_cache(target_i)
         plugins = to_compute
 
         intersec = list(plugins.keys() & loaders.keys())
@@ -893,6 +895,7 @@ class Context:
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
+            loader_plugins=loader_plugins,
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
 
