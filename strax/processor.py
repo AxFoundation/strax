@@ -162,16 +162,16 @@ class ThreadedMailboxProcessor:
                 # is empty an needs to be updated here:
                 provided_data_types = set(p.provides)
                 reader_data_types = set(strax.to_str_tuple(d))
-                _flow_freely = (to_flow_freely | ((provided_data_types - reader_data_types) -
-                                                  to_flow_freely))
-                self.log.debug(f'Updating flow freely for {mname} to be {_flow_freely}')
+                double_dependency = (provided_data_types - reader_data_types)
+                to_flow_freely |= double_dependency
+                self.log.debug(f'Updating flow freely for {mname} to be {to_flow_freely}')
 
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
                             lazy=lazy,
                             # make sure to subscribe the outputs of the mp_plugins
                             mailboxes={k: self.mailboxes[k] for k in p.provides},
-                            flow_freely=_flow_freely,
+                            flow_freely=to_flow_freely,
                             outputs=p.provides))
 
             else:
