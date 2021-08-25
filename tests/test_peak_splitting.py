@@ -131,18 +131,22 @@ def test_splitter_outer():
     records['length'] = len(data)
     records['pulse_length'] = len(data)
     to_pe = np.ones(10)
-
+    
+    hits = strax.find_hits(records, np.ones(1))
+    hits['left_integration'] = hits['left']
+    hits['right_integration'] = hits['right']
     peaks = np.zeros(1, dtype=strax.peak_dtype())
     hitlets = np.zeros(1, dtype=strax.hitlet_with_data_dtype(10))
     for data_type in (peaks, hitlets):
         data_type['dt'] = 1
         data_type['data'][0, :len(data)] = data
         data_type['length'] = len(data)
-
-    peaks = strax.split_peaks(peaks, records,  to_pe, algorithm='local_minimum',
+    
+    rlinks = strax.record_links(records)
+    peaks = strax.split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
                               data_type='peaks', min_height=1, min_ratio=0)
 
-    hitlets = strax.split_peaks(hitlets, records, to_pe, algorithm='local_minimum',
+    hitlets = strax.split_peaks(hitlets, hits, records, rlinks, to_pe, algorithm='local_minimum',
                                 data_type='hitlets', min_height=1, min_ratio=0)
 
     for name, data_type in zip(('peaks', 'hitlets'), (peaks, hitlets)):
