@@ -135,7 +135,9 @@ class ThreadedMailboxProcessor:
 
         multi_output_seen = []
         for d, p in components.plugins.items():
-            if p in multi_output_seen:
+            # Have to check if we have seen already this plugin class
+            # instance of the class maybe different for different data_types
+            if p.__class__ in multi_output_seen:
                 continue
 
             executor = None
@@ -145,7 +147,7 @@ class ThreadedMailboxProcessor:
                 executor = self.thread_executor
 
             if p.multi_output:
-                multi_output_seen.append(p)
+                multi_output_seen.append(p.__class__)
 
                 # Create temp mailbox that receives multi-output dicts
                 # and sends them forth to other mailboxes
