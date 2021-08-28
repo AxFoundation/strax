@@ -1,6 +1,7 @@
 import typing as ty
 
 import numpy as np
+import pandas as pd
 import numba
 
 import strax
@@ -17,7 +18,7 @@ class Chunk:
     data_type: str
     data_kind: str
     dtype: np.dtype
-
+    
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
@@ -27,6 +28,7 @@ class Chunk:
 
     data: np.ndarray
     target_size_mb: int
+    _index: pd.IntervalIndex = None
 
     def __init__(self,
                  *,
@@ -112,6 +114,12 @@ class Chunk:
     @property
     def duration(self):
         return self.end - self.start
+        
+    @property
+    def index(self):
+        if self._index is None:
+            self._index = pd.IntervalIndex.from_arrays(self.data['time'], strax.endtime(self.data))
+        return self._index
 
     @property
     def is_superrun(self):
