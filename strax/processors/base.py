@@ -32,3 +32,13 @@ class BaseProcessor:
     def iter(self):
         raise NotImplementedError
 
+class BasePluginProcessor:
+    def __init__(self, plugin, deps):
+        self.plugin = plugin
+        self.deps = deps
+
+    def iter(self, iters, executor=None):
+        raise NotImplementedError
+
+    def cleanup(self, wait_for):
+        self.plugin.cleanup(wait_for)

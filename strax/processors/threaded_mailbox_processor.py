@@ -4,10 +4,12 @@ import logging
 import typing as ty
 import os
 import sys
+import time
+import itertools
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
-from .base import ProcessorComponents, BaseProcessor
+from .base import ProcessorComponents, BaseProcessor, BasePluginProcessor
 
 import strax
 export, __all__ = strax.exporter()
@@ -20,6 +22,14 @@ except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
 
+@export
+class InputTimeoutExceeded(Exception):
+    pass
+
+
+@export
+class PluginGaveWrongOutput(Exception):
+    pass
 
 class MailboxDict(dict):
     def __init__(self, *args, lazy=False, **kwargs):
@@ -274,3 +284,141 @@ class ThreadedMailboxProcessor(BaseProcessor):
                     raise s.got_exception
 
         self.log.debug("Processing finished")
+@export
+class ThreadedMailboxPluginProcessor(BasePluginProcessor):
+    def iter(self, iters, executor=None):
+        """Iterate over dependencies and yield results
+
+        :param iters: dict with iterators over dependencies
+        :param executor: Executor to punt computation tasks to. If None,
+            will compute inside the plugin's thread.
+        """
+        pending_futures = []
+        last_input_received = time.time()
+        self.input_buffer = {d: None
+                             for d in self.depends_on}
+
+        # Fetch chunks from all inputs. Whoever is the slowest becomes the
+        # pacemaker
+        pacemaker = None
+        _end = float('inf')
+        for d in self.depends_on:
+            self._fetch_chunk(d, iters)
+            if self.input_buffer[d] is None:
+                raise ValueError(f'Cannot work with empty input buffer {self.input_buffer}')
+            if self.input_buffer[d].end < _end:
+                pacemaker = d
+                _end = self.input_buffer[d].end
+
+        # To break out of nested loops:
+        class IterDone(Exception):
+            pass
+
+        try:
+            for chunk_i in itertools.count():
+
+                # Online input support
+                while not self.is_ready(chunk_i):
+                    if self.source_finished():
+                        # Chunk_i does not exist. We are done.
+                        print("Source finished!")
+                        raise IterDone()
+
+                    if time.time() > last_input_received + self.input_timeout:
+                        raise InputTimeoutExceeded(
+                            f"{self.__class__.__name__}:{id(self)} waited for "
+                            f"more  than {self.input_timeout} sec for arrival of "
+                            f"input chunk {chunk_i}, and has given up.")
+
+                    print(f"{self.__class__.__name__} with object id: {id(self)} "
+                          f"waits for chunk {chunk_i}")
+                    time.sleep(2)
+                last_input_received = time.time()
+
+                if pacemaker is None:
+                    inputs_merged = dict()
+                else:
+                    if chunk_i != 0:
+                        # Fetch the pacemaker, to figure out when this chunk ends
+                        # (don't do it for chunk 0, for which we already fetched)
+                        if not self._fetch_chunk(pacemaker, iters):
+                            # Source exhausted. Cleanup will do final checks.
+                            raise IterDone()
+                    this_chunk_end = self.input_buffer[pacemaker].end
+
+                    inputs = dict()
+                    # Fetch other inputs (when needed)
+                    for d in self.depends_on:
+                        if d != pacemaker:
+                            while (self.input_buffer[d] is None
+                                   or self.input_buffer[d].end < this_chunk_end):
+                                self._fetch_chunk(
+                                    d, iters,
+                                    check_end_not_before=this_chunk_end)
+                        inputs[d], self.input_buffer[d] = \
+                            self.input_buffer[d].split(
+                                t=this_chunk_end,
+                                allow_early_split=True)
+                    # If any of the inputs were trimmed due to early splits,
+                    # trim the others too.
+                    # In very hairy cases this can take multiple passes.
+                    # TODO: can we optimize this, or code it more elegantly?
+                    max_passes_left = 10
+                    while max_passes_left > 0:
+                        this_chunk_end = min([x.end for x in inputs.values()]
+                                             + [this_chunk_end])
+                        if len(set([x.end for x in inputs.values()])) <= 1:
+                            break
+                        for d in self.depends_on:
+                            inputs[d], back_to_buffer = \
+                                inputs[d].split(
+                                    t=this_chunk_end,
+                                    allow_early_split=True)
+                            self.input_buffer[d] = strax.Chunk.concatenate(
+                                [back_to_buffer, self.input_buffer[d]])
+                        max_passes_left -= 1
+                    else:
+                        raise RuntimeError(
+                            f"{self} was unable to get time-consistent "
+                            f"inputs after ten passess. Inputs: \n{inputs}\n"
+                            f"Input buffer:\n{self.input_buffer}")
+
+                    # Merge inputs of the same kind
+                    inputs_merged = {
+                        kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
+                        for kind, deps_of_kind in self.dependencies_by_kind().items()}
+
+                # Submit the computation
+                # print(f"{self} calling with {inputs_merged}")
+                if self.parallel and executor is not None:
+                    new_future = executor.submit(
+                        self.do_compute,
+                        chunk_i=chunk_i,
+                        **inputs_merged)
+                    pending_futures.append(new_future)
+                    pending_futures = [f for f in pending_futures if not f.done()]
+                    yield new_future
+                else:
+                    yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+
+        except IterDone:
+            # Check all sources are exhausted.
+            # This is more than a check though -- it ensure the content of
+            # all sources are requested all the way (including the final
+            # Stopiteration), as required by lazy-mode processing requires
+            for d in iters.keys():
+                if self._fetch_chunk(d, iters):
+                    raise RuntimeError(
+                        f"Plugin {d} terminated without fetching last {d}!")
+
+            # This can happen especially in time range selections
+            if int(self.save_when) != strax.SaveWhen.NEVER:
+                for d, buffer in self.input_buffer.items():
+                    # Check the input buffer is empty
+                    if buffer is not None and len(buffer):
+                        raise RuntimeError(
+                            f"Plugin {d} terminated with leftover {d}: {buffer}")
+
+        finally:
+            self.cleanup(wait_for=pending_futures)
+
