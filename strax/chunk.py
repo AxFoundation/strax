@@ -38,7 +38,8 @@ class Chunk:
                  end,
                  data,
                  subruns=None,
-                 target_size_mb=default_chunk_size_mb):
+                 target_size_mb=default_chunk_size_mb,
+                 strict_bounds=True):
         self.data_type = data_type
         self.data_kind = data_kind
         self.dtype = np.dtype(dtype)
@@ -72,7 +73,7 @@ class Chunk:
             raise ValueError(f"Attempt to create chunk {self} "
                              f"with negative length")
 
-        if len(self.data):
+        if len(self.data)and strict_bounds:
             data_starts_at = self.data[0]['time']
             # Check the last 500 samples (arbitrary number) as sanity check
             data_ends_at = strax.endtime(self.data[-500:]).max()
@@ -151,16 +152,25 @@ class Chunk:
 
     def split(self,
               t: ty.Union[int, None],
-              allow_early_split=False):
+              allow_early_split=False,
+              allow_overlap=False):
         """Return (chunk_left, chunk_right) split at time t.
 
         :param t: Time at which to split the data.
-        All data in the left chunk will have their (exclusive) end <= t,
-        all data in the right chunk will have (inclusive) start >=t.
+        
         :param allow_early_split:
           If False, raise CannotSplit if the requirements above cannot be met.
           If True, split at the closest possible time before t.
+        :param allow_overlap:
+            Whether to allow the split chunks to overlap.
+            if True, data will be included in a given interval (before/after t)
+            based on whether it overlaps the interval or not. 
+            if False data will be included based on containment within a given interval:
+            All data in the left chunk will have their (exclusive) end <= t,
+            all data in the right chunk will have (inclusive) start >=t.
+
         """
+
         t = max(min(t, self.end), self.start)
         if t == self.end:
             data1, data2 = self.data, self.data[:0]
@@ -170,7 +180,8 @@ class Chunk:
             data1, data2, t = split_array(
                 data=self.data,
                 t=t,
-                allow_early_split=allow_early_split)
+                allow_early_split=allow_early_split,
+                allow_overlap=allow_overlap)
 
         common_kwargs = dict(
             run_id=self.run_id,
@@ -178,6 +189,37 @@ class Chunk:
             data_type=self.data_type,
             data_kind=self.data_kind,
             target_size_mb=self.target_size_mb)
+
+        c1 = strax.Chunk(
+            start=self.start,
+            end=max(self.start, t),
+            data=data1,
+            **common_kwargs)
+        c2 = strax.Chunk(
+            start=max(self.start, t),
+            end=max(t, self.end),
+            data=data2,
+            **common_kwargs)
+        return c1, c2
+  
+    def split_inclusive(self, t: int):
+        """Return (chunk_left, chunk_right) split at time t.
+
+        :param t: Time at which to split the data.
+        All data in the left chunk will have their start <= t,
+        all data in the right chunk will have their end >=t.
+        This results in overlapping intervals being included in both chunks.
+        """
+        data1 = self.data[self.data['time']<=t]
+        data2 = self.data[strax.endtime(self.data)>=t]
+
+        common_kwargs = dict(
+            run_id=self.run_id,
+            dtype=self.dtype,
+            data_type=self.data_type,
+            data_kind=self.data_kind,
+            target_size_mb=self.target_size_mb,
+            strict_bounds=False)
 
         c1 = strax.Chunk(
             start=self.start,
@@ -247,7 +289,7 @@ class Chunk:
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
     @classmethod
-    def concatenate(cls, chunks):
+    def concatenate(cls, chunks, trim_overlap=False):
         """Create chunk by concatenating chunks of same data type
         You can pass None's, they will be ignored
         """
@@ -272,6 +314,9 @@ class Chunk:
 
         run_id = run_ids[0]
         subruns = _update_subruns_in_chunk(chunks)
+        if trim_overlap:
+            for c in chunks:
+                c.data = c.data[c.data['time']>=c.start]
 
         prev_end = 0
         for c in chunks:
@@ -291,7 +336,6 @@ class Chunk:
             subruns=subruns,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
-
 
 @export
 def continuity_check(chunk_iter):
@@ -329,7 +373,7 @@ class CannotSplit(Exception):
 
 @export
 @numba.njit(cache=True, nogil=True)
-def split_array(data, t, allow_early_split=False):
+def split_array(data, t, allow_early_split=False, allow_overlap=False):
     """Return (data left of t, data right of t, t), or raise CannotSplit
     if that would split a data element in two.
 
@@ -347,6 +391,12 @@ def split_array(data, t, allow_early_split=False):
     # since the data is sorted by time.
     if data[0]['time'] >= t:
         return data[:0], data, t
+
+    # Overlaps allowed, split is trivial.
+    #  All data starting before t go in first part
+    # all data ending after t goes in second part
+    if allow_overlap:
+        return data[data['time']<=t], data[strax.endtime(data)>=t], t
 
     # Find:
     #  i_first_beyond: the first element starting after t

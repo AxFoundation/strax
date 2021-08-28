@@ -169,17 +169,18 @@ def test_split(things, split_indices):
 @hypothesis.settings(deadline=None)
 @hypothesis.given(strax.testutils.several_fake_records,
                   hypothesis.strategies.integers(0, 50),
+                  hypothesis.strategies.booleans(),
                   hypothesis.strategies.booleans())
-def test_split_array(data, t, allow_early_split):
+def test_split_array(data, t, allow_early_split, allow_overlap):
     print(f"\nCalled with {np.transpose([data['time'], strax.endtime(data)]).tolist()}, "
           f"{t}, {allow_early_split}")
 
     try:
         data1, data2, tsplit = strax.split_array(
-            data, t, allow_early_split=allow_early_split)
+            data, t, allow_early_split=allow_early_split, allow_overlap=allow_overlap)
 
     except strax.CannotSplit:
-        assert not allow_early_split
+        assert not allow_early_split and not allow_overlap
         # There must be data straddling t
         for d in data:
             if d['time'] < t < strax.endtime(d):
@@ -191,10 +192,14 @@ def test_split_array(data, t, allow_early_split):
         if allow_early_split:
             assert tsplit <= t
             t = tsplit
-
-        assert len(data1) + len(data2) == len(data)
-        assert np.all(strax.endtime(data1) <= t)
-        assert np.all(data2['time'] >= t)
+        if allow_overlap:
+            assert tsplit == t
+            assert np.all(strax.endtime(data2) >= t)
+            assert np.all(data1['time'] <= t)
+        else: 
+            assert len(data1) + len(data2) == len(data)
+            assert np.all(strax.endtime(data1) <= t)
+            assert np.all(data2['time'] >= t)
 
 
 @hypothesis.settings(deadline=None)
