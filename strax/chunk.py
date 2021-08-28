@@ -73,7 +73,7 @@ class Chunk:
             raise ValueError(f"Attempt to create chunk {self} "
                              f"with negative length")
 
-        if len(self.data)and strict_bounds:
+        if len(self.data) and strict_bounds:
             data_starts_at = self.data[0]['time']
             # Check the last 500 samples (arbitrary number) as sanity check
             data_ends_at = strax.endtime(self.data[-500:]).max()
