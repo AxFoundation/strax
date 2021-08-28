@@ -25,6 +25,7 @@ class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
     loaders: ty.Dict[str, callable]
+    loader_plugins: ty.Dict[str, strax.Plugin]  # Required for inline ParallelSource plugin.
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
@@ -136,6 +137,10 @@ class ThreadedMailboxProcessor:
         for d, p in components.plugins.items():
             if p in multi_output_seen:
                 continue
+                
+            if p.__class__ in [mp_seen.__class__ for mp_seen in multi_output_seen]:
+                raise ValueError('A multi-output plugin is registered with different '
+                                 'instances for its provided data_types!')
 
             executor = None
             if p.parallel == 'process':
@@ -155,6 +160,15 @@ class ThreadedMailboxProcessor:
                                for dep in p.depends_on},
                         executor=executor),
                     name=f'divide_outputs:{d}')
+
+                # If we have a plugin with double dependency both outputs
+                # of a multioutput-plugin are required. Hence flow-freely
+                # is empty an needs to be updated here:
+                provided_data_types = set(p.provides)
+                reader_data_types = set(strax.to_str_tuple(d))
+                double_dependency = (provided_data_types - reader_data_types)
+                to_flow_freely |= double_dependency
+                self.log.debug(f'Updating flow freely for {mname} to be {to_flow_freely}')
 
                 self.mailboxes[mname].add_reader(
                     partial(strax.divide_outputs,
@@ -222,6 +236,8 @@ class ThreadedMailboxProcessor:
         # Remove defaultdict-like behaviour; all mailboxes should
         # have been made by now. See #444
         self.mailboxes = dict(self.mailboxes)
+        self.log.debug(f'Created the following mailboxes: {self.mailboxes} with the '
+                      f'following threads: {[(d, m._threads) for d,m in self.mailboxes.items()]}')
 
     def iter(self):
         target = self.components.targets[0]

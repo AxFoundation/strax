@@ -477,9 +477,17 @@ class Context:
         """Load requested plugins from the plugin_cache"""
         requested_plugins = {}
         for target, plugin in self._fixed_plugin_cache[self._context_hash()].items():
-            # Lineage is fixed, just replace the run_id
-            requested_plugins[target] = plugin.__copy__()
-            requested_plugins[target].run_id = run_id
+            if target in requested_plugins:
+                # If e.g. target is already seen because the plugin is
+                # multi output
+                continue
+
+            requested_p = plugin.__copy__()
+            requested_p.run_id = run_id
+
+            # Re-use only one instance if the plugin is multi output
+            for provides in strax.to_str_tuple(requested_p.provides):
+                requested_plugins[provides] = requested_p
 
         # At this stage, all the plugins should be in requested_plugins
         # To prevent infinite copying, we are only now linking the
@@ -494,7 +502,6 @@ class Context:
         for final_plugins in self._get_end_targets(requested_plugins):
             self._fix_dependency(requested_plugins, final_plugins)
         return requested_plugins
-
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
@@ -688,6 +695,7 @@ class Context:
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
         loaders = dict()
+        loader_plugins = dict()
         savers = dict()
         seen = set()
         to_compute = dict()
@@ -756,6 +764,7 @@ class Context:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
                 loaders[target_i] = loader
+                loader_plugins[target_i] = plugins[target_i]
                 del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
@@ -869,8 +878,8 @@ class Context:
                         # This frontend cannot save. Too bad.
                         pass
 
-        for d in targets:
-            check_cache(d)
+        for target_i in targets:
+            check_cache(target_i)
         plugins = to_compute
 
         intersec = list(plugins.keys() & loaders.keys())
@@ -893,6 +902,7 @@ class Context:
         return strax.ProcessorComponents(
             plugins=plugins,
             loaders=loaders,
+            loader_plugins=loader_plugins,
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
 
