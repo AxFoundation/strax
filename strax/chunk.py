@@ -47,6 +47,7 @@ class Chunk:
         self.start = start
         self.end = end
         self.subruns = subruns
+        self.strict_bounds = strict_bounds
         if data is None:
             data = np.empty(0, dtype)
         self.data = data
@@ -188,7 +189,8 @@ class Chunk:
             dtype=self.dtype,
             data_type=self.data_type,
             data_kind=self.data_kind,
-            target_size_mb=self.target_size_mb)
+            target_size_mb=self.target_size_mb,
+            strict_bounds=not allow_overlap)
 
         c1 = strax.Chunk(
             start=self.start,
@@ -258,7 +260,7 @@ class Chunk:
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
     @classmethod
-    def concatenate(cls, chunks, trim_overlap=False):
+    def concatenate(cls, chunks):
         """Create chunk by concatenating chunks of same data type
         You can pass None's, they will be ignored
         """
@@ -283,8 +285,8 @@ class Chunk:
 
         run_id = run_ids[0]
         subruns = _update_subruns_in_chunk(chunks)
-        if trim_overlap:
-            for c in chunks:
+        for c in chunks:
+            if not c.strict_bounds:
                 c.data = c.data[c.data['time']>=c.start]
 
         prev_end = 0
@@ -304,7 +306,8 @@ class Chunk:
             run_id=run_id,
             subruns=subruns,
             data=np.concatenate([c.data for c in chunks]),
-            target_size_mb=max([c.target_size_mb for c in chunks]))
+            target_size_mb=max([c.target_size_mb for c in chunks]),
+            strict_bounds=all([c.strict_bounds for c in chunks]))
 
 @export
 def continuity_check(chunk_iter):
