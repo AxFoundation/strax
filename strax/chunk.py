@@ -202,37 +202,6 @@ class Chunk:
             **common_kwargs)
         return c1, c2
   
-    def split_inclusive(self, t: int):
-        """Return (chunk_left, chunk_right) split at time t.
-
-        :param t: Time at which to split the data.
-        All data in the left chunk will have their start <= t,
-        all data in the right chunk will have their end >=t.
-        This results in overlapping intervals being included in both chunks.
-        """
-        data1 = self.data[self.data['time']<=t]
-        data2 = self.data[strax.endtime(self.data)>=t]
-
-        common_kwargs = dict(
-            run_id=self.run_id,
-            dtype=self.dtype,
-            data_type=self.data_type,
-            data_kind=self.data_kind,
-            target_size_mb=self.target_size_mb,
-            strict_bounds=False)
-
-        c1 = strax.Chunk(
-            start=self.start,
-            end=max(self.start, t),
-            data=data1,
-            **common_kwargs)
-        c2 = strax.Chunk(
-            start=max(self.start, t),
-            end=max(t, self.end),
-            data=data2,
-            **common_kwargs)
-        return c1, c2
-
     @classmethod
     def merge(cls, chunks, data_type='<UNKNOWN>'):
         """Create chunk by merging columns of chunks of same data kind
