@@ -300,6 +300,28 @@ class Chunk:
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]))
 
+    def overlaps(self, start,end=None):
+        """
+        Return data that overlaps the interval (start, end]
+
+        Args:
+            start ([type]): interval start time or pd.Interval
+            end ([type], optional): interval end time. Defaults to None.
+
+        Raises:
+            ValueError: if end is not given and start is not an interval.
+
+        Returns:
+            [type]: array or overlapping data
+        """
+        
+        if isinstance(start, pd.Interval):
+            dt = start
+        elif end is not None:
+            dt = pd.Interval(start,end)
+        else:
+            raise ValueError("Must supply interval of start and end times.")
+        return self.data[self.index.overlaps(dt)]
 
 @export
 def continuity_check(chunk_iter):
