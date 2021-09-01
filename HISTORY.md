@@ -1,3 +1,24 @@
+1.0.0 / 2021-09-1
+---------------------
+major / minor:
+
+- Fixing peaklet baseline bias (#486)
+- Fix double dependency (#512)
+
+patch:
+
+- Parallel plugin timeout (#489)
+- Added pytest.ini (#492)
+- Fix nveto processing (#491)
+- disable testing py3.6 (#505)
+- Fix peaks merging (#506)
+- Added export (#508)
+- Simplify get_components (#510)
+- Allow creation and storing of superruns if SaveWhen > 0 (#509)
+- re-use instance of plugin for multi output (#516)
+- Add raise if instance are not equal (#517)
+
+
 0.16.1 / 2021-07-16
 ---------------------
 - Cached lineage if per run default is not allowed (#483, #485)
