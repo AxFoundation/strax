@@ -137,6 +137,10 @@ class ThreadedMailboxProcessor:
         for d, p in components.plugins.items():
             if p in multi_output_seen:
                 continue
+                
+            if p.__class__ in [mp_seen.__class__ for mp_seen in multi_output_seen]:
+                raise ValueError('A multi-output plugin is registered with different '
+                                 'instances for its provided data_types!')
 
             executor = None
             if p.parallel == 'process':
