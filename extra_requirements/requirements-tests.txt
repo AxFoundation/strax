@@ -9,7 +9,7 @@ hypothesis==6.14.5
 immutabledict==2.1.0
 lz4==3.1.3
 npshmex==0.2.1
-numba==0.53.1
+numba==0.54.0
 numexpr==2.7.3
 numpy==1.21.1
 pandas==1.3.1
