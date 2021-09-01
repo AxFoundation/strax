@@ -75,6 +75,28 @@ class CorrectionsInterface:
         database = self.client[self.database_name]
         return [x['name'] for x in database.list_collections()]
 
+    def read_by_index(self, correction, when):
+        """Smart logic to read corrections by index, i.e by datetime index
+        :param correction: pandas.DataFrame object name in the DB (str type).
+        :return: DataFrame as read from the corrections database with time
+        index or None if an empty DataFrame is read from the database
+        """
+        before_df = pdm.read_mongo(correction, self.before_date_query(when), self.client[self.database_name])
+        after_df = pdm.read_mongo(correction, self.after_date_query(when), self.client[self.database_name])
+
+        df = pd.concat([before_df, after_df])
+
+        # No data found
+        if df.size == 0:
+            return None
+        # Delete internal Mongo identifier
+        del df['_id']
+
+        df['time'] = pd.to_datetime(df['time'], utc=True)
+        df = df.set_index('time')
+        df = df.sort_index()
+        return df
+
     def read(self, correction):
         """Smart logic to read corrections,
         :param correction: pandas.DataFrame object name in the DB (str type).
@@ -168,6 +190,7 @@ class CorrectionsInterface:
         df_old = self.read(correction)
 
         now = datetime.now(tz=timezone.utc)
+       
         if df_old is not None:
             logging.info('Checking if columns unchanged in past')
             if len(df_old) < len(df):
@@ -186,12 +209,30 @@ class CorrectionsInterface:
                     if 'ONLINE' in column:
                         if not (df.loc[df.index < now, column] == df_old.loc[df_old.index < now, column]).all():
                             raise ValueError(f'{column} changed in past, not allowed')
-
+        
         df = df.reset_index()
         logging.info('Writing')
 
         database = self.client[self.database_name]
         return df.to_mongo(correction, database, if_exists='replace')
+
+    @staticmethod
+    def before_date_query(date):
+        return [{"$match": {"time": {"$lte": pd.to_datetime(date),}
+                           }
+                },
+                {"$sort": {"time": -1}},
+                {"$limit": 1}
+               ]
+
+    @staticmethod
+    def after_date_query(date):
+        return [{"$match": {"time": {"$gte": pd.to_datetime(date),}
+                           }
+                },
+                {"$sort": {"time": 1}},
+                {"$limit": 1}
+                ]
 
     @staticmethod
     def check_timezone(date):
