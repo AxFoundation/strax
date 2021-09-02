@@ -75,14 +75,14 @@ class CorrectionsInterface:
         database = self.client[self.database_name]
         return [x['name'] for x in database.list_collections()]
 
-    def read_by_index(self, correction, when):
-        """Smart logic to read corrections by index, i.e by datetime index
+    def read_at(self, correction, when, limit=1):
+        """Smart logic to read corrections at given time (index), i.e by datetime index
         :param correction: pandas.DataFrame object name in the DB (str type).
         :return: DataFrame as read from the corrections database with time
         index or None if an empty DataFrame is read from the database
         """
-        before_df = pdm.read_mongo(correction, self.before_date_query(when), self.client[self.database_name])
-        after_df = pdm.read_mongo(correction, self.after_date_query(when), self.client[self.database_name])
+        before_df = pdm.read_mongo(correction, self.before_date_query(when, limit), self.client[self.database_name])
+        after_df = pdm.read_mongo(correction, self.after_date_query(when, limit), self.client[self.database_name])
 
         df = pd.concat([before_df, after_df])
 
@@ -132,11 +132,11 @@ class CorrectionsInterface:
 
         df = what
 
-        df_new = pd.DataFrame.from_dict({'Time': [when]})
+        df = pd.DataFrame.from_dict({'Time': [when]})
 
-        df_new = df_new.set_index('Time')
+        df = df.set_index('Time')
 
-        df_combined = pd.concat([df, df_new], sort=False)
+        df_combined = pd.concat([df, df], sort=False)
 
         df_combined = df_combined.sort_index()
         if how == 'interpolate':
@@ -183,33 +183,33 @@ class CorrectionsInterface:
             if req not in df.columns:
                 raise ValueError(f'Must specify {req} in dataframe')
         # Compare against existing data
-        # We can change OFFLINE values in the past
+        # We can change OFFLINE values in the past only if they are NaN
         # We cannot change ONLINE values in the past
-        # We can add a new date(row) in the past(ONLINE) as long as it is the same value as in the past
+        # We can add a new date(row) in the past(ONLINE) as long as it is the same value
         logging.info('Reading old values for comparison')
         df_old = self.read(correction)
-
         now = datetime.now(tz=timezone.utc)
-       
+
         if df_old is not None:
-            logging.info('Checking if columns unchanged in past')
-            if len(df_old) < len(df):
-                new_date = df.index.difference(df_old.index)
-                logging.info(f'A new date(row) was added {new_date}, lets check past values')
-                for column in df_old.columns:
-                    if 'ONLINE' in column:
-                        if new_date < now:
-                            for i, item in enumerate(new_date):
-                                new_value = df.loc[df.index == new_date[i].to_pydatetime(), column].values[0]
-                                old_value = df_old.loc[df_old.index < new_date[i].to_pydatetime(), column][-1]
-                                if new_value != old_value:
-                                    raise ValueError(f'{column} changed in past, not allowed')
+            new_dates = df.index.difference(df_old.index)
+            if not new_dates.empty:
+                for i, item in enumerate(new_dates):
+                    if item < now:
+                        for column in df_old.columns:
+                            new_value = df.loc[df.index == new_dates[i].to_pydatetime(), column].values[0]
+                            old_value = df_old.loc[df_old.index < new_dates[i].to_pydatetime(), column][-1]
+                            if new_value != old_value:
+                                raise ValueError(f'{column} changed in past, not allowed')
             else:
                 for column in df_old.columns:
                     if 'ONLINE' in column:
                         if not (df.loc[df.index < now, column] == df_old.loc[df_old.index < now, column]).all():
                             raise ValueError(f'{column} changed in past, not allowed')
-        
+                    else:
+                        old_value = df.loc[df.index < new_dates[i].to_pydatetime(), column][-1]
+                        if not np.isnan(old_value).all():
+                            raise ValueError(f'{column} only NaN values can be updated')
+
         df = df.reset_index()
         logging.info('Writing')
 
@@ -217,21 +217,21 @@ class CorrectionsInterface:
         return df.to_mongo(correction, database, if_exists='replace')
 
     @staticmethod
-    def before_date_query(date):
+    def before_date_query(date, limit=1):
         return [{"$match": {"time": {"$lte": pd.to_datetime(date),}
                            }
                 },
                 {"$sort": {"time": -1}},
-                {"$limit": 1}
+                {"$limit": limit}
                ]
 
     @staticmethod
-    def after_date_query(date):
+    def after_date_query(date, limit=1):
         return [{"$match": {"time": {"$gte": pd.to_datetime(date),}
                            }
                 },
                 {"$sort": {"time": 1}},
-                {"$limit": 1}
+                {"$limit": limit}
                 ]
 
     @staticmethod
