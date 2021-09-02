@@ -97,6 +97,7 @@ class CorrectionsInterface:
         df = df.sort_index()
         return df
 
+
     def read(self, correction):
         """Smart logic to read corrections,
         :param correction: pandas.DataFrame object name in the DB (str type).
@@ -132,11 +133,11 @@ class CorrectionsInterface:
 
         df = what
 
-        df = pd.DataFrame.from_dict({'Time': [when]})
+        df_new = pd.DataFrame.from_dict({'Time': [when]})
 
-        df = df.set_index('Time')
+        df_new = df_new.set_index('Time')
 
-        df_combined = pd.concat([df, df], sort=False)
+        df_combined = pd.concat([df, df_new], sort=False)
 
         df_combined = df_combined.sort_index()
         if how == 'interpolate':
@@ -188,9 +189,8 @@ class CorrectionsInterface:
         # We can add a new date(row) in the past(ONLINE) as long as it is the same value
         logging.info('Reading old values for comparison')
         df_old = self.read(correction)
-        now = datetime.now(tz=timezone.utc)
-
         if df_old is not None:
+            now = datetime.now(tz=timezone.utc)
             new_dates = df.index.difference(df_old.index)
             if not new_dates.empty:
                 for i, item in enumerate(new_dates):
@@ -206,9 +206,11 @@ class CorrectionsInterface:
                         if not (df.loc[df.index < now, column] == df_old.loc[df_old.index < now, column]).all():
                             raise ValueError(f'{column} changed in past, not allowed')
                     else:
-                        old_value = df.loc[df.index < new_dates[i].to_pydatetime(), column][-1]
-                        if not np.isnan(old_value).all():
-                            raise ValueError(f'{column} only NaN values can be updated')
+                        for i, item in enumerate(new_dates):
+                            old_value = df.loc[df.index < new_dates[i].to_pydatetime(), column][-1]
+                            if not np.isnan(old_value).all():
+                                raise ValueError(f'{column} only NaN values can be updated')
+
 
         df = df.reset_index()
         logging.info('Writing')
@@ -233,6 +235,7 @@ class CorrectionsInterface:
                 {"$sort": {"time": 1}},
                 {"$limit": limit}
                 ]
+
 
     @staticmethod
     def check_timezone(date):
