@@ -20,5 +20,5 @@ pymongo==3.12.0
 pytest==6.2.5
 pytest-cov==2.12.1
 scipy==1.7.1
-tqdm==4.62.0
+tqdm==4.62.2
 zstd==1.5.0.2
