@@ -4,7 +4,7 @@ Setting up strax
 To install the latest stable version (from pypi), run `pip install strax`.
 Dependencies should install automatically:
 numpy, pandas, numba, two compression libraries (blosc and zstd)
-and a few miscellaneous pure-python packages. Strax requires python >= 3.6.
+and a few miscellaneous pure-python packages. Strax requires python >= 3.6 (python 3.8 is recommended).
 
 If you want to try out strax on XENON1T data, you're probably better off installing strax's XENON bindings at `<https://github.com/XENONnT/straxen>`_. Strax will be automatically installed along with straxen.
 

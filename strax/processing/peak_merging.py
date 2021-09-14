@@ -136,3 +136,29 @@ def _replace_merged(result, orig, merge, skip_windows):
 
     assert result_i == len(result)
     assert window_i == len(skip_windows)
+
+    
+@export
+@numba.njit(cache=True, nogil=True)
+def add_lone_hits(peaks, lone_hits, to_pe):
+    """
+    Function which adds information from lone hits to peaks if lone hit
+    is inside a peak (e.g. after merging.). Modifies peak area and data
+    inplace.
+
+    :param peaks: Numpy array of peaks
+    :param lone_hits: Numpy array of lone_hits
+    :param to_pe: Gain values to convert lone hit area into PE.
+    """
+    fully_contained_index = strax.fully_contained_in(lone_hits, peaks)
+
+    for fc_i, lh_i in zip(fully_contained_index, lone_hits):
+        if fc_i == -1:
+            continue
+        p = peaks[fc_i]
+        lh_area = lh_i['area'] * to_pe[lh_i['channel']]
+        p['area'] += lh_area
+
+        # Add lone hit as delta pulse to waveform:
+        index = (p['time'] - lh_i['time'])//p['dt']
+        p['data'][index] += lh_area

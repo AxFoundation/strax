@@ -30,6 +30,7 @@ __pycache__
 
 # Testing caches
 .pytest_cache
+*pytestdebug.log
 .hypothesis
 
 # Packages
