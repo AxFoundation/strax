@@ -28,10 +28,10 @@ strax.storage.mongo module
    :undoc-members:
    :show-inheritance:
 
-strax.storage.s3 module
------------------------
+strax.storage.rucio module
+--------------------------
 
-.. automodule:: strax.storage.s3
+.. automodule:: strax.storage.rucio
    :members:
    :undoc-members:
    :show-inheritance:

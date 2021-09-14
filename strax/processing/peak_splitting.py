@@ -6,14 +6,22 @@ export, __all__ = strax.exporter()
 
 
 @export
-def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
+def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
                 data_type='peaks', **kwargs):
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
 
+    Note:
+        Can also be used for hitlets splitting with local_minimum
+        splitter. Just put hitlets instead of peaks.
+
     :param peaks: Original peaks. Sum waveform must have been built
     and properties must have been computed (if you use them)
+    :param hits: Hits found in records. (or None in case of hitlets
+        splitting.)
     :param records: Records from which peaks were built
+    :param rlinks: strax.record_links for given records
+        (or None in case of hitlets splitting.)
     :param to_pe: ADC to PE conversion factor array (of n_channels)
     :param algorithm: 'local_minimum' or 'natural_breaks'.
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
@@ -26,14 +34,10 @@ def split_peaks(peaks, records, to_pe, algorithm='local_minimum',
     splitter = dict(local_minimum=LocalMinimumSplitter,
                     natural_breaks=NaturalBreaksSplitter)[algorithm]()
 
-    if data_type == 'hitlets':
-        # This is only needed once.
-        _, next_ri = strax.record_links(records)
-    elif data_type == 'peaks':
-        next_ri = None
-    else:
+    data_type_is_not_supported = data_type not in ('hitlets', 'peaks')
+    if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, records, to_pe, data_type, next_ri, **kwargs)
+    return splitter(peaks, hits, records, rlinks, to_pe, data_type, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -44,12 +48,11 @@ class PeakSplitter:
     :param peaks: Original peaks. Sum waveform must have been built
     and properties must have been computed (if you use them).
     :param records: Records from which peaks were built.
+    :param rlinks: strax.record_links for given records.
     :param to_pe: ADC to PE conversion factor array (of n_channels).
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_waveform or get_hitlets_data to compute the waveform of the
         new split peaks/hitlets.
-    :param next_ri: Index of next record for current record record_i.
-        None if not needed.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
 
@@ -61,8 +64,8 @@ class PeakSplitter:
     """
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, records, to_pe, data_type,
-                 next_ri=None, do_iterations=1, min_area=0, **kwargs):
+    def __call__(self, peaks, hits, records, rlinks, to_pe, data_type,
+                 do_iterations=1, min_area=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
@@ -86,12 +89,7 @@ class PeakSplitter:
 
         is_split = np.zeros(len(peaks), dtype=np.bool_)
 
-        split_function = {'peaks': self._split_peaks,
-                          'hitlets': self._split_hitlets}
-        if data_type not in split_function:
-            raise ValueError(f'Data_type "{data_type}" is not supported.')
-
-        new_peaks = split_function[data_type](
+        new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
             split_finder=self.find_split_points,
             peaks=peaks,
@@ -104,16 +102,19 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
-                strax.sum_waveform(new_peaks, records, to_pe)
+                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe)
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
-                strax.update_new_hitlets(new_peaks, records, next_ri, to_pe)
-
+                new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)           
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, records, to_pe, data_type, next_ri,
+            new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
                              do_iterations=do_iterations - 1,
                              min_area=min_area, **kwargs)
+            if np.any(new_peaks['length'] == 0):
+                raise ValueError('Want to add a new zero-length peak after splitting!')
+
             peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
                                                        new_peaks]))
 
@@ -128,9 +129,6 @@ class PeakSplitter:
         """Loop over peaks, pass waveforms to algorithm, construct
         new peaks if and where a split occurs.
         """
-        # NB: code very similar to _split_hitlets see
-        # github.com/AxFoundation/strax/pull/309 for more info. Keep in mind
-        # that changing one function should also be reflected in the other.
         new_peaks = _result_buffer
         offset = 0
 
@@ -164,58 +162,6 @@ class PeakSplitter:
 
                 offset += 1
                 if offset == len(new_peaks):
-                    yield offset
-                    offset = 0
-
-                prev_split_i = split_i
-
-        yield offset
-
-    @staticmethod
-    @strax.growing_result(dtype=strax.hitlet_dtype(), chunk_size=int(1e4))
-    @numba.jit(nopython=True, nogil=True)
-    def _split_hitlets(split_finder, peaks, orig_dt, is_split, min_area,
-                       args_options,
-                       _result_buffer=None, result_dtype=None):
-        """Loop over hits, pass waveforms to algorithm, construct
-        new hits if and where a split occurs.
-        """
-        # TODO NEEDS TESTS!
-        # NB: code very similar to _split_peaks see
-        # github.com/AxFoundation/strax/pull/309 for more info. Keep in mind
-        # that changing one function should also be reflected in the other.
-        new_hits = _result_buffer
-        offset = 0
-
-        for h_i, h in enumerate(peaks):
-            if h['area'] < min_area:
-                continue
-
-            prev_split_i = 0
-            w = h['data'][:h['length']]
-            for split_i, bonus_output in split_finder(
-                    w, h['dt'], h_i, *args_options):
-                if split_i == NO_MORE_SPLITS:
-                    continue
-
-                is_split[h_i] = True
-                r = new_hits[offset]
-                r['time'] = h['time'] + prev_split_i * h['dt']
-                r['channel'] = h['channel']
-                # Hitlet specific
-                r['record_i'] = h['record_i']
-                # Set the dt to the original (lowest) dt first;
-                # this may change when the sum waveform of the new peak
-                # is computed
-                r['dt'] = orig_dt
-                r['length'] = (split_i - prev_split_i) * h['dt'] / orig_dt
-                if r['length'] <= 0:
-                    print(h['data'])
-                    print(prev_split_i, split_i)
-                    raise ValueError("Attempt to create invalid hitlet!")
-
-                offset += 1
-                if offset == len(new_hits):
                     yield offset
                     offset = 0
 

@@ -9,12 +9,15 @@ import sys
 import traceback
 import typing as ty
 from hashlib import sha1
-
+import strax
+import numexpr
 import dill
 import numba
 import numpy as np
-from tqdm import tqdm
 import pandas as pd
+from collections.abc import Mapping
+from warnings import warn
+
 
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
@@ -24,6 +27,18 @@ try:
 except AttributeError:
     # Numba < 0.49
     numba.caching.pickle = dill
+
+if any('jupyter' in arg for arg in sys.argv):
+    # In some cases we are not using any notebooks,
+    # Taken from 44952863 on stack overflow thanks!
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
+
+# Throw a warning on import for python3.6
+if sys.version_info.major == 3 and sys.version_info.minor == 6:
+    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
+         'upgrading to python 3.8.')
 
 
 def exporter(export_self=False):
@@ -56,7 +71,7 @@ def inherit_docstring_from(cls):
 
 
 @export
-def growing_result(dtype=np.int, chunk_size=10000):
+def growing_result(dtype=np.int64, chunk_size=10000):
     """Decorator factory for functions that fill numpy arrays
 
     Functions must obey following API:
@@ -241,6 +256,9 @@ def hashablize(obj):
     """Convert a container hierarchy into one that can be hashed.
     See http://stackoverflow.com/questions/985294
     """
+    if isinstance(obj, Mapping):
+        # Convert immutabledict etc for json decoding
+        obj = dict(obj)
     try:
         hash(obj)
     except TypeError:
@@ -285,6 +303,7 @@ def deterministic_hash(thing, length=10):
     """
     hashable = hashablize(thing)
     jsonned = json.dumps(hashable, cls=NumpyJSONEncoder)
+    # disable bandit
     digest = sha1(jsonned.encode('ascii')).digest()
     return b32encode(digest)[:length].decode('ascii').lower()
 
@@ -300,9 +319,6 @@ def formatted_exception():
     For MailboxKilled exceptions, we return the original
     exception instead.
     """
-    # Can't do this at the top level, utils is one of the
-    # first files of the strax package
-    import strax
     exc_info = sys.exc_info()
     if exc_info[0] == strax.MailboxKilled:
         # Get the original exception back out
@@ -421,19 +437,22 @@ def dict_to_rec(x, dtype=None):
 
 
 @export
-def multi_run(fun, run_ids, *args, max_workers=None,
+def multi_run(exec_function, run_ids, *args,
+              max_workers=None,
               throw_away_result=False,
+              multi_run_progress_bar=True,
               **kwargs):
-    """Execute f(run_id, **kwargs) over multiple runs,
+    """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
 
-    :param fun: Function to run
-    :param run_ids: list/tuple of runids
+    :param exec_function: Function to run
+    :param run_ids: list/tuple of run_ids
     :param max_workers: number of worker threads/processes to spawn.
-    If set to None, defaults to 1.
+        If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
+    :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
 
-    Other (kw)args will be passed to f
+    Other (kw)args will be passed to the exec_function.
     """
     if max_workers is None:
         max_workers = 1
@@ -441,14 +460,18 @@ def multi_run(fun, run_ids, *args, max_workers=None,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
 
+    # Generally we don't want a per run pbar because of multi_run_progress_bar
+    kwargs.setdefault('progress_bar', False)
+
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(fun, r, *args, **kwargs)
+        futures = [exc.submit(exec_function, r, *args, **kwargs)
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
-                      desc="Loading %d runs" % len(run_ids)):
+                      desc="Loading %d runs" % len(run_ids),
+                      disable=not multi_run_progress_bar):
             pass
 
         result = []
@@ -500,3 +523,66 @@ def iter_chunk_meta(md):
         c['n_from'] = _n_from
         c['n_to'] = _n_to
         yield c
+
+
+@export
+def apply_selection(x,
+                    selection_str=None,
+                    keep_columns=None,
+                    time_range=None,
+                    time_selection='fully_contained'):
+    """Return x after applying selections
+
+    :param x: Numpy structured array
+    :param selection_str: Query string or sequence of strings to apply.
+    :param time_range: (start, stop) range to load, in ns since the epoch
+    :param time_selection: Kind of time selectoin to apply:
+    - skip: Do not select a time range, even if other arguments say so
+    - touching: select things that (partially) overlap with the range
+    - fully_contained: (default) select things fully contained in the range
+
+    The right bound is, as always in strax, considered exclusive.
+    Thus, data that ends (exclusively) exactly at the right edge of a
+    fully_contained selection is returned.
+    """
+    # Apply the time selections
+    if time_range is None or time_selection == 'skip':
+        pass
+    elif time_selection == 'fully_contained':
+        x = x[(time_range[0] <= x['time']) &
+              (strax.endtime(x) <= time_range[1])]
+    elif time_selection == 'touching':
+        x = x[(strax.endtime(x) > time_range[0]) &
+              (x['time'] < time_range[1])]
+    else:
+        raise ValueError(f"Unknown time_selection {time_selection}")
+
+    if selection_str:
+        if isinstance(selection_str, (list, tuple)):
+            selection_str = ' & '.join(f'({x})' for x in selection_str)
+
+        mask = numexpr.evaluate(selection_str, local_dict={
+            fn: x[fn]
+            for fn in x.dtype.names})
+        x = x[mask]
+
+    if keep_columns:
+        keep_columns = strax.to_str_tuple(keep_columns)
+
+        # Construct the new dtype
+        new_dtype = []
+        for unpacked_dtype in strax.unpack_dtype(x.dtype):
+            field_name = unpacked_dtype[0]
+            if isinstance(field_name, tuple):
+                field_name = field_name[1]
+            if field_name in keep_columns:
+                new_dtype.append(unpacked_dtype)
+
+        # Copy over the data
+        x2 = np.zeros(len(x), dtype=new_dtype)
+        for field_name in keep_columns:
+            x2[field_name] = x[field_name]
+        x = x2
+        del x2
+
+    return x

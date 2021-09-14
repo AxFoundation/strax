@@ -96,7 +96,7 @@ def _test_splitter_inner(min_heights,
             # Use min-height here as threshold (>1 meaningless)
             threshold = np.array([min_height])
             my_splits = test_splitter.find_split_points(
-                waveform, dt=1, peak_i=np.int(0), threshold=threshold, normalize=0,
+                waveform, dt=1, peak_i=np.int64(0), threshold=threshold, normalize=0,
                 split_low=0, filter_wing_width=0)
 
         my_splits = np.array(list(my_splits))
@@ -121,3 +121,36 @@ def _test_splitter_inner(min_heights,
         assert len(my_splits) <= int(len(waveform) / 2) + 1
         assert min(my_splits[:, 0]) == NO_MORE_SPLITS
         assert my_splits[-1, 0] == NO_MORE_SPLITS
+
+
+def test_splitter_outer():
+    data = [0, 2, 2, 0, 2, 2, 1]
+    records = np.zeros(1, dtype=strax.record_dtype(len(data)))
+    records['dt'] = 1
+    records['data'] = data
+    records['length'] = len(data)
+    records['pulse_length'] = len(data)
+    to_pe = np.ones(10)
+    
+    hits = strax.find_hits(records, np.ones(1))
+    hits['left_integration'] = hits['left']
+    hits['right_integration'] = hits['right']
+    peaks = np.zeros(1, dtype=strax.peak_dtype())
+    hitlets = np.zeros(1, dtype=strax.hitlet_with_data_dtype(10))
+    for data_type in (peaks, hitlets):
+        data_type['dt'] = 1
+        data_type['data'][0, :len(data)] = data
+        data_type['length'] = len(data)
+    
+    rlinks = strax.record_links(records)
+    peaks = strax.split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
+                              data_type='peaks', min_height=1, min_ratio=0)
+
+    hitlets = strax.split_peaks(hitlets, hits, records, rlinks, to_pe, algorithm='local_minimum',
+                                data_type='hitlets', min_height=1, min_ratio=0)
+
+    for name, data_type in zip(('peaks', 'hitlets'), (peaks, hitlets)):
+        data = data_type[0]['data'][:data_type[0]['length']]
+        assert np.all(data == [0, 2, 2]), f'Wrong split for {name}, got {data}, expected {[0, 2, 2]}.'
+        data = data_type[1]['data'][:data_type[1]['length']]
+        assert np.all(data == [0, 2, 2, 1]), f'Wrong split for {name}, got {data}, expected {[0, 2, 2, 1]}.'

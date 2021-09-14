@@ -29,6 +29,7 @@ def test_child_plugin_config():
                                     'more_special_context_option': immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_parent'])
                                     },
                             register=[Records, Peaks, ParentPlugin, ChildPlugin],
+                            use_per_run_defaults=True,
                             allow_multiprocess=True)
 
     parent = mystrax.get_array(run_id=run_id, targets='peaks_parent')
@@ -152,6 +153,7 @@ def test_child_plugin_lienage():
                                     'more_special_context_option': immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_parent'])
                                     },
                             register=[Records, Peaks, ParentPlugin, ChildPlugin],
+                            use_per_run_defaults=True,
                             allow_multiprocess=True)
 
     def _get_hashes():

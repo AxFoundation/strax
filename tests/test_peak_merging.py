@@ -2,7 +2,7 @@ import hypothesis
 import numpy as np
 
 import strax
-from strax.testutils import disjoint_sorted_intervals
+from strax.testutils import disjoint_sorted_intervals, fake_hits
 
 
 @hypothesis.given(disjoint_sorted_intervals,
@@ -48,3 +48,29 @@ def test_replace_merged(intervals, merge_instructions):
         assert x in result, "Didn't put in merged"
     for x in result:
         assert np.isin(x, merged_itvs) or np.isin(x, kept_itvs), "Invented itv"
+
+
+@hypothesis.given(fake_hits,
+                  hypothesis.strategies.integers(min_value=0, max_value=100))
+@hypothesis.settings(deadline=None)
+def test_add_lone_hits(hits, peak_length):
+    peak = np.zeros(1, dtype=strax.peak_dtype())
+    peak['length'] = peak_length
+    peak['dt'] = 1
+
+    to_pe = np.ones(10000)
+    strax.add_lone_hits(peak, hits, to_pe)
+
+    if not peak_length:
+        assert peak['area'] == 0
+        assert peak['data'].sum() == 0
+        return
+
+    split_hits = strax.split_by_containment(hits, peak)[0]
+    dummy_peak = np.zeros(peak_length)
+
+    for h in split_hits:
+        dummy_peak[h['time']] += h['area']
+    peak = peak[0]
+    assert peak['area'] == np.sum(split_hits['area'])
+    assert np.all(peak['data'][:peak['length']] == dummy_peak)

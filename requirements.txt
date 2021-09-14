@@ -7,7 +7,6 @@ tqdm>=4.46.0
 dill
 psutil
 numexpr
-boto3
 scipy
 pymongo
 pdmongo

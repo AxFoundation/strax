@@ -1,3 +1,96 @@
+1.0.0 / 2021-09-1
+---------------------
+major / minor:
+
+- Fixing peaklet baseline bias (#486)
+- Fix double dependency (#512)
+
+patch:
+
+- Parallel plugin timeout (#489)
+- Added pytest.ini (#492)
+- Fix nveto processing (#491)
+- disable testing py3.6 (#505)
+- Fix peaks merging (#506)
+- Added export (#508)
+- Simplify get_components (#510)
+- Allow creation and storing of superruns if SaveWhen > 0 (#509)
+- re-use instance of plugin for multi output (#516)
+- Add raise if instance are not equal (#517)
+
+
+0.16.1 / 2021-07-16
+---------------------
+- Cached lineage if per run default is not allowed (#483, #485)
+- Fix define runs and allow storing of superruns (#472, #488)
+- Change default pbar behavior (for multiple runs) (#480)
+- Reduce numpy warnings (#481, #484)
+- Reduce codefactor (#487)
+
+
+0.16.0 / 2021-06-23
+---------------------
+- Add select index to compute width (#465)
+- int blaseline (#464)
+- Fix #452 assert there is a mailbox for the final generator (#463)
+- Document fuzzy-for and documentation itself (#471)
+- Re ordered time field in cut plugins (#473)
+- Github actions for CI (#454, #460)
+- Remove travis for testing (#474)
+- Remove outdated files/configs (#462)
+- Remove overwrite from options (#467)
+
+ 
+0.15.3 / 2021-06-03
+---------------------
+- Match cached buffer chunk start times OverlapWindowPlugin (#450)
+- Prevent late creation of unattended mailboxes (#452)
+- Temporary patch div/zero in hitlets (#447)
+- Relax zstd requirements again (#443)
+- Don't ignore if pattern also startswith underscore (#445)
+- kB/s pbar (#449)
+
+
+0.15.2 / 2021-05-20
+---------------------
+- Speed up run selection by ~100x for fixed defaults (#440)
+- Use zstd for from base-env for testing (#441)
+- Add MB/s pbar (#442)
+
+
+0.15.1 / 2021-05-04
+---------------------
+- Refactor hitlets (#430, #436)
+- Update classifiers for pipy #437
+- Allow Py39 in travis tests (#427) 
+
+0.15.0 / 2021-04-16
+---------------------
+- Use int32 for peak dt, fix #397 (#403, #426)
+- max peak duration (#420)
+- Loopplugin touching windows + plugin documentation (#424)
+- Move apply selection from context to utils (#425)
+- Context testing functions + copy_to_frontend documented (#423)
+- Apply function to data & test (#422)
+
+0.14.0 / 2021-04-09
+---------------------
+- Check data availability for single run (#416) 
+
+0.13.11 / 2021-04-02
+---------------------
+- Allow re-compression at copy to frontend (#407)
+- Bug fix, in processing hitlets (#411)
+- Cleanup requirements for boto3 (#414)
+
+0.13.10 / 2021-03-24
+---------------------
+- Allow multiple targets to be computed simultaneously (#408, #409)
+- Numbafy split by containment (#402)
+- Infer start/stop from any dtype (#405)
+- Add property provided_dtypes to Context (#404)
+- Updated OverlapWindowPlugin docs (#401)
+
 0.13.9 / 2021-02-22
 ---------------------
 - Clip progress progressbar (#399)

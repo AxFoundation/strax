@@ -3,7 +3,6 @@
 A 'plugin' is something that outputs an array and gets arrays
 from one or more other plugins.
 """
-from concurrent.futures import wait
 from enum import IntEnum
 import inspect
 import itertools
@@ -13,7 +12,7 @@ import typing
 from warnings import warn
 from immutabledict import immutabledict
 import numpy as np
-
+from copy import copy, deepcopy
 import strax
 export, __all__ = strax.exporter()
 
@@ -64,7 +63,6 @@ class Plugin:
     # How large (uncompressed) should re-chunked chunks be?
     # Meaningless if rechunk_on_save is False
     chunk_target_size_mb = strax.default_chunk_size_mb
-
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -121,9 +119,44 @@ class Plugin:
         self.compute_pars = compute_pars
         self.input_buffer = dict()
 
+    def __copy__(self, _deep_copy=False):
+        """
+        Copy main attributes that are set after __init__ by the context.
+
+        Note:
+            self.deps is NOT copied for it is recursive and therefor slow.
+            Instead, this is better handled within the context after all
+            plugins are copied.
+        """
+        plugin_copy = self.__class__()
+        plugin_copy.__init__()
+        # As explained in PR #485 only copy attributes whereof we know
+        # don't depend on the run_id (for use_per_run_defaults == False).
+        # Otherwise we might copy run-dependent things like to_pe.
+        for attribute in ['dtype',
+                          'lineage',
+                          'takes_config',
+                          '__version__',
+                          'config',
+                          'data_kind']:
+            source_value = getattr(self, attribute)
+            if _deep_copy:
+                plugin_copy.__setattr__(attribute, deepcopy(source_value))
+            else:
+                plugin_copy.__setattr__(attribute, copy(source_value))
+        return plugin_copy
+
+    def __deepcopy__(self):
+        return self.__copy__(_deep_copy=True)
+
     def fix_dtype(self):
-        if not hasattr(self, 'dtype'):
+        try:
+            # Infer dtype should always precede self.dtype (e.g. due to
+            # copying)
             self.dtype = self.infer_dtype()
+        except RuntimeError:
+            if not hasattr(self, 'dtype'):
+                raise NotImplementedError(f'No dtype or infer_dtype specified')
 
         if self.multi_output:
             # Convert to a dict of numpy dtypes
@@ -455,10 +488,10 @@ class OverlapWindowPlugin(Plugin):
             raise RuntimeError("OverlapWindowPlugin must have a dependency")
 
         # Add cached inputs to compute arguments
-        for k, v in kwargs.items():
+        for data_kind, chunk in kwargs.items():
             if len(self.cached_input):
-                kwargs[k] = strax.Chunk.concatenate(
-                    [self.cached_input[k], v])
+                kwargs[data_kind] = strax.Chunk.concatenate(
+                    [self.cached_input[data_kind], chunk])
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -468,7 +501,7 @@ class OverlapWindowPlugin(Plugin):
                                  allow_early_split=False)
 
         # When does this batch of inputs end?
-        ends = [v.end for v in kwargs.values()]
+        ends = [c.end for c in kwargs.values()]
         if not len(set(ends)) == 1:
             raise RuntimeError(
                 f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
@@ -491,10 +524,32 @@ class OverlapWindowPlugin(Plugin):
         # Again, take a bit of overkill for good measure
         cache_inputs_beyond = int(self.sent_until
                                   - 2 * self.get_window_size() - 1)
-        for k, v in kwargs.items():
-            _, self.cached_input[k] = v.split(t=cache_inputs_beyond,
-                                              allow_early_split=True)
 
+        # Cache inputs, make sure that the chunks start at the same time to
+        # prevent issues in input buffers later on
+        prev_split = cache_inputs_beyond
+        max_trials = 10
+        for try_counter in range(max_trials):
+            for data_kind, chunk in kwargs.items():
+                _, self.cached_input[data_kind] = chunk.split(
+                    t=prev_split,
+                    allow_early_split=True)
+                prev_split = self.cached_input[data_kind].start
+
+            unique_starts = set([c.start for c in self.cached_input.values()])
+            chunk_starts_are_equal = len(unique_starts) == 1
+            if chunk_starts_are_equal:
+                self.log.debug(
+                    f'Success after {try_counter}. '
+                    f'Extra time = {cache_inputs_beyond-prev_split} ns')
+                break
+            else:
+                self.log.debug(
+                    f'Inconsistent start times of the cashed chunks after'
+                    f' {try_counter}/{max_trials} passes.\nChunks {self.cached_input}')
+        else:
+            raise ValueError(f'Buffer start time inconsistency cannot be '
+                             f'resolved after {max_trials} tries')
         return result
 
 
@@ -502,6 +557,16 @@ class OverlapWindowPlugin(Plugin):
 class LoopPlugin(Plugin):
     """Plugin that disguises multi-kind data-iteration by an event loop
     """
+    # time_selection: Kind of time selection to apply:
+    # - touching: select things that (partially) overlap with the range.
+    # NB! Use this option with care since if e.g. two events are
+    # adjacent, touching windows might return ambiguous results as peaks
+    # may be touching both events.
+    # The number of samples to be desired to overlapped can be set by
+    # self.touching_window. Otherwise 0 is assumed (see strax.touching_windows)
+    # - fully_contained: (default) select things fully contained in the range
+    time_selection = 'fully_contained'
+
     def compute(self, **kwargs):
         # If not otherwise specified, data kind to loop over
         # is that of the first dependency (e.g. events)
@@ -534,7 +599,23 @@ class LoopPlugin(Plugin):
                          for x in examples]))
 
             if k != loop_over:
-                r = strax.split_by_containment(things, base)
+                if self.time_selection == 'fully_contained':
+                    r = strax.split_by_containment(things, base)
+                elif self.time_selection == 'touching':
+                    # Experimental feature that should be handled with care:
+                    # github.com/AxFoundation/strax/pull/424
+                    warn(f'{self.__class__.__name__} has a touching time '
+                         f'selection. This may lead to ambiguous results as two '
+                         f'{loop_over}\'s may contain the same {k}, thereby a '
+                         f'given {k} can be included multiple times.')
+                    window = 0
+                    if hasattr(self, 'touching_window'):
+                        window = self.touching_window
+                    r = strax.split_touching_windows(things,
+                                                     base,
+                                                     window=window)
+                else:
+                    raise RuntimeError('Unknown time_selection')
                 if len(r) != len(base):
                     raise RuntimeError(f"Split {k} into {len(r)}, "
                                        f"should be {len(base)}!")
@@ -596,7 +677,7 @@ class LoopPlugin(Plugin):
 @export
 class CutPlugin(Plugin):
     """Generate a plugin that provides a boolean for a given cut specified by 'cut_by'"""
-    save_when = SaveWhen.NEVER
+    save_when = SaveWhen.TARGET
 
     def __init__(self):
         super().__init__()
@@ -617,7 +698,7 @@ class CutPlugin(Plugin):
     def infer_dtype(self):
         dtype = [(self.cut_name, np.bool_, self.cut_description)]
         # Alternatively one could use time_dt_fields for low level plugins.
-        dtype = dtype + strax.time_fields
+        dtype = strax.time_fields + dtype
         return dtype
 
     def compute(self, **kwargs):
@@ -679,11 +760,15 @@ class ParallelSourcePlugin(Plugin):
     while multiprocessing.
     """
     parallel = 'process'
+    # should we set this here?
+    input_timeout = 300
 
     @classmethod
     def inline_plugins(cls, components, start_from, log):
         plugins = components.plugins.copy()
-
+        loader_plugins = components.loader_plugins.copy()
+        log.debug(f'Try to inline plugins starting from {start_from}')
+        
         sub_plugins = {start_from: plugins[start_from]}
         del plugins[start_from]
 
@@ -704,7 +789,7 @@ class ParallelSourcePlugin(Plugin):
             else:
                 # No more plugins we can inline
                 break
-
+        log.debug(f'Trying to inline the following sub-plugins: {sub_plugins}')
         if len(set(list(sub_plugins.values()))) == 1:
             # Just one plugin to inline: no use
             log.debug("Just one plugin to inline: skipping")
@@ -775,13 +860,16 @@ class ParallelSourcePlugin(Plugin):
             p.dtype = p.sub_plugins[to_send].dtype_for(to_send)
         for d in p.provides:
             plugins[d] = p
-        p.deps = {d: plugins[d] for d in p.depends_on}
+        
+        log.debug(f'Trying to find plugins for dependencies: {p.depends_on}')
+        
+        p.deps = {d: plugins[d] if plugins.get(d, None) else loader_plugins[d] for d in p.depends_on}
 
         log.debug(f"Inlined plugins: {p.sub_plugins}."
                   f"Inlined savers: {p.sub_savers}")
 
         return strax.ProcessorComponents(
-            plugins, components.loaders, savers, components.targets)
+            plugins, components.loaders, components.loader_plugins, savers, components.targets)
 
     def __init__(self, depends_on):
         self.depends_on = depends_on

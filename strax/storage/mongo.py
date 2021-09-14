@@ -69,11 +69,10 @@ class MongoBackend(StorageBackend):
             raise ValueError(
                 f'Metadata claims chunk{chunk_i} exists but it is unknown to '
                 f'the chunks_registry')
-        else:
-            chunk_doc = doc.get('data', None)
-            if chunk_doc is None:
-                raise ValueError(
-                    f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
+
+        chunk_doc = doc.get('data', None)
+        if chunk_doc is None:
+            raise ValueError(f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
 
         # Convert JSON to numpy
         chunk_len = len(chunk_doc)

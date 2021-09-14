@@ -1,3 +1,4 @@
+# pylint: disable=redefined-builtin
 from concurrent.futures import Future, TimeoutError
 import heapq
 import sys
@@ -102,24 +103,50 @@ class Mailbox:
         self._n_sent = 0
         self._threads = []
         self._lock = threading.RLock()
+        self.log = logging.getLogger(self.name)
 
         # Conditions to wait on
         # Do NOT call notify_all when the condition is False!
         # We use wait_for, which also returns False when the timeout is broken
         # (Is this an odd design decision in the standard library
         #  or am I misunderstanding something?)
-        
+        class Condition:
+            """
+            Small helper class which wraps "threading.Condition" to get
+            some useful logging information for debugging.
+            """
+            def __init__(self, name, log, lock):
+                self.log = log
+                self._lock = lock
+                self.name = name
+                self.log.debug(f'Initialize "{name}" with lock state: {lock}.')
+                self.threading_condition = threading.Condition(lock=lock)
+
+            def notify_all(self):
+                self.log.debug(f'Notifying all for {self.name} with lock state: {self._lock}')
+                self.threading_condition.notify_all()
+
+            def wait_for(self, *args, **kwargs):
+                self.log.debug(f'Waiting for a change in "{self.name}" with state {args[0]} and lock '
+                               f'state: {self._lock}')
+                return self.threading_condition.wait_for(*args, **kwargs)
+
         # If you're waiting to read a new message that hasn't yet arrived:
-        self._read_condition = threading.Condition(lock=self._lock)
+        self._read_condition = Condition('_read_condition',
+                                              self.log,
+                                              lock=self._lock)
 
         # If you're waiting to write a new message because the mailbox is full
-        self._write_condition = threading.Condition(lock=self._lock)
+        self._write_condition = Condition('_write_condition',
+                                               self.log,
+                                               lock=self._lock)
 
         # If you're waiting to fetch a new element because the subscribers
         # stil have other things to do
-        self._fetch_new_condition = threading.Condition(lock=self._lock)
+        self._fetch_new_condition = Condition('_fetch_new_condition',
+                                                   self.log,
+                                                   lock=self._lock)
 
-        self.log = logging.getLogger(self.name)
         self.log.debug("Initialized")
 
     def add_sender(self, source, name=None):
@@ -319,7 +346,6 @@ class Mailbox:
             if self.killed:
                 self.log.debug(f"Sender found {self.name} killed while waiting"
                                " for room for new messages.")
-                # TODO: this is duplicated from above...
                 if self.force_killed:
                     raise MailboxKilled(self.killed_because)
                 return
@@ -470,11 +496,11 @@ def divide_outputs(source,
     try:
         while True:
             for d in outputs:
+                m = mailboxes[d]
                 if d in flow_freely:
                     # Do not block on account of these guys
+                    m.log.debug(f'Not locking {d}')
                     continue
-
-                m = mailboxes[d]
                 if lazy:
                     with m._lock:
                         if not m._can_fetch():

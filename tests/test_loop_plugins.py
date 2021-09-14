@@ -36,6 +36,7 @@ def drop_random(input_array: np.ndarray) -> np.ndarray:
 def _loop_test_inner(big_data,
                      nchunks,
                      target='added_thing',
+                     time_selection='fully_contained',
                      force_value_error=False):
     """
     Test loop plugins for random data. For this test we are going to
@@ -90,17 +91,30 @@ def _loop_test_inner(big_data,
         def source_finished(self):
             return True
 
-    class SmallThing(strax.CutPlugin):
+    class SmallThing(strax.Plugin):
         """Throw away some of the data in big_thing"""
         depends_on = 'big_thing'
         provides = 'small_thing'
         data_kind = 'small_kinda_data'
-        dtype = _dtype
+        dtype =_dtype
         rechunk_on_save = True
 
         def compute(self, big_kinda_data):
             # Drop some of the data in big_kinda_data
             return drop_random(big_kinda_data)
+
+    def _compute_loop_inner(res, k, big_kinda_data, small_kinda_data):
+        if k == _dtype_name:
+            res[k] = big_kinda_data[k]
+            for small_bit in small_kinda_data[k]:
+                if np.iterable(res[k]):
+                    for i in range(len(res[k])):
+                        res[k][i] += small_bit
+                else:
+                    res[k] += small_bit
+        else:
+            res[k] = big_kinda_data[k]
+
 
     class AddBigToSmall(strax.LoopPlugin):
         """
@@ -110,6 +124,9 @@ def _loop_test_inner(big_data,
         provides = 'added_thing'
         loop_over = 'big_kinda_data'  # Also just test this feature
 
+        def setup(self):
+            self.time_selection = time_selection
+
         def infer_dtype(self):
             # Get the dtype from the dependency
             return self.deps['big_thing'].dtype
@@ -117,16 +134,7 @@ def _loop_test_inner(big_data,
         def compute_loop(self, big_kinda_data, small_kinda_data):
             res = {}
             for k in self.dtype.names:
-                if k == _dtype_name:
-                    res[k] = big_kinda_data[k]
-                    for small_bit in small_kinda_data[k]:
-                        if np.iterable(res[k]):
-                            for i in range(len(res[k])):
-                                res[k][i] += small_bit
-                        else:
-                            res[k] += small_bit
-                else:
-                    res[k] = big_kinda_data[k]
+                _compute_loop_inner(res, k, big_kinda_data, small_kinda_data)
             return res
 
     class AddBigToSmallMultiOutput(strax.LoopPlugin):
@@ -142,16 +150,7 @@ def _loop_test_inner(big_data,
         def compute_loop(self, big_kinda_data, small_kinda_data):
             res = {}
             for k in self.dtype['some_combined_things'].names:
-                if k == _dtype_name:
-                    res[k] = big_kinda_data[k]
-                    for small_bit in small_kinda_data[k]:
-                        if np.iterable(res[k]):
-                            for i in range(len(res[k])):
-                                res[k][i] += small_bit
-                        else:
-                            res[k] += small_bit
-                else:
-                    res[k] = big_kinda_data[k]
+                _compute_loop_inner(res, k, big_kinda_data, small_kinda_data)
             return {k: res for k in self.provides}
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -221,3 +220,19 @@ def test_value_error_for_loop_plugin(big_data, nchunks):
     except ValueError:
         # Good we got the ValueError we wanted
         pass
+
+
+@given(get_some_array().filter(lambda x: len(x) >= 0),
+       strategies.integers(min_value=1, max_value=10))
+@settings(deadline=None)
+@example(
+    big_data=np.array(
+        [(0, 0, 1, 1),
+         (1, 1, 1, 1),
+         (5, 2, 2, 1),
+         (11, 4, 2, 4)],
+        dtype=full_dt_dtype),
+    nchunks=2)
+def test_loop_plugin_tw(big_data, nchunks):
+    """Test the loop plugin for random data"""
+    _loop_test_inner(big_data, nchunks, time_selection='touching')
