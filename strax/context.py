@@ -1653,8 +1653,11 @@ class Context:
 select_docs = """
 :param selection_str: Query string or sequence of strings to apply.
 :param keep_columns: Array field/dataframe column names to keep. 
-    Useful to reduce amount of data in memory.
-:param drop_columns: Same but for dropping columns.
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
+:param drop_columns: Array field/dataframe column names to drop. 
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
 the start of the run to load.

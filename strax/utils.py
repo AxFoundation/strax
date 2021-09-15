@@ -538,7 +538,7 @@ def apply_selection(x,
     :param selection_str: Query string or sequence of strings to apply.
     :param time_range: (start, stop) range to load, in ns since the epoch
     :param keep_columns: Field names of the columns to keep.
-    :param drop_columns: Same but for dropping certain columns.
+    :param drop_columns: Field names of the columns to drop.
     :param time_selection: Kind of time selectoin to apply:
     - skip: Do not select a time range, even if other arguments say so
     - touching: select things that (partially) overlap with the range
