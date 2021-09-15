@@ -997,6 +997,7 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
+                 drop_columns=None,
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
@@ -1093,6 +1094,7 @@ class Context:
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
+                        drop_columns=drop_columns,
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
@@ -1651,7 +1653,11 @@ class Context:
 select_docs = """
 :param selection_str: Query string or sequence of strings to apply.
 :param keep_columns: Array field/dataframe column names to keep. 
-    Useful to reduce amount of data in memory.
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
+:param drop_columns: Array field/dataframe column names to drop. 
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
 the start of the run to load.
