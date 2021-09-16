@@ -1172,36 +1172,6 @@ class Context:
         pbar.set_postfix_str(postfix)
         pbar.update(0)
 
-    @staticmethod
-    def apply_selection(x,
-                        selection_str=None,
-                        keep_columns=None,
-                        time_range=None,
-                        time_selection='fully_contained'):
-        """Return x after applying selections
-
-        :param x: Numpy structured array
-        :param selection_str: Query string or sequence of strings to apply.
-        :param time_range: (start, stop) range to load, in ns since the epoch
-        :param time_selection: Kind of time selection to apply:
-        - skip: Do not select a time range, even if other arguments say so
-        - touching: select things that (partially) overlap with the range
-        - fully_contained: (default) select things fully contained in the range
-
-        The right bound is, as always in strax, considered exclusive.
-        Thus, data that ends (exclusively) exactly at the right edge of a
-        fully_contained selection is returned.
-        """
-        warnings.warn(
-            'context.apply_selection is replaced by strax.apply_selection and '
-            'will be removed in a future release',
-            DeprecationWarning)
-        return strax.apply_selection(x,
-                                     selection_str,
-                                     keep_columns,
-                                     time_range,
-                                     time_selection)
-
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
              _skip_if_built=True,
