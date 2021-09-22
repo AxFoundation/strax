@@ -38,6 +38,16 @@ class TestSuperRuns(unittest.TestCase):
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)  # Define superrun
 
+    def test_superrun_access(self):
+        """
+        Tests if storage fornt-ends which does not provide superruns
+        raise correct exception.
+        """
+        self.context.storage[0].provide_superruns = False
+        self.assertRaises(strax.DataNotAvailable,
+                          self.context.storage[0].find,
+                          self.context.key_for(self.superrun_name, 'records'))
+
     def test_run_meta_data(self):
         """
         Check if superrun has the correct run start/end and livetime
