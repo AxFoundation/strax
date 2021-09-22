@@ -250,4 +250,3 @@ class CorrectionsInterface:
         df = df.sort_index()
 
         return df
-
