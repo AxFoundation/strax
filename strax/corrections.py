@@ -78,6 +78,8 @@ class CorrectionsInterface:
     def read_at(self, correction, when, limit=1):
         """Smart logic to read corrections at given time (index), i.e by datetime index
         :param correction: pandas.DataFrame object name in the DB (str type).
+        :param when: when, datetime to read the corrections, e.g. datetime(2020, 8, 12, 21, 4, 32, 7, tzinfo=pytz.utc)
+        :param limit: how many indexes after and before when, i.e. limit=1 will return 1 index before and 1 after 
         :return: DataFrame as read from the corrections database with time
         index or None if an empty DataFrame is read from the database
         """
@@ -86,17 +88,7 @@ class CorrectionsInterface:
 
         df = pd.concat([before_df, after_df])
 
-        # No data found
-        if df.size == 0:
-            return None
-        # Delete internal Mongo identifier
-        del df['_id']
-
-        df['time'] = pd.to_datetime(df['time'], utc=True)
-        df = df.set_index('time')
-        df = df.sort_index()
-        return df
-
+        return self.sort_by_index(df)
 
     def read(self, correction):
         """Smart logic to read corrections,
@@ -106,16 +98,7 @@ class CorrectionsInterface:
         """
         df = pdm.read_mongo(correction, [], self.client[self.database_name])
 
-        # No data found
-        if df.size == 0:
-            return None
-        # Delete internal Mongo identifier
-        del df['_id']
-
-        df['time'] = pd.to_datetime(df['time'], utc=True)
-        df = df.set_index('time')
-        df = df.sort_index()
-        return df
+        return self.sort_by_index(df)
 
     def interpolate(self, what, when, how='interpolate', **kwargs):
         """
@@ -175,10 +158,9 @@ class CorrectionsInterface:
     def write(self, correction, df, required_columns=('ONLINE', 'v1')):
         """
         Smart logic to write corrections to the corrections database.
-        :param correction: corrections is a pandas.DataFrame object,
-        corrections name (str type)
-        :param df: corrections is a pandas.DataFrame object a DatetimeIndex
-        :param required_columns: DataFrame must include an online and v1 columns
+        :param correction: corrections name (str type)
+        :param df: pandas.DataFrame object a DatetimeIndex
+        :param required_columns: DataFrame must include two columns online, an ONLINE version and OFFLINE version (e.g. v1)
         """
         for req in required_columns:
             if req not in df.columns:
@@ -250,3 +232,22 @@ class CorrectionsInterface:
         else:
             raise ValueError(f'{date} must be in UTC timezone. Insert datetime object '
                              f'like "datetime.datetime.now(tz=datetime.timezone.utc)"')
+
+    @staticmethod
+    def sort_by_index(df):
+        """
+        Smart logic to sort dataframe by index using time column
+        :param df: dataframe
+        :retrun: df sorted by index(time)
+        """
+        if df.size == 0:
+             return None
+        # Delete internal Mongo identifier
+        del df['_id']
+
+        df['time'] = pd.to_datetime(df['time'], utc=True)
+        df = df.set_index('time')
+        df = df.sort_index()
+
+        return df
+
