@@ -13,3 +13,4 @@ pdmongo
 lz4
 immutabledict
 packaging
+mongomock
