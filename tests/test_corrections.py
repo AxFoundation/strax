@@ -82,5 +82,3 @@ def test_add_row():
     df2.loc[pd.to_datetime(datetime(2020, 2, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [10.0, 12.0, 13.0]
     df2 = df2.sort_index()
     cmt.write('test', df2)
-
-
