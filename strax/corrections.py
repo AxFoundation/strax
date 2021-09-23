@@ -10,7 +10,6 @@ import logging
 import pandas as pd
 import pdmongo as pdm
 import pymongo
-import mongomock
 import pytz
 
 import strax
@@ -49,7 +48,7 @@ class CorrectionsInterface:
                 host is None and
                 username is None and
                 password is None):
-            if not isinstance(client, (pymongo.MongoClient, mongomock.MongoClient) ):
+            if not isinstance(client, type(pymongo.MongoClient())):
                 raise TypeError(f'{client} is not a pymongo.MongoClient.')
             self.client = client
         # In this case, let's just initialize a new pymongo.MongoClient
