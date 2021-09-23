@@ -9,7 +9,7 @@ import pymongo
 
 import unittest
 
-class TestCorrections(unittest.TestCase):
+class TestCorrections():
     """
     Test corrections interface
     Use a mongomock client
@@ -63,7 +63,7 @@ class TestCorrections(unittest.TestCase):
         self.cmt.write('test', df)
         df2 = self.cmt.read('test')
         df2.loc[pd.to_datetime(datetime(2021, 1, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [7.0, 24.0, 14.3]
-        with self.failUnlessRaises(ValueError):
+        with unittest.TestCase().failUnlessRaises(ValueError):
             self.cmt.write('test', df2)       
 
     @staticmethod
@@ -84,6 +84,3 @@ class TestCorrections(unittest.TestCase):
         df = df.set_index('time')
 
         return df
-
-if __name__ == "__main__":
-    unittest.main()
