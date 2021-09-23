@@ -50,17 +50,6 @@ def test_change_future():
     df2 = df2.sort_index()
     cmt.write('test', df2)
 
-def test_add_row():
-    # add a new row in between existen values
-    cmt = corrections()
-    df = make_dummy_df()
-    cmt.write('test', df)
-    df2 = cmt.read('test')
-    # add a new row, inserting new date (this checks whether user changes things in the past) 
-    df2.loc[pd.to_datetime(datetime(2020, 2, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [10.0, 12.0, 13.0]
-    df2 = df2.sort_index()
-    cmt.write('test', df2)
-
 def test_modify_nan():
     # modify non-physcal values (nan)
     cmt = corrections()
@@ -81,4 +70,17 @@ def test_change_past():
     df2.loc[pd.to_datetime(datetime(2021, 1, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [7.0, 24.0, 14.3]
     df2 = df2.sort_index()
     with unittest.TestCase().failUnlessRaises(ValueError):
-         cmt.write('test', df2)       
+         cmt.write('test', df2)
+   
+def test_add_row():
+    # add a new row in between existen values
+    cmt = corrections()
+    df = make_dummy_df()
+    cmt.write('test', df)
+    df2 = cmt.read('test')
+    # add a new row, inserting new date (this checks whether user changes things in the past) 
+    df2.loc[pd.to_datetime(datetime(2020, 2, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [10.0, 12.0, 13.0]
+    df2 = df2.sort_index()
+    cmt.write('test', df2)
+
+
