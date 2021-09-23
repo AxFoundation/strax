@@ -24,11 +24,21 @@ def test_corrections():
     # pandas.DataFrame should be identical 
     assert_frame_equal(df, df2)
 
-    # add a new row (this checks whether user changes things in the past) 
+    # add a new row, inserting new date (this checks whether user changes things in the past) 
     df2.loc[pd.to_datetime(datetime(2020, 2, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [10.0, 12.0, 13.0]
     df2 = df2.sort_index()
-
     cmt.write('test', df2)
+
+    # add a new value in the future
+    df3 = cmt.read('test')
+    df3.loc[pd.to_datetime(datetime(2022, 12, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [15.0, 13.0, np.nan]
+    cmt.write('test', df3)
+
+    # modify nan values
+    df4 = cmt.read('test')
+    df4.loc[pd.to_datetime(datetime(2021, 9, 23, 0, 0, 0, 0, tzinfo=pytz.utc))] = [8.0, 14.0, 14.3]
+    cmt.write('test', df4)
+
 
 def make_dummy_df():
     """
