@@ -16,15 +16,11 @@ class TestCorrections(unittest.TestCase):
     testing write and read usingy dummy dataframe
     and many other cases
     """
-    @classmethod
-    def setUp(cls):
-        cls.cmt = None
-
     @mongomock.patch()
     def __init__(self):
         dummy_client = pymongo.MongoClient()
         self.cmt = strax.CorrectionsInterface(client=dummy_client)
-
+    
     def test_db(self):
         df = self.make_dummy_df()
         # write to the DB
@@ -88,3 +84,6 @@ class TestCorrections(unittest.TestCase):
         df = df.set_index('time')
 
         return df
+
+if __name__ == "__main__":
+    unittest.main()
