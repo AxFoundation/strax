@@ -997,6 +997,7 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
+                 drop_columns=None,
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
@@ -1093,6 +1094,7 @@ class Context:
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
+                        drop_columns=drop_columns,
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
@@ -1169,36 +1171,6 @@ class Context:
         postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
         pbar.set_postfix_str(postfix)
         pbar.update(0)
-
-    @staticmethod
-    def apply_selection(x,
-                        selection_str=None,
-                        keep_columns=None,
-                        time_range=None,
-                        time_selection='fully_contained'):
-        """Return x after applying selections
-
-        :param x: Numpy structured array
-        :param selection_str: Query string or sequence of strings to apply.
-        :param time_range: (start, stop) range to load, in ns since the epoch
-        :param time_selection: Kind of time selection to apply:
-        - skip: Do not select a time range, even if other arguments say so
-        - touching: select things that (partially) overlap with the range
-        - fully_contained: (default) select things fully contained in the range
-
-        The right bound is, as always in strax, considered exclusive.
-        Thus, data that ends (exclusively) exactly at the right edge of a
-        fully_contained selection is returned.
-        """
-        warnings.warn(
-            'context.apply_selection is replaced by strax.apply_selection and '
-            'will be removed in a future release',
-            DeprecationWarning)
-        return strax.apply_selection(x,
-                                     selection_str,
-                                     keep_columns,
-                                     time_range,
-                                     time_selection)
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
@@ -1651,7 +1623,11 @@ class Context:
 select_docs = """
 :param selection_str: Query string or sequence of strings to apply.
 :param keep_columns: Array field/dataframe column names to keep. 
-    Useful to reduce amount of data in memory.
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
+:param drop_columns: Array field/dataframe column names to drop. 
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
 the start of the run to load.
