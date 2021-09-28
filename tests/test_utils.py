@@ -120,9 +120,9 @@ def test_selection_str(d):
     dt=(1, 10),
     max_time=(1, 20)),
 )
-def test_keep_columns(d):
+def test_keep_drop_columns(d):
     """
-    Test that the keep_columns option of apply selection works. Also
+    Test that the keep/drop_columns option of apply selection works. Also
         test that it does not affect the original array (e.g. if it were
         to use a view instead of a copy).
 
@@ -135,6 +135,13 @@ def test_keep_columns(d):
     # Check we din't loose anything of the original array
     assert columns == list(d.dtype.names)
 
+    for c in columns[1:]:
+        assert np.all(selected_data[c] == d[c])
+    for c in columns[:1]:
+        assert c not in selected_data.dtype.names
+    
+    # Repeat test but for drop columns:
+    selected_data = strax.apply_selection(d, drop_columns=columns[:1])
     for c in columns[1:]:
         assert np.all(selected_data[c] == d[c])
     for c in columns[:1]:
