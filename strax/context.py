@@ -1354,7 +1354,7 @@ class Context:
             raise
 
 
-    def get_zarr(self, run_ids, targets, storage='./strax_data', progress_bar=False):
+    def get_zarr(self, run_ids, targets, storage='./strax_data', progress_bar=False, overwrite=True):
         """get perisistant arrays using zarr. This is useful when
             loading large amounts of data that cannot fit in memory
             zarr is very compatible with dask.
@@ -1374,12 +1374,12 @@ class Context:
         import zarr
         root = zarr.open(storage, mode='w')
         for target in strax.to_str_tuple(targets):
+            idx = 0
+            z = None
             if target in root:
                 z = root[target]
-                idx = z.size
-            else:
-                z = None
-                idx = 0
+                if not overwrite:
+                    idx = z.size
             for run_id in strax.to_str_tuple(run_ids):
                 if z is not None and run_id in z.attrs.get('RUNS', []):
                     continue
