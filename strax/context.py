@@ -1353,6 +1353,48 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
+
+    def get_zarr(self, run_ids, targets, storage='./strax_data', progress_bar=False):
+        """get perisistant arrays using zarr. This is useful when
+            loading large amounts of data that cannot fit in memory
+            zarr is very compatible with dask.
+            Targets are loaded into separate arrays and runs are merged.
+            the data is added to any existing data in the storage location.
+        Args:
+            run_ids (Iterable): Run ids you wish to load.
+            targets (Iterable): targets to load.
+            storage (str, optional): [description]. Defaults to './strax_data'.
+
+        Returns:
+            zarr.Group: zarr group containing the persistant arrays available at
+                        the storage location after loading the requested data
+                        the runs loaded into a given array can be seen in the
+                        array .attrs['RUNS'] field
+        """
+        import zarr
+        root = zarr.open(storage, mode='w')
+        for target in strax.to_str_tuple(targets):
+            if target in root:
+                z = root[target]
+                idx = z.size
+            else:
+                z = None
+                idx = 0
+            for run_id in strax.to_str_tuple(run_ids):
+                if z is not None and run_id in z.attrs.get('RUNS', []):
+                    continue
+                for chunk in self.get_iter(run_id, target, progress_bar=progress_bar):
+                    l = chunk.data.size
+                    if z is None:
+                        dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
+                        z = root.create_dataset(target, shape=l, dtype=dtype)
+                    else:
+                        z.resize(idx+l)
+                    z[idx:idx+l] = chunk.data
+                    idx += l
+                z.attrs['RUNS'] = z.attrs.get('RUNS', []) + [run_id]
+        return root
+
     def key_for(self, run_id, target):
         """
         Get the DataKey for a given run and a given target plugin. The
