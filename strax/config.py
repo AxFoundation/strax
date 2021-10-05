@@ -50,7 +50,7 @@ def takes_config(*options):
 
 
 @export
-class Option:
+class Config:
     """Configuration option taken by a strax plugin"""
     taken_by: str
 
@@ -63,7 +63,8 @@ class Option:
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 help: str = ''):
+                 modifier: ty.Callable = None,
+                 help: str = '',):
         """
         :param name: Option identifier
         :param type: Excepted type of the option's value.
@@ -91,6 +92,7 @@ class Option:
         self.default_by_run = default_by_run
         self.default_factory = default_factory
         self.track = track
+        self.modifier = modifier
         self.help = help
 
         # Options required for inherited child plugins:
@@ -182,6 +184,36 @@ class Option:
         elif set_defaults:
             config[self.name] = self.get_default(run_id, run_defaults)
 
+    def __set_name__(self, owner, name):
+        self.name = name
+        takes_config = {name: self}
+        if (hasattr(owner, 'takes_config')
+                and len(owner.takes_config)):
+            # Already have some options set, e.g. because of subclassing
+            # where both child and parent have a takes_config decorator
+            
+            if name in owner.takes_config:
+                raise RuntimeError(
+                    f"Attempt to specify option {name} twice")
+            owner.takes_config = immutabledict({
+                **owner.takes_config, **takes_config})
+        else:
+            owner.takes_config = immutabledict(takes_config)
+
+    def __get__(self, obj, objtype=None):
+        if hasattr(obj, 'config') and self.name in obj.config:
+            val = obj.config[self.name]
+        else:
+            val = self.get_default(obj.run_id)
+        if self.modifier is not None:
+            val = self.modifier(val)
+        return val
+
+    def __set__(self, obj, value):
+        obj.config[self.name] = value
+
+#Backward compatibility
+Option = Config 
 
 @export
 def combine_configs(old_config, new_config=None, mode='update'):
