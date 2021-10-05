@@ -213,7 +213,10 @@ class Config:
         obj.config[self.name] = value
 
 #Backward compatibility
-Option = Config 
+@export
+class Option(Config):
+    pass
+
 
 @export
 def combine_configs(old_config, new_config=None, mode='update'):
