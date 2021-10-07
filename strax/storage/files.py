@@ -25,6 +25,7 @@ class DataDirectory(StorageFrontend):
 
     can_define_runs = True
     provide_run_metadata = False
+    provide_superruns = True
 
     def __init__(self, path='.', *args, deep_scan=False, **kwargs):
         """

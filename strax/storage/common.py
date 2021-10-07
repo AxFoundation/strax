@@ -92,6 +92,7 @@ class StorageFrontend:
     backends: list
     can_define_runs = False
     provide_run_metadata = False
+    provide_superruns = False
 
     def __init__(self,
                  readonly=False,
@@ -102,6 +103,8 @@ class StorageFrontend:
         """
         :param readonly: If True, throws CannotWriteData whenever saving is
         attempted.
+        :param provide_run_metadata: Boolean whether frontend can provide
+            run-level metadata.
         :param overwrite: When to overwrite data that already exists.
          - 'never': Never overwrite any data.
          - 'if_broken': Only overwrites data if it is incomplete or broken.
@@ -123,6 +126,7 @@ class StorageFrontend:
         self.overwrite = overwrite
         if provide_run_metadata is not None:
             self.provide_run_metadata = provide_run_metadata
+
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -197,6 +201,15 @@ class StorageFrontend:
         return not (data_type in self.exclude
                     or self.take_only and data_type not in self.take_only)
 
+    def _support_superruns(self, run_id):
+        """Checks if run is a superrun and if superruns are provided by frontend"""
+        is_superrun = run_id.startswith(('_'))
+        if is_superrun:
+            return self.provide_superruns
+        else:
+            # Not a superrun
+            return True
+
     def find(self, key: DataKey,
              write=False,
              check_broken=True,
@@ -219,6 +232,9 @@ class StorageFrontend:
         if not self._we_take(key.data_type):
             raise DataNotAvailable(
                 f"{self} does not accept or provide data type {key.data_type}")
+
+        if not self._support_superruns(key.run_id):
+            raise DataNotAvailable(f'{self} does not support superruns: {key.run_id}.')
 
         if write:
             if self.readonly:
