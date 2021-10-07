@@ -1354,7 +1354,7 @@ class Context:
             raise
 
 
-    def get_zarr(self, run_ids, targets, storage='./strax_data', progress_bar=False, overwrite=True):
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', progress_bar=False, overwrite=True):
         """get perisistant arrays using zarr. This is useful when
             loading large amounts of data that cannot fit in memory
             zarr is very compatible with dask.
@@ -1363,8 +1363,8 @@ class Context:
         Args:
             run_ids (Iterable): Run ids you wish to load.
             targets (Iterable): targets to load.
-            storage (str, optional): [description]. Defaults to './strax_data'.
-
+            storage (str, optional): fsspec path to store array. Defaults to './strax_temp_data'.
+            overwrite (boolean, optional): whether to overwrite existing arrays for targets at given path.
         Returns:
             zarr.Group: zarr group containing the persistant arrays available at
                         the storage location after loading the requested data
@@ -1372,28 +1372,34 @@ class Context:
                         array .attrs['RUNS'] field
         """
         import zarr
+        context_hash = self._context_hash()
         root = zarr.open(storage, mode='w')
+        group = root.create_group(context_hash)
         for target in strax.to_str_tuple(targets):
             idx = 0
             z = None
-            if target in root:
-                z = root[target]
+            if target in group:
+                z = group[target]
                 if not overwrite:
                     idx = z.size
+            INSERTED = {}
             for run_id in strax.to_str_tuple(run_ids):
-                if z is not None and run_id in z.attrs.get('RUNS', []):
+                if z is not None and run_id in z.attrs.get('RUNS', {}):
                     continue
+                key = self.key_for(run_id, target)
+                INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
                 for chunk in self.get_iter(run_id, target, progress_bar=progress_bar):
-                    l = chunk.data.size
+                    end_idx = idx+chunk.data.size
                     if z is None:
                         dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
-                        z = root.create_dataset(target, shape=l, dtype=dtype)
+                        z = group.create_dataset(target, shape=end_idx, dtype=dtype)
                     else:
-                        z.resize(idx+l)
-                    z[idx:idx+l] = chunk.data
-                    idx += l
-                z.attrs['RUNS'] = z.attrs.get('RUNS', []) + [run_id]
-        return root
+                        z.resize(end_idx)
+                    z[idx:end_idx] = chunk.data
+                    idx = end_idx
+                    INSERTED[run_id]['end_idx'] = end_idx
+            z.attrs['RUNS'] = dict(z.attrs.get('RUNS', {}), **INSERTED)
+        return group
 
     def key_for(self, run_id, target):
         """
