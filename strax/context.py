@@ -433,7 +433,9 @@ class Context:
         # Also take into account the versions of the plugins registered
         base_hash_on_config.update(
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
-             for data_type, plugin in self._plugin_class_registry.items()})
+             for data_type, plugin in self._plugin_class_registry.items()
+             if not data_type.startswith('_temp_')
+            })
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -454,7 +456,11 @@ class Context:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
-        if self._fixed_plugin_cache is None or context_hash not in self._fixed_plugin_cache:
+        if self._fixed_plugin_cache is None:
+            self._fixed_plugin_cache = {context_hash: dict()}
+        elif context_hash not in self._fixed_plugin_cache:
+            print(f'adding new context {context_hash} for {plugins}, had\n{self._fixed_plugin_cache.keys()}')
+            self._fixed_plugin_cache[context_hash]= dict()
             # Create a new cache every time the hash is not matching to
             # save memory. If a config changes, building the cache again
             # should be fast, we just need to track which cache to use.
@@ -997,6 +1003,7 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
+#                  drop_columns=None,
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
@@ -1093,6 +1100,7 @@ class Context:
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
+#                         drop_columns=drop_columns,
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
@@ -1169,36 +1177,6 @@ class Context:
         postfix = f'#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}'
         pbar.set_postfix_str(postfix)
         pbar.update(0)
-
-    @staticmethod
-    def apply_selection(x,
-                        selection_str=None,
-                        keep_columns=None,
-                        time_range=None,
-                        time_selection='fully_contained'):
-        """Return x after applying selections
-
-        :param x: Numpy structured array
-        :param selection_str: Query string or sequence of strings to apply.
-        :param time_range: (start, stop) range to load, in ns since the epoch
-        :param time_selection: Kind of time selection to apply:
-        - skip: Do not select a time range, even if other arguments say so
-        - touching: select things that (partially) overlap with the range
-        - fully_contained: (default) select things fully contained in the range
-
-        The right bound is, as always in strax, considered exclusive.
-        Thus, data that ends (exclusively) exactly at the right edge of a
-        fully_contained selection is returned.
-        """
-        warnings.warn(
-            'context.apply_selection is replaced by strax.apply_selection and '
-            'will be removed in a future release',
-            DeprecationWarning)
-        return strax.apply_selection(x,
-                                     selection_str,
-                                     keep_columns,
-                                     time_range,
-                                     time_selection)
 
     def make(self, run_id: ty.Union[str, tuple, list],
              targets, save=tuple(), max_workers=None,
@@ -1391,8 +1369,14 @@ class Context:
         :param target: data type to get
         :return: strax.DataKey of the target
         """
+        start_ch = self._context_hash()
         if self._plugins_are_cached((target,)):
-            plugins = self._fixed_plugin_cache[self._context_hash()]
+            context_hash = self._context_hash()
+            if context_hash not in self._fixed_plugin_cache:
+                print(f'start:{start_ch}\nch:{context_hash}\nreg:{self._fixed_plugin_cache}\nt:{target}\nr:{run_id}')
+                plugins = self._get_plugins((target,), run_id)
+            else:
+                plugins = self._fixed_plugin_cache[self._context_hash()]
         else:
             plugins = self._get_plugins((target,), run_id)
 
@@ -1651,7 +1635,11 @@ class Context:
 select_docs = """
 :param selection_str: Query string or sequence of strings to apply.
 :param keep_columns: Array field/dataframe column names to keep. 
-    Useful to reduce amount of data in memory.
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
+:param drop_columns: Array field/dataframe column names to drop. 
+    Useful to reduce amount of data in memory. (You can only specify 
+    either keep or drop column.)
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
 the start of the run to load.
