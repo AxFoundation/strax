@@ -115,4 +115,3 @@ class TestMongoFrontend(unittest.TestCase):
         len_before = len(mongo_backend.chunks_registry)
         mongo_backend._clean_first_key_from_registry()
         assert len(mongo_backend.chunks_registry) < len_before
-        assert self.collection_name.find_one() is None, "I want to see that this test is actually run"
