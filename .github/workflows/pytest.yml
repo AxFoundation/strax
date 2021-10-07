@@ -42,12 +42,15 @@ jobs:
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
         if:  matrix.test == 'pytest'
+        env:
+          TEST_MONGO_URI:  ${{ secrets.TEST_MONGO_URI }}
         run: pytest -v --durations 0
       - name: Coveralls
         if:  matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_MONGO_URI:  ${{ secrets.TEST_MONGO_URI }}
         run: |
               coverage run --source=strax setup.py test -v
               coveralls --service=github
