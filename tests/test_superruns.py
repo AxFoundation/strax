@@ -44,9 +44,8 @@ class TestSuperRuns(unittest.TestCase):
         raise correct exception.
         """
         self.context.storage[0].provide_superruns = False
-        self.assertRaises(strax.DataNotAvailable,
-                          self.context.storage[0].find,
-                          self.context.key_for(self.superrun_name, 'records'))
+        with self.assertRaises(strax.DataNotAvailable):
+            self.context.storage[0].find(self.context.key_for(self.superrun_name, 'records'))
 
     def test_run_meta_data(self):
         """
