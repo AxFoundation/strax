@@ -112,7 +112,10 @@ def test_accumulate():
                                                        deep_scan=True),
                            register=[Records])
         channels_from_array = np.sum(context.get_array(run_id, 'records')['channel'])
-        channels = context.accumulate(run_id, 'records', fields='channel')['channel']
+        channels_accumulate = context.accumulate(run_id, 'records', fields='channel')
+    channels = channels_accumulate['channel']
+    n_chunks = len(context.get_meta(run_id, 'records')['chunks'])
+    assert n_chunks == channels_accumulate['n_chunks']
     assert (channels_from_array == channels)
 
 
