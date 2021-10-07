@@ -208,6 +208,14 @@ class FileSytemBackend(strax.StorageBackend):
     """
 
     def get_metadata(self, dirname):
+        try:
+            return self._get_metadata(dirname)
+        except strax.DataCorrupted:
+            raise
+        except Exception as e:
+            raise strax.DataCorrupted(f'Cannot open metadata in {dirname} from {e}')
+
+    def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)
