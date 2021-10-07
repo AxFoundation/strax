@@ -1003,7 +1003,7 @@ class Context:
                  time_selection='fully_contained',
                  selection_str=None,
                  keep_columns=None,
-#                  drop_columns=None,
+                 drop_columns=None,
                  allow_multiple=False,
                  progress_bar=True,
                  _chunk_number=None,
@@ -1100,7 +1100,7 @@ class Context:
                         result.data,
                         selection_str=selection_str,
                         keep_columns=keep_columns,
-#                         drop_columns=drop_columns,
+                        drop_columns=drop_columns,
                         time_range=time_range,
                         time_selection=time_selection)
                     self._update_progress_bar(
