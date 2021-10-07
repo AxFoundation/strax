@@ -510,11 +510,11 @@ class StorageBackend:
             metadata['dtype'] = metadata['dtype'].descr.__repr__()
         return self._saver(key, metadata, **kwargs)
 
-    def get_metadata(self, backend_key: typing.Union[DataKey, str]) -> dict:
+    def get_metadata(self, backend_key: typing.Union[DataKey, str], **kwargs) -> dict:
         """
         Get the metadata using the backend_key and the Backend specific
         _get_metadata method. When an unforeseen error occurs, raises an
-        strax.DataCorrupted error.
+        strax.DataCorrupted error. Any kwargs are passed on to _get_metadata
 
         :param backend_key: The key the backend should look for (can be string
             or strax.DataKey)
@@ -525,7 +525,7 @@ class StorageBackend:
             this backend-key
         """
         try:
-            return self._get_metadata(backend_key)
+            return self._get_metadata(backend_key, **kwargs)
         except (strax.DataCorrupted, strax.DataNotAvailable, NotImplementedError):
             raise
         except Exception as e:
@@ -535,7 +535,7 @@ class StorageBackend:
     # Abstract methods (to override in child)
     ##
 
-    def _get_metadata(self, backend_key: typing.Union[DataKey, str]) -> dict:
+    def _get_metadata(self, backend_key: typing.Union[DataKey, str], **kwargs) -> dict:
         """Return metadata of data described by key.
         """
         raise NotImplementedError
@@ -544,7 +544,7 @@ class StorageBackend:
         """Return a single data chunk"""
         raise NotImplementedError
 
-    def _saver(self, key, metadata):
+    def _saver(self, key, metadata, **kwargs):
         raise NotImplementedError
 
 
