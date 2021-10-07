@@ -10,9 +10,11 @@ on:
     branches:
       - master
       - stable
+      - mongo_testing
   push:
     branches:
       - master
+      - empty_db_test
 
 jobs:
   update:
@@ -39,18 +41,23 @@ jobs:
       - name: Install requirements for tests
         run: |
             pip install -r extra_requirements/requirements-tests.txt
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.6.0
+        with:
+          mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
         if:  matrix.test == 'pytest'
         env:
-          TEST_MONGO_URI:  ${{ secrets.TEST_MONGO_URI }}
-        run: pytest -v --durations 0
+          TEST_MONGO_URI:  'mongodb://localhost:27017/'
+        run: |
+          pytest -v --durations 0
       - name: Coveralls
         if:  matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TEST_MONGO_URI:  ${{ secrets.TEST_MONGO_URI }}
+          TEST_MONGO_URI:  'mongodb://localhost:27017/'
         run: |
               coverage run --source=strax setup.py test -v
               coveralls --service=github

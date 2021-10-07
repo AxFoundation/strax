@@ -17,8 +17,8 @@ class TestMongoFrontend(unittest.TestCase):
 
         TEST_MONGO_URI
 
-    At the moment this is just some free ATLAS mongo server, can easily replaced
-    with another (free) server.
+    At the moment this is just an empty database but you can also use some free
+    ATLAS mongo server.
     """
     run_test = True
 
@@ -27,7 +27,7 @@ class TestMongoFrontend(unittest.TestCase):
         self.all_targets = ('peaks', 'records')
         self.mongo_target = 'peaks'
 
-        # Just some free ATLAS mongo server, see test-class docstring
+        # Just to make sure we are running some mongo server, see test-class docstring
         if 'TEST_MONGO_URI' not in os.environ:
             self.run_test = False
             warn('Cannot connect to test-database')
