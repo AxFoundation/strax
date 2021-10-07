@@ -456,22 +456,26 @@ class Context:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
-        if self._fixed_plugin_cache is None or context_hash not in self._fixed_plugin_cache:
+        if self._fixed_plugin_cache is None:
+            self._fixed_plugin_cache = {context_hash: dict()}
+        elif context_hash not in self._fixed_plugin_cache:
             # Create a new cache every time the hash is not matching to
             # save memory. If a config changes, building the cache again
             # should be fast, we just need to track which cache to use.
+            self.log.info('Replacing context._fixed_plugin_cache since '
+                          'plugins/versions changed')
             self._fixed_plugin_cache = {context_hash: dict()}
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
-    def _fix_dependency(self, plugin_resistry: dict, end_plugin: str):
+    def _fix_dependency(self, plugin_registry: dict, end_plugin: str):
         """
         Starting from end-plugin, fix the dtype until there is nothing
         left to fix. Keep in mind that dtypes can be chained.
         """
-        for go_to in plugin_resistry[end_plugin].depends_on:
-            self._fix_dependency(plugin_resistry, go_to)
-        plugin_resistry[end_plugin].fix_dtype()
+        for go_to in plugin_registry[end_plugin].depends_on:
+            self._fix_dependency(plugin_registry, go_to)
+        plugin_registry[end_plugin].fix_dtype()
 
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
