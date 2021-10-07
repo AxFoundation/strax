@@ -456,11 +456,7 @@ class Context:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
-        if self._fixed_plugin_cache is None:
-            self._fixed_plugin_cache = {context_hash: dict()}
-        elif context_hash not in self._fixed_plugin_cache:
-            print(f'adding new context {context_hash} for {plugins}, had\n{self._fixed_plugin_cache.keys()}')
-            self._fixed_plugin_cache[context_hash]= dict()
+        if self._fixed_plugin_cache is None or context_hash not in self._fixed_plugin_cache:
             # Create a new cache every time the hash is not matching to
             # save memory. If a config changes, building the cache again
             # should be fast, we just need to track which cache to use.
@@ -733,7 +729,7 @@ class Context:
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
 
-                # Make subruns if they do not exist, since we do not 
+                # Make subruns if they do not exist, since we do not
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
@@ -791,18 +787,18 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                    
+
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
-            
+
             # Should we save this data? If not, return.
             if (loading_this_data
                     and not self.context_config['storage_converter']
                     and not self.context_config['write_superruns']):
                 return
-            if (loading_this_data 
-                    and not self.context_config['write_superruns'] 
+            if (loading_this_data
+                    and not self.context_config['write_superruns']
                     and _is_superrun):
                 return
             if target_plugin.save_when == strax.SaveWhen.NEVER:
@@ -857,7 +853,7 @@ class Context:
                         continue
                     if loading_this_data:
                         # Usually, we don't save if we're loading
-                        if (not self.context_config['storage_converter'] 
+                        if (not self.context_config['storage_converter']
                                 and (not self.context_config['write_superruns'] and _is_superrun)):
                             continue
                             # ... but in storage converter mode we do,
@@ -1029,9 +1025,9 @@ class Context:
         # Keep a copy of the list of targets for apply_function
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
-        
+
         _is_superrun = run_id.startswith('_')
-        
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -1369,14 +1365,15 @@ class Context:
         :param target: data type to get
         :return: strax.DataKey of the target
         """
-        start_ch = self._context_hash()
         if self._plugins_are_cached((target,)):
             context_hash = self._context_hash()
-            if context_hash not in self._fixed_plugin_cache:
-                print(f'start:{start_ch}\nch:{context_hash}\nreg:{self._fixed_plugin_cache}\nt:{target}\nr:{run_id}')
-                plugins = self._get_plugins((target,), run_id)
-            else:
+            if context_hash in self._fixed_plugin_cache:
                 plugins = self._fixed_plugin_cache[self._context_hash()]
+            else:
+                # This once happened due to temp. plugins, should not happen again
+                self.log.warning(f'Context hash changed to {context_hash} for '
+                                 f'{self._plugin_class_registry}?')
+                plugins = self._get_plugins((target,), run_id)
         else:
             plugins = self._get_plugins((target,), run_id)
 
