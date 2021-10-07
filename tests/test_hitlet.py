@@ -411,6 +411,11 @@ data_filter = lambda x: (np.sum(x) == 0) or (np.sum(np.abs(x)) >= 0.1)
                    9.9609370, -2.8149414, -2.8149414, -2.8149414, -2.8149414],
                   dtype=np.float32),
     size_template_and_ind_max_template=[0, 1])
+@example(data=np.array(
+       [-3.8847911, -0.5546908, -0.5546908, -8.079916 ,  7.364694 ,
+        7.378992 , -0.5546908, -0.5546908, -0.5546908], 
+       dtype=float32),
+    size_template_and_ind_max_template=[1, 0])
 def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
     Test for conditional entropy. For the template larger int value defines
