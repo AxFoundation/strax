@@ -51,7 +51,6 @@ jobs:
         env:
           TEST_MONGO_URI:  'mongodb://localhost:27017/'
         run: |
-          mongod
           pytest -v --durations 0
       - name: Coveralls
         if:  matrix.test == 'coveralls'
@@ -60,7 +59,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_MONGO_URI:  'mongodb://localhost:27017/'
         run: |
-              mongod
               coverage run --source=strax setup.py test -v
               coveralls --service=github
       - name: goodbye
