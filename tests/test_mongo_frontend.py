@@ -109,3 +109,9 @@ class TestMongoFrontend(unittest.TestCase):
         assert not self.stored_in_mongo
         with self.assertRaises(strax.DataNotAvailable):
             self.st.get_array(self.test_run_id, self.mongo_target)
+
+        # For completeness, also check the buffer cleaning works
+        mongo_backend = self.mongo_sf.backends[0]
+        len_before = len(mongo_backend.chunks_registry)
+        mongo_backend._clean_first_key_from_registry()
+        assert len(mongo_backend.chunks_registry) < len_before
