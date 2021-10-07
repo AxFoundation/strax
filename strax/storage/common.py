@@ -97,7 +97,6 @@ class StorageFrontend:
     def __init__(self,
                  readonly=False,
                  provide_run_metadata=None,
-                 provide_superruns=None,
                  overwrite='if_broken',
                  take_only=tuple(),
                  exclude=tuple()):
@@ -106,8 +105,6 @@ class StorageFrontend:
         attempted.
         :param provide_run_metadata: Boolean whether frontend can provide
             run-level metadata.
-        :param provide_superruns: Boolean whether frontend can provide
-            (and store) superruns.
         :param overwrite: When to overwrite data that already exists.
          - 'never': Never overwrite any data.
          - 'if_broken': Only overwrites data if it is incomplete or broken.
@@ -129,8 +126,6 @@ class StorageFrontend:
         self.overwrite = overwrite
         if provide_run_metadata is not None:
             self.provide_run_metadata = provide_run_metadata
-        if provide_superruns is not None:
-            self.provide_superruns = provide_superruns
 
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
