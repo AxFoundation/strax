@@ -109,7 +109,7 @@ class ZipFileBackend(strax.StorageBackend):
             with zp.open(dirn + '/' + chunk_info['filename']) as f:
                 return strax.load_file(f, dtype=dtype, compressor=compressor)
 
-    def get_metadata(self, zipn_and_dirn):
+    def _get_metadata(self, zipn_and_dirn):
         zipn, dirn = zipn_and_dirn
         with zipfile.ZipFile(zipn) as zp:
             prefix = strax.dirname_to_prefix(dirn)
