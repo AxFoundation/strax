@@ -10,11 +10,9 @@ on:
     branches:
       - master
       - stable
-      - mongo_testing
   push:
     branches:
       - master
-      - empty_db_test
 
 jobs:
   update:
