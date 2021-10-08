@@ -204,6 +204,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
                              '_copy_hitlets_to_hitlets_width_data')
 
     _get_hitlets_data(hitlets_with_data_field, records, to_pe)
+    hitlets_with_data_field = hitlets_with_data_field[hitlets_with_data_field['length'] > 0]
     return hitlets_with_data_field
 
 
