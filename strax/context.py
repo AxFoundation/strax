@@ -1109,7 +1109,7 @@ class Context:
 
         except Exception as e:
             generator.throw(e)
-            raise
+            raise ValueError(f'Failed to process chunk {n_chunks}!')
 
         if not seen_a_chunk:
             if time_range is None:
