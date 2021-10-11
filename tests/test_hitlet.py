@@ -128,8 +128,8 @@ class TestGetHitletData(unittest.TestCase):
     def test_empty_overlap(self):
         records = np.zeros(3, strax.record_dtype(10))
 
-        # Create fake records for which hitlet overlaps with channel A=0
-        # although hit is in channel B=1.
+        # Create fake records for which hitlet overlaps with channel 0
+        # although hit is in channel 1. See also github.com/AxFoundation/strax/pull/549
         records['channel'] = (0, 1, 1)
         records['length'] = (10, 3, 10)
         records['time'] = (0, 0, 5)
