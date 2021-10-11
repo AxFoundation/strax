@@ -1109,7 +1109,7 @@ class Context:
 
         except Exception as e:
             generator.throw(e)
-            raise
+            raise ValueError(f'Failed to process chunk {n_chunks}!')
 
         if not seen_a_chunk:
             if time_range is None:
@@ -1328,10 +1328,7 @@ class Context:
                 result['result'] = (
                         np.sum(data, axis=0)
                         + result.get('result', 0))
-
             n_chunks += 1
-            n_chunks += 1
-
         result['n_chunks'] = n_chunks
         return result
 
