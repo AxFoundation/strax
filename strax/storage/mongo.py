@@ -88,7 +88,7 @@ class MongoBackend(StorageBackend):
         col = self.db[self.col_name if self.col_name is not None else str(key)]
         return MongoSaver(key, metadata, col, **kwargs)
 
-    def get_metadata(self, key):
+    def _get_metadata(self, key):
         """See strax.Backend"""
         query = backend_key_to_query(key)
 
