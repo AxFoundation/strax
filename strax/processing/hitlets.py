@@ -204,7 +204,9 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
                              '_copy_hitlets_to_hitlets_width_data')
 
     _get_hitlets_data(hitlets_with_data_field, records, to_pe)
-    hitlets_with_data_field = hitlets_with_data_field[hitlets_with_data_field['length'] > 0]
+    if np.any(hitlets_with_data_field['length'] == 0):
+        raise ValueError('Try to create zero length hitlets which is forbidden!')
+        
     return hitlets_with_data_field
 
 
@@ -229,7 +231,15 @@ def _get_hitlets_data(hitlets, records, to_pe):
                 r['length'],
                 h['time'] // h['dt'],
                 h['length'])
-
+            
+            if (r_end - r_start) == 0 and (h_end - h_start) == 0:
+                # _touching_windows will give a range of overlapping records 
+                # with hitlet independent of channel. Hence, in rare cases it might 
+                # be that a record of channel A touches with a hitlet of channel B which 
+                # starts before the previous record of channel b. Hence we get one
+                # non-overlapping record in channel b.
+                continue   
+            
             if is_first_record:
                 # We need recorded_samples_offset because hits may extend beyond the boundaries of our recorded data.
                 # As the data is not defined in those regions we have to chop and realign our data. See the following
@@ -239,6 +249,7 @@ def _get_hitlets_data(hitlets, records, to_pe):
                 # Time and length of the hitlet are updated accordingly.
                 is_first_record = False
                 recorded_samples_offset = h_start
+
             h_start -= recorded_samples_offset
             h_end -= recorded_samples_offset
 
