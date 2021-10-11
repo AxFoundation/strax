@@ -125,6 +125,30 @@ class TestGetHitletData(unittest.TestCase):
         with self.assertRaises(ValueError):
             strax.get_hitlets_data(hitlets_to_short, self.records, np.ones(3000))
 
+    def test_empty_overlap(self):
+        records = np.zeros(3, strax.record_dtype(10))
+
+        # Create fake records for which hitlet overlaps with channel A=0
+        # although hit is in channel B=1.
+        records['channel'] = (0, 1, 1)
+        records['length'] = (10, 3, 10)
+        records['time'] = (0, 0, 5)
+        records['dt'] = 1
+        records['data'][-1] = np.ones(10)
+
+        # Assume we extend our hits by 1 sample hence hitlet starts at 4
+        hitlet = np.zeros(1, strax.hitlet_with_data_dtype(11))
+        hitlet['time'] = 4
+        hitlet['dt'] = 1
+        hitlet['length'] = 11
+        hitlet['channel'] = 1
+
+        hitlet = strax.get_hitlets_data(hitlet, records, np.ones(10))
+        assert hitlet['time'] == 5
+        assert hitlet['length'] == 10
+        assert np.sum(hitlet['data']) == 10
+        assert hitlet['data'][0,0] == 1
+
     def test_get_hitlets_data(self):
         dummy_records = [  # Contains Hitlet #:
             [[1, 3, 2, 1, 0, 0], ],  # 0
