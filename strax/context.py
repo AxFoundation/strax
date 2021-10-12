@@ -1361,21 +1361,22 @@ class Context:
             zarr is very compatible with dask.
             Targets are loaded into separate arrays and runs are merged.
             the data is added to any existing data in the storage location.
-        Args:
-            run_ids (Iterable): Run ids you wish to load.
-            targets (Iterable): targets to load.
-            storage (str, optional): fsspec path to store array. Defaults to './strax_temp_data'.
-            overwrite (boolean, optional): whether to overwrite existing arrays for targets at given path.
-        Returns:
-            zarr.Group: zarr group containing the persistant arrays available at
+  
+        :param run_ids: (Iterable) Run ids you wish to load.
+        :param targets: (Iterable) targets to load.
+        :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
+        :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at given path.
+   
+        :returns zarr.Group: zarr group containing the persistant arrays available at
                         the storage location after loading the requested data
                         the runs loaded into a given array can be seen in the
                         array .attrs['RUNS'] field
         """
         import zarr
         context_hash = self._context_hash()
+        kwargs_hash = strax.deterministic_hash(kwargs)
         root = zarr.open(storage, mode='w')
-        group = root.create_group(context_hash)
+        group = root.create_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
         for target in strax.to_str_tuple(targets):
             idx = 0
             z = None
