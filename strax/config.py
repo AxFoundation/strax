@@ -91,7 +91,6 @@ class Option:
         self.default_by_run = default_by_run
         self.default_factory = default_factory
         self.track = track
-        self.modifier = modifier
         self.help = help
 
         # Options required for inherited child plugins:
