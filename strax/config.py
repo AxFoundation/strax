@@ -63,7 +63,6 @@ class Option:
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 modifier: ty.Callable = None,
                  help: str = '',):
         """
         :param name: Option identifier
@@ -188,9 +187,11 @@ class Option:
 #Backward compatibility
 @export
 class Config(Option):
-    def __init__(self, **kwargs):
+    def __init__(self, modifier: ty.Callable = None, **kwargs):
+        self.modifier = modifier
         if 'name' not in kwargs:
             kwargs['name'] = ''
+        super().__init__(**kwargs)
         
     def __set_name__(self, owner, name):
         self.name = name
