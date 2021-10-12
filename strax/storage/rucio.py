@@ -16,7 +16,7 @@ class rucio(strax.StorageBackend):
         super().__init__(*args, **kwargs)
         self.root_dir = root_dir
 
-    def get_metadata(self, dirname:str, **kwargs):
+    def _get_metadata(self, dirname: str):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         fn = rucio_path(self.root_dir, metadata_json, dirname)

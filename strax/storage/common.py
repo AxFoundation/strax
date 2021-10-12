@@ -92,6 +92,7 @@ class StorageFrontend:
     backends: list
     can_define_runs = False
     provide_run_metadata = False
+    provide_superruns = False
 
     def __init__(self,
                  readonly=False,
@@ -102,6 +103,8 @@ class StorageFrontend:
         """
         :param readonly: If True, throws CannotWriteData whenever saving is
         attempted.
+        :param provide_run_metadata: Boolean whether frontend can provide
+            run-level metadata.
         :param overwrite: When to overwrite data that already exists.
          - 'never': Never overwrite any data.
          - 'if_broken': Only overwrites data if it is incomplete or broken.
@@ -123,6 +126,7 @@ class StorageFrontend:
         self.overwrite = overwrite
         if provide_run_metadata is not None:
             self.provide_run_metadata = provide_run_metadata
+
         self.readonly = readonly
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -197,6 +201,15 @@ class StorageFrontend:
         return not (data_type in self.exclude
                     or self.take_only and data_type not in self.take_only)
 
+    def _support_superruns(self, run_id):
+        """Checks if run is a superrun and if superruns are provided by frontend"""
+        is_superrun = run_id.startswith(('_'))
+        if is_superrun:
+            return self.provide_superruns
+        else:
+            # Not a superrun
+            return True
+
     def find(self, key: DataKey,
              write=False,
              check_broken=True,
@@ -219,6 +232,9 @@ class StorageFrontend:
         if not self._we_take(key.data_type):
             raise DataNotAvailable(
                 f"{self} does not accept or provide data type {key.data_type}")
+
+        if not self._support_superruns(key.run_id):
+            raise DataNotAvailable(f'{self} does not support superruns: {key.run_id}.')
 
         if write:
             if self.readonly:
@@ -510,11 +526,32 @@ class StorageBackend:
             metadata['dtype'] = metadata['dtype'].descr.__repr__()
         return self._saver(key, metadata, **kwargs)
 
+    def get_metadata(self, backend_key: typing.Union[DataKey, str], **kwargs) -> dict:
+        """
+        Get the metadata using the backend_key and the Backend specific
+        _get_metadata method. When an unforeseen error occurs, raises an
+        strax.DataCorrupted error. Any kwargs are passed on to _get_metadata
+
+        :param backend_key: The key the backend should look for (can be string
+            or strax.DataKey)
+        :return: metadata for the data associated to the requested backend-key
+        :raises strax.DataCorrupted: This backend is not able to read the
+            metadata but it should exist
+        :raises strax.DataNotAvailable: When there is no data associated with
+            this backend-key
+        """
+        try:
+            return self._get_metadata(backend_key, **kwargs)
+        except (strax.DataCorrupted, strax.DataNotAvailable, NotImplementedError):
+            raise
+        except Exception as e:
+            raise strax.DataCorrupted(f'Cannot open metadata for {str(backend_key)}') from e
+
     ##
     # Abstract methods (to override in child)
     ##
 
-    def get_metadata(self, backend_key):
+    def _get_metadata(self, backend_key: typing.Union[DataKey, str], **kwargs) -> dict:
         """Return metadata of data described by key.
         """
         raise NotImplementedError
@@ -523,7 +560,7 @@ class StorageBackend:
         """Return a single data chunk"""
         raise NotImplementedError
 
-    def _saver(self, key, metadata):
+    def _saver(self, key, metadata, **kwargs):
         raise NotImplementedError
 
 
