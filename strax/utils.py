@@ -471,7 +471,8 @@ def multi_run(exec_function, run_ids, *args,
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
                       desc="Loading %d runs" % len(run_ids),
-                      disable=not multi_run_progress_bar):
+                      disable=not multi_run_progress_bar,
+                      total = len(run_ids)):
             pass
 
         result = []
@@ -529,6 +530,7 @@ def iter_chunk_meta(md):
 def apply_selection(x,
                     selection_str=None,
                     keep_columns=None,
+                    drop_columns=None,
                     time_range=None,
                     time_selection='fully_contained'):
     """Return x after applying selections
@@ -536,6 +538,8 @@ def apply_selection(x,
     :param x: Numpy structured array
     :param selection_str: Query string or sequence of strings to apply.
     :param time_range: (start, stop) range to load, in ns since the epoch
+    :param keep_columns: Field names of the columns to keep.
+    :param drop_columns: Field names of the columns to drop.
     :param time_selection: Kind of time selectoin to apply:
     - skip: Do not select a time range, even if other arguments say so
     - touching: select things that (partially) overlap with the range
@@ -545,6 +549,10 @@ def apply_selection(x,
     Thus, data that ends (exclusively) exactly at the right edge of a
     fully_contained selection is returned.
     """
+    if drop_columns and keep_columns:
+        raise ValueError('You cannot specify both keep_columns and drop_columns ' 
+                         'as their logic is contradictory please specify just one.')
+
     # Apply the time selections
     if time_range is None or time_selection == 'skip':
         pass
@@ -568,15 +576,35 @@ def apply_selection(x,
 
     if keep_columns:
         keep_columns = strax.to_str_tuple(keep_columns)
-
-        # Construct the new dtype
-        new_dtype = []
+        
+    if drop_columns:
+        drop_columns = strax.to_str_tuple(drop_columns)
+        keep_columns = []
         for unpacked_dtype in strax.unpack_dtype(x.dtype):
             field_name = unpacked_dtype[0]
             if isinstance(field_name, tuple):
                 field_name = field_name[1]
+                
+            if field_name in drop_columns:
+                continue
+            keep_columns.append(field_name) 
+
+
+    if keep_columns:
+        # We check before if keep and drop are specified both,
+        # if so we raise an error.
+        # Construct the new dtype
+        new_dtype = []
+        fields_to_copy = []
+        for unpacked_dtype in strax.unpack_dtype(x.dtype):
+            field_name = unpacked_dtype[0]
+            if isinstance(field_name, tuple):
+                field_name = field_name[1]
+
             if field_name in keep_columns:
                 new_dtype.append(unpacked_dtype)
+                fields_to_copy.append(field_name)
+
 
         # Copy over the data
         x2 = np.zeros(len(x), dtype=new_dtype)
