@@ -40,6 +40,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Install requirements for tests
         run: |
+            pip install wheel
+            pip install lvmlite==0.34.0
             pip install -r extra_requirements/requirements-tests.txt
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.6.0
