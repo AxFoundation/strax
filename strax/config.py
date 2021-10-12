@@ -192,7 +192,7 @@ class Config(Option):
         if 'name' not in kwargs:
             kwargs['name'] = ''
         super().__init__(**kwargs)
-        
+
     def __set_name__(self, owner, name):
         self.name = name
         takes_config = {name: self}
@@ -215,7 +215,7 @@ class Config(Option):
         else:
             val = self.get_default(obj.run_id)
         if self.modifier is not None:
-            val = self.modifier(val)
+            val = self.modifier(obj.run_id, val)
         return val
 
     def __set__(self, obj, value):
