@@ -1379,28 +1379,28 @@ class Context:
         group = root.create_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
         for target in strax.to_str_tuple(targets):
             idx = 0
-            z = None
+            zarray = None
             if target in group:
-                z = group[target]
+                zarray = group[target]
                 if not overwrite:
-                    idx = z.size
+                    idx = zarray.size
             INSERTED = {}
             for run_id in strax.to_str_tuple(run_ids):
-                if z is not None and run_id in z.attrs.get('RUNS', {}):
+                if zarray is not None and run_id in zarray.attrs.get('RUNS', {}):
                     continue
                 key = self.key_for(run_id, target)
                 INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
                 for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
                     end_idx = idx+chunk.data.size
-                    if z is None:
+                    if zarray is None:
                         dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
-                        z = group.create_dataset(target, shape=end_idx, dtype=dtype)
+                        zarray = group.create_dataset(target, shape=end_idx, dtype=dtype)
                     else:
-                        z.resize(end_idx)
-                    z[idx:end_idx] = chunk.data
+                        zarray.resize(end_idx)
+                    zarray[idx:end_idx] = chunk.data
                     idx = end_idx
                     INSERTED[run_id]['end_idx'] = end_idx
-            z.attrs['RUNS'] = dict(z.attrs.get('RUNS', {}), **INSERTED)
+            zarray.attrs['RUNS'] = dict(zarray.attrs.get('RUNS', {}), **INSERTED)
         return group
 
     def key_for(self, run_id, target):
