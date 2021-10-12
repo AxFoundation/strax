@@ -68,7 +68,7 @@ class TestMongoFrontend(unittest.TestCase):
 
     @property
     def is_data_in_collection(self):
-        return self.database[self.collection_name].find_one() is None
+        return self.database[self.collection_name].find_one() is not None
 
     def test_write_and_load(self):
         if not self.run_test:
