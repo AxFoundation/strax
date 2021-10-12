@@ -14,7 +14,8 @@ numba==0.51.2; python_version=="3.10"
 numba==0.53.1; python_version<="3.9"
 numexpr==2.7.3
 numpy==1.21.2; python_version<="3.9"
-pandas==1.3.2
+pandas==1.3.2; python_version<="3.9"
+pandas; python_version=="3.10"
 packaging==21.0
 pdmongo==0.1.0
 psutil==5.8.0
