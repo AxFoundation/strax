@@ -23,15 +23,15 @@ class TestMongoFrontend(unittest.TestCase):
     run_test = True
 
     def setUp(self):
-        self.test_run_id = '0'
-        self.all_targets = ('peaks', 'records')
-        self.mongo_target = 'peaks'
-
         # Just to make sure we are running some mongo server, see test-class docstring
         if 'TEST_MONGO_URI' not in os.environ:
             self.run_test = False
             warn('Cannot connect to test-database')
             return
+
+        self.test_run_id = '0'
+        self.all_targets = ('peaks', 'records')
+        self.mongo_target = 'peaks'
 
         uri = os.environ.get('TEST_MONGO_URI')
         db_name = 'test_mongosf_database'
@@ -46,72 +46,105 @@ class TestMongoFrontend(unittest.TestCase):
                                             col_name=self.collection_name,
                                             )
 
-        self.path = os.path.join(tempfile.gettempdir(), 'strax_data')
-        self.local_sf = strax.DataDirectory(self.path)
         self.st = strax.Context(register=[Records, Peaks],
-                                storage=[self.local_sf,
-                                         self.mongo_sf],
+                                storage=[self.mongo_sf],
                                 use_per_run_defaults=True,
                                 )
-        assert not self.all_targets_stored
-
-    @property
-    def all_targets_stored(self) -> bool:
-        return all([self.st.is_stored(self.test_run_id, t) for t in self.all_targets])
-
-    @property
-    def stored_in_mongo(self) -> bool:
-        return self.st._is_stored_in_sf(self.test_run_id, self.mongo_target, self.mongo_sf)
-
-    @property
-    def stored_locally(self) -> bool:
-        return all([self.st._is_stored_in_sf(self.test_run_id, t, self.local_sf)
-                    for t in self.all_targets])
+        assert not self.is_all_targets_stored
 
     def tearDown(self):
         if not self.run_test:
             return
-
         self.database[self.collection_name].drop()
 
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+    @property
+    def is_all_targets_stored(self) -> bool:
+        """This should always be False as one of the targets (records) is not stored in mongo"""
+        return all([self.st.is_stored(self.test_run_id, t) for t in self.all_targets])
 
-    def test_save_and_load(self):
+    @property
+    def is_stored_in_mongo(self) -> bool:
+        return self.st._is_stored_in_sf(self.test_run_id, self.mongo_target, self.mongo_sf)
+
+    @property
+    def is_data_in_collection(self):
+        return self.database[self.collection_name].find_one() is None
+
+    def test_write_and_load(self):
         if not self.run_test:
             return
 
         # Shouldn't be any traces of data
-        assert self.database[self.collection_name].find_one() is None
-        assert not self.stored_in_mongo
-        assert not self.stored_locally, self.path
-        assert not self.all_targets_stored
+        assert not self.is_data_in_collection
+        assert not self.is_stored_in_mongo
+        assert not self.is_all_targets_stored
 
-        # Make ALL the data and check it's stored everywhere
+        # Make ALL the data
+        # NB: the context writes to ALL the storage frontends that are susceptible
         for t in self.all_targets:
             self.st.make(self.test_run_id, t)
-        assert self.database[self.collection_name].find_one() is not None
-        # NB: the context writes to ALL the storage frontends that are susceptible
-        assert self.stored_in_mongo
-        assert self.stored_locally
 
-        # Double check that we can load if we only have the mongo sf and cannot make data
-        self.st.storage = [self.mongo_sf]
+        assert self.is_data_in_collection
+        assert self.is_stored_in_mongo
+        msg = ("since take_only of the MongoFrontend is specified not all data "
+               "should be in stored (records should not be in any frontend)")
+        assert not self.is_all_targets_stored, msg
+
+        # Double check that we can load data from mongo even if we cannot make it
         self.st.context_config['forbid_creation_of'] = self.all_targets
-        assert not self.all_targets_stored
-        assert self.stored_in_mongo
         peaks = self.st.get_array(self.test_run_id, self.mongo_target)
         assert len(peaks)
 
+    def test_write_and_change_lineage(self):
+        """
+        Lineage changes should result in data not being available
+        and therefore the data should not be returned.
+        """
+        if not self.run_test:
+            return
+        self._make_mongo_target()
+        assert self.is_stored_in_mongo
+
         # Check that lineage changes result in non-loadable data
+        self.st.context_config['forbid_creation_of'] = self.all_targets
         self.st._plugin_class_registry['peaks'].__version__ = 'some other version'
-        assert not self.stored_in_mongo
+        assert not self.is_stored_in_mongo
         with self.assertRaises(strax.DataNotAvailable):
             self.st.get_array(self.test_run_id, self.mongo_target)
 
-        # For completeness, also check the buffer cleaning works
+    def test_clean_cache(self):
+        """
+        We keep a small cache in the backend of the last loaded data for
+        offloading the database, test that it works
+        """
+        if not self.run_test:
+            return
+        self._make_mongo_target()
+        assert self.is_stored_in_mongo
         mongo_backend = self.mongo_sf.backends[0]
+        assert len(mongo_backend.chunks_registry) == 0, "nothing should be cached"
+        # Now loading data should mean we start caching something
+        self.st.get_array(self.test_run_id, self.mongo_target)
         len_before = len(mongo_backend.chunks_registry)
+        assert len_before
         mongo_backend._clean_first_key_from_registry()
         assert len(mongo_backend.chunks_registry) < len_before
+
+    def test_interrupt_iterator(self):
+        """
+        When we interrupt during the writing of data, make sure
+        we are not able to data that is only half computed
+        """
+        if not self.run_test:
+            return
+        assert not self.is_stored_in_mongo
+        self.st.config['n_chunks'] = 2  # Make sure that after one iteration we haven't finished
+        for chunk in self.st.get_iter(self.test_run_id, self.mongo_target):
+            print(chunk)
+            break
+        assert not self.is_stored_in_mongo
+
+    def _make_mongo_target(self):
+        assert not self.is_stored_in_mongo
+        self.st.make(self.test_run_id, self.mongo_target)
+        assert self.is_stored_in_mongo
