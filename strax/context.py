@@ -1354,7 +1354,8 @@ class Context:
             raise
 
 
-    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', progress_bar=False, overwrite=True):
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', 
+                progress_bar=False, overwrite=True, **kwargs):
         """get perisistant arrays using zarr. This is useful when
             loading large amounts of data that cannot fit in memory
             zarr is very compatible with dask.
@@ -1388,7 +1389,7 @@ class Context:
                     continue
                 key = self.key_for(run_id, target)
                 INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
-                for chunk in self.get_iter(run_id, target, progress_bar=progress_bar):
+                for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
                     end_idx = idx+chunk.data.size
                     if z is None:
                         dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
