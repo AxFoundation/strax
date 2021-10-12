@@ -22,6 +22,7 @@ psutil==5.8.0
 pymongo==3.12.0
 pytest==6.2.5
 pytest-cov==2.12.1
-scipy==1.7.1
+scipy==1.6.1; python_version=="3.10"
+scipy==1.7.1; python_version<="3.9"
 tqdm==4.62.2
 zstd==1.5.0.2
