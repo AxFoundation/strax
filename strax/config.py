@@ -63,7 +63,7 @@ class Option:
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 help: str = '',):
+                 help: str = ''):
         """
         :param name: Option identifier
         :param type: Excepted type of the option's value.
