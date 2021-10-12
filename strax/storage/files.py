@@ -25,6 +25,7 @@ class DataDirectory(StorageFrontend):
 
     can_define_runs = True
     provide_run_metadata = False
+    provide_superruns = True
 
     def __init__(self, path='.', *args, deep_scan=False, **kwargs):
         """
@@ -207,7 +208,7 @@ class FileSytemBackend(strax.StorageBackend):
     Metadata is stored in a file called metadata.json.
     """
 
-    def get_metadata(self, dirname):
+    def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)

@@ -471,7 +471,8 @@ def multi_run(exec_function, run_ids, *args,
                    for r in run_ids]
         for _ in tqdm(as_completed(futures),
                       desc="Loading %d runs" % len(run_ids),
-                      disable=not multi_run_progress_bar):
+                      disable=not multi_run_progress_bar,
+                      total = len(run_ids)):
             pass
 
         result = []
