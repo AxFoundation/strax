@@ -108,11 +108,15 @@ def test_accumulate():
     :return: None
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        context = strax.Context(storage=strax.DataDirectory(temp_dir,
-                                                       deep_scan=True),
-                           register=[Records])
+        context = strax.Context(
+            storage=strax.DataDirectory(temp_dir, deep_scan=True),
+            register=[Records],
+        )
         channels_from_array = np.sum(context.get_array(run_id, 'records')['channel'])
-        channels = context.accumulate(run_id, 'records', fields='channel')['channel']
+        channels_accumulate = context.accumulate(run_id, 'records', fields='channel')
+        n_chunks = len(context.get_meta(run_id, 'records')['chunks'])
+    channels = channels_accumulate['channel']
+    assert n_chunks == channels_accumulate['n_chunks']
     assert (channels_from_array == channels)
 
 
