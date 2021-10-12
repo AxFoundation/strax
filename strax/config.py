@@ -50,7 +50,7 @@ def takes_config(*options):
 
 
 @export
-class Config:
+class Option:
     """Configuration option taken by a strax plugin"""
     taken_by: str
 
@@ -184,6 +184,14 @@ class Config:
         elif set_defaults:
             config[self.name] = self.get_default(run_id, run_defaults)
 
+
+#Backward compatibility
+@export
+class Config(Option):
+    def __init__(self, **kwargs):
+        if 'name' not in kwargs:
+            kwargs['name'] = ''
+        
     def __set_name__(self, owner, name):
         self.name = name
         takes_config = {name: self}
@@ -212,10 +220,6 @@ class Config:
     def __set__(self, obj, value):
         obj.config[self.name] = value
 
-#Backward compatibility
-@export
-class Option(Config):
-    pass
 
 
 @export
