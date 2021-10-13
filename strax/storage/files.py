@@ -208,7 +208,7 @@ class FileSytemBackend(strax.StorageBackend):
     Metadata is stored in a file called metadata.json.
     """
 
-    def get_metadata(self, dirname):
+    def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)

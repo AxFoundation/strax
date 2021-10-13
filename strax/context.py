@@ -776,13 +776,17 @@ class Context:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
                 if (time_range is not None
-                        and plugins[target_i].save_when != strax.SaveWhen.NEVER):
+                        and plugins[target_i].save_when > strax.SaveWhen.EXPLICIT):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
-                    raise strax.DataNotAvailable(
-                        f"Time range selection assumes data is already "
-                        f"available, but {target_i} for {run_id} is not.")
+                    error_message = (
+                        f"Time range selection assumes data is already available,"
+                        f" but {target_i} for {run_id} is not.")
+                    if plugins[target_i].save_when == strax.SaveWhen.TARGET:
+                        error_message += (f"\nFirst run st.make({run_id}, "
+                                          f"{target_i}) to make {target_i}.")
+                    raise strax.DataNotAvailable(error_message)
                 if '*' in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
@@ -1115,7 +1119,7 @@ class Context:
 
         except Exception as e:
             generator.throw(e)
-            raise
+            raise ValueError(f'Failed to process chunk {n_chunks}!')
 
         if not seen_a_chunk:
             if time_range is None:
