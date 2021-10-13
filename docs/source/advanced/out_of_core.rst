@@ -3,14 +3,16 @@ Out of core computation
 
 Overview and motivation
 ------------------------
-Many times analyses (performing some computation not implemented by a plugin or plotting) require loading more data than can fit into a memory,
+Many times analyses involve performing some computation not implemented by a plugin (e.g. plotting)
+that require loading more data than can fit into memory,
 these type of tasks are commonly reffered to as out-of-core computations.
 Out-of-core algorithms usually involve a few repeating steps:
-1) chunk the dataset into managable sizes
-2) load the data chunk by chunk
-3) perform some computation on each chunk
-4) saving a summary of the results for each chunk
-5) perform some combination of the results into a final result. 
+
+1. chunk the dataset into managable sizes
+2. load the data chunk by chunk
+3. perform some computation on each chunk
+4. save a summary of the results for each chunk
+5. perform some combination of the per-chunk results into a final result. 
 
 While it is of course possible to implement these operations yourself, it can be tedious and repetative and the code becomes very rigid to the specific calculations being performed.
 A better approach is to use abstractions of commonly performed operations that use out-of-core algorithms under the hood to get the same result as if the operations were performed on the entire dataset.
