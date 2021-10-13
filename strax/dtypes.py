@@ -204,7 +204,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'n_saturated_channels'), np.int16),
         (('Hits within tight range of mean',
           'tight_coincidence'), np.int16),
-        (('PMT channel within tight range of mean',
+        (('number of contributing channels within tight range of mean',
           'tight_coincidence_channel'), np.int16),
         (('Largest gap between hits inside peak [ns]',
           'max_gap'), np.int32),
