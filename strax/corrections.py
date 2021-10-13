@@ -11,6 +11,7 @@ import pandas as pd
 import pdmongo as pdm
 import pymongo
 import pytz
+import numpy as np
 
 import strax
 
