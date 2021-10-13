@@ -5,11 +5,12 @@ import typing as ty
 from collections import defaultdict
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 import pytz
 import datetime
-
 import strax
+# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+tqdm = strax.utils.tqdm
+
 export, __all__ = strax.exporter()
 
 
