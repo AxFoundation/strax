@@ -25,3 +25,4 @@ tqdm==4.62.2
 zstd==1.5.0.2
 mongomock==3.23.0
 zarr==2.10.1
+fsspec
