@@ -495,7 +495,7 @@ class Plugin:
 
             # For non-saving plugins, don't be strict, just take whatever
             # endtimes are available and don't check time-consistency
-            if int(self.save_when) == strax.SaveWhen.EXPLICIT:
+            if int(self.save_when) <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     end = max([v.end for v in kwargs.values()])  # Don't delete
