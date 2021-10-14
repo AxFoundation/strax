@@ -1377,7 +1377,7 @@ class Context:
         context_hash = self._context_hash()
         kwargs_hash = strax.deterministic_hash(kwargs)
         root = zarr.open(storage, mode='w')
-        group = root.create_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
+        group = root.require_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
         for target in strax.to_str_tuple(targets):
             idx = 0
             zarray = None
