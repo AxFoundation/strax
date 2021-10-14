@@ -437,7 +437,7 @@ class Plugin:
                         f"Plugin {d} terminated without fetching last {d}!")
 
             # This can happen especially in time range selections
-            if int(self.save_when) >= strax.SaveWhen.EXPLICIT:
+            if int(self.save_when) > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
