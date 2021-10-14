@@ -1360,6 +1360,56 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
+
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', 
+                progress_bar=False, overwrite=True, **kwargs):
+        """get perisistant arrays using zarr. This is useful when
+            loading large amounts of data that cannot fit in memory
+            zarr is very compatible with dask.
+            Targets are loaded into separate arrays and runs are merged.
+            the data is added to any existing data in the storage location.
+  
+        :param run_ids: (Iterable) Run ids you wish to load.
+        :param targets: (Iterable) targets to load.
+        :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
+        :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at given path.
+   
+        :returns zarr.Group: zarr group containing the persistant arrays available at
+                        the storage location after loading the requested data
+                        the runs loaded into a given array can be seen in the
+                        array .attrs['RUNS'] field
+        """
+        import zarr
+        context_hash = self._context_hash()
+        kwargs_hash = strax.deterministic_hash(kwargs)
+        root = zarr.open(storage, mode='w')
+        group = root.require_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
+        for target in strax.to_str_tuple(targets):
+            idx = 0
+            zarray = None
+            if target in group:
+                zarray = group[target]
+                if not overwrite:
+                    idx = zarray.size
+            INSERTED = {}
+            for run_id in strax.to_str_tuple(run_ids):
+                if zarray is not None and run_id in zarray.attrs.get('RUNS', {}):
+                    continue
+                key = self.key_for(run_id, target)
+                INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
+                for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
+                    end_idx = idx+chunk.data.size
+                    if zarray is None:
+                        dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
+                        zarray = group.create_dataset(target, shape=end_idx, dtype=dtype)
+                    else:
+                        zarray.resize(end_idx)
+                    zarray[idx:end_idx] = chunk.data
+                    idx = end_idx
+                    INSERTED[run_id]['end_idx'] = end_idx
+            zarray.attrs['RUNS'] = dict(zarray.attrs.get('RUNS', {}), **INSERTED)
+        return group
+
     def key_for(self, run_id, target):
         """
         Get the DataKey for a given run and a given target plugin. The
