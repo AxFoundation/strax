@@ -433,7 +433,9 @@ class Context:
         # Also take into account the versions of the plugins registered
         base_hash_on_config.update(
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
-             for data_type, plugin in self._plugin_class_registry.items()})
+             for data_type, plugin in self._plugin_class_registry.items()
+             if not data_type.startswith('_temp_')
+            })
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -454,22 +456,26 @@ class Context:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
-        if self._fixed_plugin_cache is None or context_hash not in self._fixed_plugin_cache:
+        if self._fixed_plugin_cache is None:
+            self._fixed_plugin_cache = {context_hash: dict()}
+        elif context_hash not in self._fixed_plugin_cache:
             # Create a new cache every time the hash is not matching to
             # save memory. If a config changes, building the cache again
             # should be fast, we just need to track which cache to use.
+            self.log.info('Replacing context._fixed_plugin_cache since '
+                          'plugins/versions changed')
             self._fixed_plugin_cache = {context_hash: dict()}
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
-    def _fix_dependency(self, plugin_resistry: dict, end_plugin: str):
+    def _fix_dependency(self, plugin_registry: dict, end_plugin: str):
         """
         Starting from end-plugin, fix the dtype until there is nothing
         left to fix. Keep in mind that dtypes can be chained.
         """
-        for go_to in plugin_resistry[end_plugin].depends_on:
-            self._fix_dependency(plugin_resistry, go_to)
-        plugin_resistry[end_plugin].fix_dtype()
+        for go_to in plugin_registry[end_plugin].depends_on:
+            self._fix_dependency(plugin_registry, go_to)
+        plugin_registry[end_plugin].fix_dtype()
 
     def __get_plugins_from_cache(self,
                                  run_id: str) -> ty.Dict[str, strax.Plugin]:
@@ -727,7 +733,7 @@ class Context:
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
 
-                # Make subruns if they do not exist, since we do not 
+                # Make subruns if they do not exist, since we do not
                 # want to store data twice in case we store the superrun
                 # we have to deactivate the storage converter mode.
                 stc_mode = self.context_config['storage_converter']
@@ -770,13 +776,17 @@ class Context:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
                 if (time_range is not None
-                        and plugins[target_i].save_when != strax.SaveWhen.NEVER):
+                        and plugins[target_i].save_when > strax.SaveWhen.EXPLICIT):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
-                    raise strax.DataNotAvailable(
-                        f"Time range selection assumes data is already "
-                        f"available, but {target_i} for {run_id} is not.")
+                    error_message = (
+                        f"Time range selection assumes data is already available,"
+                        f" but {target_i} for {run_id} is not.")
+                    if plugins[target_i].save_when == strax.SaveWhen.TARGET:
+                        error_message += (f"\nFirst run st.make({run_id}, "
+                                          f"{target_i}) to make {target_i}.")
+                    raise strax.DataNotAvailable(error_message)
                 if '*' in self.context_config['forbid_creation_of']:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
@@ -785,18 +795,18 @@ class Context:
                     raise strax.DataNotAvailable(
                         f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
-                    
+
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
-            
+
             # Should we save this data? If not, return.
             if (loading_this_data
                     and not self.context_config['storage_converter']
                     and not self.context_config['write_superruns']):
                 return
-            if (loading_this_data 
-                    and not self.context_config['write_superruns'] 
+            if (loading_this_data
+                    and not self.context_config['write_superruns']
                     and _is_superrun):
                 return
             if target_plugin.save_when == strax.SaveWhen.NEVER:
@@ -851,7 +861,7 @@ class Context:
                         continue
                     if loading_this_data:
                         # Usually, we don't save if we're loading
-                        if (not self.context_config['storage_converter'] 
+                        if (not self.context_config['storage_converter']
                                 and (not self.context_config['write_superruns'] and _is_superrun)):
                             continue
                             # ... but in storage converter mode we do,
@@ -1023,9 +1033,9 @@ class Context:
         # Keep a copy of the list of targets for apply_function
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
-        
+
         _is_superrun = run_id.startswith('_')
-        
+
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
@@ -1350,6 +1360,56 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
+
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', 
+                progress_bar=False, overwrite=True, **kwargs):
+        """get perisistant arrays using zarr. This is useful when
+            loading large amounts of data that cannot fit in memory
+            zarr is very compatible with dask.
+            Targets are loaded into separate arrays and runs are merged.
+            the data is added to any existing data in the storage location.
+  
+        :param run_ids: (Iterable) Run ids you wish to load.
+        :param targets: (Iterable) targets to load.
+        :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
+        :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at given path.
+   
+        :returns zarr.Group: zarr group containing the persistant arrays available at
+                        the storage location after loading the requested data
+                        the runs loaded into a given array can be seen in the
+                        array .attrs['RUNS'] field
+        """
+        import zarr
+        context_hash = self._context_hash()
+        kwargs_hash = strax.deterministic_hash(kwargs)
+        root = zarr.open(storage, mode='w')
+        group = root.require_group(context_hash+'/'+kwargs_hash, overwrite=overwrite)
+        for target in strax.to_str_tuple(targets):
+            idx = 0
+            zarray = None
+            if target in group:
+                zarray = group[target]
+                if not overwrite:
+                    idx = zarray.size
+            INSERTED = {}
+            for run_id in strax.to_str_tuple(run_ids):
+                if zarray is not None and run_id in zarray.attrs.get('RUNS', {}):
+                    continue
+                key = self.key_for(run_id, target)
+                INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
+                for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
+                    end_idx = idx+chunk.data.size
+                    if zarray is None:
+                        dtype = [(d[0][1], )+d[1:] for d in chunk.dtype.descr]
+                        zarray = group.create_dataset(target, shape=end_idx, dtype=dtype)
+                    else:
+                        zarray.resize(end_idx)
+                    zarray[idx:end_idx] = chunk.data
+                    idx = end_idx
+                    INSERTED[run_id]['end_idx'] = end_idx
+            zarray.attrs['RUNS'] = dict(zarray.attrs.get('RUNS', {}), **INSERTED)
+        return group
+
     def key_for(self, run_id, target):
         """
         Get the DataKey for a given run and a given target plugin. The
@@ -1361,7 +1421,14 @@ class Context:
         :return: strax.DataKey of the target
         """
         if self._plugins_are_cached((target,)):
-            plugins = self._fixed_plugin_cache[self._context_hash()]
+            context_hash = self._context_hash()
+            if context_hash in self._fixed_plugin_cache:
+                plugins = self._fixed_plugin_cache[self._context_hash()]
+            else:
+                # This once happened due to temp. plugins, should not happen again
+                self.log.warning(f'Context hash changed to {context_hash} for '
+                                 f'{self._plugin_class_registry}?')
+                plugins = self._get_plugins((target,), run_id)
         else:
             plugins = self._get_plugins((target,), run_id)
 

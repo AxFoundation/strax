@@ -13,3 +13,5 @@ pdmongo
 lz4
 immutabledict
 packaging
+zarr
+fsspec
