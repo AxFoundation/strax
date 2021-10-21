@@ -1,6 +1,7 @@
+# The order is not trivial! Some installers will install dependencies top down.
+numba>=0.43.1
 numpy>=1.18.5
 pandas
-numba>=0.43.1, < 0.54
 blosc
 zstd
 tqdm>=4.46.0
