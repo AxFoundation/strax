@@ -15,7 +15,7 @@ on:
 
 jobs:
   update:
-    name: "${{ matrix.test }}_py${{ matrix.python-version }}"
+    name: "py${{ matrix.python-version }}"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
