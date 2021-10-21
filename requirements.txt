@@ -8,9 +8,6 @@ tqdm>=4.46.0
 dill
 psutil
 numexpr
-scipy
-pymongo
-pdmongo
 lz4
 immutabledict
 packaging
