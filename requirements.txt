@@ -1,6 +1,6 @@
 numpy>=1.18.5
 pandas
-numba>=0.43.1
+numba>=0.43.1, < 0.54
 blosc
 zstd
 tqdm>=4.46.0
