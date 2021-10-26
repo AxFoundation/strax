@@ -261,55 +261,6 @@ class Plugin:
             lineage=self.lineage,
             chunk_target_size_mb=self.chunk_target_size_mb)
 
-    def dependencies_by_kind(self):
-        """Return dependencies grouped by data kind
-        i.e. {kind1: [dep0, dep1], kind2: [dep, dep]}
-        :param require_time: If True, one dependency of each kind
-        must provide time information. It will be put first in the list.
-
-        If require_time is omitted, we will require time only if there is
-        more than one data kind in the dependencies.
-        """
-        return strax.group_by_kind(
-            self.depends_on,
-            plugins=self.deps)
-
-    def is_ready(self, chunk_i):
-        """Return whether the chunk chunk_i is ready for reading.
-        Returns True by default; override if you make an online input plugin.
-        """
-        return True
-
-    def source_finished(self):
-        """Return whether all chunks the plugin wants to read have been written.
-        Only called for online input plugins.
-        """
-        # Don't raise NotImplementedError, IDE complains
-        raise RuntimeError("source_finished called on a regular plugin")
-
-    def _fetch_chunk(self, d, iters, check_end_not_before=None):
-        """Add a chunk of the datatype d to the input buffer.
-        Return True if this succeeded, False if the source is exhausted.
-        :param d: data type to fetch
-        :param iters: iterators that produce data
-        :param check_end_not_before: Raise a runtimeError if the source 
-        is exhausted, but the input buffer ends before this time.
-        """
-        try:
-            # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
-            self.input_buffer[d] = strax.Chunk.concatenate(
-                [self.input_buffer[d], next(iters[d])])
-            # print(f"Fetched {d} in {self}, "
-            #      f"now have {self.input_buffer[d]}")
-            return True
-        except StopIteration:
-            # print(f"Got StopIteration while fetching for {d} in {self}")
-            if (check_end_not_before is not None
-                    and self.input_buffer[d].end < check_end_not_before):
-                raise RuntimeError(
-                    f"Tried to get data until {check_end_not_before}, but {d} "
-                    f"ended prematurely at {self.input_buffer[d].end}")
-            return False
 
     def cleanup(self, wait_for):
         pass
