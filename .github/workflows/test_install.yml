@@ -1,0 +1,36 @@
+# Test if we can actually install strax by installing
+name: Installation test
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+  pull_request:
+    branches:
+      - master
+      - stable
+  push:
+    branches:
+      - master
+
+jobs:
+  update:
+    name: "py${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8]
+    steps:
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install strax
+        run: python setup.py install
+      - name: Test import
+        run: python -c "import strax; print(strax.__version__)"
+      - name: goodbye
+        run: echo goodbye
