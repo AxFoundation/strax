@@ -191,6 +191,7 @@ class Config(Option):
     def __init__(self, **kwargs):
         if 'name' not in kwargs:
             kwargs['name'] = ''
+        self.depends_on = kwargs.pop('depends_on', ())
         super().__init__(**kwargs)
 
     def __set_name__(self, owner, name):
