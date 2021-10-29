@@ -238,6 +238,15 @@ class TestPerRunDefaults(unittest.TestCase):
     def test_register_all_no_defaults_and_allowed(self):
         self.test_register_all_no_defaults(runs_default_allowed=True)
 
+    def test_deregister(self):
+        """Tests if plugin cleaning is working:"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st._plugin_class_registry.pop('records', None)
+        st.deregister_plugins()
+        assert st._plugin_class_registry.pop('peaks', None) is None
+
     def get_context(self, use_defaults):
         """Get simple context where we have one mock run in the only storage frontend"""
         assert isinstance(use_defaults, bool)
