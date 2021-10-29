@@ -186,8 +186,9 @@ class Option:
 #Backward compatibility
 @export
 class Config(Option):
-    def __init__(self, modifier: ty.Callable = None, **kwargs):
-        self.modifier = modifier
+    depends_on: ty.Tuple = ()
+
+    def __init__(self, **kwargs):
         if 'name' not in kwargs:
             kwargs['name'] = ''
         super().__init__(**kwargs)
@@ -209,18 +210,66 @@ class Config(Option):
             owner.takes_config = immutabledict(takes_config)
 
     def __get__(self, obj, objtype=None):
-        if hasattr(obj, 'config') and self.name in obj.config:
-            val = obj.config[self.name]
-        else:
-            val = self.get_default(obj.run_id)
-        if self.modifier is not None:
-            val = self.modifier(obj.run_id, val)
-        return val
+        kwargs = {k: getattr(k) for k in self.depends_on}
+        return self.fetch(obj, **kwargs)
 
     def __set__(self, obj, value):
         obj.config[self.name] = value
 
+    def fetch(self, plugin, **kwargs):
+        return plugin.config[self.name]
 
+@export
+class CallableConfig(Config):
+    func: ty.Callable
+
+    def __init__(self, func: ty.Callable, **kwargs):
+        if not isinstance(func, ty.Callable):
+            raise TypeError('func parameter must be of type Callable.')
+        self.func = func
+
+    def fetch(self, plugin, **kwargs):
+        value = super().fetch(plugin, **kwargs)
+        value = self.func(value, **kwargs)
+        return value
+@export
+class LookupConfig(Config):
+    mapping: ty.Mapping
+    keys = ty.Iterable
+
+    def __init__(self, mapping: ty.Mapping, keys=('name', 'value')):
+        self.mapping = mapping
+        self.keys = keys
+        
+    def fetch(self, plugin, **kwargs):
+        kwargs['name'] = self.name
+        kwargs['value'] = plugin.config[self.name]
+        key = tuple(kwargs[k] for k in self.keys)
+        return self.mapping[key]
+@export
+class RemoteConfig(Config):
+    storages: ty.Iterable
+    name_key: str
+    value_key: str
+    
+    def __init__(self, storages, name_key='name', value_key='value', **kwargs):
+        super().__init__(**kwargs)
+        self.storages = storages
+        self.name_key = name_key
+        self.value_key = value_key
+        
+    def fetch(self, plugin, **kwargs):
+        kwargs[self.name_key] = self.name
+        kwargs[self.value_key] = plugin.config[self.name]
+        for store in self.storages:
+            v = store.get_value(**kwargs)
+            if v is not None:
+                break
+        else:
+            raise KeyError(f'A value for the {self.name} config has not been \
+                            found in any of its registered storages.')
+        return v
+    
 
 @export
 def combine_configs(old_config, new_config=None, mode='update'):

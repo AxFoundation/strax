@@ -149,6 +149,22 @@ class Plugin:
     def __deepcopy__(self):
         return self.__copy__(_deep_copy=True)
 
+    def __getattr__(self, name):
+        """
+        allow access to config parameters as attributes
+        this allows backwards compatibility in cases where
+        a descriptor style config depends on a non descriptor
+        stype config.
+        """
+        if hasattr(self, 'config') and name in self.config:
+            message = '''
+            Looks like you are mixing config paradigms,
+            this is not recommended.
+            '''
+            warn(message, UserWarning)
+            return self.config[name]
+        raise AttributeError(f'{self.__class__.__name__} instance has no attribute {name}')
+
     def fix_dtype(self):
         try:
             # Infer dtype should always precede self.dtype (e.g. due to
