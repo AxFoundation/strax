@@ -285,9 +285,9 @@ class Context:
 
         return plugin_class
 
-    def deregister_plugins(self):
+    def deregister_plugins_with_missing_dependencies(self):
         """
-        Function which will deregister plugins in case a data_type the plugin
+        Deregister plugins in case a data_type the plugin
         depends on is not provided by any other plugin.
         """
         registry_changed = True
@@ -304,7 +304,8 @@ class Context:
                     plugins_to_deregister.append(p_key)
 
             for p_key in plugins_to_deregister:
-                self._plugin_class_registry.pop(p_key, None)
+                self.log.info(f'Deregister {p_key}')
+                del self._plugin_class_registry[p_key]
 
             if not len(plugins_to_deregister):
                 registry_changed = False
