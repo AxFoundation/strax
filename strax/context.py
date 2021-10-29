@@ -828,7 +828,7 @@ class Context:
             # Should we save this data? If not, return.
             if (loading_this_data
                     and not self.context_config['storage_converter']
-                    and not self.context_config['write_superruns']):
+                    and not (self.context_config['write_superruns'] and _is_superrun)):
                 return
             if (loading_this_data
                     and not self.context_config['write_superruns']
