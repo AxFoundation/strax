@@ -13,8 +13,8 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
     :param peaks: Record array of strax peak dtype.
     :param start_merge_at: Indices to start merge at
     :param end_merge_at: EXCLUSIVE indices to end merge at
-    :param max_buffer: Maximum number of samples in the sum_waveforms of
-    the resulting peaks (after merging).
+    :param max_buffer: Maximum number of samples in the sum_waveforms
+    and other waveforms of the resulting peaks (after merging).
 
     Peaks must be constructed based on the properties of constituent peaks,
     it being too time-consuming to revert to records/hits.
@@ -24,6 +24,8 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
+    buffer_top = np.zeros(max_buffer, dtype=np.float32)
+    buffer_bot = np.zeros(max_buffer, dtype=np.float32)
 
     for new_i, new_p in enumerate(new_peaks):
 
@@ -39,7 +41,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         new_p['length'] = \
             (strax.endtime(last_peak) - new_p['time']) // common_dt
 
-        # re-zero relevant part of buffer (overkill? not sure if
+        # re-zero relevant part of buffers (overkill? not sure if
         # this saves much time)
         buffer[:min(
             int(
@@ -50,14 +52,36 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             ),
             len(buffer)
         )] = 0
+        buffer_top[:min(
+            int(
+                (
+                        last_peak['time']
+                        + (last_peak['length'] * old_peaks['dt'].max())
+                        - first_peak['time']) / common_dt
+            ),
+            len(buffer_top)
+        )] = 0
+        buffer_bot[:min(
+            int(
+                (
+                        last_peak['time']
+                        + (last_peak['length'] * old_peaks['dt'].max())
+                        - first_peak['time']) / common_dt
+            ),
+            len(buffer_bot)
+        )] = 0
 
         for p in old_peaks:
-            # Upsample the sum waveform into the buffer
+            # Upsample the sum and top/bottom array waveforms into their buffers
             upsample = p['dt'] // common_dt
             n_after = p['length'] * upsample
             i0 = (p['time'] - new_p['time']) // common_dt
             buffer[i0: i0 + n_after] = \
                 np.repeat(p['data'][:p['length']], upsample) / upsample
+            buffer_top[i0: i0 + n_after] = \
+                np.repeat(p['data_top'][:p['length']], upsample) / upsample
+            buffer_bot[i0: i0 + n_after] = \
+                np.repeat(p['data_bot'][:p['length']], upsample) / upsample
 
             # Handle the other peak attributes
             new_p['area'] += p['area']
@@ -65,8 +89,11 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             new_p['n_hits'] += p['n_hits']
             new_p['saturated_channel'][p['saturated_channel'] == 1] = 1
 
-        # Downsample the buffer into new_p['data']
-        strax.store_downsampled_waveform(new_p, buffer)
+        # Downsample the buffers into new_p['data'], new_p['data_top'],
+        # and new_p['data_bot']
+        strax.store_downsampled_waveform(new_p, buffer, target_field='data')
+        strax.store_downsampled_waveform(new_p, buffer_top, target_field='data_top')
+        strax.store_downsampled_waveform(new_p, buffer_bot, target_field='data_bot')
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
@@ -140,7 +167,7 @@ def _replace_merged(result, orig, merge, skip_windows):
     
 @export
 @numba.njit(cache=True, nogil=True)
-def add_lone_hits(peaks, lone_hits, to_pe):
+def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
     """
     Function which adds information from lone hits to peaks if lone hit
     is inside a peak (e.g. after merging.). Modifies peak area and data
@@ -149,6 +176,7 @@ def add_lone_hits(peaks, lone_hits, to_pe):
     :param peaks: Numpy array of peaks
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
+    :param n_top_channels: Number of top array channels.
     """
     fully_contained_index = strax.fully_contained_in(lone_hits, peaks)
 
@@ -159,6 +187,12 @@ def add_lone_hits(peaks, lone_hits, to_pe):
         lh_area = lh_i['area'] * to_pe[lh_i['channel']]
         p['area'] += lh_area
 
-        # Add lone hit as delta pulse to waveform:
+        # Add lone hit as delta pulse to waveforms:
         index = (p['time'] - lh_i['time'])//p['dt']
         p['data'][index] += lh_area
+
+        if n_top_channels > 0:
+            if lh_i['channel'] < n_top_channels:
+                p['data_top'][index] += lh_area
+            else:
+                p['data_bot'][index] += lh_area

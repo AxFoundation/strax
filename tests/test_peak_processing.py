@@ -64,6 +64,7 @@ def test__build_hit_waveform(records):
 def test_sum_waveform(records):
     # Make a single big peak to contain all the records
     n_ch = 100
+    n_top_channels = 50
   
     rlinks = strax.record_links(records)
     hits = strax.find_hits(records, np.ones(n_ch))
@@ -77,7 +78,7 @@ def test_sum_waveform(records):
                              min_area=0,
                              min_channels=1,
                              max_duration=10_000_000)
-    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch))
+    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels)
     
     for p in peaks:
         # Area measures must be consistent
@@ -93,9 +94,13 @@ def test_sum_waveform(records):
 
         assert np.all(p['data'][:p['length']] == sum_wv)
 
+        # top and bottom array waveforms must yield summed waveform
+        np.testing.assert_allclose(p['data_top'] + p['data_bot'], p['data'])
+
 
         # Finally check that we also can use a selection of peaks to sum
-        strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), select_peaks_indices=np.array([0]))
+        strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels,
+                           select_peaks_indices=np.array([0]))
 
 
 @settings(deadline=None)
