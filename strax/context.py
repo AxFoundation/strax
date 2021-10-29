@@ -285,6 +285,30 @@ class Context:
 
         return plugin_class
 
+    def deregister_plugins(self):
+        """
+        Function which will deregister plugins in case a data_type the plugin
+        depends on is not provided by any other plugin.
+        """
+        registry_changed = True
+        while registry_changed:
+            all_provides = set()
+            plugins_to_deregister = []
+
+            for p in self._plugin_class_registry.values():
+                all_provides |= set(p.provides)
+
+            for p_key, p in self._plugin_class_registry.items():
+                requires = set(strax.to_str_tuple(p.depends_on))
+                if not requires.issubset(all_provides):
+                    plugins_to_deregister.append(p_key)
+
+            for p_key in plugins_to_deregister:
+                self._plugin_class_registry.pop(p_key, None)
+
+            if not len(plugins_to_deregister):
+                registry_changed = False
+
     def search_field(self, pattern):
         """Find and print which plugin(s) provides a field that matches
         pattern (fnmatch)."""
