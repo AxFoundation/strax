@@ -1041,9 +1041,7 @@ class Context:
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
-                temp_name = ('_temp_'
-                             + ''.join(
-                               random.choices(string.ascii_lowercase, k=10)))
+                temp_name = ('_temp_' + strax.deterministic_hash(targets))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
