@@ -32,6 +32,7 @@ You might also find these presentations useful:
 
     advanced/chunking
     advanced/superrun
+    advanced/out_of_core
     advanced/plugin_dev
     advanced/recompression
     advanced/fuzzy_for

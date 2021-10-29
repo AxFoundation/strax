@@ -20,6 +20,8 @@ class TestSuperRuns(unittest.TestCase):
         # Temp directory for storing record data for the tests.
         # Will be removed during TearDown.
         self.tempdir = tempfile.mkdtemp()
+        self.tempdir2 = tempfile.mkdtemp()  # Required to test writing superruns
+                                            # with two storage frontends
         self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
@@ -238,11 +240,30 @@ class TestSuperRuns(unittest.TestCase):
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
         assert self.context.is_stored(self.superrun_name, 'peaks_extension')
         assert self.context.is_stored(self.subrun_ids[0], 'peaks_extension')
-        
+
+    def test_storing_with_second_sf(self):
+        """Tests if only superrun is written to new sf if subruns
+        already exist in different sf.
+        """
+        self.context.storage[0].readonly=True
+        self.context.storage.append(strax.DataDirectory(self.tempdir2))
+        self.context.make(self.superrun_name, 'records')
+        superrun_sf = self.context.storage.pop(1)
+        # Check if first sf contains superrun, it should not:
+        assert not self.context.is_stored(self.superrun_name, 'records')
+
+        # Now check second sf for which only the superrun should be
+        # stored:
+        self.context.storage = [superrun_sf]
+        assert self.context.is_stored(self.superrun_name, 'records')
+        for subrun in self.subrun_ids:
+            assert not self.context.is_stored(subrun, 'records')
     
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
+        if os.path.exists(self.tempdir2):
+            shutil.rmtree(self.tempdir2)
 
     def _create_subruns(self, n_subruns=3):
         self.now = datetime.datetime.now()
