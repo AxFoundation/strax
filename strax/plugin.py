@@ -437,7 +437,7 @@ class Plugin:
                         f"Plugin {d} terminated without fetching last {d}!")
 
             # This can happen especially in time range selections
-            if int(self.save_when) != strax.SaveWhen.NEVER:
+            if int(self.save_when) > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
@@ -495,7 +495,7 @@ class Plugin:
 
             # For non-saving plugins, don't be strict, just take whatever
             # endtimes are available and don't check time-consistency
-            if int(self.save_when) == strax.SaveWhen.NEVER:
+            if int(self.save_when) <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     end = max([v.end for v in kwargs.values()])  # Don't delete
@@ -869,7 +869,7 @@ class CutPlugin(Plugin):
 class MergeOnlyPlugin(Plugin):
     """Plugin that merges data from its dependencies
     """
-    save_when = SaveWhen.NEVER
+    save_when = SaveWhen.EXPLICIT
 
     def infer_dtype(self):
         deps_by_kind = self.dependencies_by_kind()
