@@ -285,6 +285,31 @@ class Context:
 
         return plugin_class
 
+    def deregister_plugins_with_missing_dependencies(self):
+        """
+        Deregister plugins in case a data_type the plugin
+        depends on is not provided by any other plugin.
+        """
+        registry_changed = True
+        while registry_changed:
+            all_provides = set()
+            plugins_to_deregister = []
+
+            for p in self._plugin_class_registry.values():
+                all_provides |= set(p.provides)
+
+            for p_key, p in self._plugin_class_registry.items():
+                requires = set(strax.to_str_tuple(p.depends_on))
+                if not requires.issubset(all_provides):
+                    plugins_to_deregister.append(p_key)
+
+            for p_key in plugins_to_deregister:
+                self.log.info(f'Deregister {p_key}')
+                del self._plugin_class_registry[p_key]
+
+            if not len(plugins_to_deregister):
+                registry_changed = False
+
     def search_field(self, pattern):
         """Find and print which plugin(s) provides a field that matches
         pattern (fnmatch)."""
@@ -803,7 +828,7 @@ class Context:
             # Should we save this data? If not, return.
             if (loading_this_data
                     and not self.context_config['storage_converter']
-                    and not self.context_config['write_superruns']):
+                    and not (self.context_config['write_superruns'] and _is_superrun)):
                 return
             if (loading_this_data
                     and not self.context_config['write_superruns']
@@ -1041,9 +1066,7 @@ class Context:
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
-                temp_name = ('_temp_'
-                             + ''.join(
-                               random.choices(string.ascii_lowercase, k=10)))
+                temp_name = ('_temp_' + strax.deterministic_hash(targets))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
