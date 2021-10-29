@@ -1,3 +1,11 @@
+1.1.1 / 2021-10-27
+---------------------
+- Fix memory leak (#561)
+- Fix superrun creation (#562)
+- Add derigister plugins (#560)
+- Script for testing python setup.py install (#557)
+
+
 1.1.0 / 2021-10-15
 ---------------------
 
