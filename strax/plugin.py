@@ -156,6 +156,8 @@ class Plugin:
         a descriptor style config depends on a non descriptor
         stype config.
         """
+        if name == 'config':
+            raise AttributeError('Plugin not configured yet.')
         if hasattr(self, 'config') and name in self.config:
             message = '''
             Looks like you are mixing config paradigms,
@@ -163,6 +165,8 @@ class Plugin:
             '''
             warn(message, UserWarning)
             return self.config[name]
+            
+
         raise AttributeError(f'{self.__class__.__name__} instance has no attribute {name}')
 
     def fix_dtype(self):
