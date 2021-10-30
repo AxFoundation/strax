@@ -285,12 +285,25 @@ class DispatchConfig(Config):
     dispatcher = ProtocolDispatch()
     register = dispatcher.register
 
+    def __init__(self, **kwargs):
+        # Ensure backwards compatibility with Option validation
+        # type of the config value can be different from the fetched value.
+        if kwargs['type'] is not OMITTED:
+            self.final_type = kwargs['type']
+            kwargs['type'] = OMITTED # do not enforce type on the URL
+        super().__init__(**kwargs)
+
     def fetch(self, plugin, **kwargs):
         url = super().fetch(plugin, **kwargs)
         if not isinstance(url, str):
-            return url
-        return self.dispatcher(url, **kwargs)
-
+            value = url
+        else:
+            value = self.dispatcher(url, **kwargs)
+        if self.final_type is not OMITTED and not isinstance(value, self.final_type):
+            raise InvalidConfiguration(
+                    f"Invalid type for option {self.name}. "
+                    f"Excepted a {self.final_type}, got a {type(value)}")
+        return value
 
 @export
 def combine_configs(old_config, new_config=None, mode='update'):

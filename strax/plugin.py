@@ -154,7 +154,7 @@ class Plugin:
         allow access to config parameters as attributes
         this allows backwards compatibility in cases where
         a descriptor style config depends on a non descriptor
-        stype config.
+        style config.
         """
         if name == 'config':
             raise AttributeError('Plugin not configured yet.')

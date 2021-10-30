@@ -620,8 +620,6 @@ def apply_selection(x,
 
     return x
 
-
-
 def parse_val(val):
     try:
         val = literal_eval(val)
@@ -646,7 +644,8 @@ def filter_kwargs(func, kwargs):
     params = inspect.signature(func).parameters
     if any([str(p).startswith('**') for p in params.values()]):
         return kwargs
-    return {k:v for k,v in kwargs.items() if k in params}    
+    return {k:v for k,v in kwargs.items() if k in params}
+    
 class ProtocolDispatch:
     """Dispatch by protocol.
     unrecognized protocol returns identity
