@@ -213,7 +213,7 @@ class Config(Option):
             owner.takes_config = immutabledict(takes_config)
 
     def __get__(self, obj, objtype=None):
-        kwargs = {k: getattr(k) for k in self.depends_on}
+        kwargs = {k: getattr(obj, k) for k in self.depends_on}
         return self.fetch(obj, **kwargs)
 
     def __set__(self, obj, value):
@@ -283,10 +283,10 @@ class RemoteConfig(Config):
 @export
 class DispatchConfig(Config):
     dispatcher = ProtocolDispatch()
-    register_protocol = dispatcher.register
+    register = dispatcher.register
 
     def fetch(self, plugin, **kwargs):
-        url = plugin.config[self.name]
+        url = super().fetch(plugin, **kwargs)
         if not isinstance(url, str):
             return url
         return self.dispatcher(url, **kwargs)

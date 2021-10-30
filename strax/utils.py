@@ -642,6 +642,11 @@ def url_arg_kwargs(url):
             kwargs[k] = map(parse_val, v)
     return arg, kwargs
 
+def filter_kwargs(func, kwargs):
+    params = inspect.signature(func).parameters
+    if any([str(p).startswith('**') for p in params.values()]):
+        return kwargs
+    return {k:v for k,v in kwargs.items() if k in params}    
 class ProtocolDispatch:
     """Dispatch by protocol.
     unrecognized protocol returns identity
@@ -675,14 +680,14 @@ class ProtocolDispatch:
         previous protocol as input
         overrides are passed to any protocol whos signature can accept them.
         """
-        protocol, _, url =  url.partition(self.sep)
-        if self.sep in url:
-            arg = self(url)
+        protocol, _, path =  url.partition(self.sep)
+        if self.sep in path:
+            arg = self(path)
         else:
-            arg, kwargs = url_arg_kwargs(url)
+            arg, kwargs = url_arg_kwargs(path)
         meth = self.dispatch(protocol)
         if meth is None:
             return url
-        param_names = list(inspect.signature(meth).parameters)
-        kwargs.update({k:v for k,v in overrides.items() if k in param_names})
-        return meth(arg, **kwargs)
+        overrides = filter_kwargs(meth, overrides)
+        kwargs.update(overrides)
+        return meth(arg, **kwargs)  
