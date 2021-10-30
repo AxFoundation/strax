@@ -5,6 +5,9 @@ import contextlib
 from functools import wraps
 import json
 import re
+import inspect
+from urllib.parse import urlparse, parse_qs
+from ast import literal_eval
 import sys
 import traceback
 import typing as ty
@@ -616,3 +619,70 @@ def apply_selection(x,
         del x2
 
     return x
+
+
+
+def parse_val(val):
+    try:
+        val = literal_eval(val)
+    except:
+        pass
+    return val
+
+def url_arg_kwargs(url):
+    arg, _, _ = url.partition('?')
+    kwargs = {}
+    for k,v in parse_qs(urlparse(url).query).items():
+        n = len(v)
+        if not n:
+            kwargs[k] = None
+        elif n==1:
+            kwargs[k] = parse_val(v[0])
+        else:
+            kwargs[k] = map(parse_val, v)
+    return arg, kwargs
+
+class ProtocolDispatch:
+    """Dispatch by protocol.
+    unrecognized protocol returns identity
+    inspired by dasks Dispatch and fsspec fs protocols.
+    """
+    def __init__(self, name=None, sep='://'):
+        self._lookup = {}
+        if name:
+            self.__name__ = name
+        self.sep = sep
+
+    def register(self, protocol, func=None):
+        """Register dispatch of `func` on urls starting with protocol name `protocol` """
+
+        def wrapper(func):
+            if isinstance(protocol, tuple):
+                for t in protocol:
+                    self.register(t, func)
+            else:
+                self._lookup[protocol] = func
+            return func
+        return wrapper(func) if func is not None else wrapper
+
+    def dispatch(self, protocol):
+        return self._lookup.get(protocol, None)
+        
+    def __call__(self, url, **overrides):
+        """
+        Call the corresponding method based on protocol in url.
+        chained protocols will be called with the result of the
+        previous protocol as input
+        overrides are passed to any protocol whos signature can accept them.
+        """
+        protocol, _, url =  url.partition(self.sep)
+        if self.sep in url:
+            arg = self(url)
+        else:
+            arg, kwargs = url_arg_kwargs(url)
+        meth = self.dispatch(protocol)
+        if meth is None:
+            return url
+        param_names = list(inspect.signature(meth).parameters)
+        kwargs.update({k:v for k,v in overrides.items() if k in param_names})
+        return meth(arg, **kwargs)

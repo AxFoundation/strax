@@ -4,6 +4,8 @@ import typing as ty
 from immutabledict import immutabledict
 
 import strax
+from .utils import ProtocolDispatch
+
 export, __all__ = strax.exporter()
 
 # Placeholder value for omitted values.
@@ -218,19 +220,26 @@ class Config(Option):
         obj.config[self.name] = value
 
     def fetch(self, plugin, **kwargs):
-        return plugin.config[self.name]
-
+        ''' This function is called when the attribute is being 
+        accessed. Should be overriden by subclasses to customize behavior.
+        '''
+        if hasattr(plugin, 'config') and self.name in plugin.config:
+            return plugin.config[self.name]
+        raise AttributeError('Plugin has not been configured.')
+        
 @export
 class CallableConfig(Config):
     func: ty.Callable
 
-    def __init__(self, func: ty.Callable, **kwargs):
+    def __init__(self, func: ty.Callable, extra_kwargs={}, **kwargs):
         if not isinstance(func, ty.Callable):
             raise TypeError('func parameter must be of type Callable.')
         self.func = func
+        self.extra_kwargs = extra_kwargs
 
     def fetch(self, plugin, **kwargs):
         value = super().fetch(plugin, **kwargs)
+        kwargs.update(self.extra_kwargs)
         value = self.func(value, **kwargs)
         return value
 @export
@@ -271,6 +280,14 @@ class RemoteConfig(Config):
                             found in any of its registered storages.')
         return v
     
+@export
+class DispatchConfig(Config):
+    dispatcher = ProtocolDispatch()
+    register_protocol = dispatcher.register
+
+    def fetch(self, plugin, **kwargs):
+        return self.dispatcher(plugin.config[self.name], **kwargs)
+
 
 @export
 def combine_configs(old_config, new_config=None, mode='update'):
