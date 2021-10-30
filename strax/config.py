@@ -286,7 +286,10 @@ class DispatchConfig(Config):
     register_protocol = dispatcher.register
 
     def fetch(self, plugin, **kwargs):
-        return self.dispatcher(plugin.config[self.name], **kwargs)
+        url = plugin.config[self.name]
+        if not isinstance(url, str):
+            return url
+        return self.dispatcher(url, **kwargs)
 
 
 @export
