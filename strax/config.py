@@ -111,7 +111,6 @@ class Option:
         #     warnings.warn(f"The {self.name} option uses default_by_run,"
         #                   f" which will soon stop working!",
         #                   DeprecationWarning)
-
         type = builtins.type
         if sum([self.default is not OMITTED,
                 self.default_factory is not OMITTED,
@@ -232,6 +231,7 @@ class CallableConfig(Config):
     func: ty.Callable
 
     def __init__(self, func: ty.Callable, extra_kwargs={}, **kwargs):
+        super().__init__(**kwargs)
         if not isinstance(func, ty.Callable):
             raise TypeError('func parameter must be of type Callable.')
         self.func = func
@@ -247,7 +247,8 @@ class LookupConfig(Config):
     mapping: ty.Mapping
     keys = ty.Iterable
 
-    def __init__(self, mapping: ty.Mapping, keys=('name', 'value')):
+    def __init__(self, mapping: ty.Mapping, keys=('name', 'value'), **kwargs):
+        super().__init__(**kwargs)
         self.mapping = mapping
         self.keys = keys
         
@@ -286,19 +287,20 @@ class DispatchConfig(Config):
     register = dispatcher.register
 
     def __init__(self, **kwargs):
+        self.final_type = OMITTED
         # Ensure backwards compatibility with Option validation
         # type of the config value can be different from the fetched value.
-        if kwargs['type'] is not OMITTED:
-            self.final_type = kwargs['type']
-            kwargs['type'] = OMITTED # do not enforce type on the URL
         super().__init__(**kwargs)
-
+        if self.type is not OMITTED:
+            self.final_type = self.type
+            self.type = OMITTED # do not enforce type on the URL
+        
     def fetch(self, plugin, **kwargs):
         url = super().fetch(plugin, **kwargs)
-        if not isinstance(url, str):
-            value = url
-        else:
+        if isinstance(url, str):
             value = self.dispatcher(url, **kwargs)
+        else:
+            value = url
         if self.final_type is not OMITTED and not isinstance(value, self.final_type):
             raise InvalidConfiguration(
                     f"Invalid type for option {self.name}. "

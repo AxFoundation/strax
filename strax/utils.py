@@ -645,7 +645,7 @@ def filter_kwargs(func, kwargs):
     if any([str(p).startswith('**') for p in params.values()]):
         return kwargs
     return {k:v for k,v in kwargs.items() if k in params}
-    
+
 class ProtocolDispatch:
     """Dispatch by protocol.
     unrecognized protocol returns identity
@@ -682,11 +682,11 @@ class ProtocolDispatch:
         protocol, _, path =  url.partition(self.sep)
         if self.sep in path:
             arg = self(path)
+            kwargs = {}
         else:
             arg, kwargs = url_arg_kwargs(path)
         meth = self.dispatch(protocol)
         if meth is None:
             return url
-        overrides = filter_kwargs(meth, overrides)
-        kwargs.update(overrides)
+        kwargs.update(filter_kwargs(meth, overrides))
         return meth(arg, **kwargs)  
