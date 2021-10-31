@@ -2,6 +2,7 @@ import builtins
 import typing as ty
 
 from immutabledict import immutabledict
+from numpy import isin
 
 import strax
 from .utils import ProtocolDispatch
@@ -187,12 +188,9 @@ class Option:
 #Backward compatibility
 @export
 class Config(Option):
-    depends_on: ty.Tuple = ()
-
     def __init__(self, **kwargs):
         if 'name' not in kwargs:
             kwargs['name'] = ''
-        self.depends_on = kwargs.pop('depends_on', ())
         super().__init__(**kwargs)
 
     def __set_name__(self, owner, name):
@@ -212,36 +210,19 @@ class Config(Option):
             owner.takes_config = immutabledict(takes_config)
 
     def __get__(self, obj, objtype=None):
-        kwargs = {k: getattr(obj, k) for k in self.depends_on}
-        return self.fetch(obj, **kwargs)
+        return self.fetch(obj)
 
     def __set__(self, obj, value):
         obj.config[self.name] = value
 
-    def fetch(self, plugin, **kwargs):
+    def fetch(self, plugin):
         ''' This function is called when the attribute is being 
         accessed. Should be overriden by subclasses to customize behavior.
         '''
         if hasattr(plugin, 'config') and self.name in plugin.config:
             return plugin.config[self.name]
         raise AttributeError('Plugin has not been configured.')
-        
-@export
-class CallableConfig(Config):
-    func: ty.Callable
 
-    def __init__(self, func: ty.Callable, extra_kwargs={}, **kwargs):
-        super().__init__(**kwargs)
-        if not isinstance(func, ty.Callable):
-            raise TypeError('func parameter must be of type Callable.')
-        self.func = func
-        self.extra_kwargs = extra_kwargs
-
-    def fetch(self, plugin, **kwargs):
-        value = super().fetch(plugin, **kwargs)
-        kwargs.update(self.extra_kwargs)
-        value = self.func(value, **kwargs)
-        return value
 @export
 class LookupConfig(Config):
     mapping: ty.Mapping
@@ -250,12 +231,26 @@ class LookupConfig(Config):
     def __init__(self, mapping: ty.Mapping, keys=('name', 'value'), **kwargs):
         super().__init__(**kwargs)
         self.mapping = mapping
+        if not isinstance(keys, ty.Iterable):
+            keys = (keys,)
         self.keys = keys
         
-    def fetch(self, plugin, **kwargs):
-        kwargs['name'] = self.name
-        kwargs['value'] = plugin.config[self.name]
-        key = tuple(kwargs[k] for k in self.keys)
+    def fetch(self, plugin):
+        key = []
+        for k in self.keys:
+            if k=='name':
+                v = self.name
+            elif k=='value':
+                v = plugin.config[self.name]
+            elif isinstance(k, str) and hasattr(plugin, k):
+                v = getattr(plugin, k)
+            else:
+                v = k
+            key.append(v)
+        if len(key)==1:
+            key = key[0]
+        else:
+            key = tuple(key)
         return self.mapping[key]
 @export
 class RemoteConfig(Config):
@@ -282,31 +277,49 @@ class RemoteConfig(Config):
         return v
     
 @export
-class DispatchConfig(Config):
+class CallableConfig(Config):
+    func: ty.Callable
+
+    def __init__(self, func: ty.Callable, args=(), kwargs={}, **extra_kwargs):
+        if not isinstance(func, ty.Callable):
+            raise TypeError('func parameter must be of type Callable.')
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        super().__init__(**extra_kwargs)
+    
+    def fetch(self, plugin):
+        args = []
+        for arg in self.args:
+            if isinstance(arg, str) and hasattr(plugin, arg):
+                args.append(getattr(plugin, arg))
+            else:
+                args.append(arg)
+            
+        kwargs = {}
+        for k,v in self.kwargs.items():
+            if isinstance(v, str) and hasattr(plugin, v):
+                kwargs[k] = getattr(plugin, v)
+            else:
+                kwargs[k] = v
+        
+        value = super().fetch(plugin)
+        value = self.func(value, *args, **kwargs)
+        return value
+@export
+class DispatchConfig(CallableConfig):
     dispatcher = ProtocolDispatch()
     register = dispatcher.register
 
-    def __init__(self, **kwargs):
+    def __init__(self, args=(), kwargs={}, **extra_kwargs):
         self.final_type = OMITTED
+        super().__init__(self.dispatcher, args=args, kwargs=kwargs, **extra_kwargs)
         # Ensure backwards compatibility with Option validation
         # type of the config value can be different from the fetched value.
-        super().__init__(**kwargs)
         if self.type is not OMITTED:
             self.final_type = self.type
             self.type = OMITTED # do not enforce type on the URL
         
-    def fetch(self, plugin, **kwargs):
-        url = super().fetch(plugin, **kwargs)
-        if isinstance(url, str):
-            value = self.dispatcher(url, **kwargs)
-        else:
-            value = url
-        if self.final_type is not OMITTED and not isinstance(value, self.final_type):
-            raise InvalidConfiguration(
-                    f"Invalid type for option {self.name}. "
-                    f"Excepted a {self.final_type}, got a {type(value)}")
-        return value
-
 @export
 def combine_configs(old_config, new_config=None, mode='update'):
     if new_config is None:

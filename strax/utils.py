@@ -672,7 +672,7 @@ class ProtocolDispatch:
     def dispatch(self, protocol):
         return self._lookup.get(protocol, None)
         
-    def __call__(self, url, **overrides):
+    def __call__(self, url, *args, **kwargs):
         """
         Call the corresponding method based on protocol in url.
         chained protocols will be called with the result of the
@@ -682,11 +682,12 @@ class ProtocolDispatch:
         protocol, _, path =  url.partition(self.sep)
         if self.sep in path:
             arg = self(path)
-            kwargs = {}
+            overrides = {}
         else:
-            arg, kwargs = url_arg_kwargs(path)
+            arg, overrides = url_arg_kwargs(path)
         meth = self.dispatch(protocol)
         if meth is None:
             return url
-        kwargs.update(filter_kwargs(meth, overrides))
-        return meth(arg, **kwargs)  
+        kwargs.update(overrides)
+        kwargs = filter_kwargs(meth, overrides)
+        return meth(arg, *args, **kwargs)
