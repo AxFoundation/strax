@@ -464,16 +464,18 @@ def multi_run(exec_function, run_ids, *args,
         import logging
         log = logging.getLogger('strax_multi_run')
     
-    # Only schedule twice as many tasks as there are workers to avoid
-    # memory explosion.
+    # Only schedule twice as many tasks as there are workers. In this
+    # way we avoid an overload of memory due to too many runs
+    # (scales with number of runs)
     how_many_tasks_at_once = max_workers*2
     task_index = 0
     
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
-    run_id_output = []  # List to sort data in the end according to output (order may change due
-    # to threads)
+    # List to sort data in the end according to output
+    # (order may change due to threads)
+    run_id_output = []
 
     # Generally we don't want a per run pbar because of multi_run_progress_bar
     kwargs.setdefault('progress_bar', False)
@@ -488,6 +490,7 @@ def multi_run(exec_function, run_ids, *args,
 
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
+        # Submit first bunch of futures, add additional futures later
         futures = {exc.submit(exec_function, r, *args, **kwargs): r
                    for r in itertools.islice(run_id_numpy, task_index, how_many_tasks_at_once)}
 

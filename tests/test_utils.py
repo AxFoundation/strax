@@ -164,18 +164,49 @@ class TestMultiRun(unittest.TestCase):
                                                                   readonly=False,
                                                                   deep_scan=True)],
                                      register=[Records, Peaks],
-                                     config={'bonus_area': 42, 'use_per_run_defaults': False},
+                                     config={'bonus_area': 42,
+                                             'use_per_run_defaults': False,
+                                             'recs_per_chunk': 10**3,
+                                             },
                                      )
         self.run_ids = [str(r) for r in range(5)]
 
         for run_id in self.run_ids:
             self.context.make(run_id, 'records')
 
-    def test_make_multi_run(self):
+    def test_multi_run(self):
         self._test_get_array_multi_run()
+
+    def test_multi_run_more_workers(self):
         self._test_get_array_multi_run(max_worker=2)
+
+    def test_multi_run_multiprocessing(self):
         self.context.set_context_config({'allow_multiprocess': True})
         self._test_get_array_multi_run(max_worker=2)
+
+    def test_multi_run_memory_profile(self):
+        """Tests if multi-runs fills up memory. Use only a single worker
+        hence there should not be at any time more than 2 runs inside the
+        ThreadPoolExecutor.
+        """
+        from memory_profiler import memory_usage
+        # First get overhead to set up computing:
+        mem_overhead = memory_usage((self.context.make,
+                                     ('1', 'records')))
+        mem_overhead = np.mean(mem_overhead)
+
+        # Now get size of a single array:
+        size_per_run = self.context.size_mb('1', 'records')
+        rr_test = self.context.get_array('1', 'records')
+        # Make 50 runs and compare memory usage:
+        used_mem = memory_usage((self.context.make,
+                                 ([str(r) for r in range(50)], 'records'))
+                                )
+        peak_mem = np.mean(used_mem)
+
+        # Be a bit more generous and put the limit to 5 runs. If we
+        # really fill up the memory processing 50 runs should show it.
+        assert peak_mem <= mem_overhead + size_per_run*5
 
     def _test_get_array_multi_run(self, max_worker=None):
         rr = []
