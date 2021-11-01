@@ -491,17 +491,18 @@ def multi_run(exec_function, run_ids, *args,
         futures = {exc.submit(exec_function, r, *args, **kwargs): r
                    for r in itertools.islice(run_id_numpy, task_index, how_many_tasks_at_once)}
 
-        task_index = how_many_tasks_at_once-1
+        task_index = how_many_tasks_at_once
+        tasks_done = 0
         log.debug(f'Submitting first futures: {futures.values()}')
         final_result = []
         while futures:
             futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
 
             for f in futures_done:
+                tasks_done += 1
                 _run_id = futures.pop(f)
-                task_index += 1
                 log.debug(f'Done with run_id: {_run_id} ' 
-                          f'and {len(run_id_numpy)-(task_index-how_many_tasks_at_once)} are left.')
+                          f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
                 if throw_away_result:
                     continue
@@ -515,6 +516,7 @@ def multi_run(exec_function, run_ids, *args,
                 run_id_output.append(_run_id)
 
             for r in itertools.islice(run_id_numpy, task_index, task_index+len(futures_done)):
+                task_index += 1
                 fut = exc.submit(exec_function, r, *args, **kwargs)
                 futures[fut] = r
                 log.debug(f'Submitting additional futures, new futures are: {futures.values()}')
