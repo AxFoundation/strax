@@ -1,7 +1,12 @@
 import numpy as np
+import tempfile
+import unittest
+import os
+import shutil
 import hypothesis.strategies as hst
 from hypothesis import given, settings
 import strax
+from strax.testutils import Records, Peaks, run_id
 
 
 def test_growing_result():
@@ -146,3 +151,47 @@ def test_keep_drop_columns(d):
         assert np.all(selected_data[c] == d[c])
     for c in columns[:1]:
         assert c not in selected_data.dtype.names
+
+
+class TestMultiRun(unittest.TestCase):
+    """Test behavior of multi-runs for various different settings."""
+
+    def setUp(self):
+        """Setup context and make some subruns."""
+        self.tempdir = tempfile.mkdtemp()
+        self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
+                                                                  provide_run_metadata=True,
+                                                                  readonly=False,
+                                                                  deep_scan=True)],
+                                     register=[Records, Peaks],
+                                     config={'bonus_area': 42, 'use_per_run_defaults': False},
+                                     )
+        self.run_ids = [str(r) for r in range(5)]
+
+        for run_id in self.run_ids:
+            self.context.make(run_id, 'records')
+
+    def test_make_multi_run(self):
+        self._test_get_array_multi_run()
+        self._test_get_array_multi_run(max_worker=2)
+        self.context.set_context_config({'allow_multiprocess': True})
+        self._test_get_array_multi_run(max_worker=2)
+
+    def _test_get_array_multi_run(self, max_worker=None):
+        rr = []
+        for run_id in self.run_ids:
+            rr.append(self.context.get_array(run_id, 'records'))
+        rr = np.concatenate(rr)
+
+        rr_multi = self.context.get_array(self.run_ids, 'records', max_worker=max_worker)
+        assert len(rr) == len(rr_multi)
+        assert np.all(rr['time'] == rr_multi['time'])
+
+        # Shuffle run_ids and check if output is sorted:
+        np.random.shuffle(self.run_ids)
+        rr_multi = self.context.get_array(self.run_ids, 'records', max_worker=max_worker)
+        assert np.all(np.diff(rr_multi['run_id'].astype(np.int8)) >= 0)
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir)
+
