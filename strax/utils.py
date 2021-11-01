@@ -680,14 +680,14 @@ class ProtocolDispatch:
         overrides are passed to any protocol whos signature can accept them.
         """
         protocol, _, path =  url.partition(self.sep)
+        arg, overrides = url_arg_kwargs(path)
+        kwargs.update(overrides)
         if self.sep in path:
-            arg = self(path)
-            overrides = {}
-        else:
-            arg, overrides = url_arg_kwargs(path)
+            arg = self(path, **kwargs)
+    
         meth = self.dispatch(protocol)
         if meth is None:
             return url
-        kwargs.update(overrides)
+        
         kwargs = filter_kwargs(meth, overrides)
         return meth(arg, *args, **kwargs)

@@ -164,6 +164,8 @@ class Plugin:
             this is not recommended.
             '''
             warn(message, UserWarning)
+            if isinstance(self.takes_config[name], strax.Config):
+                return self.takes_config[name].__get__(self)
             return self.config[name]
             
 
