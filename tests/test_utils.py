@@ -194,4 +194,3 @@ class TestMultiRun(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tempdir)
-
