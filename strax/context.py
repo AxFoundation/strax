@@ -1221,7 +1221,7 @@ class Context:
         if len(run_ids) > 1:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
-                throw_away_result=True,
+                throw_away_result=True, log=self.log,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
@@ -1245,6 +1245,7 @@ class Context:
         if len(run_ids) > 1:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
+                log=self.log,
                 save=save, max_workers=max_workers, **kwargs)
         else:
             source = self.get_iter(
