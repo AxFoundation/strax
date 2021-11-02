@@ -2,10 +2,7 @@ import datetime
 import logging
 import fnmatch
 from functools import partial
-import random
-import string
 import typing as ty
-import warnings
 import time
 import numpy as np
 import pandas as pd
@@ -212,13 +209,13 @@ class Context:
 
         for k in new_config:
             if k not in self.takes_config:
-                warnings.warn(f"Unknown config option {k}; will do nothing.")
+                self.log.warning(f"Unknown config option {k}; will do nothing.")
 
         self.context_config = new_config
 
         for k in self.context_config:
             if k not in self.takes_config:
-                warnings.warn(f"Invalid context option {k}; will do nothing.")
+                self.log.warning(f"Invalid context option {k}; will do nothing.")
 
     def register(self, plugin_class):
         """Register plugin_class as provider for data types in provides.
@@ -552,7 +549,7 @@ class Context:
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
             if not (k in all_opts or k in self.context_config['free_options']):
-                warnings.warn(f"Option {k} not taken by any registered plugin", UserWarning, 2)
+                self.log.warning(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
