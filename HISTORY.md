@@ -1,3 +1,37 @@
+1.1.1 / 2021-10-27
+---------------------
+- Fix memory leak (#561)
+- Fix superrun creation (#562)
+- Add deregister plugins (#560)
+- Script for testing python setup.py install (#557)
+
+
+1.1.0 / 2021-10-15
+---------------------
+
+major / minor:
+
+- Fix hitlet splitting (#549)
+- Add tight channel (#551) 
+
+patch:
+
+- Add read by index plus some extra checks (#529)
+- Add drop column option (#530)
+- Remove context.apply_selection (#531)
+- Add option to support superruns for storage frontends. Adds test (#532)
+- Fix issue #536 (#537) 
+- Two pbar patches (#538)
+- Add get_zarr method to context (#540) 
+- Broken metadata error propagation (#541)
+- few tests for MongoStorage frontend (#542)
+- Fix caching (#545) 
+- dds information about failing chunk (#548)
+- remove rucio (#552) 
+- Allow loading SaveWhen.EXPLICIT time range selection (#553) 
+- Changes to savewhen behavior (#554)
+
+
 1.0.0 / 2021-09-1
 ---------------------
 major / minor:
