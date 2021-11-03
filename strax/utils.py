@@ -1,6 +1,7 @@
 from base64 import b32encode
 import collections
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import itertools
 import contextlib
 from functools import wraps
 import json
@@ -441,6 +442,7 @@ def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
@@ -451,14 +453,29 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param log: logger to be used.
 
     Other (kw)args will be passed to the exec_function.
     """
     if max_workers is None:
         max_workers = 1
 
+    if log is None:
+        import logging
+        log = logging.getLogger('strax_multi_run')
+    
+    # Only schedule twice as many tasks as there are workers. In this
+    # way we avoid an overload of memory due to too many runs
+    # (scales with number of runs)
+    how_many_tasks_at_once = max_workers*2
+    task_index = 0
+    
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
+    run_id_numpy = np.sort(run_id_numpy)
+    # List to sort data in the end according to output
+    # (order may change due to threads)
+    run_id_output = []
 
     # Generally we don't want a per run pbar because of multi_run_progress_bar
     kwargs.setdefault('progress_bar', False)
@@ -466,29 +483,54 @@ def multi_run(exec_function, run_ids, *args,
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
-    with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(exec_function, r, *args, **kwargs)
-                   for r in run_ids]
-        for _ in tqdm(as_completed(futures),
-                      desc="Loading %d runs" % len(run_ids),
-                      disable=not multi_run_progress_bar,
-                      total = len(run_ids)):
-            pass
+    pbar = tqdm(total=len(run_id_numpy), 
+                desc="Loading %d runs" % len(run_ids),
+                disable=not multi_run_progress_bar,
+                )
 
-        result = []
-        for i, f in enumerate(futures):
-            r = f.result()
-            if throw_away_result:
-                continue
-            # Append the run id column
-            ids = np.array([run_id_numpy[i]] * len(r),
-                           dtype=[('run_id', run_id_numpy.dtype)])
-            r = merge_arrs([ids, r])
-            result.append(r)
+    with ThreadPoolExecutor(max_workers=max_workers) as exc:
+        log.debug('Starting ThreadPoolExecutor for multi-run.')
+        # Submit first bunch of futures, add additional futures later
+        futures = {exc.submit(exec_function, r, *args, **kwargs): r
+                   for r in itertools.islice(run_id_numpy, task_index, how_many_tasks_at_once)}
+
+        task_index = how_many_tasks_at_once
+        tasks_done = 0
+        log.debug(f'Submitting first futures: {futures.values()}')
+        final_result = []
+        while futures:
+            futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
+
+            for f in futures_done:
+                tasks_done += 1
+                _run_id = futures.pop(f)
+                log.debug(f'Done with run_id: {_run_id} ' 
+                          f'and {len(run_id_numpy)-tasks_done} are left.')
+                pbar.update(1)
+                if throw_away_result:
+                    continue
+
+                result = f.result()
+                # Append the run id column
+                ids = np.array([_run_id] * len(result),
+                               dtype=[('run_id', run_id_numpy.dtype)])
+                result = merge_arrs([ids, result])
+                final_result.append(result)
+                run_id_output.append(_run_id)
+
+            for r in itertools.islice(run_id_numpy, task_index, task_index+len(futures_done)):
+                task_index += 1
+                fut = exc.submit(exec_function, r, *args, **kwargs)
+                futures[fut] = r
+                log.debug(f'Submitting additional futures, new futures are: {futures.values()}')
 
         if throw_away_result:
+            pbar.close()
             return None
-        return result
+
+        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        pbar.close()
+        return final_result
 
 
 @export
