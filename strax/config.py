@@ -116,14 +116,17 @@ class Option:
                 self.default_by_run is not OMITTED]) > 1:
             raise RuntimeError(f"Tried to specify more than one default "
                                f"for option {self.name}.")
-
-        if infer_dtype is OMITTED and type is OMITTED and default is not OMITTED:
-            warnings.warn(f'You are setting a default value for config {name} but not \
+            
+        if infer_dtype and type is OMITTED and default is not OMITTED:
+            # ------------
+            #FIXME: remove after long enough period to allow fixing problematic options.
+            if infer_dtype is OMITTED:
+                warnings.warn(f'You are setting a default value for config {name} but not \
                 specifying a type. In the future the type will be inferred from \
                 the default value which will result in an error if this config \
                 is set to a different type.')
-
-        if infer_dtype and type is OMITTED and default is not OMITTED:
+                return
+            ## -----------
             for ntype in [numbers.Integral, numbers.Number]:
                 # first check if its a number otherwise numpy numbers
                 # will fail type checking when checked against int and float.
