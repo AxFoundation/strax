@@ -94,6 +94,7 @@ class DataDirectory(StorageFrontend):
 
     def _find(self, key, write,
               allow_incomplete, fuzzy_for, fuzzy_for_options):
+        self.raise_if_non_compatible_run_id(key.run_id)
         dirname = osp.join(self.path, str(key))
         exists = os.path.exists(dirname)
         bk = self.backend_key(dirname)
@@ -192,6 +193,11 @@ class DataDirectory(StorageFrontend):
         # (which FileStore should do) is sufficient.
         pass
 
+    @staticmethod
+    def raise_if_non_compatible_run_id(run_id):
+        if '-' in str(run_id):
+            raise ValueError("The filesystem frontend does not understand"
+                             " run_id's with '-', please replace with '_'")
 
 @export
 def dirname_to_prefix(dirname):

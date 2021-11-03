@@ -309,7 +309,11 @@ class MongoSaver(Saver):
 
 def backend_key_to_query(backend_key):
     """Convert backend key to queryable dictionary"""
-    n, d, l = backend_key.split('-')
+    split_key = backend_key.split('-')
+    if len(split_key) != 3:
+        raise ValueError(f'backend_key ({backend_key}) has too many "-"s,'
+                         f' don\'t use "-" within run_ids')
+    n, d, l = split_key
     return {'number': int(n), 'data_type': d, 'lineage_hash': l}
 
 
