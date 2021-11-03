@@ -1,6 +1,6 @@
 import builtins
 import typing as ty
-
+import numbers
 from immutabledict import immutabledict
 
 import strax
@@ -110,7 +110,6 @@ class Option:
         #                   f" which will soon stop working!",
         #                   DeprecationWarning)
 
-        type = builtins.type
         if sum([self.default is not OMITTED,
                 self.default_factory is not OMITTED,
                 self.default_by_run is not OMITTED]) > 1:
@@ -118,7 +117,18 @@ class Option:
                                f"for option {self.name}.")
 
         if type is OMITTED and default is not OMITTED:
-            self.type = type(default)
+            for ntype in [numbers.Integral, numbers.Number]:
+                # first check if its a number otherwise numpy numbers
+                # will fail type checking when checked against int and float.
+                # numbers.Integral, numbers.Number are safe to use
+                # since numpy registers them as super-classes.
+                # left as a loop since we may want to add other exceptions as
+                # they are discovered.
+                if isinstance(default, ntype):
+                    self.type = ntype
+                    break
+            else:
+                self.type = builtins.type(default)
 
     def get_default(self, run_id, run_defaults: dict = None):
         """Return default value for the option"""

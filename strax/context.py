@@ -69,7 +69,7 @@ tqdm = strax.utils.tqdm
     strax.Option(name='free_options', default=tuple(),
                  help='Do not warn if any of these options are passed, '
                       'even when no registered plugin takes them.'),
-    strax.Option(name='apply_data_function', default=tuple(),
+    strax.Option(name='apply_data_function', default=tuple(), type=(tuple,list,ty.Callable),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
                       'func(<data>, <run_id>, <targets>).'),
