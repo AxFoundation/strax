@@ -679,6 +679,8 @@ class ProtocolDispatch:
         previous protocol as input
         overrides are passed to any protocol whos signature can accept them.
         """
+        if not isinstance(url, str):
+            return url
         protocol, _, path =  url.partition(self.sep)
         arg, overrides = url_arg_kwargs(path)
         kwargs.update(overrides)
@@ -689,5 +691,5 @@ class ProtocolDispatch:
         if meth is None:
             return url
         
-        kwargs = filter_kwargs(meth, overrides)
+        kwargs = filter_kwargs(meth, kwargs)
         return meth(arg, *args, **kwargs)
