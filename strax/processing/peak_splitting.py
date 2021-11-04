@@ -114,7 +114,8 @@ class PeakSplitter:
             # ... and recurse (if needed)
             new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
                              do_iterations=do_iterations - 1,
-                             min_area=min_area, **kwargs)
+                             min_area=min_area,
+                             n_top_channels=n_top_channels, **kwargs)
             if np.any(new_peaks['length'] == 0):
                 raise ValueError('Want to add a new zero-length peak after splitting!')
 
