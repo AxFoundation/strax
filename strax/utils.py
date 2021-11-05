@@ -646,8 +646,8 @@ def filter_kwargs(func, kwargs):
         return kwargs
     return {k:v for k,v in kwargs.items() if k in params}
 
-class ProtocolDispatch:
-    """Dispatch by protocol.
+class URLDispatch:
+    """Dispatch on URL protocol.
     unrecognized protocol returns identity
     inspired by dasks Dispatch and fsspec fs protocols.
     """
@@ -658,7 +658,8 @@ class ProtocolDispatch:
         self.sep = sep
 
     def register(self, protocol, func=None):
-        """Register dispatch of `func` on urls starting with protocol name `protocol` """
+        """Register dispatch of `func` on urls
+         starting with protocol name `protocol` """
 
         def wrapper(func):
             if isinstance(protocol, tuple):

@@ -5,7 +5,7 @@ from immutabledict import immutabledict
 from numpy import isin
 
 import strax
-from .utils import ProtocolDispatch
+from .utils import URLDispatch
 
 export, __all__ = strax.exporter()
 
@@ -307,8 +307,8 @@ class CallableConfig(Config):
         value = self.func(value, *args, **kwargs)
         return value
 @export
-class DispatchConfig(CallableConfig):
-    dispatcher = ProtocolDispatch()
+class URLConfig(CallableConfig):
+    dispatcher = URLDispatch('url_config')
     register = dispatcher.register
 
     def __init__(self, args=(), kwargs={}, **extra_kwargs):
