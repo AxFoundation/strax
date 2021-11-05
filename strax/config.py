@@ -3,9 +3,11 @@ import typing as ty
 
 from immutabledict import immutabledict
 from numpy import isin
+import inspect
+from urllib.parse import urlparse, parse_qs
+from ast import literal_eval
 
 import strax
-from .utils import URLDispatch
 
 export, __all__ = strax.exporter()
 
@@ -50,6 +52,13 @@ def takes_config(*options):
         return plugin_class
 
     return wrapped
+
+def parse_val(val):
+    try:
+        val = literal_eval(val)
+    except:
+        pass
+    return val
 
 
 @export
@@ -307,19 +316,99 @@ class CallableConfig(Config):
         value = self.func(value, *args, **kwargs)
         return value
 @export
-class URLConfig(CallableConfig):
-    dispatcher = URLDispatch('url_config')
-    register = dispatcher.register
+class URLConfig(Config):
+    """Dispatch on URL protocol.
+    unrecognized protocol returns identity
+    inspired by dasks Dispatch and fsspec fs protocols.
+    """
 
-    def __init__(self, args=(), kwargs={}, **extra_kwargs):
+    _lookup = {}
+
+    def __init__(self, sep='://', **kwargs):
         self.final_type = OMITTED
-        super().__init__(self.dispatcher, args=args, kwargs=kwargs, **extra_kwargs)
+        super().__init__(**kwargs)
         # Ensure backwards compatibility with Option validation
         # type of the config value can be different from the fetched value.
         if self.type is not OMITTED:
             self.final_type = self.type
             self.type = OMITTED # do not enforce type on the URL
-        
+        self.sep = sep
+
+    @classmethod
+    def register(cls, protocol, func=None):
+        """Register dispatch of `func` on urls
+         starting with protocol name `protocol` """
+
+        def wrapper(func):
+            if isinstance(protocol, tuple):
+                for t in protocol:
+                    cls.register(t, func)
+            else:
+                cls._lookup[protocol] = func
+            return func
+        return wrapper(func) if func is not None else wrapper
+
+    def dispatch(self, url, *args, **kwargs):
+        """
+        Call the corresponding method based on protocol in url.
+        chained protocols will be called with the result of the
+        previous protocol as input
+        overrides are passed to any protocol whos signature can accept them.
+        """
+        if not isinstance(url, str):
+            return url
+        protocol, _, path =  url.partition(self.sep)
+
+        meth = self._lookup.get(protocol, None)
+        if meth is None:
+            return url
+
+        if self.sep in path:
+            arg = self(path, **kwargs)
+        else:
+            arg = path
+        kwargs = self.filter_kwargs(meth, kwargs)
+        return meth(arg, *args, **kwargs)
+    
+    @staticmethod
+    def split_url_kwargs(url):
+        arg, _, _ = url.partition('?')
+        kwargs = {}
+        for k,v in parse_qs(urlparse(url).query).items():
+            n = len(v)
+            if not n:
+                kwargs[k] = None
+            elif n==1:
+                kwargs[k] = parse_val(v[0])
+            else:
+                kwargs[k] = map(parse_val, v)
+        return arg, kwargs
+    
+    @staticmethod
+    def filter_kwargs(func, kwargs):
+        params = inspect.signature(func).parameters
+        if any([str(p).startswith('**') for p in params.values()]):
+            return kwargs
+        return {k:v for k,v in kwargs.items() if k in params}
+
+    def fetch(self, plugin):
+        url = super().fetch(plugin)
+        if not isinstance(url, str):
+            return url
+        if self.sep not in url:
+            return url 
+        url, url_kwargs = self.split_url_kwargs(url)
+        kwargs = {}
+        for k,v in url_kwargs.items():
+            if isinstance(v, str) and v.startswith('%'):
+                kwargs[k] = v[1:]
+            elif isinstance(v, str) and hasattr(plugin, v):
+                kwargs[k] = getattr(plugin, v)
+            else:
+                kwargs[k] = v
+        return self.dispatch(url, **kwargs)
+
+
 @export
 def combine_configs(old_config, new_config=None, mode='update'):
     if new_config is None:
