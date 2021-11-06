@@ -324,7 +324,7 @@ class URLConfig(Config):
 
     _lookup = {}
 
-    def __init__(self, sep='://', **kwargs):
+    def __init__(self, sep='://', attr_prefix='plugin.', **kwargs):
         self.final_type = OMITTED
         super().__init__(**kwargs)
         # Ensure backwards compatibility with Option validation
@@ -333,6 +333,7 @@ class URLConfig(Config):
             self.final_type = self.type
             self.type = OMITTED # do not enforce type on the URL
         self.sep = sep
+        self.attr_prefix = attr_prefix
 
     @classmethod
     def register(cls, protocol, func=None):
@@ -364,7 +365,7 @@ class URLConfig(Config):
             return url
 
         if self.sep in path:
-            arg = self(path, **kwargs)
+            arg = self.dispatch(path, **kwargs)
         else:
             arg = path
         kwargs = self.filter_kwargs(meth, kwargs)
@@ -400,10 +401,8 @@ class URLConfig(Config):
         url, url_kwargs = self.split_url_kwargs(url)
         kwargs = {}
         for k,v in url_kwargs.items():
-            if isinstance(v, str) and v.startswith('%'):
-                kwargs[k] = v[1:]
-            elif isinstance(v, str) and hasattr(plugin, v):
-                kwargs[k] = getattr(plugin, v)
+            if isinstance(v, str) and v.startswith(self.attr_prefix):
+                kwargs[k] = getattr(plugin, v[len(self.attr_prefix):], v)
             else:
                 kwargs[k] = v
         return self.dispatch(url, **kwargs)
