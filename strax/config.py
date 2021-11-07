@@ -6,6 +6,7 @@ from numpy import isin
 import inspect
 from urllib.parse import urlparse, parse_qs
 from ast import literal_eval
+from functools import lru_cache
 
 import strax
 
@@ -323,8 +324,9 @@ class URLConfig(Config):
     """
 
     _lookup = {}
+    _cache = {}
 
-    def __init__(self, sep='://', attr_prefix='plugin.', **kwargs):
+    def __init__(self, sep='://', attr_prefix='plugin.', cache=False, **kwargs):
         self.final_type = OMITTED
         super().__init__(**kwargs)
         # Ensure backwards compatibility with Option validation
@@ -334,6 +336,8 @@ class URLConfig(Config):
             self.type = OMITTED # do not enforce type on the URL
         self.sep = sep
         self.attr_prefix = attr_prefix
+        if cache:
+            self.dispatch = lru_cache()(self.dispatch)
 
     @classmethod
     def register(cls, protocol, func=None):
@@ -405,6 +409,7 @@ class URLConfig(Config):
                 kwargs[k] = getattr(plugin, v[len(self.attr_prefix):], v)
             else:
                 kwargs[k] = v
+        
         return self.dispatch(url, **kwargs)
 
 
