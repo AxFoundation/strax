@@ -2,7 +2,6 @@ import json
 import fsspec
 from numpy.lib.arraysetops import isin
 import strax
-from collections import defaultdict
 
 
 @strax.URLConfig.register('json')
