@@ -50,6 +50,8 @@ def takes_config(*options):
                 **plugin_class.takes_config, **result})
         else:
             plugin_class.takes_config = immutabledict(result)
+        if isinstance(opt, strax.Config):
+            setattr(plugin_class, opt.name, opt)
         return plugin_class
 
     return wrapped
