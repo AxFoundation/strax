@@ -2,10 +2,7 @@ import datetime
 import logging
 import fnmatch
 from functools import partial
-import random
-import string
 import typing as ty
-import warnings
 import time
 import numpy as np
 import pandas as pd
@@ -72,7 +69,7 @@ tqdm = strax.utils.tqdm
     strax.Option(name='free_options', default=tuple(),
                  help='Do not warn if any of these options are passed, '
                       'even when no registered plugin takes them.'),
-    strax.Option(name='apply_data_function', default=tuple(),
+    strax.Option(name='apply_data_function', default=tuple(), type=(tuple,list,ty.Callable),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
                       'func(<data>, <run_id>, <targets>).'),
@@ -212,13 +209,13 @@ class Context:
 
         for k in new_config:
             if k not in self.takes_config:
-                warnings.warn(f"Unknown config option {k}; will do nothing.")
+                self.log.warning(f"Unknown config option {k}; will do nothing.")
 
         self.context_config = new_config
 
         for k in self.context_config:
             if k not in self.takes_config:
-                warnings.warn(f"Invalid context option {k}; will do nothing.")
+                self.log.warning(f"Invalid context option {k}; will do nothing.")
 
     def register(self, plugin_class):
         """Register plugin_class as provider for data types in provides.
@@ -284,6 +281,31 @@ class Context:
                     pass
 
         return plugin_class
+
+    def deregister_plugins_with_missing_dependencies(self):
+        """
+        Deregister plugins in case a data_type the plugin
+        depends on is not provided by any other plugin.
+        """
+        registry_changed = True
+        while registry_changed:
+            all_provides = set()
+            plugins_to_deregister = []
+
+            for p in self._plugin_class_registry.values():
+                all_provides |= set(p.provides)
+
+            for p_key, p in self._plugin_class_registry.items():
+                requires = set(strax.to_str_tuple(p.depends_on))
+                if not requires.issubset(all_provides):
+                    plugins_to_deregister.append(p_key)
+
+            for p_key in plugins_to_deregister:
+                self.log.info(f'Deregister {p_key}')
+                del self._plugin_class_registry[p_key]
+
+            if not len(plugins_to_deregister):
+                registry_changed = False
 
     def search_field(self, pattern):
         """Find and print which plugin(s) provides a field that matches
@@ -527,7 +549,7 @@ class Context:
             for pc in self._plugin_class_registry.values()])
         for k in self.config:
             if not (k in all_opts or k in self.context_config['free_options']):
-                warnings.warn(f"Option {k} not taken by any registered plugin", UserWarning, 2)
+                self.log.warning(f"Option {k} not taken by any registered plugin")
 
         # Initialize plugins for the entire computation graph
         # (most likely far further down than we need)
@@ -803,7 +825,7 @@ class Context:
             # Should we save this data? If not, return.
             if (loading_this_data
                     and not self.context_config['storage_converter']
-                    and not self.context_config['write_superruns']):
+                    and not (self.context_config['write_superruns'] and _is_superrun)):
                 return
             if (loading_this_data
                     and not self.context_config['write_superruns']
@@ -1041,9 +1063,7 @@ class Context:
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
-                temp_name = ('_temp_'
-                             + ''.join(
-                               random.choices(string.ascii_lowercase, k=10)))
+                temp_name = ('_temp_' + strax.deterministic_hash(targets))
                 p = type(temp_name,
                          (strax.MergeOnlyPlugin,),
                          dict(depends_on=tuple(targets)))
@@ -1198,7 +1218,7 @@ class Context:
         if len(run_ids) > 1:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
-                throw_away_result=True,
+                throw_away_result=True, log=self.log,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
@@ -1222,6 +1242,7 @@ class Context:
         if len(run_ids) > 1:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
+                log=self.log,
                 save=save, max_workers=max_workers, **kwargs)
         else:
             source = self.get_iter(
