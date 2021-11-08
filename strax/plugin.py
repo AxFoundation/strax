@@ -16,7 +16,7 @@ from copy import copy, deepcopy
 import strax
 export, __all__ = strax.exporter()
 
-
+LOGGERS = {}
 @export
 class SaveWhen(IntEnum):
     """Plugin's preference for having it's data saved"""
@@ -189,6 +189,13 @@ class Plugin:
     @property
     def multi_output(self):
         return len(self.provides) > 1
+
+    @property
+    def log(self):
+        _id = id(self)
+        if _id not in LOGGERS:
+            LOGGERS[_id] = logging.getLogger(self.__class__.__name__)
+        return LOGGERS[_id]
 
     def setup(self):
         """Hook if plugin wants to do something on initialization
@@ -606,7 +613,6 @@ class OverlapWindowPlugin(Plugin):
         self.cached_results = None
         self.sent_until = 0
         # This guy can have a logger, it's not parallelized anyway
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def get_window_size(self):
         """Return the required window size in nanoseconds"""
