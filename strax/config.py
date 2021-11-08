@@ -125,7 +125,6 @@ class Option:
         #     warnings.warn(f"The {self.name} option uses default_by_run,"
         #                   f" which will soon stop working!",
         #                   DeprecationWarning)
-        type = builtins.type
 
         if sum([self.default is not OMITTED,
                 self.default_factory is not OMITTED,
