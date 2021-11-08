@@ -63,7 +63,7 @@ class Option:
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 infer_dtype = OMITTED,
+                 infer_type = OMITTED,
                  help: str = ''):
         """
         :param name: Option identifier
@@ -84,6 +84,8 @@ class Option:
             by the value of the child option.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
+        :param infer_type: Whether to infer the type from the
+            default value if type not explicitly set.
         :param help: Human-readable description of the option.
         """
         self.name = name
@@ -117,10 +119,10 @@ class Option:
             raise RuntimeError(f"Tried to specify more than one default "
                                f"for option {self.name}.")
             
-        if infer_dtype and type is OMITTED and default is not OMITTED:
+        if infer_type and type is OMITTED and default is not OMITTED:
             # ------------
             #FIXME: remove after long enough period to allow fixing problematic options.
-            if infer_dtype is OMITTED:
+            if infer_type is OMITTED:
                 warnings.warn(f'You are setting a default value for config {name} but not \
                 specifying a type. In the future the type will be inferred from \
                 the default value which will result in an error if this config \
