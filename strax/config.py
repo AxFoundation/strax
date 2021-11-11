@@ -315,11 +315,13 @@ class RemoteConfig(Config):
 class CallableConfig(Config):
     func: ty.Callable
 
-    def __init__(self, func: ty.Callable, args=(), kwargs={}, **extra_kwargs):
+    def __init__(self, func: ty.Callable, args=(), kwargs: dict=None, **extra_kwargs):
         if not isinstance(func, ty.Callable):
             raise TypeError('func parameter must be of type Callable.')
         self.func = func
         self.args = args
+        if kwargs is None:
+            kwargs = {}
         self.kwargs = kwargs
         super().__init__(**extra_kwargs)
     
