@@ -343,6 +343,8 @@ class CallableConfig(Config):
         value = super().fetch(plugin)
         value = self.func(value, *args, **kwargs)
         return value
+
+
 @export
 class URLConfig(Config):
     """Dispatch on URL protocol.
