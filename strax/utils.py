@@ -534,8 +534,6 @@ def multi_run(exec_function, run_ids, *args,
         return final_result
 
 
-
-
 @export
 def group_by_kind(dtypes, plugins=None, context=None) -> ty.Dict[str, ty.List]:
     """Return dtypes grouped by data kind
