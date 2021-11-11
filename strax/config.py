@@ -250,7 +250,7 @@ class Config(Option):
 
     def fetch(self, plugin):
         ''' This function is called when the attribute is being 
-        accessed. Should be overriden by subclasses to customize behavior.
+        accessed. Should be overridden by subclasses to customize behavior.
         '''
         if hasattr(plugin, 'config') and self.name in plugin.config:
             return plugin.config[self.name]
