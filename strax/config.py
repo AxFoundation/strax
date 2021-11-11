@@ -264,8 +264,7 @@ class LookupConfig(Config):
     def __init__(self, mapping: ty.Mapping, keys=('name', 'value'), **kwargs):
         super().__init__(**kwargs)
         self.mapping = mapping
-        if not isinstance(keys, ty.Iterable):
-            keys = (keys,)
+        keys = strax.to_str_tuple(keys)
         self.keys = keys
         
     def fetch(self, plugin):
