@@ -285,6 +285,8 @@ class LookupConfig(Config):
         else:
             key = tuple(key)
         return self.mapping[key]
+
+
 @export
 class RemoteConfig(Config):
     storages: ty.Iterable
