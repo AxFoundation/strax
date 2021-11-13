@@ -218,17 +218,30 @@ class Option:
             config[self.name] = self.get_default(run_id, run_defaults)
 
 
-#Backward compatibility
+# subclass Option for backward compatibility
 @export
 class Config(Option):
+    """An alternative to the `takes_config` class decorator
+       which uses the descriptor protocol to return the config
+       value when the attribute is accessed from within a plugin 
+    """
     def __init__(self, **kwargs):
+        # for now set the name to empty string
+        # will be replaced by the actual name
+        # after __set_name__ is called on class
+        # instantiation
         if 'name' not in kwargs:
             kwargs['name'] = ''
         super().__init__(**kwargs)
 
     def __set_name__(self, owner, name):
+        ''''Plugin class has been instantiated
+            we can now set the option name and add it
+            to the plugins takes_config dictionary
+        '''
         self.name = name
-        takes_config = {name: self}
+        self.taken_by = owner.__name__
+        new_takes_config = {name: self}
         if (hasattr(owner, 'takes_config')
                 and len(owner.takes_config)):
             # Already have some options set, e.g. because of subclassing
@@ -238,207 +251,25 @@ class Config(Option):
                 raise RuntimeError(
                     f"Attempt to specify option {name} twice")
             owner.takes_config = immutabledict({
-                **owner.takes_config, **takes_config})
+                **owner.takes_config, **new_takes_config})
         else:
-            owner.takes_config = immutabledict(takes_config)
+            owner.takes_config = immutabledict(new_takes_config)
 
     def __get__(self, obj, objtype=None):
         return self.fetch(obj)
 
     def __set__(self, obj, value):
-        obj.config[self.name] = value
+        raise AttributeError(f"{self.name} is a plugin configuration and cannot be set directly.")
 
     def fetch(self, plugin):
         ''' This function is called when the attribute is being 
         accessed. Should be overridden by subclasses to customize behavior.
         '''
-        if hasattr(plugin, 'config') and self.name in plugin.config:
+        if not hasattr(plugin, 'config'):
+            raise AttributeError('Plugin has not been configured.')
+        if self.name in plugin.config:
             return plugin.config[self.name]
-        raise AttributeError('Plugin has not been configured.')
-
-@export
-class LookupConfig(Config):
-    mapping: ty.Mapping
-    keys = ty.Iterable
-
-    def __init__(self, mapping: ty.Mapping, keys=('name', 'value'), **kwargs):
-        super().__init__(**kwargs)
-        self.mapping = mapping
-        keys = strax.to_str_tuple(keys)
-        self.keys = keys
-        
-    def fetch(self, plugin):
-        key = []
-        for k in self.keys:
-            if k=='name':
-                v = self.name
-            elif k=='value':
-                v = plugin.config[self.name]
-            elif isinstance(k, str) and hasattr(plugin, k):
-                v = getattr(plugin, k)
-            else:
-                v = k
-            key.append(v)
-        if len(key)==1:
-            key = key[0]
-        else:
-            key = tuple(key)
-        return self.mapping[key]
-
-
-@export
-class RemoteConfig(Config):
-    storages: ty.Iterable
-    name_key: str
-    value_key: str
-    
-    def __init__(self, storages, name_key='name', value_key='value', **kwargs):
-        super().__init__(**kwargs)
-        self.storages = storages
-        self.name_key = name_key
-        self.value_key = value_key
-        
-    def fetch(self, plugin, **kwargs):
-        kwargs[self.name_key] = self.name
-        kwargs[self.value_key] = plugin.config[self.name]
-        for store in self.storages:
-            v = store.get_value(**kwargs)
-            if v is not None:
-                break
-        else:
-            raise KeyError(f'A value for the {self.name} config has not been \
-                            found in any of its registered storages.')
-        return v
-    
-@export
-class CallableConfig(Config):
-    func: ty.Callable
-
-    def __init__(self, func: ty.Callable, args=(), kwargs: dict=None, **extra_kwargs):
-        if not isinstance(func, ty.Callable):
-            raise TypeError('func parameter must be of type Callable.')
-        self.func = func
-        self.args = args
-        if kwargs is None:
-            kwargs = {}
-        self.kwargs = kwargs
-        super().__init__(**extra_kwargs)
-    
-    def fetch(self, plugin):
-        args = []
-        for arg in self.args:
-            if isinstance(arg, str) and hasattr(plugin, arg):
-                args.append(getattr(plugin, arg))
-            else:
-                args.append(arg)
-            
-        kwargs = {}
-        for k,v in self.kwargs.items():
-            if isinstance(v, str) and hasattr(plugin, v):
-                kwargs[k] = getattr(plugin, v)
-            else:
-                kwargs[k] = v
-        
-        value = super().fetch(plugin)
-        value = self.func(value, *args, **kwargs)
-        return value
-
-
-@export
-class URLConfig(Config):
-    """Dispatch on URL protocol.
-    unrecognized protocol returns identity
-    inspired by dasks Dispatch and fsspec fs protocols.
-    """
-
-    _lookup = {}
-    _cache = {}
-
-    def __init__(self, sep='://', attr_prefix='plugin.', cache=False, **kwargs):
-        self.final_type = OMITTED
-        super().__init__(**kwargs)
-        # Ensure backwards compatibility with Option validation
-        # type of the config value can be different from the fetched value.
-        if self.type is not OMITTED:
-            self.final_type = self.type
-            self.type = OMITTED # do not enforce type on the URL
-        self.sep = sep
-        self.attr_prefix = attr_prefix
-        if cache:
-            self.dispatch = lru_cache()(self.dispatch)
-
-    @classmethod
-    def register(cls, protocol, func=None):
-        """Register dispatch of `func` on urls
-         starting with protocol name `protocol` """
-
-        def wrapper(func):
-            if isinstance(protocol, tuple):
-                for t in protocol:
-                    cls.register(t, func)
-            else:
-                cls._lookup[protocol] = func
-            return func
-        return wrapper(func) if func is not None else wrapper
-
-    def dispatch(self, url, *args, **kwargs):
-        """
-        Call the corresponding method based on protocol in url.
-        chained protocols will be called with the result of the
-        previous protocol as input
-        overrides are passed to any protocol whos signature can accept them.
-        """
-        if not isinstance(url, str):
-            return url
-        protocol, _, path =  url.partition(self.sep)
-
-        meth = self._lookup.get(protocol, None)
-        if meth is None:
-            return url
-
-        if self.sep in path:
-            arg = self.dispatch(path, **kwargs)
-        else:
-            arg = path
-        kwargs = self.filter_kwargs(meth, kwargs)
-        return meth(arg, *args, **kwargs)
-    
-    @staticmethod
-    def split_url_kwargs(url):
-        arg, _, _ = url.partition('?')
-        kwargs = {}
-        for k,v in parse_qs(urlparse(url).query).items():
-            n = len(v)
-            if not n:
-                kwargs[k] = None
-            elif n==1:
-                kwargs[k] = parse_val(v[0])
-            else:
-                kwargs[k] = map(parse_val, v)
-        return arg, kwargs
-    
-    @staticmethod
-    def filter_kwargs(func, kwargs):
-        params = inspect.signature(func).parameters
-        if any([str(p).startswith('**') for p in params.values()]):
-            return kwargs
-        return {k:v for k,v in kwargs.items() if k in params}
-
-    def fetch(self, plugin):
-        url = super().fetch(plugin)
-        if not isinstance(url, str):
-            return url
-        if self.sep not in url:
-            return url 
-        url, url_kwargs = self.split_url_kwargs(url)
-        kwargs = {}
-        for k,v in url_kwargs.items():
-            if isinstance(v, str) and v.startswith(self.attr_prefix):
-                kwargs[k] = getattr(plugin, v[len(self.attr_prefix):], v)
-            else:
-                kwargs[k] = v
-        
-        return self.dispatch(url, **kwargs)
+        return self.get_default(plugin.run_id)
 
 
 @export
