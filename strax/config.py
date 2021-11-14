@@ -2,11 +2,6 @@ import builtins
 import typing as ty
 import numbers
 from immutabledict import immutabledict
-from numpy import isin
-import inspect
-from urllib.parse import urlparse, parse_qs
-from ast import literal_eval
-from functools import lru_cache
 import warnings
 
 import strax
@@ -55,13 +50,6 @@ def takes_config(*options):
         return plugin_class
 
     return wrapped
-
-def parse_val(val):
-    try:
-        val = literal_eval(val)
-    except:
-        pass
-    return val
 
 
 @export
