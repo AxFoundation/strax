@@ -19,61 +19,62 @@ tqdm = strax.utils.tqdm
 
 
 @strax.takes_config(
-    strax.Option(name='storage_converter', default=False,
+    strax.Option(name='storage_converter', default=False, type=bool,
                  help='If True, save data that is loaded from one frontend '
                       'through all willing other storage frontends.'),
-    strax.Option(name='fuzzy_for', default=tuple(),
+    strax.Option(name='fuzzy_for', default=tuple(), type=tuple,
                  help='Tuple or string of plugin names for which no checks for version, '
                       'providing plugin, and config will be performed when '
                       'looking for data.'),
-    strax.Option(name='fuzzy_for_options', default=tuple(),
+    strax.Option(name='fuzzy_for_options', default=tuple(), type=tuple,
                  help='Tuple of config options for which no checks will be '
                       'performed when looking for data.'),
-    strax.Option(name='allow_incomplete', default=False,
+    strax.Option(name='allow_incomplete', default=False, type=bool,
                  help="Allow loading of incompletely written data, if the "
                       "storage systems support it"),
-    strax.Option(name='allow_rechunk', default=True,
+    strax.Option(name='allow_rechunk', default=True, type=bool,
                  help="Allow rechunking of data during writing."),
-    strax.Option(name='allow_multiprocess', default=False,
+    strax.Option(name='allow_multiprocess', default=False, type=bool,
                  help="Allow multiprocessing."
                       "If False, will use multithreading only."),
-    strax.Option(name='allow_shm', default=False,
+    strax.Option(name='allow_shm', default=False, type=bool,
                  help="Allow use of /dev/shm for interprocess communication."),
-    strax.Option(name='allow_lazy', default=True,
+    strax.Option(name='allow_lazy', default=True, type=bool,
                  help='Allow "lazy" processing. Saves memory, but incompatible '
                       'with multiprocessing and perhaps slightly slower.'),
-    strax.Option(name='forbid_creation_of', default=tuple(),
+    strax.Option(name='forbid_creation_of', default=tuple(), type=tuple,
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
                       "descending too far into the dependency graph."),
-    strax.Option(name='store_run_fields', default=tuple(),
+    strax.Option(name='store_run_fields', default=tuple(), type=tuple,
                  help="Tuple of run document fields to store "
                       "during scan_run."),
-    strax.Option(name='check_available', default=tuple(),
+    strax.Option(name='check_available', default=tuple(), type=tuple,
                  help="Tuple of data types to scan availability for "
                       "during scan_run."),
-    strax.Option(name='max_messages', default=4,
+    strax.Option(name='max_messages', default=4, type=int,
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=24 * 3600,
+    strax.Option(name='timeout', default=24 * 3600, type=int,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
-    strax.Option(name='saver_timeout', default=900,
+    strax.Option(name='saver_timeout', default=900, type=int,
                  help="Max time [s] a saver can take to store a result. Set "
                       "high for slow compression algorithms."),
-    strax.Option(name='use_per_run_defaults', default=False,
+    strax.Option(name='use_per_run_defaults', default=False, type=bool,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
                       'possibly be removed, see issue #246'),
-    strax.Option(name='free_options', default=tuple(),
+    strax.Option(name='free_options', default=tuple(), type=tuple,
                  help='Do not warn if any of these options are passed, '
                       'even when no registered plugin takes them.'),
-    strax.Option(name='apply_data_function', default=tuple(), type=(tuple,list,ty.Callable),
+    strax.Option(name='apply_data_function', default=tuple(),
+                 type=(tuple, list, ty.Callable),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
                       'func(<data>, <run_id>, <targets>).'),
-    strax.Option(name='write_superruns', default=False,
+    strax.Option(name='write_superruns', default=False, type=bool,
                  help='If True, save superruns as rechunked "new" data.'),
 )
 @export
@@ -1388,12 +1389,12 @@ class Context:
             zarr is very compatible with dask.
             Targets are loaded into separate arrays and runs are merged.
             the data is added to any existing data in the storage location.
-  
+
         :param run_ids: (Iterable) Run ids you wish to load.
         :param targets: (Iterable) targets to load.
         :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
         :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at given path.
-   
+
         :returns zarr.Group: zarr group containing the persistant arrays available at
                         the storage location after loading the requested data
                         the runs loaded into a given array can be seen in the
@@ -1691,18 +1692,10 @@ class Context:
 
         stored_sources = set()
         for dep in deps:
-            if check_forbidden and dep in forbidden:
-                self.log.warning(forbidden_warning.format(run_id=run_id,
-                                                          target=target,
-                                                          dep=dep,))
+            deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
+            if deeper is None:
                 return None
-            else:
-                deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
-                if deeper is None:
-                    self.log.info(f'For run {run_id}, requested dependency '
-                                  f'{dep} for {target} is not stored')
-                    return None
-                stored_sources |= deeper
+            stored_sources |= deeper
         return stored_sources
 
     def _is_stored_in_sf(self, run_id, target,
