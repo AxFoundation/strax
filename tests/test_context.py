@@ -283,13 +283,34 @@ class TestContext(unittest.TestCase):
         st = self.get_context(True)
         st.register(Records)
         st.register(Peaks)
-        assert not st.is_stored(run_id, 'records')
-        assert not st.is_stored(run_id, 'peaks')
-        assert st.get_source(run_id, 'records') is None
-        assert st.get_source(run_id, 'peaks') is None
+        st.register(self.get_dummy_peaks_dependency())
+        st.set_context_config({'forbid_creation_of': ('peaks',)})
+        for target in 'records peaks cut_peaks'.split():
+            # Nothing is available and nothing should find a source
+            assert not st.is_stored(run_id, target)
+            assert st.get_source(run_id, target) is None
+
+        # Now make a source "records"
         st.make(run_id, 'records')
         assert st.get_source(run_id, 'records') == {'records'}
-        assert st.get_source(run_id, 'peaks') == {'records'}
+        # since we cannot make peaks!
+        assert st.get_source(run_id, 'peaks', check_forbidden=True) is None
+        assert st.get_source(run_id, 'cut_peaks', check_forbidden=True) is None
+
+        # We could ignore the error though
+        assert st.get_source(run_id, 'peaks', check_forbidden=False) == {'records'}
+        assert st.get_source(run_id, 'cut_peaks', check_forbidden=False) == {'records'}
+
+        st.set_context_config({'forbid_creation_of': ()})
         st.make(run_id, 'peaks')
         assert st.get_source(run_id, 'records') == {'records'}
         assert st.get_source(run_id, 'peaks') == {'peaks'}
+        assert st.get_source(run_id, 'peaks') == {'peaks'}
+
+    @staticmethod
+    def get_dummy_peaks_dependency():
+        class DummyDependsOnPeaks(strax.CutPlugin):
+            depends_on = 'peaks'
+            provides = 'cut_peaks'
+        return DummyDependsOnPeaks
+

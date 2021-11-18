@@ -1655,13 +1655,19 @@ class Context:
                     f'Trying to write {data_key} to {t_sf} which already exists, '
                     'do you have two storage frontends writing to the same place?')
 
-    def get_source(self, run_id: str, target: str) -> ty.Union[set, None]:
+    def get_source(self,
+                   run_id: str,
+                   target: str,
+                   check_forbidden: bool = True,
+                   ) -> ty.Union[set, None]:
         """
         For a given run_id and target get the stored bases where we can
         start processing from, if no base is available, return None.
 
         :param run_id: run_id
         :param target:  target
+        :param check_forbidden: Check that we are not requesting to make
+            a plugin that is forbidden by the context to be created.
         :return: set of plugin names that are needed to start processing
             from and are needed in order to build this target.
         """
@@ -1672,11 +1678,22 @@ class Context:
         if not deps:
             return None
         stored_sources = set()
+        forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
+        if check_forbidden and target in forbidden:
+            # Simple, we are not allowed to make this
+            return None
+
         for dep in deps:
             if self.is_stored(run_id, dep):
                 stored_sources |= {dep}
+            elif check_forbidden and dep in forbidden:
+                self.log.warning(f'For run {run_id}:{target}, you are not '
+                                 f'allowed to make {dep} and it is not stored. '
+                                 f'Disable with check_forbidden=False'
+                                 )
+                return None
             else:
-                deeper = self.get_source(run_id, dep)
+                deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
                 if not deeper:
                     self.log.info(f'For run {run_id}, requested dependency '
                                   f'{dep} for {target} is not stored')
