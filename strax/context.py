@@ -66,7 +66,7 @@ tqdm = strax.utils.tqdm
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
                       'possibly be removed, see issue #246'),
-    strax.Option(name='free_options', default=tuple(), type=tuple,
+    strax.Option(name='free_options', default=tuple(), type=(tuple,list),
                  help='Do not warn if any of these options are passed, '
                       'even when no registered plugin takes them.'),
     strax.Option(name='apply_data_function', default=tuple(),
