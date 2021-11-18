@@ -5,6 +5,7 @@ from immutabledict import immutabledict
 import warnings
 
 import strax
+
 export, __all__ = strax.exporter()
 
 # Placeholder value for omitted values.
@@ -44,6 +45,8 @@ def takes_config(*options):
                 **plugin_class.takes_config, **result})
         else:
             plugin_class.takes_config = immutabledict(result)
+        if isinstance(opt, strax.Config):
+            setattr(plugin_class, opt.name, opt)
         return plugin_class
 
     return wrapped
@@ -203,6 +206,60 @@ class Option:
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
             config[self.name] = self.get_default(run_id, run_defaults)
+
+
+# subclass Option for backward compatibility
+@export
+class Config(Option):
+    """An alternative to the `takes_config` class decorator
+       which uses the descriptor protocol to return the config
+       value when the attribute is accessed from within a plugin 
+    """
+    def __init__(self, **kwargs):
+        # for now set the name to empty string
+        # will be replaced by the actual name
+        # after __set_name__ is called on class
+        # instantiation
+        if 'name' not in kwargs:
+            kwargs['name'] = ''
+        super().__init__(**kwargs)
+
+    def __set_name__(self, owner, name):
+        ''''Plugin class has been instantiated
+            we can now set the option name and add it
+            to the plugins takes_config dictionary
+        '''
+        self.name = name
+        self.taken_by = owner.__name__
+        new_takes_config = {name: self}
+        if (hasattr(owner, 'takes_config')
+                and len(owner.takes_config)):
+            # Already have some options set, e.g. because of subclassing
+            # where both child and parent have a takes_config decorator
+            
+            if name in owner.takes_config:
+                raise RuntimeError(
+                    f"Attempt to specify option {name} twice")
+            owner.takes_config = immutabledict({
+                **owner.takes_config, **new_takes_config})
+        else:
+            owner.takes_config = immutabledict(new_takes_config)
+
+    def __get__(self, obj, objtype=None):
+        return self.fetch(obj)
+
+    def __set__(self, obj, value):
+        raise AttributeError(f"{self.name} is a plugin configuration and cannot be set directly.")
+
+    def fetch(self, plugin):
+        ''' This function is called when the attribute is being 
+        accessed. Should be overridden by subclasses to customize behavior.
+        '''
+        if not hasattr(plugin, 'config'):
+            raise AttributeError('Plugin has not been configured.')
+        if self.name in plugin.config:
+            return plugin.config[self.name]
+        return self.get_default(plugin.run_id)
 
 
 @export
