@@ -1679,17 +1679,23 @@ class Context:
             return None
 
         forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
+        forbidden_warning = (
+            'For {run_id}:{target}, you are not allowed to make {dep} and '
+            'it is not stored. Disable check with check_forbidden=False'
+        )
         if check_forbidden and target in forbidden:
+            self.log.warning(forbidden_warning.format(run_id=run_id,
+                                                      target=target,
+                                                      dep=target
+                             ))
             return None
 
         stored_sources = set()
         for dep in deps:
-            if self.is_stored(run_id, dep):
-                stored_sources |= {dep}
-            elif check_forbidden and dep in forbidden:
-                self.log.warning(f'For run {run_id}:{target}, you are not '
-                                 f'allowed to make {dep} and it is not stored. '
-                                 f'Disable with check_forbidden=False'
+            if check_forbidden and dep in forbidden:
+                self.log.warning(forbidden_warning.format(run_id=run_id,
+                                                          target=target,
+                                                          dep=dep)
                                  )
                 return None
             else:
