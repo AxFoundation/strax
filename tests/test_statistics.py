@@ -1,5 +1,7 @@
 import strax
 import numpy as np
+from strax.processing.hitlets import highest_density_region_width
+
 
 def test_highest_density_region():
     """
@@ -25,3 +27,18 @@ def _test_highest_density_region(distribution, truth_dict):
             mes = f'Have not found the correct edges for a fraction of {key}% found {int_found}, but expected ' \
                   f'{interval}'
             assert np.all(int_found == interval), mes
+
+
+def test_too_small_buffer():
+    """
+    Unit test to check whether a too small buffer leads to np.nans
+    """
+    distribution = np.ones(1000)
+    distribution[::4] = 0
+    indicies, _ = strax.highest_density_region(distribution, np.array([0.5]))
+    assert np.all(indicies == -1)
+
+    width = highest_density_region_width(distribution,
+                                         fractions_desired=np.array([0.5]),
+                                         _buffer_size=10)
+    assert np.all(np.isnan(width))
