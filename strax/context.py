@@ -1677,12 +1677,12 @@ class Context:
         deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
         if not deps:
             return None
-        stored_sources = set()
+
         forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
         if check_forbidden and target in forbidden:
-            # Simple, we are not allowed to make this
             return None
 
+        stored_sources = set()
         for dep in deps:
             if self.is_stored(run_id, dep):
                 stored_sources |= {dep}
@@ -1694,7 +1694,7 @@ class Context:
                 return None
             else:
                 deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
-                if not deeper:
+                if deeper is None:
                     self.log.info(f'For run {run_id}, requested dependency '
                                   f'{dep} for {target} is not stored')
                     return None
