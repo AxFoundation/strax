@@ -313,4 +313,3 @@ class TestContext(unittest.TestCase):
             depends_on = 'peaks'
             provides = 'cut_peaks'
         return DummyDependsOnPeaks
-
