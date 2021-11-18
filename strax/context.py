@@ -1686,8 +1686,7 @@ class Context:
         if check_forbidden and target in forbidden:
             self.log.warning(forbidden_warning.format(run_id=run_id,
                                                       target=target,
-                                                      dep=target
-                             ))
+                                                      dep=target,))
             return None
 
         stored_sources = set()
@@ -1695,8 +1694,7 @@ class Context:
             if check_forbidden and dep in forbidden:
                 self.log.warning(forbidden_warning.format(run_id=run_id,
                                                           target=target,
-                                                          dep=dep)
-                                 )
+                                                          dep=dep,))
                 return None
             else:
                 deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
