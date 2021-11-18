@@ -3,7 +3,7 @@ from strax.testutils import Records, Peaks, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
-import hypothesis.strategies as st
+import hypothesis.strategies as strategy
 import typing as ty
 import os
 import unittest
@@ -49,7 +49,7 @@ def test_apply_pass_to_data():
 
 
 @settings(deadline=None)
-@given(st.integers(min_value=-10, max_value=10))
+@given(strategy.integers(min_value=-10, max_value=10))
 def test_apply_ch_shift_to_data(magic_shift: int):
     """
     Apply some magic shift number to the channel field and check the results
@@ -178,7 +178,7 @@ def test_copy_to_frontend():
             )
 
 
-class TestPerRunDefaults(unittest.TestCase):
+class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
     def setUp(self):
         """
@@ -244,7 +244,7 @@ class TestPerRunDefaults(unittest.TestCase):
         st.register(Records)
         st.register(Peaks)
         st.deregister_plugins_with_missing_dependencies()
-        assert all([p in st._plugin_class_registry for p in 'peaks records'.split()]) 
+        assert all([p in st._plugin_class_registry for p in 'peaks records'.split()])
         st._plugin_class_registry.pop('records', None)
         st.deregister_plugins_with_missing_dependencies()
         assert st._plugin_class_registry.pop('peaks', None) is None
@@ -277,3 +277,19 @@ class TestPerRunDefaults(unittest.TestCase):
                 # Found one option
                 break
         return has_per_run_defaults
+
+    def test_get_source(self):
+        """See if we get the correct answer for each of the plugins"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        assert not st.is_stored(run_id, 'records')
+        assert not st.is_stored(run_id, 'peaks')
+        assert st.get_source(run_id, 'records') is None
+        assert st.get_source(run_id, 'peaks') is None
+        st.make(run_id, 'records')
+        assert st.get_source(run_id, 'records') == {'records'}
+        assert st.get_source(run_id, 'peaks') == {'records'}
+        st.make(run_id, 'peaks')
+        assert st.get_source(run_id, 'records') == {'records'}
+        assert st.get_source(run_id, 'peaks') == {'peaks'}

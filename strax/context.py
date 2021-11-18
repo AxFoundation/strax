@@ -457,7 +457,7 @@ class Context:
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
              for data_type, plugin in self._plugin_class_registry.items()
              if not data_type.startswith('_temp_')
-            })
+             })
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -1381,10 +1381,9 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
-
-    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', 
-                progress_bar=False, overwrite=True, **kwargs):
-        """get perisistant arrays using zarr. This is useful when
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data',
+                 progress_bar=False, overwrite=True, **kwargs):
+        """get persistent  arrays using zarr. This is useful when
             loading large amounts of data that cannot fit in memory
             zarr is very compatible with dask.
             Targets are loaded into separate arrays and runs are merged.
@@ -1655,6 +1654,35 @@ class Context:
                 raise strax.DataExistsError(
                     f'Trying to write {data_key} to {t_sf} which already exists, '
                     'do you have two storage frontends writing to the same place?')
+
+    def get_source(self, run_id: str, target: str) -> ty.Union[set, None]:
+        """
+        For a given run_id and target get the stored bases where we can
+        start processing from, if no base is available, return None.
+
+        :param run_id: run_id
+        :param target:  target
+        :return: set of plugin names that are needed to start processing
+            from and are needed in order to build this target.
+        """
+        if self.is_stored(run_id, target):
+            return {target}
+
+        deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
+        if not deps:
+            return None
+        stored_sources = set()
+        for dep in deps:
+            if self.is_stored(run_id, dep):
+                stored_sources |= {dep}
+            else:
+                deeper = self.get_source(run_id, dep)
+                if not deeper:
+                    self.log.info(f'For run {run_id}, requested dependency '
+                                  f'{dep} for {target} is not stored')
+                    return None
+                stored_sources |= deeper
+        return stored_sources
 
     def _is_stored_in_sf(self, run_id, target,
                          storage_frontend: strax.StorageFrontend) -> bool:
