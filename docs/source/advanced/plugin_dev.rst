@@ -199,7 +199,7 @@ Fetch config value from a callable
             value = self.func(value, *args, **kwargs)
             return value
 
-URL style configuration
+URL style configuration (used in `straxen <https://github.com/XENONnT/straxen>`_ )
 
 .. code-block:: python
 
