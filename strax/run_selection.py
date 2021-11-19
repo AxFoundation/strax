@@ -112,10 +112,12 @@ def scan_runs(self: strax.Context,
                 doc.setdefault('name', f"{doc['number']:06d}")
 
             doc.setdefault('mode', '')
-
+            if type(doc['mode']) == list:
+                doc['mode'] = ','.join(doc['mode']) 
             # Convert tags list to a ,separated string
-            doc['tags'] = ','.join([t['name']
+            doc['tags'] = ','.join([t['name'] if type(t) == dict else t
                                    for t in doc.get('tags', [])])
+
 
             # Set a default livetime if we have start and stop
             if ('start' in store_fields
@@ -124,7 +126,25 @@ def scan_runs(self: strax.Context,
                     and doc.get('start') is not None
                     and doc.get('end') is not None):
                 doc.setdefault('livetime', doc['end'] - doc['start'])
-
+                
+            
+            if _is_superrun:
+                # In contrast to regular run-docs, 
+                # superruns are timezone aware. So strip off timezone 
+                # again:
+                start = doc.get('start')
+                if start:
+                    doc['start'] = start.replace(tzinfo=None)
+                    
+                start = doc.get('end')
+                if start:
+                    doc['end'] = start.replace(tzinfo=None)
+                    
+                if type(doc.get('livetime')) == float:
+                    # If we have a superrun livetime is stored as intger seconds
+                    # as timedelta is not json serializable 
+                    doc['livetime'] = datetime.timedelta(seconds=doc['livetime'])
+            
             # Put the strax defaults stuff into a different cache
             if strax.RUN_DEFAULTS_KEY in doc:
                 self._run_defaults_cache[doc['name']] = \
@@ -149,6 +169,7 @@ def scan_runs(self: strax.Context,
                 new_docs[
                     ~np.in1d(new_docs['name'], docs['name'])]],
                 sort=False)
+            docs.reset_index(drop=True, inplace=True)
 
     # Rearrange columns
     if (not self.context_config['use_per_run_defaults']
@@ -217,16 +238,18 @@ def select_runs(self, run_mode=None, run_id=None,
 
         if requested_value is None:
             continue
+            
+        requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
         mask = np.zeros(len(values), dtype=np.bool_)
 
         if pattern_type == 'fnmatch':
             for i, x in enumerate(values):
-                mask[i] = fnmatch.fnmatch(x, requested_value)
+                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value]) 
         elif pattern_type == 're':
             for i, x in enumerate(values):
-                mask[i] = bool(re.match(requested_value, x))
+                mask[i] = np.any([re.match(rv, x) for rv in requested_value])
 
         dsets = dsets[mask]
 
@@ -302,7 +325,6 @@ def define_run(self: strax.Context,
         else:
             df = pd.DataFrame(dict(start=start, end=end,
                                    run_id=data['run_id']))
-            print(df)
             return self.define_run(
                 name,
                 {run_id: rs[['start', 'end']].values.transpose()
@@ -336,13 +358,14 @@ def define_run(self: strax.Context,
 
         run_md['start'] = min(run_md['start'], run_doc_start)
         run_md['end'] = max(run_md['end'], run_doc_end)
+
         time_delta = run_doc_end - run_doc_start
-        run_md['livetime'] += time_delta.total_seconds()*10**9
+        run_md['livetime'] += time_delta.total_seconds()
         keys.append(_subrunid)
         starts.append(run_doc_start)
 
-    run_md['tags'] = tags
-    run_md['mode'] = modes
+    run_md['tags'] = tuple(tags)
+    run_md['mode'] = tuple(modes)
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
