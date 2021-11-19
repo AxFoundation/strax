@@ -324,8 +324,12 @@ def define_run(self: strax.Context,
                   livetime=0)
     keys = []
     starts = []
+    tags = set()
+    modes = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ['start', 'end'])
+        doc = self.run_metadata(_subrunid, ['start', 'end', 'mode', 'tags'])
+        tags |= set([tag['name'] for tag in doc['tags']])
+        modes |= set(strax.to_str_tuple(doc['mode']))
 
         run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
         run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
@@ -336,6 +340,9 @@ def define_run(self: strax.Context,
         run_md['livetime'] += time_delta.total_seconds()*10**9
         keys.append(_subrunid)
         starts.append(run_doc_start)
+
+    run_md['tags'] = tags
+    run_md['mode'] = modes
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
