@@ -9,6 +9,7 @@ import datetime
 import pytz
 import json
 from bson import json_util
+import pandas as pd
 import re
 
 
@@ -27,7 +28,10 @@ class TestSuperRuns(unittest.TestCase):
                                                                   readonly=False,
                                                                   deep_scan=True)],
                                      register=[Records, RecordsExtension, Peaks, PeaksExtension],
-                                     config={'bonus_area': 42}
+                                     config={'bonus_area': 42,},
+                                     store_run_fields=('name', 'number', 'start', 'end',
+                                                       'livetime', 'mode', 'source',
+                                                       ),
                                      )
         self.context.set_context_config({'write_superruns': True,
                                          'use_per_run_defaults': False
@@ -258,6 +262,14 @@ class TestSuperRuns(unittest.TestCase):
         assert self.context.is_stored(self.superrun_name, 'records')
         for subrun in self.subrun_ids:
             assert not self.context.is_stored(subrun, 'records')
+
+    def test_run_selection_with_superruns(self):
+        df_runs = self.context.select_runs()
+        print(df_runs)
+        assert pd.api.types.is_string_dtype(df_runs['mode'])
+        assert pd.api.types.is_string_dtype(df_runs['tags'])
+        assert pd.api.types.is_timedelta64_dtype(df_runs['livetime'])
+
     
     def tearDown(self):
         if os.path.exists(self.tempdir):

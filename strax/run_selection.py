@@ -2,6 +2,7 @@
 import fnmatch
 import re
 import typing as ty
+import warnings
 from collections import defaultdict
 import numpy as np
 import pandas as pd
@@ -111,13 +112,18 @@ def scan_runs(self: strax.Context,
             if not _is_superrun:
                 doc.setdefault('name', f"{doc['number']:06d}")
 
+            # Convert tags/mode/source list to a,separated string if needed (mode and source can
+            # be lists for superruns)
             doc.setdefault('mode', '')
             if type(doc['mode']) == list:
-                doc['mode'] = ','.join(doc['mode']) 
-            # Convert tags list to a ,separated string
+                doc['mode'] = ','.join(doc['mode'])
+
+            doc.setdefault('source', '')
+            if type(doc['source']) == list:
+                doc['source'] = ','.join(doc['source'])
+
             doc['tags'] = ','.join([t['name'] if type(t) == dict else t
                                    for t in doc.get('tags', [])])
-
 
             # Set a default livetime if we have start and stop
             if ('start' in store_fields
@@ -126,8 +132,7 @@ def scan_runs(self: strax.Context,
                     and doc.get('start') is not None
                     and doc.get('end') is not None):
                 doc.setdefault('livetime', doc['end'] - doc['start'])
-                
-            
+
             if _is_superrun:
                 # In contrast to regular run-docs, 
                 # superruns are timezone aware. So strip off timezone 
@@ -253,17 +258,9 @@ def select_runs(self, run_mode=None, run_id=None,
 
         dsets = dsets[mask]
 
-    if include_tags is not None:
-        dsets = dsets[_tags_match(dsets,
-                                  include_tags,
-                                  pattern_type,
-                                  ignore_underscore)]
-
-    if exclude_tags is not None:
-        dsets = dsets[True ^ _tags_match(dsets,
-                                         exclude_tags,
-                                         pattern_type,
-                                         ignore_underscore)]
+    dsets = _include_exclude_tags(dsets, include_tags, exclude_tags, pattern_type,
+                                  ignore_underscore,
+                                  )
 
     have_available = strax.to_str_tuple(available)
     for d in have_available:
@@ -348,14 +345,19 @@ def define_run(self: strax.Context,
     starts = []
     tags = set()
     modes = set()
+    sources = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ['start', 'end', 'mode', 'tags'])
+        doc = self.run_metadata(_subrunid, ['start', 'end', 'mode', 'tags', 'source'])
         doc.setdefault('tags', [{'name': ''},])
         doc.setdefault('mode', '')
+        doc.setdefault('source', '')
 
         tags |= set([tag['name'] for tag in doc['tags']])
 
         modes |= set(strax.to_str_tuple(doc['mode']))
+        sources |= set(strax.to_str_tuple(doc['source']))
+        if len(sources) > 1:
+            warnings.warn(f'You are defining a superrun with more than one source: "{sources}"')
 
         run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
         run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
@@ -370,6 +372,7 @@ def define_run(self: strax.Context,
 
     run_md['tags'] = tuple(tags)
     run_md['mode'] = tuple(modes)
+    run_md['sources'] = tuple(sources)
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
@@ -447,6 +450,26 @@ def available_for_run(self: strax.Context,
             is_stored['target'].append(target)
             is_stored['is_stored'].append(self.is_stored(run_id, target))
     return pd.DataFrame(is_stored)
+
+
+def _include_exclude_tags(dsets,
+                          include_tags,
+                          exclude_tags,
+                          pattern_type,
+                          ignore_underscore,
+                          ):
+    if include_tags is not None:
+        dsets = dsets[_tags_match(dsets,
+                                  include_tags,
+                                  pattern_type,
+                                  ignore_underscore)]
+
+    if exclude_tags is not None:
+        dsets = dsets[True ^ _tags_match(dsets,
+                                         exclude_tags,
+                                         pattern_type,
+                                         ignore_underscore)]
+    return dsets
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
