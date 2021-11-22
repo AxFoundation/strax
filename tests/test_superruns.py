@@ -62,7 +62,7 @@ class TestSuperRuns(unittest.TestCase):
         livetime = 0
         for meta in subrun_meta:
             time_delta = meta['end'] - meta['start']
-            livetime += time_delta.total_seconds()*10**9
+            livetime += time_delta.total_seconds()
         assert superrun_meta['livetime'] == livetime
 
         prev_start = datetime.datetime.min.replace(tzinfo=pytz.utc)
