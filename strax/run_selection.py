@@ -350,7 +350,11 @@ def define_run(self: strax.Context,
     modes = set()
     for _subrunid in data:
         doc = self.run_metadata(_subrunid, ['start', 'end', 'mode', 'tags'])
+        doc.setdefault('tags', [{'name': ''},])
+        doc.setdefault('mode', '')
+
         tags |= set([tag['name'] for tag in doc['tags']])
+
         modes |= set(strax.to_str_tuple(doc['mode']))
 
         run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
