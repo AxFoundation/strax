@@ -372,7 +372,7 @@ def define_run(self: strax.Context,
 
     run_md['tags'] = tuple(tags)
     run_md['mode'] = tuple(modes)
-    run_md['sources'] = tuple(sources)
+    run_md['source'] = tuple(sources)
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
