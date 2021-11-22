@@ -18,6 +18,8 @@ class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name='_superrun_test'):
         self.offset_between_subruns = 10
         self.superrun_name = superrun_name
+        self.subrun_modes = ['mode_a', 'mode_b']
+        self.subrun_source = 'test'
         # Temp directory for storing record data for the tests.
         # Will be removed during TearDown.
         self.tempdir = tempfile.mkdtemp()
@@ -201,9 +203,9 @@ class TestSuperRuns(unittest.TestCase):
         for run_id in range(next_subrun_id, next_subrun_id+2):
             self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             rr = self.context.get_array(str(run_id), 'records')
-            self._write_run_doc(self.context, run_id, 
-                               self.now + datetime.timedelta(0, int(rr['time'].min())),
-                               self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
+            self._write_run_doc(run_id,
+                                self.now + datetime.timedelta(0, int(rr['time'].min())),
+                                self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
             endtime = np.max(strax.endtime(rr))
             self.subrun_ids.append(str(run_id))
 
@@ -265,12 +267,17 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_run_selection_with_superruns(self):
         df_runs = self.context.select_runs()
-        print(df_runs)
+        mask_superrun = df_runs['name'] == self.superrun_name
         assert pd.api.types.is_string_dtype(df_runs['mode'])
+        modes = df_runs.loc[mask_superrun, 'mode'].values[0]
+        modes = modes.split(',')
+        assert set(modes) == set(self.subrun_modes)
+
         assert pd.api.types.is_string_dtype(df_runs['tags'])
+        assert pd.api.types.is_string_dtype(df_runs['source'])
+        assert df_runs.loc[mask_superrun, 'source'].values[0] == 'test'
         assert pd.api.types.is_timedelta64_dtype(df_runs['livetime'])
 
-    
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
@@ -287,8 +294,7 @@ class TestSuperRuns(unittest.TestCase):
             time = np.min(rr['time'])
             endtime = np.max(strax.endtime(rr))
 
-            self._write_run_doc(self.context,
-                                run_id,
+            self._write_run_doc(run_id,
                                 self.now + datetime.timedelta(0, int(time)),
                                 self.now + datetime.timedelta(0, int(endtime)),
                                 )
@@ -296,12 +302,12 @@ class TestSuperRuns(unittest.TestCase):
             self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             assert self.context.is_stored(run_id, 'records')
 
-    @staticmethod
-    def _write_run_doc(context, run_id, time, endtime):
+    def _write_run_doc(self, run_id, time, endtime):
         """Function which writes a dummy run document.
         """
-        run_doc = {'name': run_id, 'start': time, 'end': endtime}
-        with open(context.storage[0]._run_meta_path(str(run_id)), 'w') as fp:
+        run_doc = {'name': run_id, 'start': time, 'end': endtime,
+                   'mode': self.subrun_modes[int(run_id)%2], 'source': self.subrun_source}
+        with open(self.context.storage[0]._run_meta_path(str(run_id)), 'w') as fp:
             json.dump(run_doc, fp, sort_keys=True, indent=4, default=json_util.default)
 
 
