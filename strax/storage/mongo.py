@@ -176,16 +176,24 @@ class MongoFrontend(StorageFrontend):
         self.backends = [MongoBackend(uri, database, col_name=col_name)]
         self.col_name = col_name
 
+    @property
+    def collection(self):
+        return self.db[self.col_name]
+
     def _find(self, key, write, allow_incomplete, fuzzy_for,
               fuzzy_for_options):
         """See strax.Frontend"""
         if write:
             return self.backends[0].__class__.__name__, str(key)
-        query = backend_key_to_query(str(key))
-        if self.db[self.col_name].count_documents(query):
-            self.log.debug(f"{key} is in cache.")
+        # Should have at least one non-metadata chunk, otherwise there
+        # is no data to load
+        query = {**backend_key_to_query(str(key)),
+                 'provides_meta': False
+                 }
+        if self.collection.count_documents(query):
+            self.log.debug(f"{key} is in database.")
             return self.backends[0].__class__.__name__, str(key)
-        self.log.debug(f"{key} is NOT in cache.")
+        self.log.debug(f"{key} is NOT in database.")
         raise strax.DataNotAvailable
 
 
