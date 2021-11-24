@@ -27,7 +27,7 @@ DEFAULT_MONGO_BACKEND_BUFFER_NRUNS = 5
 @export
 class MongoBackend(StorageBackend):
     """Mongo storage backend"""
-    def __init__(self, uri, database, col_name=None):
+    def __init__(self, uri: str, database: str, col_name: str):
         """
         Backend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
@@ -85,10 +85,10 @@ class MongoBackend(StorageBackend):
     def _saver(self, key, metadata, **kwargs):
         """See strax.Backend"""
         # Use the key to make a collection otherwise, use the backend-key
-        col = self.db[self.col_name if self.col_name is not None else str(key)]
+        col = self.db[self.col_name]
         return MongoSaver(key, metadata, col, **kwargs)
 
-    def _get_metadata(self, key):
+    def _get_metadata(self, key, **kwargs):
         """See strax.Backend"""
         query = backend_key_to_query(key)
 
@@ -160,7 +160,7 @@ class MongoBackend(StorageBackend):
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
 
-    def __init__(self, uri, database, col_name=None, *args, **kwargs):
+    def __init__(self, uri, database, col_name, *args, **kwargs):
         """
         MongoFrontend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
@@ -321,8 +321,11 @@ def backend_key_to_query(backend_key):
     if len(split_key) != 3:
         raise ValueError(f'backend_key ({backend_key}) has too many "-"s,'
                          f' don\'t use "-" within run_ids')
-    n, d, l = split_key
-    return {'number': int(n), 'data_type': d, 'lineage_hash': l}
+    number, data_type, lineage = split_key
+    return {'number': int(number),
+            'data_type': data_type,
+            'lineage_hash': lineage,
+            }
 
 
 def remove_np(dictin):

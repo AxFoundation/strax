@@ -3,8 +3,8 @@ import strax
 from strax.testutils import Records, Peaks
 import os
 import pymongo
-
-
+import logging
+import time
 _can_test = 'TEST_MONGO_URI' in os.environ
 
 
@@ -45,6 +45,7 @@ class TestMongoFrontend(unittest.TestCase):
                                 storage=[self.mongo_sf],
                                 use_per_run_defaults=True,
                                 )
+        self.log = logging.getLogger(self.__class__.__name__)
         assert not self.is_all_targets_stored
 
     def tearDown(self):
@@ -68,7 +69,7 @@ class TestMongoFrontend(unittest.TestCase):
 
     @property
     def is_data_in_collection(self):
-        return self.database[self.collection_name].find_one() is not None
+        return self.collection.find_one() is not None
 
     def test_write_and_load(self):
         # Shouldn't be any traces of data
@@ -146,9 +147,11 @@ class TestMongoFrontend(unittest.TestCase):
         assert not self.is_stored_in_mongo
         self.st.config['n_chunks'] = 3
 
+        self.log.info(f'Starting with empty db {self.chunk_summary}')
         # Get the iterator separately and complete with "next(iterator)
         iterator = self.st.get_iter(self.test_run_id, self.mongo_target)
 
+        self.log.info(f'Got iterator, still no data?: {self.chunk_summary}')
         # Chunk 0
         if self.is_stored_in_mongo:
             raise RuntimeError(f'Target should not be stored'
@@ -156,6 +159,8 @@ class TestMongoFrontend(unittest.TestCase):
 
         # Chunk 1
         next(iterator)
+        time.sleep(0.5)  # In case the database is not reflecting changes quick enough
+        self.log.info(f'Got first chunk, still no data?: {self.chunk_summary}')
         if self.is_stored_in_mongo:
             raise RuntimeError(f'After 1 chunk target should not be stored'
                                f'\n{self.chunk_summary}')
@@ -180,7 +185,7 @@ class TestMongoFrontend(unittest.TestCase):
         Test that allowing incomplete data does not find data if the
         metadata ("md") is just created
 
-        See #594 for more info
+        See #596 for more info
 
         Test is different from "test_allow_incomplete" in the sense
         that no chunks are written at all, only the md is registered
