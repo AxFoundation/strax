@@ -48,6 +48,19 @@ def test_apply_pass_to_data():
     assert np.all(r == r_changed)
 
 
+def test_byte_strings_as_run_id():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                       deep_scan=True),
+                           register=[Records])
+
+
+        records_bytes = st.get_array(b'0', 'records')
+        records = st.get_array('0', 'records')
+        assert np.all(records_bytes == records)
+
+
+
 @settings(deadline=None)
 @given(strategy.integers(min_value=-10, max_value=10))
 def test_apply_ch_shift_to_data(magic_shift: int):
