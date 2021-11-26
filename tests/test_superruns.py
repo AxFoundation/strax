@@ -115,12 +115,15 @@ class TestSuperRuns(unittest.TestCase):
     def test_create_and_load_superruns(self):
         """
         Creates "new" superrun data from already existing data. Loads
-        and compare data afterwards.
+        and compare data afterwards. Also tests "add_run_id_field"
+        option.
         """
         
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
-                                             progress_bar=False)
+                                             progress_bar=False,
+                                             add_run_id_field=False
+                                             )
 
         self.context.make(self.superrun_name,
                           'records',)
@@ -128,7 +131,7 @@ class TestSuperRuns(unittest.TestCase):
                                                'records',)
 
         assert self.context.is_stored(self.superrun_name, 'records')
-        assert np.all(subrun_data['time'] == superrun_data['time'])
+        assert np.all(subrun_data == superrun_data)
 
         # Load meta data and check if rechunking worked:
         chunks = self.context.get_meta(self.superrun_name, 'records')['chunks']

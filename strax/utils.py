@@ -444,7 +444,6 @@ def multi_run(exec_function, run_ids, *args,
               throw_away_result=False,
               multi_run_progress_bar=True,
               log=None,
-              add_run_id_field=True,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
@@ -456,8 +455,6 @@ def multi_run(exec_function, run_ids, *args,
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
     :param log: logger to be used.
-    :param add_run_id_field: Boolean if True adds a run_id field to the
-        returned data.
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -467,7 +464,6 @@ def multi_run(exec_function, run_ids, *args,
     if log is None:
         import logging
         log = logging.getLogger('strax_multi_run')
-    
     # Only schedule twice as many tasks as there are workers. In this
     # way we avoid an overload of memory due to too many runs
     # (scales with number of runs)
@@ -479,9 +475,11 @@ def multi_run(exec_function, run_ids, *args,
     run_id_numpy = np.sort(run_id_numpy)
     run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
 
+    # Get from kwargs whether output should contain a run_id field.
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
-    _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
+    add_run_id_field = kwargs.get('add_run_id_field', True)
+    _is_superrun = np.any([r.startswith(b'_') for r in run_id_numpy])
     if _is_superrun:
         add_run_id_field = False
 
