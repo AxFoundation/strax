@@ -473,6 +473,7 @@ def multi_run(exec_function, run_ids, *args,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
+    _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
 
     if len(run_id_numpy) > 70:
         warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
@@ -485,7 +486,6 @@ def multi_run(exec_function, run_ids, *args,
     # Get from kwargs whether output should contain a run_id field.
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
-    _is_superrun = np.any([r.startswith(b'_') for r in run_id_numpy])
     if 'add_run_id_field' in kwargs:
         add_run_id_field = kwargs.pop('add_run_id_field')
     else:
