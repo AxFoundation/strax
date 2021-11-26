@@ -473,7 +473,14 @@ def multi_run(exec_function, run_ids, *args,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
-    run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
+
+    if len(run_id_numpy) > 70:
+        warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
+             'Changing run_id data_type from string to bytes to reduce memory consumption. '
+             'Please note that "run_id" != b"run_id"! You can convert a byte string back to '
+             'a normal string via b"byte_string".decode("utf-8"). '
+             )
+        run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
 
     # Get from kwargs whether output should contain a run_id field.
     # In case we have a multi-runs with superruns we should skip adding
