@@ -444,6 +444,7 @@ def multi_run(exec_function, run_ids, *args,
               throw_away_result=False,
               multi_run_progress_bar=True,
               log=None,
+              add_run_id_field=True,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
@@ -455,6 +456,8 @@ def multi_run(exec_function, run_ids, *args,
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
     :param log: logger to be used.
+    :param add_run_id_field: Boolean if True adds a run_id field to the
+        returned data.
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -474,6 +477,13 @@ def multi_run(exec_function, run_ids, *args,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
+
+    # In case we have a multi-runs with superruns we should skip adding
+    # run_ids and sorting according run_id does not make sense.
+    _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
+    if _is_superrun:
+        add_run_id_field = False
+
     # List to sort data in the end according to output
     # (order may change due to threads)
     run_id_output = []
@@ -513,9 +523,10 @@ def multi_run(exec_function, run_ids, *args,
 
                 result = f.result()
                 # Append the run id column
-                ids = np.array([_run_id] * len(result),
-                               dtype=[('run_id', run_id_numpy.dtype)])
-                result = merge_arrs([ids, result])
+                if add_run_id_field:
+                    ids = np.array([_run_id] * len(result),
+                                   dtype=[('run_id', run_id_numpy.dtype)])
+                    result = merge_arrs([ids, result])
                 final_result.append(result)
                 run_id_output.append(_run_id)
 
@@ -529,7 +540,12 @@ def multi_run(exec_function, run_ids, *args,
             pbar.close()
             return None
 
-        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        if add_run_id_field:
+            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        else:
+            # In case we do not have any run_id sort according to time:
+            start_of_runs = [np.min(res['time']) for res in final_result]
+            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
         return final_result
 

@@ -1204,7 +1204,8 @@ class Context:
         pbar.update(0)
 
     def make(self, run_id: ty.Union[str, tuple, list],
-             targets, save=tuple(), max_workers=None,
+             targets, save=tuple(), add_run_id_field=True,
+             max_workers=None,
              _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
@@ -1220,6 +1221,7 @@ class Context:
             return strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 throw_away_result=True, log=self.log,
+                add_run_id_field=add_run_id_field,
                 save=save, max_workers=max_workers, **kwargs)
 
         if _skip_if_built and self.is_stored(run_id, targets):
@@ -1231,6 +1233,7 @@ class Context:
 
     def get_array(self, run_id: ty.Union[str, tuple, list],
                   targets, save=tuple(), max_workers=None,
+                  add_run_id_field=True,
                   **kwargs) -> np.ndarray:
         """Compute target for run_id and return as numpy array
         {get_docs}
@@ -1244,6 +1247,7 @@ class Context:
             results = strax.multi_run(
                 self.get_array, run_ids, targets=targets,
                 log=self.log,
+                add_run_id_field=add_run_id_field,
                 save=save, max_workers=max_workers, **kwargs)
         else:
             source = self.get_iter(
@@ -1781,6 +1785,8 @@ get_docs = """
     be used when mass producing plugins that are not of the same
     datakind. Don't try to use this in get_array or get_df because the
     data is not returned.
+:param add_run_id_field: Boolean whether to add a run_id field in case
+    of multi-runs.
 """ + select_docs
 
 for attr in dir(Context):
