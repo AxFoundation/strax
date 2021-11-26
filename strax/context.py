@@ -1041,6 +1041,10 @@ class Context:
         in background threads...
         {get_docs}
         """
+        if hasattr(run_id, 'decode'):
+            # Byte string has to be decoded:
+            run_id = run_id.decode('utf-8')
+
         # If any new options given, replace the current context
         # with a temporary one
         if len(kwargs):

@@ -477,6 +477,7 @@ def multi_run(exec_function, run_ids, *args,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
+    run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
 
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
