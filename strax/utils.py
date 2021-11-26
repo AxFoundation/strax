@@ -478,10 +478,11 @@ def multi_run(exec_function, run_ids, *args,
     # Get from kwargs whether output should contain a run_id field.
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
-    add_run_id_field = kwargs.get('add_run_id_field', True)
     _is_superrun = np.any([r.startswith(b'_') for r in run_id_numpy])
-    if _is_superrun:
-        add_run_id_field = False
+    if 'add_run_id_field' in kwargs:
+        add_run_id_field = kwargs.pop('add_run_id_field')
+    else:
+        add_run_id_field = not _is_superrun
 
     # List to sort data in the end according to output
     # (order may change due to threads)
