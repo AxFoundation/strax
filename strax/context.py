@@ -1686,7 +1686,7 @@ class Context:
 
     def stored_dependencies(self,
                             run_id: str,
-                            target: str,
+                            target: ty.Union[str, list, tuple],
                             check_forbidden: bool = True,
                             _targets_stored: ty.Optional[dict] = None,
                             ) -> ty.Optional[dict]:
@@ -1694,7 +1694,7 @@ class Context:
         For a given run_id and target(s) get a dictionary of all the datatypes taht
 
         :param run_id: run_id
-        :param target: target
+        :param target: target or a list of targets
         :param check_forbidden: Check that we are not requesting to make
             a plugin that is forbidden by the context to be created.
         :return: dictionary of data types (keys) required for building
@@ -1706,15 +1706,19 @@ class Context:
         if _targets_stored is None:
             _targets_stored = dict()
 
-        if len(strax.to_str_tuple(target)) > 1:
+        targets = strax.to_str_tuple(target)
+        if len(targets) > 1:
             # Multiple targets, do them all
-            for dep in target:
+            for dep in targets:
                 self.stored_dependencies(run_id,
                                          dep,
                                          check_forbidden=check_forbidden,
                                          _targets_stored=_targets_stored,
                                          )
             return _targets_stored
+
+        # Make sure we have the string not ('target',)
+        target = targets[0]
 
         if target in _targets_stored:
             return
@@ -1725,8 +1729,8 @@ class Context:
         if this_target_is_stored:
             return _targets_stored
 
-        deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
-        if not deps:
+        dependencies = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
+        if not dependencies:
             raise strax.DataNotAvailable(f'Lowest level dependency {target} is not stored')
 
         forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
@@ -1738,13 +1742,11 @@ class Context:
             raise strax.DataNotAvailable(
                 forbidden_warning.format(run_id=run_id, target=target, dep=target,))
 
-        for dep in deps:
-            if dep not in _targets_stored:
-                self.stored_dependencies(run_id,
-                                         dep,
-                                         check_forbidden=check_forbidden,
-                                         _targets_stored=_targets_stored,
-                                         )
+        self.stored_dependencies(run_id,
+                                 target=dependencies,
+                                 check_forbidden=check_forbidden,
+                                 _targets_stored=_targets_stored,
+                                 )
         return _targets_stored
 
     def _is_stored_in_sf(self, run_id, target,
