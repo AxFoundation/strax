@@ -1729,7 +1729,10 @@ class Context:
         if this_target_is_stored:
             return _targets_stored
 
-        dependencies = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
+        # Need to init the class e.g. if we want to allow depends on like this:
+        # https://github.com/XENONnT/cutax/blob/d7ec0685650d03771fef66507fd6882676151b9b/cutax/cutlist.py#L33  # noqa
+        plugin = self._plugin_class_registry[target]()
+        dependencies = strax.to_str_tuple(plugin.depends_on)
         if not dependencies:
             raise strax.DataNotAvailable(f'Lowest level dependency {target} is not stored')
 
