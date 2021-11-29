@@ -1673,12 +1673,14 @@ class Context:
             from and are needed in order to build this target.
         """
         try:
-            return set(
-                self.stored_dependencies(run_id=run_id,
-                                         target=target,
-                                         check_forbidden=check_forbidden
-                                         ).keys()
-            )
+            return set(plugin_name
+                       for plugin_name, plugin_stored in
+                       self.stored_dependencies(run_id=run_id,
+                                                target=target,
+                                                check_forbidden=check_forbidden
+                                                ).items()
+                       if plugin_stored
+                       )
         except strax.DataNotAvailable:
             return None
 
@@ -1705,8 +1707,7 @@ class Context:
         if len(strax.to_str_tuple(target)) > 1:
             # Multiple targets, do them all
             for dep in target:
-                self.stored_dependencies(self,
-                                         run_id,
+                self.stored_dependencies(run_id,
                                          dep,
                                          check_forbidden=check_forbidden,
                                          _is_target_stored=_is_target_stored,
@@ -1720,7 +1721,7 @@ class Context:
         _is_target_stored[target] = is_stored
 
         if is_stored:
-            return
+            return _is_target_stored
 
         deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
         if not deps:
@@ -1732,11 +1733,9 @@ class Context:
             'it is not stored. Disable check with check_forbidden=False'
         )
         if check_forbidden and target in forbidden:
-            self.log.warning(forbidden_warning.format(run_id=run_id,
-                                                      target=target,
-                                                      dep=target,))
-            _is_target_stored[target] = False
-            return
+            raise strax.DataNotAvailable(forbidden_warning.format(run_id=run_id,
+                                                                  target=target,
+                                                                  dep=target,))
 
         for dep in deps:
             if dep not in _is_target_stored:

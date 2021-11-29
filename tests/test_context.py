@@ -296,6 +296,7 @@ class TestContext(unittest.TestCase):
         # since we cannot make peaks!
         assert st.get_source(run_id, 'peaks', check_forbidden=True) is None
         assert st.get_source(run_id, 'cut_peaks', check_forbidden=True) is None
+        assert st.get_source(run_id, ('peaks', 'cut_peaks'), check_forbidden=True) is None
 
         # We could ignore the error though
         assert st.get_source(run_id, 'peaks', check_forbidden=False) == {'records'}
