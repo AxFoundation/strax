@@ -10,7 +10,7 @@ limit is respected!
 
 import strax
 import numpy as np
-from pymongo import MongoClient, DESCENDING
+from pymongo import MongoClient, DESCENDING, collection
 from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
@@ -160,7 +160,12 @@ class MongoBackend(StorageBackend):
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
 
-    def __init__(self, uri, database, col_name, *args, **kwargs):
+    def __init__(self,
+                 uri: str,
+                 database: str,
+                 col_name: str,
+                 *args,
+                 **kwargs):
         """
         MongoFrontend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
@@ -201,10 +206,15 @@ class MongoFrontend(StorageFrontend):
 class MongoSaver(Saver):
     allow_rechunk = False
 
-    def __init__(self, key, metadata, col, **kwargs):
+    def __init__(self,
+                 key: str,
+                 metadata: dict,
+                 col: collection.Collection,
+                 **kwargs
+                 ):
         """
         Mongo saver
-        :param key: strax.Datakey
+        :param key: string of strax.Datakey
         :param metadata: metadata to save belonging to data
         :param col: collection (NB! pymongo collection object) of mongo
         instance to write to
