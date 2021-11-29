@@ -1666,7 +1666,7 @@ class Context:
         start processing from, if no base is available, return None.
 
         :param run_id: run_id
-        :param target:  target
+        :param target: target
         :param check_forbidden: Check that we are not requesting to make
             a plugin that is forbidden by the context to be created.
         :return: set of plugin names that are needed to start processing
@@ -1688,21 +1688,23 @@ class Context:
                             run_id: str,
                             target: str,
                             check_forbidden: bool = True,
-                            _is_target_stored: ty.Optional[dict] = None,
+                            _targets_stored: ty.Optional[dict] = None,
                             ) -> ty.Optional[dict]:
         """
-        For a given run_id and target get the stored bases where we can
-        start processing from, if no base is available, return None.
+        For a given run_id and target(s) get a dictionary of all the datatypes taht
 
         :param run_id: run_id
-        :param target:  target
+        :param target: target
         :param check_forbidden: Check that we are not requesting to make
             a plugin that is forbidden by the context to be created.
-        :return: set of plugin names that are needed to start processing
-            from and are needed in order to build this target.
+        :return: dictionary of data types (keys) required for building
+            the requested target(s) and if they are stored (values)
+        :raises strax.DataNotAvailable: if there is at least one data
+            type that is not stored and has no dependency or if it
+            cannot be created
         """
-        if _is_target_stored is None:
-            _is_target_stored = dict()
+        if _targets_stored is None:
+            _targets_stored = dict()
 
         if len(strax.to_str_tuple(target)) > 1:
             # Multiple targets, do them all
@@ -1710,18 +1712,18 @@ class Context:
                 self.stored_dependencies(run_id,
                                          dep,
                                          check_forbidden=check_forbidden,
-                                         _is_target_stored=_is_target_stored,
+                                         _targets_stored=_targets_stored,
                                          )
-            return _is_target_stored
+            return _targets_stored
 
-        if target in _is_target_stored:
+        if target in _targets_stored:
             return
 
-        is_stored = self.is_stored(run_id, target)
-        _is_target_stored[target] = is_stored
+        this_target_is_stored = self.is_stored(run_id, target)
+        _targets_stored[target] = this_target_is_stored
 
-        if is_stored:
-            return _is_target_stored
+        if this_target_is_stored:
+            return _targets_stored
 
         deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
         if not deps:
@@ -1733,18 +1735,17 @@ class Context:
             'it is not stored. Disable check with check_forbidden=False'
         )
         if check_forbidden and target in forbidden:
-            raise strax.DataNotAvailable(forbidden_warning.format(run_id=run_id,
-                                                                  target=target,
-                                                                  dep=target,))
+            raise strax.DataNotAvailable(
+                forbidden_warning.format(run_id=run_id, target=target, dep=target,))
 
         for dep in deps:
-            if dep not in _is_target_stored:
+            if dep not in _targets_stored:
                 self.stored_dependencies(run_id,
                                          dep,
                                          check_forbidden=check_forbidden,
-                                         _is_target_stored=_is_target_stored,
+                                         _targets_stored=_targets_stored,
                                          )
-        return _is_target_stored
+        return _targets_stored
 
     def _is_stored_in_sf(self, run_id, target,
                          storage_frontend: strax.StorageFrontend) -> bool:
