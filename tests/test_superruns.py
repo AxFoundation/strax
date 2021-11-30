@@ -195,7 +195,7 @@ class TestSuperRuns(unittest.TestCase):
         # three chunks
         next_subrun_id = int(self.subrun_ids[-1])+1
         for run_id in range(next_subrun_id, next_subrun_id+2):
-            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
+            self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             rr = self.context.get_array(str(run_id), 'records')
             self._write_run_doc(self.context, run_id, 
                                self.now + datetime.timedelta(0, int(rr['time'].min())),
@@ -281,7 +281,7 @@ class TestSuperRuns(unittest.TestCase):
                                 self.now + datetime.timedelta(0, int(endtime)),
                                 )
 
-            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
+            self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             assert self.context.is_stored(run_id, 'records')
 
     @staticmethod

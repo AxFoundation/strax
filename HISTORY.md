@@ -1,3 +1,17 @@
+1.1.2 / 2021-11-19
+---------------------
+- Descriptor configs (#550)
+- Add funcs for getting stored source (#590)
+- use logged warnings (#582)
+- Fail for - run_ids (#567)
+- Infer type from default value in Option (#569, #586, #587)
+- Fix buffer issue in highest density regions, adds tests (#591)
+- Fix memory usage multi runs (#581)
+- Update CONTRIBUTING.md (#585)
+
+Notes:
+ - PRs #569, #586, #587 may cause a lot of warnings for options
+ 
 1.1.1 / 2021-10-27
 ---------------------
 - Fix memory leak (#561)

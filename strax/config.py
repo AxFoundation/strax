@@ -5,6 +5,7 @@ from immutabledict import immutabledict
 import warnings
 
 import strax
+
 export, __all__ = strax.exporter()
 
 # Placeholder value for omitted values.
@@ -44,6 +45,8 @@ def takes_config(*options):
                 **plugin_class.takes_config, **result})
         else:
             plugin_class.takes_config = immutabledict(result)
+        if isinstance(opt, strax.Config):
+            setattr(plugin_class, opt.name, opt)
         return plugin_class
 
     return wrapped
@@ -56,14 +59,14 @@ class Option:
 
     def __init__(self,
                  name: str,
-                 type: type = OMITTED,
+                 type: ty.Union[type, tuple, list] = OMITTED,
                  default: ty.Any = OMITTED,
                  default_factory: ty.Callable = OMITTED,
                  default_by_run=OMITTED,
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 infer_dtype = OMITTED,
+                 infer_type = OMITTED,
                  help: str = ''):
         """
         :param name: Option identifier
@@ -84,6 +87,8 @@ class Option:
             by the value of the child option.
         :param track: If True (default), option value becomes part of plugin
         lineage (just like the plugin version).
+        :param infer_type: Whether to infer the type from the
+            default value if type not explicitly set.
         :param help: Human-readable description of the option.
         """
         self.name = name
@@ -117,14 +122,15 @@ class Option:
             raise RuntimeError(f"Tried to specify more than one default "
                                f"for option {self.name}.")
             
-        if infer_dtype and type is OMITTED and default is not OMITTED:
+        if infer_type and type is OMITTED and default is not OMITTED:
             # ------------
             #FIXME: remove after long enough period to allow fixing problematic options.
-            if infer_dtype is OMITTED:
-                warnings.warn(f'You are setting a default value for config {name} but not \
-                specifying a type. In the future the type will be inferred from \
-                the default value which will result in an error if this config \
-                is set to a different type.')
+            if infer_type is OMITTED:
+                warnings.warn(
+                    f'You are setting a default value for config {name} but not ' 
+                    'specifying a type. In the future the type will be inferred from '
+                    'the default value which will result in an error if this config '
+                    'is set to a different type.')
                 return
             ## -----------
             for ntype in [numbers.Integral, numbers.Number]:
@@ -196,11 +202,66 @@ class Option:
             value = config[self.name]
             if (self.type is not OMITTED
                     and not isinstance(value, self.type)):
-                raise InvalidConfiguration(
+                # TODO replace back with InvalidConfiguration
+                UserWarning(
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}")
         elif set_defaults:
             config[self.name] = self.get_default(run_id, run_defaults)
+
+
+# subclass Option for backward compatibility
+@export
+class Config(Option):
+    """An alternative to the `takes_config` class decorator
+       which uses the descriptor protocol to return the config
+       value when the attribute is accessed from within a plugin 
+    """
+    def __init__(self, **kwargs):
+        # for now set the name to empty string
+        # will be replaced by the actual name
+        # after __set_name__ is called on class
+        # instantiation
+        if 'name' not in kwargs:
+            kwargs['name'] = ''
+        super().__init__(**kwargs)
+
+    def __set_name__(self, owner, name):
+        ''''Plugin class has been instantiated
+            we can now set the option name and add it
+            to the plugins takes_config dictionary
+        '''
+        self.name = name
+        self.taken_by = owner.__name__
+        new_takes_config = {name: self}
+        if (hasattr(owner, 'takes_config')
+                and len(owner.takes_config)):
+            # Already have some options set, e.g. because of subclassing
+            # where both child and parent have a takes_config decorator
+            
+            if name in owner.takes_config:
+                raise RuntimeError(
+                    f"Attempt to specify option {name} twice")
+            owner.takes_config = immutabledict({
+                **owner.takes_config, **new_takes_config})
+        else:
+            owner.takes_config = immutabledict(new_takes_config)
+
+    def __get__(self, obj, objtype=None):
+        return self.fetch(obj)
+
+    def __set__(self, obj, value):
+        raise AttributeError(f"{self.name} is a plugin configuration and cannot be set directly.")
+
+    def fetch(self, plugin):
+        ''' This function is called when the attribute is being 
+        accessed. Should be overridden by subclasses to customize behavior.
+        '''
+        if not hasattr(plugin, 'config'):
+            raise AttributeError('Plugin has not been configured.')
+        if self.name in plugin.config:
+            return plugin.config[self.name]
+        return self.get_default(plugin.run_id)
 
 
 @export

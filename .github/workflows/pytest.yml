@@ -30,17 +30,18 @@ jobs:
           - python-version: 3.9
             test: coveralls
     steps:
-      - name: Setup python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Checkout repo
         uses: actions/checkout@v2
-      - name: Install requirements for tests
-        run: |
-            pip install -r extra_requirements/requirements-tests.txt
+      - name: Setup python
+        uses: actions/setup-python@v2.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'extra_requirements/requirements-tests.txt'
+      - name: Install requirements
+        run: pip install -r extra_requirements/requirements-tests.txt
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.6.0
+        uses: supercharge/mongodb-github-action@1.7.0
         with:
           mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest
