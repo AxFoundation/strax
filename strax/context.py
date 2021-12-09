@@ -1842,6 +1842,9 @@ get_docs = """
     data is not returned.
 :param add_run_id_field: Boolean whether to add a run_id field in case
     of multi-runs.
+:param run_id_as_bytes: Boolean if true uses byte string instead of an
+    unicode string added to a multi-run array. This can save a lot of 
+    memory when loading many runs.
 """ + select_docs
 
 for attr in dir(Context):
