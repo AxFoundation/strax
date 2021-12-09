@@ -309,6 +309,7 @@ class TestContext(unittest.TestCase):
         # since we cannot make peaks!
         assert st.get_source(run_id, 'peaks', check_forbidden=True) is None
         assert st.get_source(run_id, 'cut_peaks', check_forbidden=True) is None
+        assert st.get_source(run_id, ('peaks', 'cut_peaks'), check_forbidden=True) is None
 
         # We could ignore the error though
         assert st.get_source(run_id, 'peaks', check_forbidden=False) == {'records'}
@@ -317,8 +318,9 @@ class TestContext(unittest.TestCase):
         st.set_context_config({'forbid_creation_of': ()})
         st.make(run_id, 'peaks')
         assert st.get_source(run_id, 'records') == {'records'}
+        assert st.get_source(run_id, ('records', 'peaks')) == {'records', 'peaks'}
         assert st.get_source(run_id, 'peaks') == {'peaks'}
-        assert st.get_source(run_id, 'peaks') == {'peaks'}
+        assert st.get_source(run_id, 'cut_peaks') == {'peaks'}
 
     @staticmethod
     def get_dummy_peaks_dependency():

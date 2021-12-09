@@ -1671,18 +1671,75 @@ class Context:
         start processing from, if no base is available, return None.
 
         :param run_id: run_id
-        :param target:  target
+        :param target: target
         :param check_forbidden: Check that we are not requesting to make
             a plugin that is forbidden by the context to be created.
         :return: set of plugin names that are needed to start processing
             from and are needed in order to build this target.
         """
-        if self.is_stored(run_id, target):
-            return {target}
-
-        deps = strax.to_str_tuple(self._plugin_class_registry[target].depends_on)
-        if not deps:
+        try:
+            return set(plugin_name
+                       for plugin_name, plugin_stored in
+                       self.stored_dependencies(run_id=run_id,
+                                                target=target,
+                                                check_forbidden=check_forbidden
+                                                ).items()
+                       if plugin_stored
+                       )
+        except strax.DataNotAvailable:
             return None
+
+    def stored_dependencies(self,
+                            run_id: str,
+                            target: ty.Union[str, list, tuple],
+                            check_forbidden: bool = True,
+                            _targets_stored: ty.Optional[dict] = None,
+                            ) -> ty.Optional[dict]:
+        """
+        For a given run_id and target(s) get a dictionary of all the datatypes that:
+
+        :param run_id: run_id
+        :param target: target or a list of targets
+        :param check_forbidden: Check that we are not requesting to make
+            a plugin that is forbidden by the context to be created.
+        :return: dictionary of data types (keys) required for building
+            the requested target(s) and if they are stored (values)
+        :raises strax.DataNotAvailable: if there is at least one data
+            type that is not stored and has no dependency or if it
+            cannot be created
+        """
+        if _targets_stored is None:
+            _targets_stored = dict()
+
+        targets = strax.to_str_tuple(target)
+        if len(targets) > 1:
+            # Multiple targets, do them all
+            for dep in targets:
+                self.stored_dependencies(run_id,
+                                         dep,
+                                         check_forbidden=check_forbidden,
+                                         _targets_stored=_targets_stored,
+                                         )
+            return _targets_stored
+
+        # Make sure we have the string not ('target',)
+        target = targets[0]
+
+        if target in _targets_stored:
+            return
+
+        this_target_is_stored = self.is_stored(run_id, target)
+        _targets_stored[target] = this_target_is_stored
+
+        if this_target_is_stored:
+            return _targets_stored
+
+        # Need to init the class e.g. if we want to allow depends on like this:
+        # https://github.com/XENONnT/cutax/blob/d7ec0685650d03771fef66507fd6882676151b9b/cutax/cutlist.py#L33  # noqa
+        plugin = self._plugin_class_registry[target]()
+        dependencies = strax.to_str_tuple(plugin.depends_on)
+        if not dependencies:
+            raise strax.DataNotAvailable(f'Lowest level dependency {target} is not stored')
 
         forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
         forbidden_warning = (
@@ -1690,18 +1747,15 @@ class Context:
             'it is not stored. Disable check with check_forbidden=False'
         )
         if check_forbidden and target in forbidden:
-            self.log.warning(forbidden_warning.format(run_id=run_id,
-                                                      target=target,
-                                                      dep=target,))
-            return None
+            raise strax.DataNotAvailable(
+                forbidden_warning.format(run_id=run_id, target=target, dep=target,))
 
-        stored_sources = set()
-        for dep in deps:
-            deeper = self.get_source(run_id, dep, check_forbidden=check_forbidden)
-            if deeper is None:
-                return None
-            stored_sources |= deeper
-        return stored_sources
+        self.stored_dependencies(run_id,
+                                 target=dependencies,
+                                 check_forbidden=check_forbidden,
+                                 _targets_stored=_targets_stored,
+                                 )
+        return _targets_stored
 
     def _is_stored_in_sf(self, run_id, target,
                          storage_frontend: strax.StorageFrontend) -> bool:
