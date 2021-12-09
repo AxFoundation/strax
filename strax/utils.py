@@ -475,14 +475,6 @@ def multi_run(exec_function, run_ids, *args,
     run_id_numpy = np.sort(run_id_numpy)
     _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
 
-    if len(run_id_numpy) > 70:
-        warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
-             'Changing run_id data_type from string to bytes to reduce memory consumption. '
-             'Please note that "run_id" != b"run_id"! You can convert a byte string back to '
-             'a normal string via b"byte_string".decode("utf-8"). '
-             )
-        run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
-
     # Get from kwargs whether output should contain a run_id field.
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
@@ -490,6 +482,15 @@ def multi_run(exec_function, run_ids, *args,
         add_run_id_field = kwargs.pop('add_run_id_field')
     else:
         add_run_id_field = not _is_superrun
+    if add_run_id_field and not run_id_as_bytes and len(run_id_numpy) > 70:
+        warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
+             'Changing run_id data_type from string to bytes would reduce memory consumption. '
+             'Do so with passing "run_id_as_bytes=True" . When you do, '
+             'please note that "run_id" != b"run_id"! You can convert a byte string back to '
+             'a normal string via b"byte_string".decode("utf-8"). '
+             )
+    elif run_id_as_bytes or not add_run_id_field:
+        run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
 
     # List to sort data in the end according to output
     # (order may change due to threads)
