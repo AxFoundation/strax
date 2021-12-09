@@ -479,10 +479,10 @@ def multi_run(exec_function, run_ids, *args,
     # In case we have a multi-runs with superruns we should skip adding
     # run_ids and sorting according run_id does not make sense.
     # (Have to delete it from kwargs to make not a new context later on)
-    add_run_id_field = kwargs.get('add_run_id_field', _is_superrun)
-    del add_run_id_field['add_run_id_field']
-    run_id_as_bytes = kwargs.get('run_id_as_bytes', False)
-    del run_id_as_bytes['run_id_as_bytes']
+    add_run_id_field = kwargs.setdefault('add_run_id_field', _is_superrun)
+    del kwargs['add_run_id_field']
+    run_id_as_bytes = kwargs.setdefault('run_id_as_bytes', False)
+    del kwargs['run_id_as_bytes']
 
     _add_run_id_as_byte = add_run_id_field and run_id_as_bytes
     if not _add_run_id_as_byte and len(run_id_numpy) > 70:
