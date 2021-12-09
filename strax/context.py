@@ -1041,6 +1041,10 @@ class Context:
         in background threads...
         {get_docs}
         """
+        if hasattr(run_id, 'decode'):
+            # Byte string has to be decoded:
+            run_id = run_id.decode('utf-8')
+
         # If any new options given, replace the current context
         # with a temporary one
         if len(kwargs):
@@ -1204,7 +1208,8 @@ class Context:
         pbar.update(0)
 
     def make(self, run_id: ty.Union[str, tuple, list],
-             targets, save=tuple(), max_workers=None,
+             targets, save=tuple(),
+             max_workers=None,
              _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
@@ -1835,6 +1840,11 @@ get_docs = """
     be used when mass producing plugins that are not of the same
     datakind. Don't try to use this in get_array or get_df because the
     data is not returned.
+:param add_run_id_field: Boolean whether to add a run_id field in case
+    of multi-runs.
+:param run_id_as_bytes: Boolean if true uses byte string instead of an
+    unicode string added to a multi-run array. This can save a lot of 
+    memory when loading many runs.
 """ + select_docs
 
 for attr in dir(Context):

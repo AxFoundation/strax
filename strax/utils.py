@@ -240,7 +240,7 @@ def profile_threaded(filename):
 
 @export
 def to_str_tuple(x) -> ty.Tuple[str]:
-    if isinstance(x, str):
+    if isinstance(x, (str, bytes)):
         return (x,)
     elif isinstance(x, list):
         return tuple(x)
@@ -464,7 +464,6 @@ def multi_run(exec_function, run_ids, *args,
     if log is None:
         import logging
         log = logging.getLogger('strax_multi_run')
-    
     # Only schedule twice as many tasks as there are workers. In this
     # way we avoid an overload of memory due to too many runs
     # (scales with number of runs)
@@ -474,6 +473,28 @@ def multi_run(exec_function, run_ids, *args,
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
     run_id_numpy = np.sort(run_id_numpy)
+    _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
+
+    # Get from kwargs whether output should contain a run_id field.
+    # In case we have a multi-runs with superruns we should skip adding
+    # run_ids and sorting according run_id does not make sense.
+    # (Have to delete it from kwargs to make not a new context later on)
+    add_run_id_field = kwargs.setdefault('add_run_id_field', not _is_superrun)
+    del kwargs['add_run_id_field']
+    run_id_as_bytes = kwargs.setdefault('run_id_as_bytes', False)
+    del kwargs['run_id_as_bytes']
+
+    _add_run_id_as_byte = add_run_id_field and run_id_as_bytes
+    if not _add_run_id_as_byte and len(run_id_numpy) > 70:
+        warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
+             'Changing run_id data_type from string to bytes would reduce memory consumption. '
+             'Do so with passing "run_id_as_bytes=True" . When you do, '
+             'please note that "run_id" != b"run_id"! You can convert a byte string back to '
+             'a normal string via b"byte_string".decode("utf-8"). '
+             )
+    elif _add_run_id_as_byte:
+        run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
+
     # List to sort data in the end according to output
     # (order may change due to threads)
     run_id_output = []
@@ -513,9 +534,10 @@ def multi_run(exec_function, run_ids, *args,
 
                 result = f.result()
                 # Append the run id column
-                ids = np.array([_run_id] * len(result),
-                               dtype=[('run_id', run_id_numpy.dtype)])
-                result = merge_arrs([ids, result])
+                if add_run_id_field:
+                    ids = np.array([_run_id] * len(result),
+                                   dtype=[('run_id', run_id_numpy.dtype)])
+                    result = merge_arrs([ids, result])
                 final_result.append(result)
                 run_id_output.append(_run_id)
 
@@ -529,7 +551,12 @@ def multi_run(exec_function, run_ids, *args,
             pbar.close()
             return None
 
-        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        if add_run_id_field:
+            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        else:
+            # In case we do not have any run_id sort according to time:
+            start_of_runs = [np.min(res['time']) for res in final_result]
+            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
         return final_result
 
