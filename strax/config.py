@@ -66,7 +66,7 @@ class Option:
                  child_option: bool = False,
                  parent_option_name: str = None,
                  track: bool = True,
-                 infer_type = OMITTED,
+                 infer_type = False,
                  help: str = ''):
         """
         :param name: Option identifier
@@ -123,16 +123,6 @@ class Option:
                                f"for option {self.name}.")
             
         if infer_type and type is OMITTED and default is not OMITTED:
-            # ------------
-            #FIXME: remove after long enough period to allow fixing problematic options.
-            if infer_type is OMITTED:
-                warnings.warn(
-                    f'You are setting a default value for config {name} but not ' 
-                    'specifying a type. In the future the type will be inferred from '
-                    'the default value which will result in an error if this config '
-                    'is set to a different type.')
-                return
-            ## -----------
             for ntype in [numbers.Integral, numbers.Number]:
                 # first check if its a number otherwise numpy numbers
                 # will fail type checking when checked against int and float.
