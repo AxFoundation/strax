@@ -1691,7 +1691,7 @@ class Context:
                             _targets_stored: ty.Optional[dict] = None,
                             ) -> ty.Optional[dict]:
         """
-        For a given run_id and target(s) get a dictionary of all the datatypes taht
+        For a given run_id and target(s) get a dictionary of all the datatypes that:
 
         :param run_id: run_id
         :param target: target or a list of targets
