@@ -1,3 +1,12 @@
+1.1.3 / 2021-12-13
+---------------------
+-  Add mode and tags to superrun. (#593) 
+-  cache deps (#595) 
+-  Fix online monitor bug for only md stored (#596) 
+-  speedup get_source with lookupdict (#599)
+-  remove config warning and infer_dtype=False (#600)
+-  Require pymongo 3.* (#611) 
+
 1.1.2 / 2021-11-19
 ---------------------
 - Descriptor configs (#550)
