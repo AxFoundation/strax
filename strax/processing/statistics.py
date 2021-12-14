@@ -50,7 +50,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
             continue
 
         lowest_sample_seen = data[max_to_min[j]]
-        lowest_sample_seen *= only_upper_part
+        lowest_sample_seen *= int(only_upper_part)
         sorted_data_max_to_j = data[max_to_min[:j]]
         fraction_seen = np.sum(sorted_data_max_to_j - lowest_sample_seen) / area_tot
 
