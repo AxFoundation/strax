@@ -19,7 +19,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
     :param _buffer_size: Size of the result buffer. The size is
         equivalent to the maximal number of allowed intervals.
     :param only_upper_part: Boolean, if true only computes
-        area/probability between maximum and current hight.
+        area/probability between maximum and current height.
     :return: two arrays: The first one stores the start and inclusive
         endindex of the highest density region. The second array holds
         the amplitude for which the desired fraction was reached.
