@@ -548,6 +548,7 @@ def highest_density_region_width(data,
 
     inter, amps = strax.highest_density_region(data,
                                                fractions_desired,
+                                               only_upper_part=True,
                                                _buffer_size=_buffer_size,
                                                )
 
