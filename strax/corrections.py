@@ -11,6 +11,7 @@ import pandas as pd
 import pdmongo as pdm
 import pymongo
 import pytz
+import numpy as np
 
 import strax
 
@@ -48,7 +49,7 @@ class CorrectionsInterface:
                 host is None and
                 username is None and
                 password is None):
-            if not isinstance(client, pymongo.MongoClient):
+            if not isinstance(client, type(pymongo.MongoClient())):
                 raise TypeError(f'{client} is not a pymongo.MongoClient.')
             self.client = client
         # In this case, let's just initialize a new pymongo.MongoClient
@@ -75,6 +76,21 @@ class CorrectionsInterface:
         database = self.client[self.database_name]
         return [x['name'] for x in database.list_collections()]
 
+    def read_at(self, correction, when, limit=1):
+        """Smart logic to read corrections at given time (index), i.e by datetime index
+        :param correction: pandas.DataFrame object name in the DB (str type).
+        :param when: when, datetime to read the corrections, e.g. datetime(2020, 8, 12, 21, 4, 32, 7, tzinfo=pytz.utc)
+        :param limit: how many indexes after and before when, i.e. limit=1 will return 1 index before and 1 after 
+        :return: DataFrame as read from the corrections database with time
+        index or None if an empty DataFrame is read from the database
+        """
+        before_df = pdm.read_mongo(correction, self.before_date_query(when, limit), self.client[self.database_name])
+        after_df = pdm.read_mongo(correction, self.after_date_query(when, limit), self.client[self.database_name])
+
+        df = pd.concat([before_df, after_df])
+
+        return self.sort_by_index(df)
+
     def read(self, correction):
         """Smart logic to read corrections,
         :param correction: pandas.DataFrame object name in the DB (str type).
@@ -83,16 +99,7 @@ class CorrectionsInterface:
         """
         df = pdm.read_mongo(correction, [], self.client[self.database_name])
 
-        # No data found
-        if df.size == 0:
-            return None
-        # Delete internal Mongo identifier
-        del df['_id']
-
-        df['time'] = pd.to_datetime(df['time'], utc=True)
-        df = df.set_index('time')
-        df = df.sort_index()
-        return df
+        return self.sort_by_index(df)
 
     def interpolate(self, what, when, how='interpolate', **kwargs):
         """
@@ -152,32 +159,78 @@ class CorrectionsInterface:
     def write(self, correction, df, required_columns=('ONLINE', 'v1')):
         """
         Smart logic to write corrections to the corrections database.
-        :param correction: corrections is a pandas.DataFrame object,
-        corrections name (str type)
-        :param df: corrections is a pandas.DataFrame object a DatetimeIndex
-        :param required_columns: DataFrame must include an online and v1 columns
+        :param correction: corrections name (str type)
+        :param df: pandas.DataFrame object a DatetimeIndex
+        :param required_columns: DataFrame must include two columns online, an ONLINE version and OFFLINE version (e.g. v1)
         """
         for req in required_columns:
             if req not in df.columns:
                 raise ValueError(f'Must specify {req} in dataframe')
-        # Compare against
+        # Compare against existing data
         logging.info('Reading old values for comparison')
-        df2 = self.read(correction)
-
-        if df2 is not None:
-            logging.info('Checking if columns unchanged in past')
+        df_old = self.read(correction)
+        if df_old is not None:
             now = datetime.now(tz=timezone.utc)
-            for column in df2.columns:
-                logging.debug(f'Checking {column}')
-                if not (df2.loc[df2.index < now, column] ==
-                        df.loc[df.index < now, column]).all():
-                    raise ValueError(f'{column} changed in past, not allowed')
+            new_dates = df.index.difference(df_old.index)
+            new_past_dates = new_dates[new_dates < now]
+            old_past_dates = df_old.index[df_old.index < now]
+            for column in df_old.columns:
+                if 'ONLINE' in column:
+                    # We cannot change ONLINE values in the past
+                    if not (df_old.loc[old_past_dates, column] == df.loc[old_past_dates, column]).all():
+                        raise ValueError(f'Existing {column} values must not be changed in the past')
+                    # We can add a new date(row) in the past(ONLINE) as long as it has the same correction value as
+                    # for the preceding existing time stamp
+                    if not new_past_dates.empty:
+                        for new_past_date in new_past_dates:
+                            new_value = df.loc[df.index == new_past_date.to_pydatetime(), column].values[0]
+                            preceding_old_value = df_old.loc[df_old.index < new_past_date.to_pydatetime(), column][-1]
+                            if new_value != preceding_old_value:
+                                raise ValueError(f'Adding new past dates to {column} only allowed if correction value '
+                                                 f'not deviating from value for preceding existing time stamp')
+                else:
+                    # We can change OFFLINE values in the past only if they are NaN
+                    if not ((df_old.loc[old_past_dates, column] == df.loc[old_past_dates, column]) | (np.isnan(df_old.loc[old_past_dates, column]))).all():
+                        raise ValueError(f'{column} only NaN values may be updated in the past')
+                    # We can add a new date(row) in the past(OFFLINE) only if it does not affect already potentially
+                    # processed times, or if it is the same value as the entire column (relevant e.g. for indices or
+                    # constant corrections), or if we only add NaN
+                    if not new_past_dates.empty:
+                        for new_past_date in new_past_dates:
+                            new_value = df.loc[df.index == new_past_date.to_pydatetime(), column].values[0]
+                            if not (np.isnan(new_value) or (df[column] == new_value).all()):
+                                preceding_old_value = df_old.loc[df_old.index < new_past_date.to_pydatetime(), column][-1]
+                                if (df_old.loc[df_old.index > new_past_date.to_pydatetime(), column]).empty:
+                                    succeeding_old_value = False
+                                else:
+                                    succeeding_old_value = df_old.loc[df_old.index > new_past_date.to_pydatetime(), column][0]
+                                if not np.isnan(np.array([preceding_old_value, succeeding_old_value])).any():
+                                    raise ValueError(f'Given new value in {column} not allowed for given past time stamp')
 
         df = df.reset_index()
         logging.info('Writing')
 
         database = self.client[self.database_name]
         return df.to_mongo(correction, database, if_exists='replace')
+
+    @staticmethod
+    def before_date_query(date, limit=1):
+        return [{"$match": {"time": {"$lte": pd.to_datetime(date),}
+                           }
+                },
+                {"$sort": {"time": -1}},
+                {"$limit": limit}
+               ]
+
+    @staticmethod
+    def after_date_query(date, limit=1):
+        return [{"$match": {"time": {"$gte": pd.to_datetime(date),}
+                           }
+                },
+                {"$sort": {"time": 1}},
+                {"$limit": limit}
+                ]
+
 
     @staticmethod
     def check_timezone(date):
@@ -192,3 +245,21 @@ class CorrectionsInterface:
         else:
             raise ValueError(f'{date} must be in UTC timezone. Insert datetime object '
                              f'like "datetime.datetime.now(tz=datetime.timezone.utc)"')
+
+    @staticmethod
+    def sort_by_index(df):
+        """
+        Smart logic to sort dataframe by index using time column
+        :param df: dataframe
+        :retrun: df sorted by index(time)
+        """
+        if df.size == 0:
+             return None
+        # Delete internal Mongo identifier
+        del df['_id']
+
+        df['time'] = pd.to_datetime(df['time'], utc=True)
+        df = df.set_index('time')
+        df = df.sort_index()
+
+        return df

@@ -1,7 +1,12 @@
 import numpy as np
+import tempfile
+import unittest
+import os
+import shutil
 import hypothesis.strategies as hst
 from hypothesis import given, settings
 import strax
+from strax.testutils import Records, Peaks, run_id
 
 
 def test_growing_result():
@@ -120,9 +125,9 @@ def test_selection_str(d):
     dt=(1, 10),
     max_time=(1, 20)),
 )
-def test_keep_columns(d):
+def test_keep_drop_columns(d):
     """
-    Test that the keep_columns option of apply selection works. Also
+    Test that the keep/drop_columns option of apply selection works. Also
         test that it does not affect the original array (e.g. if it were
         to use a view instead of a copy).
 
@@ -139,3 +144,84 @@ def test_keep_columns(d):
         assert np.all(selected_data[c] == d[c])
     for c in columns[:1]:
         assert c not in selected_data.dtype.names
+    
+    # Repeat test but for drop columns:
+    selected_data = strax.apply_selection(d, drop_columns=columns[:1])
+    for c in columns[1:]:
+        assert np.all(selected_data[c] == d[c])
+    for c in columns[:1]:
+        assert c not in selected_data.dtype.names
+
+
+class TestMultiRun(unittest.TestCase):
+    """Test behavior of multi-runs for various different settings."""
+
+    def setUp(self):
+        """Setup context and make some subruns."""
+        self.tempdir = tempfile.mkdtemp()
+        self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
+                                                                  provide_run_metadata=True,
+                                                                  readonly=False,
+                                                                  deep_scan=True)],
+                                     register=[Records, Peaks],
+                                     config={'bonus_area': 42,
+                                             'use_per_run_defaults': False,
+                                             'recs_per_chunk': 10**3,
+                                             },
+                                     )
+        self.run_ids = [str(r) for r in range(5)]
+
+        for run_id in self.run_ids:
+            self.context.make(run_id, 'records')
+
+    def test_multi_run(self):
+        self._test_get_array_multi_run()
+
+    def test_multi_run_more_workers(self):
+        self._test_get_array_multi_run(max_worker=2)
+
+    def test_multi_run_multiprocessing(self):
+        self.context.set_context_config({'allow_multiprocess': True})
+        self._test_get_array_multi_run(max_worker=2)
+
+    def test_multi_run_memory_profile(self):
+        """Tests if multi-runs fills up memory. Use only a single worker
+        hence there should not be at any time more than 2 runs inside the
+        ThreadPoolExecutor.
+        """
+        from memory_profiler import memory_usage
+        # First get overhead to set up computing:
+        mem_overhead = memory_usage((self.context.make,
+                                     ('1', 'records')))
+        mem_overhead = np.mean(mem_overhead)
+
+        # Now get size of a single array:
+        size_per_run = self.context.size_mb('1', 'records')
+        rr_test = self.context.get_array('1', 'records')
+        # Make 50 runs and compare memory usage:
+        used_mem = memory_usage((self.context.make,
+                                 ([str(r) for r in range(50)], 'records'))
+                                )
+        peak_mem = np.mean(used_mem)
+
+        # Be a bit more generous and put the limit to 5 runs. If we
+        # really fill up the memory processing 50 runs should show it.
+        assert peak_mem <= mem_overhead + size_per_run*5
+
+    def _test_get_array_multi_run(self, max_worker=None):
+        rr = []
+        for run_id in self.run_ids:
+            rr.append(self.context.get_array(run_id, 'records'))
+        rr = np.concatenate(rr)
+
+        rr_multi = self.context.get_array(self.run_ids, 'records', max_worker=max_worker)
+        assert len(rr) == len(rr_multi)
+        assert np.all(rr['time'] == rr_multi['time'])
+
+        # Shuffle run_ids and check if output is sorted:
+        np.random.shuffle(self.run_ids)
+        rr_multi = self.context.get_array(self.run_ids, 'records', max_worker=max_worker)
+        assert np.all(np.diff(rr_multi['run_id'].astype(np.int8)) >= 0)
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir)

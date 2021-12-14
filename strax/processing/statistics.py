@@ -5,7 +5,7 @@ import strax
 export, __all__ = strax.exporter()
 
 @export
-@numba.njit()
+@numba.njit(cache=True)
 def highest_density_region(data, fractions_desired, _buffer_size=10):
     """
     Computes for a given sampled distribution the highest density region
@@ -86,11 +86,14 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
             g_ind = -1
             diff = ind[1:] - ind[:-1]
             gaps = gaps[:-1][diff > 1]
-            if len(gaps):
-                mes = ('Found more intervals than "_buffer_size" allows please'
-                       'increase the size of the buffer.')
-                assert len(gaps) < _buffer_size, mes
 
+            if len(gaps) > _buffer_size:
+                # This signal has more boundaries than the buffer can hold
+                # hence set all entries to -1 instead.
+                res[fi, 0, :] = -1
+                res[fi, 1, :] = -1
+                fi += 1
+            else:
                 for g_ind, g in enumerate(gaps):
                     # Loop over all gaps and get outer edges:
                     interval = ind[g0:g]
@@ -98,12 +101,11 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
                     res[fi, 1, g_ind] = interval[-1] + 1
                     g0 = g
 
-            # Now we have to do the last interval:
-            interval = ind[g0:]
-            res[fi, 0, g_ind + 1] = interval[0]
-            res[fi, 1, g_ind + 1] = interval[-1] + 1
-
-            fi += 1
+                # Now we have to do the last interval:
+                interval = ind[g0:]
+                res[fi, 0, g_ind + 1] = interval[0]
+                res[fi, 1, g_ind + 1] = interval[-1] + 1
+                fi += 1
 
         if fi == (len(fractions_desired)):
             # Found all fractions so we are done

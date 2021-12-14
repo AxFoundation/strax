@@ -1,10 +1,12 @@
 from base64 import b32encode
 import collections
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import itertools
 import contextlib
 from functools import wraps
 import json
 import re
+
 import sys
 import traceback
 import typing as ty
@@ -238,7 +240,7 @@ def profile_threaded(filename):
 
 @export
 def to_str_tuple(x) -> ty.Tuple[str]:
-    if isinstance(x, str):
+    if isinstance(x, (str, bytes)):
         return (x,)
     elif isinstance(x, list):
         return tuple(x)
@@ -441,6 +443,7 @@ def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
     then return list of result arrays, each with a run_id column added.
@@ -451,14 +454,50 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param log: logger to be used.
 
     Other (kw)args will be passed to the exec_function.
     """
     if max_workers is None:
         max_workers = 1
 
+    if log is None:
+        import logging
+        log = logging.getLogger('strax_multi_run')
+    # Only schedule twice as many tasks as there are workers. In this
+    # way we avoid an overload of memory due to too many runs
+    # (scales with number of runs)
+    how_many_tasks_at_once = max_workers*2
+    task_index = 0
+    
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
+    run_id_numpy = np.sort(run_id_numpy)
+    _is_superrun = np.any([r.startswith('_') for r in run_id_numpy])
+
+    # Get from kwargs whether output should contain a run_id field.
+    # In case we have a multi-runs with superruns we should skip adding
+    # run_ids and sorting according run_id does not make sense.
+    # (Have to delete it from kwargs to make not a new context later on)
+    add_run_id_field = kwargs.setdefault('add_run_id_field', not _is_superrun)
+    del kwargs['add_run_id_field']
+    run_id_as_bytes = kwargs.setdefault('run_id_as_bytes', False)
+    del kwargs['run_id_as_bytes']
+
+    _add_run_id_as_byte = add_run_id_field and run_id_as_bytes
+    if not _add_run_id_as_byte and len(run_id_numpy) > 70:
+        warn('You are asking for more than 70 runs at a time with add_run_id_field=True. '
+             'Changing run_id data_type from string to bytes would reduce memory consumption. '
+             'Do so with passing "run_id_as_bytes=True" . When you do, '
+             'please note that "run_id" != b"run_id"! You can convert a byte string back to '
+             'a normal string via b"byte_string".decode("utf-8"). '
+             )
+    elif _add_run_id_as_byte:
+        run_id_numpy = run_id_numpy.astype('S')  # Use byte string to reduce memory usage.
+
+    # List to sort data in the end according to output
+    # (order may change due to threads)
+    run_id_output = []
 
     # Generally we don't want a per run pbar because of multi_run_progress_bar
     kwargs.setdefault('progress_bar', False)
@@ -466,28 +505,60 @@ def multi_run(exec_function, run_ids, *args,
     # Probably we'll want to use dask for this in the future,
     # to enable cut history tracking and multiprocessing.
     # For some reason the ProcessPoolExecutor doesn't work??
-    with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        futures = [exc.submit(exec_function, r, *args, **kwargs)
-                   for r in run_ids]
-        for _ in tqdm(as_completed(futures),
-                      desc="Loading %d runs" % len(run_ids),
-                      disable=not multi_run_progress_bar):
-            pass
+    pbar = tqdm(total=len(run_id_numpy), 
+                desc="Loading %d runs" % len(run_ids),
+                disable=not multi_run_progress_bar,
+                )
 
-        result = []
-        for i, f in enumerate(futures):
-            r = f.result()
-            if throw_away_result:
-                continue
-            # Append the run id column
-            ids = np.array([run_id_numpy[i]] * len(r),
-                           dtype=[('run_id', run_id_numpy.dtype)])
-            r = merge_arrs([ids, r])
-            result.append(r)
+    with ThreadPoolExecutor(max_workers=max_workers) as exc:
+        log.debug('Starting ThreadPoolExecutor for multi-run.')
+        # Submit first bunch of futures, add additional futures later
+        futures = {exc.submit(exec_function, r, *args, **kwargs): r
+                   for r in itertools.islice(run_id_numpy, task_index, how_many_tasks_at_once)}
+
+        task_index = how_many_tasks_at_once
+        tasks_done = 0
+        log.debug(f'Submitting first futures: {futures.values()}')
+        final_result = []
+        while futures:
+            futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
+
+            for f in futures_done:
+                tasks_done += 1
+                _run_id = futures.pop(f)
+                log.debug(f'Done with run_id: {_run_id} ' 
+                          f'and {len(run_id_numpy)-tasks_done} are left.')
+                pbar.update(1)
+                if throw_away_result:
+                    continue
+
+                result = f.result()
+                # Append the run id column
+                if add_run_id_field:
+                    ids = np.array([_run_id] * len(result),
+                                   dtype=[('run_id', run_id_numpy.dtype)])
+                    result = merge_arrs([ids, result])
+                final_result.append(result)
+                run_id_output.append(_run_id)
+
+            for r in itertools.islice(run_id_numpy, task_index, task_index+len(futures_done)):
+                task_index += 1
+                fut = exc.submit(exec_function, r, *args, **kwargs)
+                futures[fut] = r
+                log.debug(f'Submitting additional futures, new futures are: {futures.values()}')
 
         if throw_away_result:
+            pbar.close()
             return None
-        return result
+
+        if add_run_id_field:
+            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        else:
+            # In case we do not have any run_id sort according to time:
+            start_of_runs = [np.min(res['time']) for res in final_result]
+            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
+        pbar.close()
+        return final_result
 
 
 @export
@@ -529,6 +600,7 @@ def iter_chunk_meta(md):
 def apply_selection(x,
                     selection_str=None,
                     keep_columns=None,
+                    drop_columns=None,
                     time_range=None,
                     time_selection='fully_contained'):
     """Return x after applying selections
@@ -536,6 +608,8 @@ def apply_selection(x,
     :param x: Numpy structured array
     :param selection_str: Query string or sequence of strings to apply.
     :param time_range: (start, stop) range to load, in ns since the epoch
+    :param keep_columns: Field names of the columns to keep.
+    :param drop_columns: Field names of the columns to drop.
     :param time_selection: Kind of time selectoin to apply:
     - skip: Do not select a time range, even if other arguments say so
     - touching: select things that (partially) overlap with the range
@@ -545,6 +619,10 @@ def apply_selection(x,
     Thus, data that ends (exclusively) exactly at the right edge of a
     fully_contained selection is returned.
     """
+    if drop_columns and keep_columns:
+        raise ValueError('You cannot specify both keep_columns and drop_columns ' 
+                         'as their logic is contradictory please specify just one.')
+
     # Apply the time selections
     if time_range is None or time_selection == 'skip':
         pass
@@ -568,15 +646,35 @@ def apply_selection(x,
 
     if keep_columns:
         keep_columns = strax.to_str_tuple(keep_columns)
-
-        # Construct the new dtype
-        new_dtype = []
+        
+    if drop_columns:
+        drop_columns = strax.to_str_tuple(drop_columns)
+        keep_columns = []
         for unpacked_dtype in strax.unpack_dtype(x.dtype):
             field_name = unpacked_dtype[0]
             if isinstance(field_name, tuple):
                 field_name = field_name[1]
+                
+            if field_name in drop_columns:
+                continue
+            keep_columns.append(field_name) 
+
+
+    if keep_columns:
+        # We check before if keep and drop are specified both,
+        # if so we raise an error.
+        # Construct the new dtype
+        new_dtype = []
+        fields_to_copy = []
+        for unpacked_dtype in strax.unpack_dtype(x.dtype):
+            field_name = unpacked_dtype[0]
+            if isinstance(field_name, tuple):
+                field_name = field_name[1]
+
             if field_name in keep_columns:
                 new_dtype.append(unpacked_dtype)
+                fields_to_copy.append(field_name)
+
 
         # Copy over the data
         x2 = np.zeros(len(x), dtype=new_dtype)

@@ -1,6 +1,6 @@
-numpy>=1.18.5
-pandas
 numba>=0.43.1
+numpy>=1.18.5, <1.21
+pandas
 blosc
 zstd
 tqdm>=4.46.0
@@ -8,8 +8,10 @@ dill
 psutil
 numexpr
 scipy
-pymongo
+pymongo<4.0
 pdmongo
 lz4
 immutabledict
 packaging
+zarr
+fsspec

@@ -10,7 +10,7 @@ limit is respected!
 
 import strax
 import numpy as np
-from pymongo import MongoClient, DESCENDING
+from pymongo import MongoClient, DESCENDING, collection
 from strax import StorageFrontend, StorageBackend, Saver
 from datetime import datetime
 from pytz import utc as py_utc
@@ -27,7 +27,7 @@ DEFAULT_MONGO_BACKEND_BUFFER_NRUNS = 5
 @export
 class MongoBackend(StorageBackend):
     """Mongo storage backend"""
-    def __init__(self, uri, database, col_name=None):
+    def __init__(self, uri: str, database: str, col_name: str):
         """
         Backend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
@@ -85,10 +85,10 @@ class MongoBackend(StorageBackend):
     def _saver(self, key, metadata, **kwargs):
         """See strax.Backend"""
         # Use the key to make a collection otherwise, use the backend-key
-        col = self.db[self.col_name if self.col_name is not None else str(key)]
+        col = self.db[self.col_name]
         return MongoSaver(key, metadata, col, **kwargs)
 
-    def get_metadata(self, key):
+    def _get_metadata(self, key, **kwargs):
         """See strax.Backend"""
         query = backend_key_to_query(key)
 
@@ -160,7 +160,12 @@ class MongoBackend(StorageBackend):
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
 
-    def __init__(self, uri, database, col_name=None, *args, **kwargs):
+    def __init__(self,
+                 uri: str,
+                 database: str,
+                 col_name: str,
+                 *args,
+                 **kwargs):
         """
         MongoFrontend for reading/writing data from Mongo
         :param uri: Mongo url (with pw and username)
@@ -176,16 +181,24 @@ class MongoFrontend(StorageFrontend):
         self.backends = [MongoBackend(uri, database, col_name=col_name)]
         self.col_name = col_name
 
+    @property
+    def collection(self):
+        return self.db[self.col_name]
+
     def _find(self, key, write, allow_incomplete, fuzzy_for,
               fuzzy_for_options):
         """See strax.Frontend"""
         if write:
             return self.backends[0].__class__.__name__, str(key)
-        query = backend_key_to_query(str(key))
-        if self.db[self.col_name].count_documents(query):
-            self.log.debug(f"{key} is in cache.")
+        # Should have at least one non-metadata chunk, otherwise there
+        # is no data to load
+        query = {**backend_key_to_query(str(key)),
+                 'provides_meta': False
+                 }
+        if self.collection.count_documents(query):
+            self.log.debug(f"{key} is in database.")
             return self.backends[0].__class__.__name__, str(key)
-        self.log.debug(f"{key} is NOT in cache.")
+        self.log.debug(f"{key} is NOT in database.")
         raise strax.DataNotAvailable
 
 
@@ -193,10 +206,15 @@ class MongoFrontend(StorageFrontend):
 class MongoSaver(Saver):
     allow_rechunk = False
 
-    def __init__(self, key, metadata, col, **kwargs):
+    def __init__(self,
+                 key: str,
+                 metadata: dict,
+                 col: collection.Collection,
+                 **kwargs
+                 ):
         """
         Mongo saver
-        :param key: strax.Datakey
+        :param key: string of strax.Datakey
         :param metadata: metadata to save belonging to data
         :param col: collection (NB! pymongo collection object) of mongo
         instance to write to
@@ -309,8 +327,15 @@ class MongoSaver(Saver):
 
 def backend_key_to_query(backend_key):
     """Convert backend key to queryable dictionary"""
-    n, d, l = backend_key.split('-')
-    return {'number': int(n), 'data_type': d, 'lineage_hash': l}
+    split_key = backend_key.split('-')
+    if len(split_key) != 3:
+        raise ValueError(f'backend_key ({backend_key}) has too many "-"s,'
+                         f' don\'t use "-" within run_ids')
+    number, data_type, lineage = split_key
+    return {'number': int(number),
+            'data_type': data_type,
+            'lineage_hash': lineage,
+            }
 
 
 def remove_np(dictin):

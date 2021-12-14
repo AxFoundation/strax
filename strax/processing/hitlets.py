@@ -204,6 +204,9 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
                              '_copy_hitlets_to_hitlets_width_data')
 
     _get_hitlets_data(hitlets_with_data_field, records, to_pe)
+    if np.any(hitlets_with_data_field['length'] == 0):
+        raise ValueError('Try to create zero length hitlets which is forbidden!')
+        
     return hitlets_with_data_field
 
 
@@ -228,16 +231,25 @@ def _get_hitlets_data(hitlets, records, to_pe):
                 r['length'],
                 h['time'] // h['dt'],
                 h['length'])
-
+            
+            if (r_end - r_start) == 0 and (h_end - h_start) == 0:
+                # _touching_windows will give a range of overlapping records  with hitlet
+                # independent of channel. Hence, in rare cases it might be that a record of
+                # channel A touches with a hitlet of channel B which  starts before the previous
+                # record of channel b. Hence we get one non-overlapping record in channel b.
+                continue   
+            
             if is_first_record:
-                # We need recorded_samples_offset because hits may extend beyond the boundaries of our recorded data.
-                # As the data is not defined in those regions we have to chop and realign our data. See the following
-                # Example: (fragment 0, 1) [2, 2, 2, 2] [2, 2, 2] with a hitfinder threshold of 1 and left/right
-                # extension of 3. In the first fragment our hitlet would range from 3 to 8 in the second from 8
-                # to 11. Hence we have to subtract from every h_start and h_end the offset of 3 to realign our data.
-                # Time and length of the hitlet are updated accordingly.
+                # We need recorded_samples_offset because hits may extend beyond the boundaries
+                # of our recorded data. As the data is not defined in those regions we have to
+                # chop and realign our data. See the following Example: (fragment 0, 1) [2, 2, 2,
+                # 2] [2, 2, 2] with a hitfinder threshold of 1 and left/right extension of 3. In
+                # the first fragment our hitlet would range from 3 to 8 in the second from 8 to
+                # 11. Hence we have to subtract from every h_start and h_end the offset of 3 to
+                # realign our data. Time and length of the hitlet are updated accordingly.
                 is_first_record = False
                 recorded_samples_offset = h_start
+
             h_start -= recorded_samples_offset
             h_end -= recorded_samples_offset
 
@@ -503,12 +515,12 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     return res
 
 
-@numba.njit
+@numba.njit(cache=True)
 def highest_density_region_width(data,
-                                  fractions_desired,
-                                  dt=1,
-                                  fractionl_edges=False,
-                                  _buffer_size=100):
+                                 fractions_desired,
+                                 dt=1,
+                                 fractionl_edges=False,
+                                 _buffer_size=100):
     """
     Function which computes the left and right edge based on the outer
     most sample for the highest density region of a signal.
@@ -524,7 +536,8 @@ def highest_density_region_width(data,
     :param fractionl_edges: If true computes width as fractional time
         depending on the covered area between the current and next
         sample.
-    :param _buffer_size: Maximal number of allowed intervals.
+    :param _buffer_size: Maximal number of allowed intervals. If signal
+        exceeds number e.g. due to noise width computation is skipped.
     """
     res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
     data = np.maximum(data, 0)
@@ -532,17 +545,24 @@ def highest_density_region_width(data,
     if np.all(data == 0):
         res[:] = np.nan
         return res
-    else:
-        inter, amps = strax.highest_density_region(data,
-                                                   fractions_desired, _buffer_size=_buffer_size)
 
-    for f_ind, (i, a) in enumerate(zip(inter, amps)):
+    inter, amps = strax.highest_density_region(data,
+                                               fractions_desired,
+                                               _buffer_size=_buffer_size,
+                                               )
+
+    for index_area_fraction, (interval_indicies, area_fraction_amplitude) in enumerate(zip(inter, amps)):
+        if np.all(interval_indicies[:] == -1):
+            res[index_area_fraction, :] = np.nan
+            continue
+
         if not fractionl_edges:
-            res[f_ind, 0] = i[0, 0] * dt
-            res[f_ind, 1] = i[1, np.argmax(i[1, :])] * dt
+            res[index_area_fraction, 0] = interval_indicies[0, 0] * dt
+            res[index_area_fraction, 1] = interval_indicies[1, np.argmax(interval_indicies[1, :])] * dt
         else:
-            left = i[0, 0]
-            right = i[1, np.argmax(i[1, :])] - 1  # since value corresponds to outer edge
+            left = interval_indicies[0, 0]
+            # -1 since value corresponds to outer edge:
+            right = interval_indicies[1, np.argmax(interval_indicies[1, :])] - 1
 
             # Get amplitudes of outer most samples
             # and amplitudes of adjacent samples (if any)
@@ -556,11 +576,13 @@ def highest_density_region_width(data,
             if (right + 1) < len(data):
                 next_right_amp = data[right + 1]
 
-            # Compute fractions and new left and right edges:
-            fl = (left_amp - a) / (left_amp - next_left_amp)
-            fr = (right_amp - a) / (right_amp - next_right_amp)
+            # Compute fractions and new left and right edges, the case
+            # left_amp == next_left_amp cannot occure by the definition of the highest density
+            # region.
+            fl = (left_amp - area_fraction_amplitude) / (left_amp - next_left_amp)
+            fr = (right_amp - area_fraction_amplitude) / (right_amp - next_right_amp)
 
-            res[f_ind, 0] = (left + 0.5 - fl) * dt
-            res[f_ind, 1] = (right + 0.5 + fr) * dt
+            res[index_area_fraction, 0] = (left + 0.5 - fl) * dt
+            res[index_area_fraction, 1] = (right + 0.5 + fr) * dt
 
     return res
