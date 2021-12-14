@@ -4,13 +4,13 @@ import numba
 import strax
 export, __all__ = strax.exporter()
 
+
 @export
 @numba.njit(cache=True)
-def highest_density_region(data, fractions_desired, _buffer_size=10):
+def highest_density_region(data, fractions_desired, only_upper_part=False, _buffer_size=10):
     """
     Computes for a given sampled distribution the highest density region
     of the desired fractions.
-
     Does not assume anything on the normalisation of the data.
 
     :param data: Sampled distribution
@@ -18,11 +18,11 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
         the hdr should be computed.
     :param _buffer_size: Size of the result buffer. The size is
         equivalent to the maximal number of allowed intervals.
-
+    :param only_upper_part: Boolean, if true only computes
+        area/probability between maximum and current hight.
     :return: two arrays: The first one stores the start and inclusive
         endindex of the highest density region. The second array holds
         the amplitude for which the desired fraction was reached.
-
     Note:
         Also goes by the name highest posterior density. Please note,
         that the right edge corresponds to the right side of the sample.
@@ -50,6 +50,7 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
             continue
 
         lowest_sample_seen = data[max_to_min[j]]
+        lowest_sample_seen *= only_upper_part
         sorted_data_max_to_j = data[max_to_min[:j]]
         fraction_seen = np.sum(sorted_data_max_to_j - lowest_sample_seen) / area_tot
 
@@ -110,7 +111,7 @@ def highest_density_region(data, fractions_desired, _buffer_size=10):
         if fi == (len(fractions_desired)):
             # Found all fractions so we are done
             return res, res_amp
-    
+
     # If we end up here this might be due to an offset 
     # of the distribution with respect to zero. In that case it can
     # happen that we do not find all desired fractions.
