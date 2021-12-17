@@ -1,4 +1,4 @@
-1.1.3 / 2021-12-16
+1.1.4 / 2021-12-16
 ---------------------
 - Make truly HDR (#613)
 - Remove tight coincidence channel from data_type (#614) 
