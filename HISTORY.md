@@ -1,3 +1,8 @@
+1.1.3 / 2021-12-16
+---------------------
+- Make truly HDR (#613)
+- Remove tight coincidence channel from data_type (#614) 
+
 1.1.3 / 2021-12-13
 ---------------------
 -  Add mode and tags to superrun. (#593) 
