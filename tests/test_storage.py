@@ -147,7 +147,7 @@ class TestStorageType(TestCase):
         self.assertEqual(n_chunks,
                          frontend_setup['n_chunks'][closest],
                          f'Should have returned {n_fastest} from'
-                         f' {self.st.storage[closest]}, got {n_chunks}'
+                         f' {st.storage[closest]}, got {n_chunks}'
                          )
 
     def test_close_goes_first_on_loading(self):
