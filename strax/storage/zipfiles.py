@@ -21,6 +21,8 @@ class ZipDirectory(strax.StorageFrontend):
     instead these zip files are made by zipping stuff from FileSytemBackend.
     """
 
+    storage_typ = strax.StorageType.COMPRESSED
+
     def __init__(self, path='.', *args, readonly=True, **kwargs):
         if not readonly:
             raise NotImplementedError("Zipfiles are currently read-only")
