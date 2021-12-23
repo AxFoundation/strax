@@ -1612,7 +1612,7 @@ class Context:
         :param rechunk: allow re-chunking for saving
         """
 
-        # NB! We don't want to use self.sorted_storage here since the order matters!
+        # NB! We don't want to use self._sorted_storage here since the order matters!
         if not self.is_stored(run_id, target):
             raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
                                          f'does not exist')
