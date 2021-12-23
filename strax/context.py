@@ -687,9 +687,7 @@ class Context:
         as a simple list without asking users to keep any particular
         order in mind. Return the fastest first and try loading from it
         """
-        storage_sfs = self.storage
-        storage_sfs.sort(key=lambda x: x.storage_type)
-        return storage_sfs
+        return sorted(self.storage, key=lambda x: x.storage_type)
 
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """
@@ -701,7 +699,7 @@ class Context:
             strax.DataKey. This chunck is loaded exclusively.
         :return: partial object
         """
-        for _, sf in enumerate(self._sorted_storage):
+        for sf in self._sorted_storage:
             try:
                 # Partial is clunky... but allows specifying executor later
                 # Since it doesn't run until later, we must do a find now
