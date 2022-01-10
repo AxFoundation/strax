@@ -9,7 +9,7 @@ fsspec==2021.11.1
 hypothesis==6.29.0
 immutabledict==2.2.1
 lz4==3.1.10
-memory_profiler==0.58.0
+memory_profiler==0.60.0
 mongomock==3.23.0
 npshmex==0.2.1
 numba==0.54.1
