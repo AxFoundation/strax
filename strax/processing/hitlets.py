@@ -268,7 +268,7 @@ def _get_hitlets_data(hitlets, records, to_pe):
 # Hitlet properties:
 # ----------------------
 @export
-@numba.njit(cache=True, nogil=True)
+@numba.njit(cache=False, nogil=True)
 def hitlet_properties(hitlets):
     """
     Computes additional hitlet properties such as amplitude, FHWM, etc.
@@ -548,6 +548,7 @@ def highest_density_region_width(data,
 
     inter, amps = strax.highest_density_region(data,
                                                fractions_desired,
+                                               only_upper_part=True,
                                                _buffer_size=_buffer_size,
                                                )
 

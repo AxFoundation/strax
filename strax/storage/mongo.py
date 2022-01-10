@@ -160,6 +160,9 @@ class MongoBackend(StorageBackend):
 class MongoFrontend(StorageFrontend):
     """MongoDB storage frontend"""
 
+    # Not as fast as local storage, especially due to many chunks
+    storage_type = strax.StorageType.ONLINE
+
     def __init__(self,
                  uri: str,
                  database: str,

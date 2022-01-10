@@ -679,17 +679,27 @@ class Context:
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
+    @property
+    def _sorted_storage(self) -> ty.List[strax.StorageFrontend]:
+        """
+        Simple ordering of the storage frontends on the fly when e.g.
+        looking for data. This allows us to use the simple self.storage
+        as a simple list without asking users to keep any particular
+        order in mind. Return the fastest first and try loading from it
+        """
+        return sorted(self.storage, key=lambda x: x.storage_type)
+
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """
         Get partial loaders to allow loading data later
         :param key: strax.DataKey
         :param time_range: 2-length arraylike of (start, exclusive end) of row
-        numbers to get. Default is None, which means get the entire run.
+            numbers to get. Default is None, which means get the entire run.
         :param chunk_number: number of the chunk for data specified by
-        strax.DataKey. This chunck is loaded exclusively.
+            strax.DataKey. This chunck is loaded exclusively.
         :return: partial object
         """
-        for sb_i, sf in enumerate(self.storage):
+        for sf in self._sorted_storage:
             try:
                 # Partial is clunky... but allows specifying executor later
                 # Since it doesn't run until later, we must do a find now
@@ -879,7 +889,7 @@ class Context:
 
                 key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
 
-                for sf in self.storage:
+                for sf in self._sorted_storage:
                     if sf.readonly:
                         continue
                     if loading_this_data:
@@ -1469,10 +1479,10 @@ class Context:
         :param target: data type to get
         """
         key = self.key_for(run_id, target)
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             try:
                 return sf.get_metadata(key, **self._find_options)
-            except strax.DataNotAvailable as e:
+            except strax.DataNotAvailable:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
@@ -1487,7 +1497,7 @@ class Context:
         :param projection: Selection of fields to get, following MongoDB
         syntax. May not be supported by frontend.
         """
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if not sf.provide_run_metadata:
                 continue
             try:
@@ -1523,7 +1533,8 @@ class Context:
         return defs
 
     def is_stored(self, run_id, target, **kwargs):
-        """Return whether data type target has been saved for run_id
+        """
+        Return whether data type target has been saved for run_id
         through any of the registered storage frontends.
 
         Note that even if False is returned, the data type may still be made
@@ -1540,7 +1551,7 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
                 return True
         # None of the frontends has the data
@@ -1592,6 +1603,7 @@ class Context:
                          rechunk: bool = False):
         """
         Copy data from one frontend to another
+
         :param run_id: run_id
         :param target: target datakind
         :param target_frontend_id: index of the frontend that the data should go to
@@ -1599,6 +1611,8 @@ class Context:
         :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
         """
+
+        # NB! We don't want to use self._sorted_storage here since the order matters!
         if not self.is_stored(run_id, target):
             raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
                                          f'does not exist')
@@ -1781,7 +1795,7 @@ class Context:
         :return: strax.StorageFrontend or None (when raise_error is
         False)
         """
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
                 return sf
         if should_exist:

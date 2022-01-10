@@ -1,3 +1,17 @@
+1.1.5 / 2022-01-10
+---------------------
+- StorageFrontend remoteness attribute and test (#617)
+- fix line endings (#618)
+- Bump numpy (#627)
+- Don't cache `hitlet_properties` (#616)
+
+
+1.1.4 / 2021-12-16
+---------------------
+- Make truly HDR (#613)
+- Remove tight coincidence channel from data_type (#614) 
+
+
 1.1.3 / 2021-12-13
 ---------------------
 -  Add mode and tags to superrun. (#593) 
@@ -6,6 +20,7 @@
 -  speedup get_source with lookupdict (#599)
 -  remove config warning and infer_dtype=False (#600)
 -  Require pymongo 3.* (#611) 
+
 
 1.1.2 / 2021-11-19
 ---------------------
@@ -21,6 +36,7 @@
 Notes:
  - PRs #569, #586, #587 may cause a lot of warnings for options
  
+
 1.1.1 / 2021-10-27
 ---------------------
 - Fix memory leak (#561)
@@ -31,7 +47,6 @@ Notes:
 
 1.1.0 / 2021-10-15
 ---------------------
-
 major / minor:
 
 - Fix hitlet splitting (#549)
