@@ -9,6 +9,7 @@ import datetime
 import pytz
 import json
 from bson import json_util
+import pandas as pd
 import re
 
 
@@ -17,15 +18,22 @@ class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name='_superrun_test'):
         self.offset_between_subruns = 10
         self.superrun_name = superrun_name
+        self.subrun_modes = ['mode_a', 'mode_b']
+        self.subrun_source = 'test'
         # Temp directory for storing record data for the tests.
         # Will be removed during TearDown.
         self.tempdir = tempfile.mkdtemp()
+        self.tempdir2 = tempfile.mkdtemp()  # Required to test writing superruns
+                                            # with two storage frontends
         self.context = strax.Context(storage=[strax.DataDirectory(self.tempdir,
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
                                                                   deep_scan=True)],
                                      register=[Records, RecordsExtension, Peaks, PeaksExtension],
-                                     config={'bonus_area': 42}
+                                     config={'bonus_area': 42,},
+                                     store_run_fields=('name', 'number', 'start', 'end',
+                                                       'livetime', 'mode', 'source',
+                                                       ),
                                      )
         self.context.set_context_config({'write_superruns': True,
                                          'use_per_run_defaults': False
@@ -37,6 +45,15 @@ class TestSuperRuns(unittest.TestCase):
         self.context._plugin_class_registry['records'].chunk_target_size_mb = 1
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)  # Define superrun
+
+    def test_superrun_access(self):
+        """
+        Tests if storage fornt-ends which does not provide superruns
+        raise correct exception.
+        """
+        self.context.storage[0].provide_superruns = False
+        with self.assertRaises(strax.DataNotAvailable):
+            self.context.storage[0].find(self.context.key_for(self.superrun_name, 'records'))
 
     def test_run_meta_data(self):
         """
@@ -51,7 +68,7 @@ class TestSuperRuns(unittest.TestCase):
         livetime = 0
         for meta in subrun_meta:
             time_delta = meta['end'] - meta['start']
-            livetime += time_delta.total_seconds()*10**9
+            livetime += time_delta.total_seconds()
         assert superrun_meta['livetime'] == livetime
 
         prev_start = datetime.datetime.min.replace(tzinfo=pytz.utc)
@@ -98,12 +115,15 @@ class TestSuperRuns(unittest.TestCase):
     def test_create_and_load_superruns(self):
         """
         Creates "new" superrun data from already existing data. Loads
-        and compare data afterwards.
+        and compare data afterwards. Also tests "add_run_id_field"
+        option.
         """
         
         subrun_data = self.context.get_array(self.subrun_ids,
                                              'records',
-                                             progress_bar=False)
+                                             progress_bar=False,
+                                             add_run_id_field=False
+                                             )
 
         self.context.make(self.superrun_name,
                           'records',)
@@ -111,7 +131,7 @@ class TestSuperRuns(unittest.TestCase):
                                                'records',)
 
         assert self.context.is_stored(self.superrun_name, 'records')
-        assert np.all(subrun_data['time'] == superrun_data['time'])
+        assert np.all(subrun_data == superrun_data)
 
         # Load meta data and check if rechunking worked:
         chunks = self.context.get_meta(self.superrun_name, 'records')['chunks']
@@ -184,11 +204,11 @@ class TestSuperRuns(unittest.TestCase):
         # three chunks
         next_subrun_id = int(self.subrun_ids[-1])+1
         for run_id in range(next_subrun_id, next_subrun_id+2):
-            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
+            self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             rr = self.context.get_array(str(run_id), 'records')
-            self._write_run_doc(self.context, run_id, 
-                               self.now + datetime.timedelta(0, int(rr['time'].min())),
-                               self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
+            self._write_run_doc(run_id,
+                                self.now + datetime.timedelta(0, int(rr['time'].min())),
+                                self.now + datetime.timedelta(0, int(np.max(strax.endtime(rr)))))
             endtime = np.max(strax.endtime(rr))
             self.subrun_ids.append(str(run_id))
 
@@ -229,11 +249,43 @@ class TestSuperRuns(unittest.TestCase):
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
         assert self.context.is_stored(self.superrun_name, 'peaks_extension')
         assert self.context.is_stored(self.subrun_ids[0], 'peaks_extension')
-        
-    
+
+    def test_storing_with_second_sf(self):
+        """Tests if only superrun is written to new sf if subruns
+        already exist in different sf.
+        """
+        self.context.storage[0].readonly=True
+        self.context.storage.append(strax.DataDirectory(self.tempdir2))
+        self.context.make(self.superrun_name, 'records')
+        superrun_sf = self.context.storage.pop(1)
+        # Check if first sf contains superrun, it should not:
+        assert not self.context.is_stored(self.superrun_name, 'records')
+
+        # Now check second sf for which only the superrun should be
+        # stored:
+        self.context.storage = [superrun_sf]
+        assert self.context.is_stored(self.superrun_name, 'records')
+        for subrun in self.subrun_ids:
+            assert not self.context.is_stored(subrun, 'records')
+
+    def test_run_selection_with_superruns(self):
+        df_runs = self.context.select_runs()
+        mask_superrun = df_runs['name'] == self.superrun_name
+        assert pd.api.types.is_string_dtype(df_runs['mode'])
+        modes = df_runs.loc[mask_superrun, 'mode'].values[0]
+        modes = modes.split(',')
+        assert set(modes) == set(self.subrun_modes)
+
+        assert pd.api.types.is_string_dtype(df_runs['tags'])
+        assert pd.api.types.is_string_dtype(df_runs['source'])
+        assert df_runs.loc[mask_superrun, 'source'].values[0] == 'test'
+        assert pd.api.types.is_timedelta64_dtype(df_runs['livetime'])
+
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
+        if os.path.exists(self.tempdir2):
+            shutil.rmtree(self.tempdir2)
 
     def _create_subruns(self, n_subruns=3):
         self.now = datetime.datetime.now()
@@ -245,21 +297,20 @@ class TestSuperRuns(unittest.TestCase):
             time = np.min(rr['time'])
             endtime = np.max(strax.endtime(rr))
 
-            self._write_run_doc(self.context,
-                                run_id,
+            self._write_run_doc(run_id,
                                 self.now + datetime.timedelta(0, int(time)),
                                 self.now + datetime.timedelta(0, int(endtime)),
                                 )
 
-            self.context.set_config({'secret_time_offset': endtime + self.offset_between_subruns})
+            self.context.set_config({'secret_time_offset': int(endtime + self.offset_between_subruns)})
             assert self.context.is_stored(run_id, 'records')
 
-    @staticmethod
-    def _write_run_doc(context, run_id, time, endtime):
+    def _write_run_doc(self, run_id, time, endtime):
         """Function which writes a dummy run document.
         """
-        run_doc = {'name': run_id, 'start': time, 'end': endtime}
-        with open(context.storage[0]._run_meta_path(str(run_id)), 'w') as fp:
+        run_doc = {'name': run_id, 'start': time, 'end': endtime,
+                   'mode': self.subrun_modes[int(run_id)%2], 'source': self.subrun_source}
+        with open(self.context.storage[0]._run_meta_path(str(run_id)), 'w') as fp:
             json.dump(run_doc, fp, sort_keys=True, indent=4, default=json_util.default)
 
 

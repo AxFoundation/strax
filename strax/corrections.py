@@ -11,6 +11,7 @@ import pandas as pd
 import pdmongo as pdm
 import pymongo
 import pytz
+import numpy as np
 
 import strax
 
@@ -166,33 +167,45 @@ class CorrectionsInterface:
             if req not in df.columns:
                 raise ValueError(f'Must specify {req} in dataframe')
         # Compare against existing data
-        # We can change OFFLINE values in the past only if they are NaN
-        # We cannot change ONLINE values in the past
-        # We can add a new date(row) in the past(ONLINE) as long as it is the same value
         logging.info('Reading old values for comparison')
         df_old = self.read(correction)
         if df_old is not None:
             now = datetime.now(tz=timezone.utc)
             new_dates = df.index.difference(df_old.index)
-            if not new_dates.empty:
-                for i, item in enumerate(new_dates):
-                    if item < now:
-                        for column in df_old.columns:
-                            new_value = df.loc[df.index == new_dates[i].to_pydatetime(), column].values[0]
-                            old_value = df_old.loc[df_old.index < new_dates[i].to_pydatetime(), column][-1]
-                            if new_value != old_value:
-                                raise ValueError(f'{column} changed in past, not allowed')
-            else:
-                for column in df_old.columns:
-                    if 'ONLINE' in column:
-                        if not (df.loc[df.index < now, column] == df_old.loc[df_old.index < now, column]).all():
-                            raise ValueError(f'{column} changed in past, not allowed')
-                    else:
-                        for i, item in enumerate(new_dates):
-                            old_value = df.loc[df.index < new_dates[i].to_pydatetime(), column][-1]
-                            if not np.isnan(old_value).all():
-                                raise ValueError(f'{column} only NaN values can be updated')
-
+            new_past_dates = new_dates[new_dates < now]
+            old_past_dates = df_old.index[df_old.index < now]
+            for column in df_old.columns:
+                if 'ONLINE' in column:
+                    # We cannot change ONLINE values in the past
+                    if not (df_old.loc[old_past_dates, column] == df.loc[old_past_dates, column]).all():
+                        raise ValueError(f'Existing {column} values must not be changed in the past')
+                    # We can add a new date(row) in the past(ONLINE) as long as it has the same correction value as
+                    # for the preceding existing time stamp
+                    if not new_past_dates.empty:
+                        for new_past_date in new_past_dates:
+                            new_value = df.loc[df.index == new_past_date.to_pydatetime(), column].values[0]
+                            preceding_old_value = df_old.loc[df_old.index < new_past_date.to_pydatetime(), column][-1]
+                            if new_value != preceding_old_value:
+                                raise ValueError(f'Adding new past dates to {column} only allowed if correction value '
+                                                 f'not deviating from value for preceding existing time stamp')
+                else:
+                    # We can change OFFLINE values in the past only if they are NaN
+                    if not ((df_old.loc[old_past_dates, column] == df.loc[old_past_dates, column]) | (np.isnan(df_old.loc[old_past_dates, column]))).all():
+                        raise ValueError(f'{column} only NaN values may be updated in the past')
+                    # We can add a new date(row) in the past(OFFLINE) only if it does not affect already potentially
+                    # processed times, or if it is the same value as the entire column (relevant e.g. for indices or
+                    # constant corrections), or if we only add NaN
+                    if not new_past_dates.empty:
+                        for new_past_date in new_past_dates:
+                            new_value = df.loc[df.index == new_past_date.to_pydatetime(), column].values[0]
+                            if not (np.isnan(new_value) or (df[column] == new_value).all()):
+                                preceding_old_value = df_old.loc[df_old.index < new_past_date.to_pydatetime(), column][-1]
+                                if (df_old.loc[df_old.index > new_past_date.to_pydatetime(), column]).empty:
+                                    succeeding_old_value = False
+                                else:
+                                    succeeding_old_value = df_old.loc[df_old.index > new_past_date.to_pydatetime(), column][0]
+                                if not np.isnan(np.array([preceding_old_value, succeeding_old_value])).any():
+                                    raise ValueError(f'Given new value in {column} not allowed for given past time stamp')
 
         df = df.reset_index()
         logging.info('Writing')
