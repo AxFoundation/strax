@@ -1,5 +1,5 @@
 numba>=0.43.1
-numpy>=1.18.5, <1.21
+numpy>=1.18.5, <1.22
 pandas
 blosc
 zstd
