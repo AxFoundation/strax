@@ -29,6 +29,8 @@ jobs:
             test: coveralls
           - python-version: 3.9
             test: coveralls
+          - python-version: "3.10"
+            test: coveralls
     steps:
       - name: Checkout repo
         uses: actions/checkout@v2
