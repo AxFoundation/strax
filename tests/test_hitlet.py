@@ -76,6 +76,7 @@ class TestGetHitletData(unittest.TestCase):
     def setUp(self):
         self.test_data = [1, 3, 2, 1, 0, 0]
         self.test_data_truth = self.test_data[:-2]
+        self.records, self.hitlets = self.make_records_and_hitlets([[self.test_data]])
 
     def make_records_and_hitlets(self, dummy_records):
         records = self._make_fake_records(dummy_records)
@@ -84,50 +85,69 @@ class TestGetHitletData(unittest.TestCase):
         return records, hitlets
 
     def test_inputs_are_empty(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
         hitlets_empty = np.zeros(0, dtype=strax.hitlet_with_data_dtype(2))
         records_empty = np.zeros(0, dtype=strax.record_dtype(10))
 
-        hitlets_result = strax.get_hitlets_data(hitlets_empty, records, np.ones(3000))
+        hitlets_result = strax.get_hitlets_data(hitlets_empty, self.records, np.ones(3000))
         assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
 
         hitlets_result = strax.get_hitlets_data(hitlets_empty, records_empty, np.ones(3000))
         assert len(hitlets_result) == 0, 'get_hitlet_data returned result for empty hitlets'
 
-        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records_empty, np.ones(3000))
-
+        with self.assertRaises(ValueError):
+            strax.get_hitlets_data(self.hitlets, records_empty, np.ones(3000))
 
     def test_to_pe_wrong_shape(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-        hitlets['channel'] = 2000
-        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(10))
+        self.hitlets['channel'] = 2000
+        with self.assertRaises(ValueError):
+            strax.get_hitlets_data(self.hitlets, self.records, np.ones(10))
 
     def test_get_hitlets_data_for_single_hitlet(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-
-        hitlets = strax.get_hitlets_data(hitlets[0], records, np.ones(3000))
+        hitlets = strax.get_hitlets_data(self.hitlets[0], self.records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_data_field_is_empty(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-
-        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
-        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets, records, np.ones(3000))
+        hitlets = strax.get_hitlets_data(self.hitlets, self.records, np.ones(3000))
+        with self.assertRaises(ValueError):
+            strax.get_hitlets_data(hitlets, self.records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_get_hitlets_data_without_data_field(self):
-        records, hitlets_with_data = self.make_records_and_hitlets([[self.test_data]])
-        hitlets = np.zeros(len(hitlets_with_data), strax.hitlet_dtype())
-        strax.copy_to_buffer(hitlets_with_data, hitlets, '_copy_hitlets_to_hitlets_without_data')
+        hitlets_empty = np.zeros(len(self.hitlets), strax.hitlet_dtype())
+        strax.copy_to_buffer(self.hitlets, hitlets_empty, '_copy_hitlets_to_hitlets_without_data')
 
-        hitlets = strax.get_hitlets_data(hitlets, records, np.ones(3000))
+        hitlets = strax.get_hitlets_data(hitlets_empty, self.records, np.ones(3000))
         self._test_data_is_identical(hitlets, [self.test_data_truth])
 
     def test_to_short_data_field(self):
-        records, hitlets = self.make_records_and_hitlets([[self.test_data]])
-        hitlets_to_short = np.zeros(len(hitlets), dtype=strax.hitlet_with_data_dtype(2))
-        strax.copy_to_buffer(hitlets, hitlets_to_short, '_refresh_hit_to_hitlet')
-        self.assertRaises(ValueError, strax.get_hitlets_data, hitlets_to_short, records, np.ones(3000))
+        hitlets_to_short = np.zeros(len(self.hitlets), dtype=strax.hitlet_with_data_dtype(2))
+        strax.copy_to_buffer(self.hitlets, hitlets_to_short, '_refresh_hit_to_hitlet')
+        with self.assertRaises(ValueError):
+            strax.get_hitlets_data(hitlets_to_short, self.records, np.ones(3000))
+
+    def test_empty_overlap(self):
+        records = np.zeros(3, strax.record_dtype(10))
+
+        # Create fake records for which hitlet overlaps with channel 0
+        # although hit is in channel 1. See also github.com/AxFoundation/strax/pull/549
+        records['channel'] = (0, 1, 1)
+        records['length'] = (10, 3, 10)
+        records['time'] = (0, 0, 5)
+        records['dt'] = 1
+        records['data'][-1] = np.ones(10)
+
+        # Assume we extend our hits by 1 sample hence hitlet starts at 4
+        hitlet = np.zeros(1, strax.hitlet_with_data_dtype(11))
+        hitlet['time'] = 4
+        hitlet['dt'] = 1
+        hitlet['length'] = 11
+        hitlet['channel'] = 1
+
+        hitlet = strax.get_hitlets_data(hitlet, records, np.ones(10))
+        assert hitlet['time'] == 5
+        assert hitlet['length'] == 10
+        assert np.sum(hitlet['data']) == 10
+        assert hitlet['data'][0,0] == 1
 
     def test_get_hitlets_data(self):
         dummy_records = [  # Contains Hitlet #:

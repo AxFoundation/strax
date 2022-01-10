@@ -71,8 +71,8 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
         # Use the tight coincidence of the peak with the highest amplitude
-        new_p['tight_coincidence'] = old_peaks['tight_coincidence'][
-            old_peaks['data'].max(axis=1).argmax()]
+        i_max_subpeak = old_peaks['data'].max(axis=1).argmax()
+        new_p['tight_coincidence'] = old_peaks['tight_coincidence'][i_max_subpeak]
         
         # If the endtime was in the peaks we have to recompute it here 
         # because otherwise it will stay set to zero due to the buffer

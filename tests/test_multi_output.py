@@ -1,7 +1,4 @@
 import tempfile
-
-import numpy as np
-import strax
 from strax.testutils import *
 
 import unittest
