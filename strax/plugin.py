@@ -71,7 +71,6 @@ class Plugin:
     input_timeout = 80
 
     save_when = SaveWhen.ALWAYS
-    _save_when = SaveWhen.ALWAYS
 
     # Instructions how to parallelize
     #   False: never parallellize;
@@ -463,7 +462,8 @@ class Plugin:
                         f"Plugin {d} terminated without fetching last {d}!")
 
             # This can happen especially in time range selections
-            if int(self._save_when) > strax.SaveWhen.EXPLICIT:
+            save_when = max([int(save_when) for save_when in self.save_when.values()])
+            if save_when > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
@@ -521,7 +521,10 @@ class Plugin:
 
             # For non-saving plugins, don't be strict, just take whatever
             # endtimes are available and don't check time-consistency
-            if int(self._save_when) <= strax.SaveWhen.EXPLICIT:
+            # Side mark this wont work for a plugin which has a SaveWhen.NEVER and other
+            # SaveWhen type.
+            save_when = max([int(save_when) for save_when in self.save_when.values()])
+            if save_when <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     end = max([v.end for v in kwargs.values()])  # Don't delete

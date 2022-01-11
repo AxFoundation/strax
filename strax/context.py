@@ -829,7 +829,6 @@ class Context:
                         f"{target_i} for {run_id} not found in any storage, and "
                         "your context specifies it cannot be created.")
 
-                target_plugin._save_when = target_plugin.save_when[target_i]
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
