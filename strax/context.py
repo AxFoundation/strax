@@ -844,7 +844,8 @@ class Context:
                     and _is_superrun):
                 return
 
-            if not _target_should_be_saved(target_plugin, target_i, targets, save, _is_superrun):
+            if not self._target_should_be_saved(target_plugin, target_i, targets, save, loader,
+                                                _is_superrun):
                 return
 
             # Warn about conditions that preclude saving, but the user
@@ -872,8 +873,12 @@ class Context:
             # Save the target and any other outputs of the plugin.
             # TODO Updated me: 1. save when change 2. superruns
             for d_to_save in set([target_i] + list(target_plugin.provides)):
-                if (not _target_should_be_saved(target_plugin, d_to_save, targets, save, False)
-                        or savers.get(d_to_save)):
+                key = self.key_for(run_id, target_i)
+                loader = self._get_partial_loader_for(key,
+                                                      time_range=time_range,
+                                                      chunk_number=chunk_number)
+                if (not self._target_should_be_saved(target_plugin, d_to_save, targets, save,
+                                                     loader, False) or savers.get(d_to_save)):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers or store data_types we do not want to.
                     assert target_plugin.multi_output
