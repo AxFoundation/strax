@@ -844,23 +844,6 @@ class Context:
                     and _is_superrun):
                 return
 
-            def _target_should_be_saved(target_plugin, target_i, targets, save, _is_superrun):
-                if target_plugin.save_when[target_i] == strax.SaveWhen.NEVER:
-                    if target_i in save:
-                        raise ValueError(f"Plugin forbids saving of {target_i}")
-                    return False
-                elif target_plugin.save_when[target_i] == strax.SaveWhen.TARGET:
-                    if target_i not in targets:
-                        return False
-                elif target_plugin.save_when[target_i] == strax.SaveWhen.EXPLICIT:
-                    # If we arrive here in case of a superrun the user want to save
-                    # as self.context_config['write_superruns'] is true.
-                    if target_i not in save and not _is_superrun:
-                        return False
-                else:
-                    assert target_plugin.save_when[target_i] == strax.SaveWhen.ALWAYS
-                return True
-
             if not _target_should_be_saved(target_plugin, target_i, targets, save, _is_superrun):
                 return
 
@@ -957,6 +940,39 @@ class Context:
             loader_plugins=loader_plugins,
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
+
+    def _target_should_be_saved(self, target_plugin, target, targets, save, loader, _is_superrun):
+        """
+        Function which checks if a given target should be saved.
+
+        :param target_plugin: Plugin to compute target data_type.
+        :param target: Target data_type.
+        :param targets: Other targets to be computed.
+        :param loader: Partial loader for the corresponding target
+        :param save: Targets to be saved.
+        :param _is_superrun:
+        :return:
+        """
+        if target_plugin.save_when[target] == strax.SaveWhen.NEVER:
+            if target in save:
+                raise ValueError(f"Plugin forbids saving of {target}")
+            return False
+        elif target_plugin.save_when[target] == strax.SaveWhen.TARGET:
+            if target not in targets:
+                return False
+        elif target_plugin.save_when[target] == strax.SaveWhen.EXPLICIT:
+            # If we arrive here in case of a superrun the user want to save
+            # as self.context_config['write_superruns'] is true.
+            if target not in save and not _is_superrun:
+                return False
+        elif (target_plugin.save_when[target] == strax.SaveWhen.ALWAYS
+              and loader):
+            # If an loader for this data_type exists already we do not
+            # have to store the data again.
+            return False
+
+        assert target_plugin.save_when[target] == strax.SaveWhen.ALWAYS
+        return True
 
     def estimate_run_start_and_end(self, run_id, targets=None):
         """Return run start and end time in ns since epoch.
