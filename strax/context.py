@@ -844,7 +844,7 @@ class Context:
                     and _is_superrun):
                 return
 
-            def _target_should_be_saved(target_plugin, target, save, is_superrun):
+            def _target_should_be_saved(target_plugin, target_i, targets, save, _is_superrun):
                 if target_plugin.save_when[target_i] == strax.SaveWhen.NEVER:
                     if target_i in save:
                         raise ValueError(f"Plugin forbids saving of {target_i}")
@@ -861,7 +861,7 @@ class Context:
                     assert target_plugin.save_when[target_i] == strax.SaveWhen.ALWAYS
                 return True
 
-            if not _target_should_be_saved(target_plugin, target_i, save, _is_superrun):
+            if not _target_should_be_saved(target_plugin, target_i, targets, save, _is_superrun):
                 return
 
             # Warn about conditions that preclude saving, but the user
@@ -889,10 +889,10 @@ class Context:
             # Save the target and any other outputs of the plugin.
             # TODO Updated me: 1. save when change 2. superruns
             for d_to_save in set([target_i] + list(target_plugin.provides)):
-                if (_target_should_be_saved(target_plugin, target_i, save, False)
-                        and savers.get(d_to_save)):
+                if (not _target_should_be_saved(target_plugin, d_to_save, targets, save, False)
+                        or savers.get(d_to_save)):
                     # This multi-output plugin was scanned before
-                    # let's not create doubled savers
+                    # let's not create doubled savers or store data_types we do not want to.
                     assert target_plugin.multi_output
                     continue
 
