@@ -809,14 +809,14 @@ class Context:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
                 if (time_range is not None
-                        and target_plugin.save_when > strax.SaveWhen.EXPLICIT):
+                        and target_plugin.save_when[target_i] > strax.SaveWhen.EXPLICIT):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
                     error_message = (
                         f"Time range selection assumes data is already available,"
                         f" but {target_i} for {run_id} is not.")
-                    if target_plugin.save_when == strax.SaveWhen.TARGET:
+                    if target_plugin.save_when[target_i] == strax.SaveWhen.TARGET:
                         error_message += (f"\nFirst run st.make({run_id}, "
                                           f"{target_i}) to make {target_i}.")
                     raise strax.DataNotAvailable(error_message)
@@ -843,20 +843,26 @@ class Context:
                     and not self.context_config['write_superruns']
                     and _is_superrun):
                 return
-            if target_plugin.save_when[target_i] == strax.SaveWhen.NEVER:
-                if target_i in save:
-                    raise ValueError(f"Plugin forbids saving of {target_i}")
+
+            def _target_should_be_saved(target_plugin, target, save, is_superrun):
+                if target_plugin.save_when[target_i] == strax.SaveWhen.NEVER:
+                    if target_i in save:
+                        raise ValueError(f"Plugin forbids saving of {target_i}")
+                    return False
+                elif target_plugin.save_when[target_i] == strax.SaveWhen.TARGET:
+                    if target_i not in targets:
+                        return False
+                elif target_plugin.save_when[target_i] == strax.SaveWhen.EXPLICIT:
+                    # If we arrive here in case of a superrun the user want to save
+                    # as self.context_config['write_superruns'] is true.
+                    if target_i not in save and not _is_superrun:
+                        return False
+                else:
+                    assert target_plugin.save_when[target_i] == strax.SaveWhen.ALWAYS
+                return True
+
+            if not _target_should_be_saved(target_plugin, target_i, save, _is_superrun):
                 return
-            elif target_plugin.save_when[target_i] == strax.SaveWhen.TARGET:
-                if target_i not in targets:
-                    return
-            elif target_plugin.save_when[target_i] == strax.SaveWhen.EXPLICIT:
-                # If we arrive here in case of a superrun the user want to save
-                # as self.context_config['write_superruns'] is true.
-                if target_i not in save and not _is_superrun:
-                    return
-            else:
-                assert target_plugin.save_when[target_i] == strax.SaveWhen.ALWAYS
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
@@ -881,9 +887,10 @@ class Context:
                                  f" data is allowed.")
                 return
             # Save the target and any other outputs of the plugin.
-            #TODO Updated me: 1. save when change 2. superruns
+            # TODO Updated me: 1. save when change 2. superruns
             for d_to_save in set([target_i] + list(target_plugin.provides)):
-                if savers.get(d_to_save):
+                if (_target_should_be_saved(target_plugin, target_i, save, False)
+                        and savers.get(d_to_save)):
                     # This multi-output plugin was scanned before
                     # let's not create doubled savers
                     assert target_plugin.multi_output
