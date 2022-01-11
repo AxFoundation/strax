@@ -71,7 +71,7 @@ class Plugin:
     input_timeout = 80
 
     save_when = SaveWhen.ALWAYS
-    _save_when = SaveWhen.Always
+    _save_when = SaveWhen.ALWAYS
 
     # Instructions how to parallelize
     #   False: never parallellize;
