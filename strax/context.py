@@ -873,7 +873,7 @@ class Context:
             # Save the target and any other outputs of the plugin.
             # TODO Updated me: 1. save when change 2. superruns
             for d_to_save in set([target_i] + list(target_plugin.provides)):
-                key = self.key_for(run_id, target_i)
+                key = self.key_for(run_id, d_to_save)
                 loader = self._get_partial_loader_for(key,
                                                       time_range=time_range,
                                                       chunk_number=chunk_number)
@@ -975,8 +975,6 @@ class Context:
             # If an loader for this data_type exists already we do not
             # have to store the data again.
             return False
-
-        assert target_plugin.save_when[target] == strax.SaveWhen.ALWAYS
         return True
 
     def estimate_run_start_and_end(self, run_id, targets=None):
