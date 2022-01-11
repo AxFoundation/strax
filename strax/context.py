@@ -803,20 +803,20 @@ class Context:
                 # Found it! No need to make it or look in other frontends
                 loading_this_data = True
                 loaders[target_i] = loader
-                loader_plugins[target_i] = plugins[target_i]
+                loader_plugins[target_i] = target_plugin
                 del plugins[target_i]
             else:
                 # Data not found anywhere. We will be computing it.
                 self._check_forbidden()
                 if (time_range is not None
-                        and plugins[target_i].save_when > strax.SaveWhen.EXPLICIT):
+                        and target_plugin.save_when > strax.SaveWhen.EXPLICIT):
                     # While the data type providing the time information is
                     # available (else we'd have failed earlier), one of the
                     # other requested data types is not.
                     error_message = (
                         f"Time range selection assumes data is already available,"
                         f" but {target_i} for {run_id} is not.")
-                    if plugins[target_i].save_when == strax.SaveWhen.TARGET:
+                    if target_plugin.save_when == strax.SaveWhen.TARGET:
                         error_message += (f"\nFirst run st.make({run_id}, "
                                           f"{target_i}) to make {target_i}.")
                     raise strax.DataNotAvailable(error_message)
