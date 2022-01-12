@@ -844,8 +844,9 @@ class Context:
                 return
  
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
-            if (not self._target_should_be_saved(target_plugin, target_i, targets, save, loader, _is_superrun)
-                and not self.context_config['storage_converter']):
+            if (not self._target_should_be_saved(
+                    target_plugin, target_i, targets, save, loader, _is_superrun)
+                    and not self.context_config['storage_converter']):
                 # In case of the storage converter mode we copy already existing data. So we do not
                 # have to check for the saving requirements here.
                 return
@@ -886,10 +887,10 @@ class Context:
                                                           time_range=time_range,
                                                           chunk_number=chunk_number)
 
-                    if ((not self._target_should_be_saved(target_plugin, d_to_save, targets, save, 
-                                                         loader, _is_superrun) 
-                        and not self.context_config['storage_converter'])
-                        or savers.get(d_to_save)):
+                    if ((not self._target_should_be_saved(
+                            target_plugin, d_to_save, targets, save, loader, _is_superrun)
+                         and not self.context_config['storage_converter'])
+                            or savers.get(d_to_save)):
                         # This multi-output plugin was scanned before
                         # let's not create doubled savers or store data_types we do not want to.
                         assert target_plugin.multi_output
@@ -960,9 +961,9 @@ class Context:
                 # This frontend cannot save. Too bad.
                 pass
         return savers
-        
-    
-    def _target_should_be_saved(self, target_plugin, target, targets, save, loader, _is_superrun):
+
+    @staticmethod
+    def _target_should_be_saved(target_plugin, target, targets, save, loader, _is_superrun):
         """
         Function which checks if a given target should be saved.
 
