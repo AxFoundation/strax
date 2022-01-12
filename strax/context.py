@@ -766,13 +766,8 @@ class Context:
                 sub_run_spec = self.run_metadata(
                     run_id, 'sub_run_spec')['sub_run_spec']
 
-                # Make subruns if they do not exist, since we do not
-                # want to store data twice in case we store the superrun
-                # we have to deactivate the storage converter mode.
-                stc_mode = self.context_config['storage_converter']
-                self.context_config['storage_converter'] = False
+                # Make subruns if they do not exist.
                 self.make(list(sub_run_spec.keys()), target_i, save=(target_i,))
-                self.context_config['storage_converter'] = stc_mode
 
                 ldrs = []
                 for subrun in sub_run_spec:
@@ -835,17 +830,18 @@ class Context:
                     check_cache(dep_d)
 
             # Should we save this data? If not, return.
+            _can_store_superrun = (self.context_config['write_superruns'] and _is_superrun)
+            # In case we can load the data already we want either use the storage converter
+            # or make a new superrun.
             if (loading_this_data
                     and not self.context_config['storage_converter']
-                    and not (self.context_config['write_superruns'] and _is_superrun)):
+                    and not _can_store_superrun):
                 return
             if (loading_this_data
-                    and not self.context_config['write_superruns']
-                    and _is_superrun):
+                    and not _can_store_superrun):
                 return
-
-            if not self._target_should_be_saved(target_plugin, target_i, targets, save, loader,
-                                                _is_superrun):
+            # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
+            if not self._target_should_be_saved(target_plugin, target_i, targets, save, loader, _is_superrun):
                 return
 
             # Warn about conditions that preclude saving, but the user
@@ -870,53 +866,30 @@ class Context:
                 self.log.warning(f"Not saving {target_i} while loading incomplete"
                                  f" data is allowed.")
                 return
+            
             # Save the target and any other outputs of the plugin.
-            # TODO Updated me: 1. save when change 2. superruns
-            for d_to_save in set([target_i] + list(target_plugin.provides)):
-                key = self.key_for(run_id, d_to_save)
-                loader = self._get_partial_loader_for(key,
-                                                      time_range=time_range,
-                                                      chunk_number=chunk_number)
-                if (not self._target_should_be_saved(target_plugin, d_to_save, targets, save,
-                                                     loader, False) or savers.get(d_to_save)):
-                    # This multi-output plugin was scanned before
-                    # let's not create doubled savers or store data_types we do not want to.
-                    assert target_plugin.multi_output
-                    continue
+            if _is_superrun:
+                # In case of a superrun we are only interested in the specified targets 
+                # and not any other stuff provided by the corresponding plugin.
+                savers = self._add_saver(savers, run_id, target_i, target_plugin, 
+                                         _is_superrun, loading_this_data)
+            else:
+                for d_to_save in set([target_i] + list(target_plugin.provides)):
+                    key = self.key_for(run_id, d_to_save)
+                    loader = self._get_partial_loader_for(key,
+                                                          time_range=time_range,
+                                                          chunk_number=chunk_number)
 
-                key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
-
-                for sf in self._sorted_storage:
-                    if sf.readonly:
+                    if (not self._target_should_be_saved(target_plugin, d_to_save, targets, save, 
+                                                         loader, _is_superrun)
+                        or savers.get(d_to_save)):
+                        # This multi-output plugin was scanned before
+                        # let's not create doubled savers or store data_types we do not want to.
+                        assert target_plugin.multi_output
                         continue
-                    if loading_this_data:
-                        # Usually, we don't save if we're loading
-                        if (not self.context_config['storage_converter']
-                                and (not self.context_config['write_superruns'] and _is_superrun)):
-                            continue
-                            # ... but in storage converter mode we do,
-                            # ... or we want to write a new superrun. This is different from
-                            # storage converter mode as we do not want to write the subruns again.
-                        try:
-                            sf.find(key,
-                                    **self._find_options)
-                            # Already have this data in this backend
-                            continue
-                        except strax.DataNotAvailable:
-                            # Don't have it, so let's save it!
-                            pass
-                    # If we get here, we must try to save
-                    try:
-                        saver = sf.saver(
-                            key,
-                            metadata=target_plugin.metadata(run_id, d_to_save),
-                            saver_timeout=self.context_config['saver_timeout'])
-                        # Now that we are surely saving, make an entry in savers
-                        savers.setdefault(d_to_save, [])
-                        savers[d_to_save].append(saver)
-                    except strax.DataNotAvailable:
-                        # This frontend cannot save. Too bad.
-                        pass
+                    
+                    savers = self._add_saver(savers, run_id, d_to_save, target_plugin,
+                                             _is_superrun, loading_this_data)
 
         for target_i in targets:
             check_cache(target_i)
@@ -945,7 +918,43 @@ class Context:
             loader_plugins=loader_plugins,
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
-
+    
+    def _add_saver(self, savers, run_id, d_to_save, target_plugin, _is_superrun, loading_this_data):
+        key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
+        for sf in self._sorted_storage:
+            if sf.readonly:
+                continue
+            if loading_this_data:
+                # Usually, we don't save if we're loading
+                if (not self.context_config['storage_converter']
+                        and (not self.context_config['write_superruns'] and _is_superrun)):
+                    continue
+                    # ... but in storage converter mode we do,
+                    # ... or we want to write a new superrun. This is different from
+                    # storage converter mode as we do not want to write the subruns again.
+                try:
+                    sf.find(key,
+                            **self._find_options)
+                    # Already have this data in this backend
+                    continue
+                except strax.DataNotAvailable:
+                    # Don't have it, so let's save it!
+                    pass
+            # If we get here, we must try to save
+            try:
+                saver = sf.saver(
+                    key,
+                    metadata=target_plugin.metadata(run_id, d_to_save),
+                    saver_timeout=self.context_config['saver_timeout'])
+                # Now that we are surely saving, make an entry in savers
+                savers.setdefault(d_to_save, [])
+                savers[d_to_save].append(saver)
+            except strax.DataNotAvailable:
+                # This frontend cannot save. Too bad.
+                pass
+        return savers
+        
+    
     def _target_should_be_saved(self, target_plugin, target, targets, save, loader, _is_superrun):
         """
         Function which checks if a given target should be saved.
@@ -955,8 +964,7 @@ class Context:
         :param targets: Other targets to be computed.
         :param loader: Partial loader for the corresponding target
         :param save: Targets to be saved.
-        :param _is_superrun:
-        :return:
+        :param _is_superrun: Boolean if run is a superrun.
         """
         if target_plugin.save_when[target] == strax.SaveWhen.NEVER:
             if target in save:
@@ -966,14 +974,12 @@ class Context:
             if target not in targets:
                 return False
         elif target_plugin.save_when[target] == strax.SaveWhen.EXPLICIT:
-            # If we arrive here in case of a superrun the user want to save
-            # as self.context_config['write_superruns'] is true.
-            if target not in save and not _is_superrun:
+            if target not in save:
                 return False
         elif (target_plugin.save_when[target] == strax.SaveWhen.ALWAYS
-              and loader):
+              and (loader and not _is_superrun)):
             # If an loader for this data_type exists already we do not
-            # have to store the data again.
+            # have to store the data again, except it is a superrun.
             return False
         return True
 
