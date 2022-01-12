@@ -1,5 +1,6 @@
 import datetime
 import logging
+import warnings
 import fnmatch
 from functools import partial
 import typing as ty
@@ -828,7 +829,12 @@ class Context:
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
-
+            
+            if self.context_config['storage_converter']:
+                warnings.warn('The storage converter mode will be replaced by "copy_to_frontend" soon. '
+                              'It well be removed in one of the future releases. Please let us know if '
+                              'you are still using the "storage_converter" option.', DeprecationWarning)
+            
             # Should we save this data? If not, return.
             _can_store_superrun = (self.context_config['write_superruns'] and _is_superrun)
             # In case we can load the data already we want either use the storage converter
@@ -837,13 +843,14 @@ class Context:
                     and not self.context_config['storage_converter']
                     and not _can_store_superrun):
                 return
-            if (loading_this_data
-                    and not _can_store_superrun):
-                return
+ 
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
-            if not self._target_should_be_saved(target_plugin, target_i, targets, save, loader, _is_superrun):
+            if (not self._target_should_be_saved(target_plugin, target_i, targets, save, loader, _is_superrun)
+                and not self.context_config['storage_converter']):
+                # In case of the storage converter mode we copy already existing data. So we do not
+                # have to check for the saving requirements here.
                 return
-
+            
             # Warn about conditions that preclude saving, but the user
             # might not expect.
             if time_range is not None:
@@ -880,8 +887,9 @@ class Context:
                                                           time_range=time_range,
                                                           chunk_number=chunk_number)
 
-                    if (not self._target_should_be_saved(target_plugin, d_to_save, targets, save, 
-                                                         loader, _is_superrun)
+                    if ((not self._target_should_be_saved(target_plugin, d_to_save, targets, save, 
+                                                         loader, _is_superrun) 
+                        and not self.context_config['storage_converter'])
                         or savers.get(d_to_save)):
                         # This multi-output plugin was scanned before
                         # let's not create doubled savers or store data_types we do not want to.
