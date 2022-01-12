@@ -244,7 +244,7 @@ class TestSuperRuns(unittest.TestCase):
         assert not self.context.is_stored(self.superrun_name, 'peaks_extension')
         self.context._plugin_class_registry['peaks'].save_when = strax.SaveWhen.EXPLICIT
         
-        self.context.make(self.superrun_name, 'peaks_extension')
+        self.context.make(self.superrun_name, 'peaks_extension', save=('peaks_extension',))
         assert not self.context.is_stored(self.superrun_name, 'peaks')
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
         assert self.context.is_stored(self.superrun_name, 'peaks_extension')
