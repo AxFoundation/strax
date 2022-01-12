@@ -465,7 +465,10 @@ class Plugin:
                         f"Plugin {d} terminated without fetching last {d}!")
 
             # This can happen especially in time range selections
-            save_when = max([int(save_when) for save_when in self.save_when.values()])
+            if hasattr(self.save_when, 'values'):
+                save_when = max([int(save_when) for save_when in self.save_when.values()])
+            else:
+                save_when = self.save_when
             if save_when > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
@@ -526,7 +529,10 @@ class Plugin:
             # endtimes are available and don't check time-consistency
             # Side mark this wont work for a plugin which has a SaveWhen.NEVER and other
             # SaveWhen type.
-            save_when = max([int(save_when) for save_when in self.save_when.values()])
+            if hasattr(self.save_when, 'values'):
+                save_when = max([int(save_when) for save_when in self.save_when.values()])
+            else:
+                save_when = self.save_when
             if save_when <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
