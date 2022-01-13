@@ -183,6 +183,11 @@ class TestMultiOutputs(unittest.TestCase):
         assert not self.mystrax.is_stored('0', 'odd_recs')
         assert self.mystrax.is_stored('0', 'rec_count')
 
+        # Check if saver of already existing data dropped:
+        components = self.mystrax.get_components('0', 'odd_recs')
+        assert 'odd_recs' in components.savers
+        assert 'rec_count' not in components.savers
+
         # See if TARGET is made and previous always does not raise error
         # since it already exists:
         self.mystrax.make('0', 'odd_recs')
