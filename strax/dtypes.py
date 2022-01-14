@@ -186,6 +186,10 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8),
+        (('S1 ln probability',
+          's1_prob'), np.float32),
+        (('S2 ln probability',
+          's2_prob'), np.float32),
         (('Integral across channels [PE]',
           'area'), np.float32),
         (('Integral per channel [PE]',
@@ -208,10 +212,6 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'max_gap'), np.int32),
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
-        (('S1 ln probability',
-          's1_prob'), np.float32),
-        (('S2 ln probability',
-          's2_prob'), np.float32),
     ]
 
 
