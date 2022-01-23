@@ -60,12 +60,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_MONGO_URI:  'mongodb://localhost:27017/'
         run: |
-              coverage run --source=strax setup.py test -v
+              
               straxen_dir=../straxen/
               git clone --single-branch --branch master https://github.com/XENONnT/straxen.git $straxen_dir
-              cd $straxen_dir
-              bash .github/scripts/create_pre_apply_function.sh $HOME
-              coverage run --append --source=../strax/strax setup.py test -v
+              bash $straxen_dir/.github/scripts/create_pre_apply_function.sh $HOME
+              coverage run --source=strax $straxen_dir/setup.py test -v
+              coverage report
+              coverage run --append --source=strax setup.py test -v
+              coverage report
               coveralls --service=github
       - name: goodbye
         run: echo goodbye
