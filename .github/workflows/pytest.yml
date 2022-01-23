@@ -57,7 +57,6 @@ jobs:
         if: matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_MONGO_URI: 'mongodb://localhost:27017/'
         run: |
           coverage run --source=strax setup.py test -v
@@ -65,7 +64,6 @@ jobs:
         if: matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_MONGO_URI: 'mongodb://localhost:27017/'
         run: |
           echo "clone straxen"
@@ -78,6 +76,8 @@ jobs:
           coverage report
       - name: Coveralls upload
         if: matrix.test == 'coveralls'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           coverage report
           coveralls --service=github
