@@ -67,6 +67,7 @@ jobs:
               coverage run --source=strax setup.py test -v
               coverage report
               cd ../strax
+              cp $straxen/.coverage .
               coverage run --append --source=strax setup.py test -v
               coverage report
               coveralls --service=github
