@@ -533,7 +533,6 @@ def multi_run(exec_function, run_ids, *args,
                 
                 if throw_away_result:
                     continue
-                
                 result = f.result()
  
                 # Append the run id column
