@@ -10,7 +10,7 @@ from packaging import version
 import time
 import typing
 import warnings
-
+from enum import IntEnum
 import numpy as np
 
 import strax
@@ -85,6 +85,23 @@ class RunMetadataNotAvailable(Exception):
 
 
 @export
+class StorageType(IntEnum):
+    """
+    Class attribute of how far/close data is when fetched from a given
+    storage frontend. This is used to prioritize which frontend will be
+    asked first for data (prevents loading data from slow frontends when
+    fast frontends might also have the data)
+    """
+    # Feel free to add, could even be floats if needed
+    MEMORY = 0      # Sits in cache, super fast to load
+    LOCAL = 1       # Available on hard-disk, only limited by IO
+    ONLINE = 2      # Limited by network bandwidth
+    COMPRESSED = 3  # Data is compressed and needs (slow) decompression before loading
+    REMOTE = 4      # Data needs to be fetched from another host, and downloaded
+    TAPE = 10       # Nothing is as slow as tape, except pigeon post
+
+
+@export
 class StorageFrontend:
     """Interface to something that knows data-locations and run-level metadata.
     For example, a runs database, or a data directory on the file system.
@@ -93,6 +110,7 @@ class StorageFrontend:
     can_define_runs = False
     provide_run_metadata = False
     provide_superruns = False
+    storage_type = StorageType.LOCAL
 
     def __init__(self,
                  readonly=False,

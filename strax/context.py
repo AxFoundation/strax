@@ -19,61 +19,62 @@ tqdm = strax.utils.tqdm
 
 
 @strax.takes_config(
-    strax.Option(name='storage_converter', default=False,
+    strax.Option(name='storage_converter', default=False, type=bool,
                  help='If True, save data that is loaded from one frontend '
                       'through all willing other storage frontends.'),
-    strax.Option(name='fuzzy_for', default=tuple(),
+    strax.Option(name='fuzzy_for', default=tuple(), type=tuple,
                  help='Tuple or string of plugin names for which no checks for version, '
                       'providing plugin, and config will be performed when '
                       'looking for data.'),
-    strax.Option(name='fuzzy_for_options', default=tuple(),
+    strax.Option(name='fuzzy_for_options', default=tuple(), type=tuple,
                  help='Tuple of config options for which no checks will be '
                       'performed when looking for data.'),
-    strax.Option(name='allow_incomplete', default=False,
+    strax.Option(name='allow_incomplete', default=False, type=bool,
                  help="Allow loading of incompletely written data, if the "
                       "storage systems support it"),
-    strax.Option(name='allow_rechunk', default=True,
+    strax.Option(name='allow_rechunk', default=True, type=bool,
                  help="Allow rechunking of data during writing."),
-    strax.Option(name='allow_multiprocess', default=False,
+    strax.Option(name='allow_multiprocess', default=False, type=bool,
                  help="Allow multiprocessing."
                       "If False, will use multithreading only."),
-    strax.Option(name='allow_shm', default=False,
+    strax.Option(name='allow_shm', default=False, type=bool,
                  help="Allow use of /dev/shm for interprocess communication."),
-    strax.Option(name='allow_lazy', default=True,
+    strax.Option(name='allow_lazy', default=True, type=bool,
                  help='Allow "lazy" processing. Saves memory, but incompatible '
                       'with multiprocessing and perhaps slightly slower.'),
-    strax.Option(name='forbid_creation_of', default=tuple(),
+    strax.Option(name='forbid_creation_of', default=tuple(), type=tuple,
                  help="If any of the following datatypes is requested to be "
                       "created, throw an error instead. Useful to limit "
                       "descending too far into the dependency graph."),
-    strax.Option(name='store_run_fields', default=tuple(),
+    strax.Option(name='store_run_fields', default=tuple(), type=tuple,
                  help="Tuple of run document fields to store "
                       "during scan_run."),
-    strax.Option(name='check_available', default=tuple(),
+    strax.Option(name='check_available', default=tuple(), type=tuple,
                  help="Tuple of data types to scan availability for "
                       "during scan_run."),
-    strax.Option(name='max_messages', default=4,
+    strax.Option(name='max_messages', default=4, type=int,
                  help="Maximum number of mailbox messages, i.e. size of buffer "
                       "between plugins. Too high = RAM blows up. "
                       "Too low = likely deadlocks."),
-    strax.Option(name='timeout', default=24 * 3600,
+    strax.Option(name='timeout', default=24 * 3600, type=int,
                  help="Terminate processing if any one mailbox receives "
                       "no result for more than this many seconds"),
-    strax.Option(name='saver_timeout', default=900,
+    strax.Option(name='saver_timeout', default=900, type=int,
                  help="Max time [s] a saver can take to store a result. Set "
                       "high for slow compression algorithms."),
-    strax.Option(name='use_per_run_defaults', default=False,
+    strax.Option(name='use_per_run_defaults', default=False, type=bool,
                  help='Scan the run db for per-run defaults. '
                       'This is an experimental strax feature that will '
                       'possibly be removed, see issue #246'),
-    strax.Option(name='free_options', default=tuple(),
+    strax.Option(name='free_options', default=tuple(), type=(tuple,list),
                  help='Do not warn if any of these options are passed, '
                       'even when no registered plugin takes them.'),
-    strax.Option(name='apply_data_function', default=tuple(), type=(tuple,list,ty.Callable),
+    strax.Option(name='apply_data_function', default=tuple(),
+                 type=(tuple, list, ty.Callable),
                  help='Apply a function to the data prior to returning the'
                       'data. The function should take three positional arguments: '
                       'func(<data>, <run_id>, <targets>).'),
-    strax.Option(name='write_superruns', default=False,
+    strax.Option(name='write_superruns', default=False, type=bool,
                  help='If True, save superruns as rechunked "new" data.'),
 )
 @export
@@ -457,7 +458,7 @@ class Context:
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
              for data_type, plugin in self._plugin_class_registry.items()
              if not data_type.startswith('_temp_')
-            })
+             })
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(self, targets: ty.Tuple[str],) -> bool:
@@ -678,17 +679,27 @@ class Context:
                     fuzzy_for_options=self.context_config['fuzzy_for_options'],
                     allow_incomplete=self.context_config['allow_incomplete'])
 
+    @property
+    def _sorted_storage(self) -> ty.List[strax.StorageFrontend]:
+        """
+        Simple ordering of the storage frontends on the fly when e.g.
+        looking for data. This allows us to use the simple self.storage
+        as a simple list without asking users to keep any particular
+        order in mind. Return the fastest first and try loading from it
+        """
+        return sorted(self.storage, key=lambda x: x.storage_type)
+
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """
         Get partial loaders to allow loading data later
         :param key: strax.DataKey
         :param time_range: 2-length arraylike of (start, exclusive end) of row
-        numbers to get. Default is None, which means get the entire run.
+            numbers to get. Default is None, which means get the entire run.
         :param chunk_number: number of the chunk for data specified by
-        strax.DataKey. This chunck is loaded exclusively.
+            strax.DataKey. This chunck is loaded exclusively.
         :return: partial object
         """
-        for sb_i, sf in enumerate(self.storage):
+        for sf in self._sorted_storage:
             try:
                 # Partial is clunky... but allows specifying executor later
                 # Since it doesn't run until later, we must do a find now
@@ -878,7 +889,7 @@ class Context:
 
                 key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
 
-                for sf in self.storage:
+                for sf in self._sorted_storage:
                     if sf.readonly:
                         continue
                     if loading_this_data:
@@ -1040,6 +1051,10 @@ class Context:
         in background threads...
         {get_docs}
         """
+        if hasattr(run_id, 'decode'):
+            # Byte string has to be decoded:
+            run_id = run_id.decode('utf-8')
+
         # If any new options given, replace the current context
         # with a temporary one
         if len(kwargs):
@@ -1203,7 +1218,8 @@ class Context:
         pbar.update(0)
 
     def make(self, run_id: ty.Union[str, tuple, list],
-             targets, save=tuple(), max_workers=None,
+             targets, save=tuple(),
+             max_workers=None,
              _skip_if_built=True,
              **kwargs) -> None:
         """Compute target for run_id. Returns nothing (None).
@@ -1381,20 +1397,19 @@ class Context:
                     f"array fields. Please use get_array.")
             raise
 
-
-    def get_zarr(self, run_ids, targets, storage='./strax_temp_data', 
-                progress_bar=False, overwrite=True, **kwargs):
-        """get perisistant arrays using zarr. This is useful when
+    def get_zarr(self, run_ids, targets, storage='./strax_temp_data',
+                 progress_bar=False, overwrite=True, **kwargs):
+        """get persistent  arrays using zarr. This is useful when
             loading large amounts of data that cannot fit in memory
             zarr is very compatible with dask.
             Targets are loaded into separate arrays and runs are merged.
             the data is added to any existing data in the storage location.
-  
+
         :param run_ids: (Iterable) Run ids you wish to load.
         :param targets: (Iterable) targets to load.
         :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
         :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at given path.
-   
+
         :returns zarr.Group: zarr group containing the persistant arrays available at
                         the storage location after loading the requested data
                         the runs loaded into a given array can be seen in the
@@ -1464,10 +1479,10 @@ class Context:
         :param target: data type to get
         """
         key = self.key_for(run_id, target)
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             try:
                 return sf.get_metadata(key, **self._find_options)
-            except strax.DataNotAvailable as e:
+            except strax.DataNotAvailable:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, "
                                      f"data for {key} not available")
@@ -1482,7 +1497,7 @@ class Context:
         :param projection: Selection of fields to get, following MongoDB
         syntax. May not be supported by frontend.
         """
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if not sf.provide_run_metadata:
                 continue
             try:
@@ -1518,7 +1533,8 @@ class Context:
         return defs
 
     def is_stored(self, run_id, target, **kwargs):
-        """Return whether data type target has been saved for run_id
+        """
+        Return whether data type target has been saved for run_id
         through any of the registered storage frontends.
 
         Note that even if False is returned, the data type may still be made
@@ -1535,7 +1551,7 @@ class Context:
             # noinspection PyMethodFirstArgAssignment
             self = self.new_context(**kwargs)
 
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
                 return True
         # None of the frontends has the data
@@ -1587,6 +1603,7 @@ class Context:
                          rechunk: bool = False):
         """
         Copy data from one frontend to another
+
         :param run_id: run_id
         :param target: target datakind
         :param target_frontend_id: index of the frontend that the data should go to
@@ -1594,6 +1611,8 @@ class Context:
         :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
         """
+
+        # NB! We don't want to use self._sorted_storage here since the order matters!
         if not self.is_stored(run_id, target):
             raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
                                          f'does not exist')
@@ -1656,6 +1675,102 @@ class Context:
                     f'Trying to write {data_key} to {t_sf} which already exists, '
                     'do you have two storage frontends writing to the same place?')
 
+    def get_source(self,
+                   run_id: str,
+                   target: str,
+                   check_forbidden: bool = True,
+                   ) -> ty.Union[set, None]:
+        """
+        For a given run_id and target get the stored bases where we can
+        start processing from, if no base is available, return None.
+
+        :param run_id: run_id
+        :param target: target
+        :param check_forbidden: Check that we are not requesting to make
+            a plugin that is forbidden by the context to be created.
+        :return: set of plugin names that are needed to start processing
+            from and are needed in order to build this target.
+        """
+        try:
+            return set(plugin_name
+                       for plugin_name, plugin_stored in
+                       self.stored_dependencies(run_id=run_id,
+                                                target=target,
+                                                check_forbidden=check_forbidden
+                                                ).items()
+                       if plugin_stored
+                       )
+        except strax.DataNotAvailable:
+            return None
+
+    def stored_dependencies(self,
+                            run_id: str,
+                            target: ty.Union[str, list, tuple],
+                            check_forbidden: bool = True,
+                            _targets_stored: ty.Optional[dict] = None,
+                            ) -> ty.Optional[dict]:
+        """
+        For a given run_id and target(s) get a dictionary of all the datatypes that:
+
+        :param run_id: run_id
+        :param target: target or a list of targets
+        :param check_forbidden: Check that we are not requesting to make
+            a plugin that is forbidden by the context to be created.
+        :return: dictionary of data types (keys) required for building
+            the requested target(s) and if they are stored (values)
+        :raises strax.DataNotAvailable: if there is at least one data
+            type that is not stored and has no dependency or if it
+            cannot be created
+        """
+        if _targets_stored is None:
+            _targets_stored = dict()
+
+        targets = strax.to_str_tuple(target)
+        if len(targets) > 1:
+            # Multiple targets, do them all
+            for dep in targets:
+                self.stored_dependencies(run_id,
+                                         dep,
+                                         check_forbidden=check_forbidden,
+                                         _targets_stored=_targets_stored,
+                                         )
+            return _targets_stored
+
+        # Make sure we have the string not ('target',)
+        target = targets[0]
+
+        if target in _targets_stored:
+            return
+
+        this_target_is_stored = self.is_stored(run_id, target)
+        _targets_stored[target] = this_target_is_stored
+
+        if this_target_is_stored:
+            return _targets_stored
+
+        # Need to init the class e.g. if we want to allow depends on like this:
+        # https://github.com/XENONnT/cutax/blob/d7ec0685650d03771fef66507fd6882676151b9b/cutax/cutlist.py#L33  # noqa
+        plugin = self._plugin_class_registry[target]()
+        dependencies = strax.to_str_tuple(plugin.depends_on)
+        if not dependencies:
+            raise strax.DataNotAvailable(f'Lowest level dependency {target} is not stored')
+
+        forbidden = strax.to_str_tuple(self.context_config['forbid_creation_of'])
+        forbidden_warning = (
+            'For {run_id}:{target}, you are not allowed to make {dep} and '
+            'it is not stored. Disable check with check_forbidden=False'
+        )
+        if check_forbidden and target in forbidden:
+            raise strax.DataNotAvailable(
+                forbidden_warning.format(run_id=run_id, target=target, dep=target,))
+
+        self.stored_dependencies(run_id,
+                                 target=dependencies,
+                                 check_forbidden=check_forbidden,
+                                 _targets_stored=_targets_stored,
+                                 )
+        return _targets_stored
+
     def _is_stored_in_sf(self, run_id, target,
                          storage_frontend: strax.StorageFrontend) -> bool:
         """
@@ -1680,7 +1795,7 @@ class Context:
         :return: strax.StorageFrontend or None (when raise_error is
         False)
         """
-        for sf in self.storage:
+        for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
                 return sf
         if should_exist:
@@ -1739,6 +1854,11 @@ get_docs = """
     be used when mass producing plugins that are not of the same
     datakind. Don't try to use this in get_array or get_df because the
     data is not returned.
+:param add_run_id_field: Boolean whether to add a run_id field in case
+    of multi-runs.
+:param run_id_as_bytes: Boolean if true uses byte string instead of an
+    unicode string added to a multi-run array. This can save a lot of 
+    memory when loading many runs.
 """ + select_docs
 
 for attr in dir(Context):
