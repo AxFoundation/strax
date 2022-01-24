@@ -2,14 +2,16 @@
 import fnmatch
 import re
 import typing as ty
+import warnings
 from collections import defaultdict
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 import pytz
 import datetime
-
 import strax
+# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+tqdm = strax.utils.tqdm
+
 export, __all__ = strax.exporter()
 
 
@@ -110,10 +112,17 @@ def scan_runs(self: strax.Context,
             if not _is_superrun:
                 doc.setdefault('name', f"{doc['number']:06d}")
 
+            # Convert tags/mode/source list to a,separated string if needed (mode and source can
+            # be lists for superruns)
             doc.setdefault('mode', '')
+            if type(doc['mode']) == list:
+                doc['mode'] = ','.join(doc['mode'])
 
-            # Convert tags list to a ,separated string
-            doc['tags'] = ','.join([t['name']
+            doc.setdefault('source', '')
+            if type(doc['source']) == list:
+                doc['source'] = ','.join(doc['source'])
+
+            doc['tags'] = ','.join([t['name'] if type(t) == dict else t
                                    for t in doc.get('tags', [])])
 
             # Set a default livetime if we have start and stop
@@ -124,6 +133,23 @@ def scan_runs(self: strax.Context,
                     and doc.get('end') is not None):
                 doc.setdefault('livetime', doc['end'] - doc['start'])
 
+            if _is_superrun:
+                # In contrast to regular run-docs, 
+                # superruns are timezone aware. So strip off timezone 
+                # again:
+                start = doc.get('start')
+                if start:
+                    doc['start'] = start.replace(tzinfo=None)
+                    
+                start = doc.get('end')
+                if start:
+                    doc['end'] = start.replace(tzinfo=None)
+                    
+                if type(doc.get('livetime')) == float:
+                    # If we have a superrun livetime is stored as intger seconds
+                    # as timedelta is not json serializable 
+                    doc['livetime'] = datetime.timedelta(seconds=doc['livetime'])
+            
             # Put the strax defaults stuff into a different cache
             if strax.RUN_DEFAULTS_KEY in doc:
                 self._run_defaults_cache[doc['name']] = \
@@ -148,6 +174,7 @@ def scan_runs(self: strax.Context,
                 new_docs[
                     ~np.in1d(new_docs['name'], docs['name'])]],
                 sort=False)
+            docs.reset_index(drop=True, inplace=True)
 
     # Rearrange columns
     if (not self.context_config['use_per_run_defaults']
@@ -216,30 +243,24 @@ def select_runs(self, run_mode=None, run_id=None,
 
         if requested_value is None:
             continue
+            
+        requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
         mask = np.zeros(len(values), dtype=np.bool_)
 
         if pattern_type == 'fnmatch':
             for i, x in enumerate(values):
-                mask[i] = fnmatch.fnmatch(x, requested_value)
+                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value]) 
         elif pattern_type == 're':
             for i, x in enumerate(values):
-                mask[i] = bool(re.match(requested_value, x))
+                mask[i] = np.any([re.match(rv, x) for rv in requested_value])
 
         dsets = dsets[mask]
 
-    if include_tags is not None:
-        dsets = dsets[_tags_match(dsets,
-                                  include_tags,
-                                  pattern_type,
-                                  ignore_underscore)]
-
-    if exclude_tags is not None:
-        dsets = dsets[True ^ _tags_match(dsets,
-                                         exclude_tags,
-                                         pattern_type,
-                                         ignore_underscore)]
+    dsets = _include_exclude_tags(dsets, include_tags, exclude_tags, pattern_type,
+                                  ignore_underscore,
+                                  )
 
     have_available = strax.to_str_tuple(available)
     for d in have_available:
@@ -301,7 +322,6 @@ def define_run(self: strax.Context,
         else:
             df = pd.DataFrame(dict(start=start, end=end,
                                    run_id=data['run_id']))
-            print(df)
             return self.define_run(
                 name,
                 {run_id: rs[['start', 'end']].values.transpose()
@@ -323,18 +343,36 @@ def define_run(self: strax.Context,
                   livetime=0)
     keys = []
     starts = []
+    tags = set()
+    modes = set()
+    sources = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ['start', 'end'])
+        doc = self.run_metadata(_subrunid, ['start', 'end', 'mode', 'tags', 'source'])
+        doc.setdefault('tags', [{'name': ''},])
+        doc.setdefault('mode', '')
+        doc.setdefault('source', '')
+
+        tags |= set([tag['name'] for tag in doc['tags']])
+
+        modes |= set(strax.to_str_tuple(doc['mode']))
+        sources |= set(strax.to_str_tuple(doc['source']))
+        if len(sources) > 1:
+            warnings.warn(f'You are defining a superrun with more than one source: "{sources}"')
 
         run_doc_start = doc['start'].replace(tzinfo=pytz.utc)
         run_doc_end = doc['end'].replace(tzinfo=pytz.utc)
 
         run_md['start'] = min(run_md['start'], run_doc_start)
         run_md['end'] = max(run_md['end'], run_doc_end)
+
         time_delta = run_doc_end - run_doc_start
-        run_md['livetime'] += time_delta.total_seconds()*10**9
+        run_md['livetime'] += time_delta.total_seconds()
         keys.append(_subrunid)
         starts.append(run_doc_start)
+
+    run_md['tags'] = tuple(tags)
+    run_md['mode'] = tuple(modes)
+    run_md['source'] = tuple(sources)
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
@@ -412,6 +450,26 @@ def available_for_run(self: strax.Context,
             is_stored['target'].append(target)
             is_stored['is_stored'].append(self.is_stored(run_id, target))
     return pd.DataFrame(is_stored)
+
+
+def _include_exclude_tags(dsets,
+                          include_tags,
+                          exclude_tags,
+                          pattern_type,
+                          ignore_underscore,
+                          ):
+    if include_tags is not None:
+        dsets = dsets[_tags_match(dsets,
+                                  include_tags,
+                                  pattern_type,
+                                  ignore_underscore)]
+
+    if exclude_tags is not None:
+        dsets = dsets[True ^ _tags_match(dsets,
+                                         exclude_tags,
+                                         pattern_type,
+                                         ignore_underscore)]
+    return dsets
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):

@@ -1,5 +1,5 @@
 # flake8: noqa
-__version__ = '1.0.0-rc0'
+__version__ = '1.1.5'
 
 # Glue the package together
 # See https://www.youtube.com/watch?v=0oTh1CXRaQ0 if this confuses you
@@ -11,7 +11,6 @@ from strax.processing.general import *
 
 from .storage.common import *
 from .storage.files import *
-from .storage.rucio import *
 from .storage.mongo import *
 from .storage.zipfiles import *
 

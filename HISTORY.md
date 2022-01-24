@@ -1,3 +1,96 @@
+1.1.5 / 2022-01-10
+---------------------
+- StorageFrontend remoteness attribute and test (#617)
+- fix line endings (#618)
+- Bump numpy (#627)
+- Don't cache `hitlet_properties` (#616)
+
+
+1.1.4 / 2021-12-16
+---------------------
+- Make truly HDR (#613)
+- Remove tight coincidence channel from data_type (#614) 
+
+
+1.1.3 / 2021-12-13
+---------------------
+-  Add mode and tags to superrun. (#593) 
+-  cache deps (#595) 
+-  Fix online monitor bug for only md stored (#596) 
+-  speedup get_source with lookupdict (#599)
+-  remove config warning and infer_dtype=False (#600)
+-  Require pymongo 3.* (#611) 
+
+
+1.1.2 / 2021-11-19
+---------------------
+- Descriptor configs (#550)
+- Add funcs for getting stored source (#590)
+- use logged warnings (#582)
+- Fail for - run_ids (#567)
+- Infer type from default value in Option (#569, #586, #587)
+- Fix buffer issue in highest density regions, adds tests (#591)
+- Fix memory usage multi runs (#581)
+- Update CONTRIBUTING.md (#585)
+
+Notes:
+ - PRs #569, #586, #587 may cause a lot of warnings for options
+ 
+
+1.1.1 / 2021-10-27
+---------------------
+- Fix memory leak (#561)
+- Fix superrun creation (#562)
+- Add deregister plugins (#560)
+- Script for testing python setup.py install (#557)
+
+
+1.1.0 / 2021-10-15
+---------------------
+major / minor:
+
+- Fix hitlet splitting (#549)
+- Add tight channel (#551) 
+
+patch:
+
+- Add read by index plus some extra checks (#529)
+- Add drop column option (#530)
+- Remove context.apply_selection (#531)
+- Add option to support superruns for storage frontends. Adds test (#532)
+- Fix issue #536 (#537) 
+- Two pbar patches (#538)
+- Add get_zarr method to context (#540) 
+- Broken metadata error propagation (#541)
+- few tests for MongoStorage frontend (#542)
+- Fix caching (#545) 
+- dds information about failing chunk (#548)
+- remove rucio (#552) 
+- Allow loading SaveWhen.EXPLICIT time range selection (#553) 
+- Changes to savewhen behavior (#554)
+
+
+1.0.0 / 2021-09-1
+---------------------
+major / minor:
+
+- Fixing peaklet baseline bias (#486)
+- Fix double dependency (#512)
+
+patch:
+
+- Parallel plugin timeout (#489)
+- Added pytest.ini (#492)
+- Fix nveto processing (#491)
+- disable testing py3.6 (#505)
+- Fix peaks merging (#506)
+- Added export (#508)
+- Simplify get_components (#510)
+- Allow creation and storing of superruns if SaveWhen > 0 (#509)
+- re-use instance of plugin for multi output (#516)
+- Add raise if instance are not equal (#517)
+
+
 0.16.1 / 2021-07-16
 ---------------------
 - Cached lineage if per run default is not allowed (#483, #485)
