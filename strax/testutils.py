@@ -138,11 +138,11 @@ several_fake_records_one_channel = sorted_bounds(
 # Basic test plugins
 ##
 @strax.takes_config(
-    strax.Option('crash', default=False),
-    strax.Option('dummy_tracked_option', default=42),
-    strax.Option('secret_time_offset', default=0, track=False),
-    strax.Option('n_chunks', default=10, track=False),
-    strax.Option('recs_per_chunk', default=10, track=False),
+    strax.Option('crash', type=bool, default=False),
+    strax.Option('dummy_tracked_option', type=int, default=42),
+    strax.Option('secret_time_offset', type=int, default=0, track=False),
+    strax.Option('n_chunks', type=int, default=10, track=False),
+    strax.Option('recs_per_chunk', type=int, default=10, track=False),
 )
 class Records(strax.Plugin):
     provides = 'records'
@@ -174,8 +174,8 @@ class SomeCrash(Exception):
 
 
 @strax.takes_config(
-    strax.Option('base_area', default=0),
-    strax.Option('give_wrong_dtype', default=False),
+    strax.Option('base_area', type=int, default=0),
+    strax.Option('give_wrong_dtype', type=bool, default=False),
     strax.Option('bonus_area', default_by_run=[(0, 0), (1, 1)]))
 class Peaks(strax.Plugin):
     provides = 'peaks'
@@ -229,7 +229,9 @@ DEFAULT_CONFIG_TEST = {'area_parent': 2, 'area_child': 4,
 
 # Parent:
 @strax.takes_config(
-    strax.Option('by_child_overwrite_option', default=DEFAULT_CONFIG_TEST['area_parent'],
+    strax.Option('by_child_overwrite_option',
+                 type=int,
+                 default=DEFAULT_CONFIG_TEST['area_parent'],
                  help="Option we will overwrite in our child plugin"),
     strax.Option('parent_unique_option', type=int, default=DEFAULT_CONFIG_TEST['max_gap_both'],
                  help='Option which is not touched by the child and '
@@ -271,6 +273,7 @@ class ParentPlugin(strax.Plugin):
 # Child:
 @strax.takes_config(
     strax.Option('by_child_overwrite_option_child',
+                 type=int,
                  default=DEFAULT_CONFIG_TEST['area_child'],
                  child_option=True,
                  parent_option_name='by_child_overwrite_option',
@@ -283,10 +286,11 @@ class ParentPlugin(strax.Plugin):
     strax.Option('child_exclusive_option', type=int, default=DEFAULT_CONFIG_TEST['nhits_child'],
                  help='Option which is exclusive for the child.'),
     strax.Option('more_special_context_option_child',
+                 type=immutabledict,
                  child_option=True,
                  parent_option_name='more_special_context_option',
                  track=False,
-                 default=immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_child']), type=immutabledict,
+                 default=immutabledict(tpc=DEFAULT_CONFIG_TEST['channel_map_child']),
                  help="Special context option which is not tacked e.g. channel_map")
 )
 class ChildPlugin(ParentPlugin):

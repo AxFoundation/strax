@@ -25,6 +25,7 @@ class DataDirectory(StorageFrontend):
 
     can_define_runs = True
     provide_run_metadata = False
+    provide_superruns = True
 
     def __init__(self, path='.', *args, deep_scan=False, **kwargs):
         """
@@ -93,6 +94,7 @@ class DataDirectory(StorageFrontend):
 
     def _find(self, key, write,
               allow_incomplete, fuzzy_for, fuzzy_for_options):
+        self.raise_if_non_compatible_run_id(key.run_id)
         dirname = osp.join(self.path, str(key))
         exists = os.path.exists(dirname)
         bk = self.backend_key(dirname)
@@ -191,6 +193,11 @@ class DataDirectory(StorageFrontend):
         # (which FileStore should do) is sufficient.
         pass
 
+    @staticmethod
+    def raise_if_non_compatible_run_id(run_id):
+        if '-' in str(run_id):
+            raise ValueError("The filesystem frontend does not understand"
+                             " run_id's with '-', please replace with '_'")
 
 @export
 def dirname_to_prefix(dirname):
@@ -207,7 +214,7 @@ class FileSytemBackend(strax.StorageBackend):
     Metadata is stored in a file called metadata.json.
     """
 
-    def get_metadata(self, dirname):
+    def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
         md_path = osp.join(dirname, metadata_json)

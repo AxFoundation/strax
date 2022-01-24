@@ -21,7 +21,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='1.0.0',
+                 version='1.1.5',
                  description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
                  url='https://github.com/AxFoundation/strax',
@@ -47,6 +47,7 @@ setuptools.setup(name='strax',
                      'Programming Language :: Python :: 3.7',
                      'Programming Language :: Python :: 3.8',
                      'Programming Language :: Python :: 3.9',
+                     'Programming Language :: Python :: 3.10',
                      'Intended Audience :: Science/Research',
                      'Programming Language :: Python :: Implementation :: CPython',
                      'Topic :: Scientific/Engineering :: Physics',

@@ -27,6 +27,4 @@ In particular, don't go into code someone else is maintaining to "PEP8-ify" it (
 Other style guidelines (docstrings etc.) are yet to be determined.
 
 ### Pull requests
-When accepting pull requests, prefer merge or squash depending on how the commit history looks.
-- If it's dozens of 'oops' and 'test' commits, best to squash.
-- If it's a few commits that mostly outline discrete steps of an implementation, it's worth keeping, so best to merge.
+When accepting pull requests, preferrably squash as it attributes all the commits to one single pull request. One might consider merging the pull request without squashing if it's a few commits that mostly outline discrete steps of an implementation which seem worth keeping.

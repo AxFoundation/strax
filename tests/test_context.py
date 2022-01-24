@@ -3,7 +3,7 @@ from strax.testutils import Records, Peaks, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
-import hypothesis.strategies as st
+import hypothesis.strategies as strategy
 import typing as ty
 import os
 import unittest
@@ -48,8 +48,21 @@ def test_apply_pass_to_data():
     assert np.all(r == r_changed)
 
 
+def test_byte_strings_as_run_id():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(storage=strax.DataDirectory(temp_dir,
+                                                       deep_scan=True),
+                           register=[Records])
+
+
+        records_bytes = st.get_array(b'0', 'records')
+        records = st.get_array('0', 'records')
+        assert np.all(records_bytes == records)
+
+
+
 @settings(deadline=None)
-@given(st.integers(min_value=-10, max_value=10))
+@given(strategy.integers(min_value=-10, max_value=10))
 def test_apply_ch_shift_to_data(magic_shift: int):
     """
     Apply some magic shift number to the channel field and check the results
@@ -108,11 +121,15 @@ def test_accumulate():
     :return: None
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        context = strax.Context(storage=strax.DataDirectory(temp_dir,
-                                                       deep_scan=True),
-                           register=[Records])
+        context = strax.Context(
+            storage=strax.DataDirectory(temp_dir, deep_scan=True),
+            register=[Records],
+        )
         channels_from_array = np.sum(context.get_array(run_id, 'records')['channel'])
-        channels = context.accumulate(run_id, 'records', fields='channel')['channel']
+        channels_accumulate = context.accumulate(run_id, 'records', fields='channel')
+        n_chunks = len(context.get_meta(run_id, 'records')['chunks'])
+    channels = channels_accumulate['channel']
+    assert n_chunks == channels_accumulate['n_chunks']
     assert (channels_from_array == channels)
 
 
@@ -174,7 +191,7 @@ def test_copy_to_frontend():
             )
 
 
-class TestPerRunDefaults(unittest.TestCase):
+class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
     def setUp(self):
         """
@@ -234,6 +251,17 @@ class TestPerRunDefaults(unittest.TestCase):
     def test_register_all_no_defaults_and_allowed(self):
         self.test_register_all_no_defaults(runs_default_allowed=True)
 
+    def test_deregister(self):
+        """Tests if plugin cleaning is working:"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.deregister_plugins_with_missing_dependencies()
+        assert all([p in st._plugin_class_registry for p in 'peaks records'.split()])
+        st._plugin_class_registry.pop('records', None)
+        st.deregister_plugins_with_missing_dependencies()
+        assert st._plugin_class_registry.pop('peaks', None) is None
+
     def get_context(self, use_defaults):
         """Get simple context where we have one mock run in the only storage frontend"""
         assert isinstance(use_defaults, bool)
@@ -262,3 +290,41 @@ class TestPerRunDefaults(unittest.TestCase):
                 # Found one option
                 break
         return has_per_run_defaults
+
+    def test_get_source(self):
+        """See if we get the correct answer for each of the plugins"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(self.get_dummy_peaks_dependency())
+        st.set_context_config({'forbid_creation_of': ('peaks',)})
+        for target in 'records peaks cut_peaks'.split():
+            # Nothing is available and nothing should find a source
+            assert not st.is_stored(run_id, target)
+            assert st.get_source(run_id, target) is None
+
+        # Now make a source "records"
+        st.make(run_id, 'records')
+        assert st.get_source(run_id, 'records') == {'records'}
+        # since we cannot make peaks!
+        assert st.get_source(run_id, 'peaks', check_forbidden=True) is None
+        assert st.get_source(run_id, 'cut_peaks', check_forbidden=True) is None
+        assert st.get_source(run_id, ('peaks', 'cut_peaks'), check_forbidden=True) is None
+
+        # We could ignore the error though
+        assert st.get_source(run_id, 'peaks', check_forbidden=False) == {'records'}
+        assert st.get_source(run_id, 'cut_peaks', check_forbidden=False) == {'records'}
+
+        st.set_context_config({'forbid_creation_of': ()})
+        st.make(run_id, 'peaks')
+        assert st.get_source(run_id, 'records') == {'records'}
+        assert st.get_source(run_id, ('records', 'peaks')) == {'records', 'peaks'}
+        assert st.get_source(run_id, 'peaks') == {'peaks'}
+        assert st.get_source(run_id, 'cut_peaks') == {'peaks'}
+
+    @staticmethod
+    def get_dummy_peaks_dependency():
+        class DummyDependsOnPeaks(strax.CutPlugin):
+            depends_on = 'peaks'
+            provides = 'cut_peaks'
+        return DummyDependsOnPeaks

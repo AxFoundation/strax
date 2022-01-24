@@ -2,12 +2,16 @@
 Streaming analysis for xenon experiments
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1340632.svg)](https://doi.org/10.5281/zenodo.1340632)
-[![tests](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml/badge.svg?branch=master)](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml)
 [![Readthedocs Badge](https://readthedocs.org/projects/strax/badge/?version=latest)](https://strax.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/AxFoundation/strax?branch=master)
-[![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
+[![tests](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml/badge.svg?branch=master)](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml)
 [![CodeFactor](https://www.codefactor.io/repository/github/axfoundation/strax/badge)](https://www.codefactor.io/repository/github/axfoundation/strax)
+
+[![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/strax.svg)](https://pypi.python.org/pypi/strax)
+[![PyPI downloads](https://img.shields.io/pypi/dm/strax.svg)](https://pypistats.org/packages/strax)
 [![Join the chat at https://gitter.im/AxFoundation/strax](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/AxFoundation/strax?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 
 Strax is an analysis framework for pulse-only digitization data, specialized for live data reduction at speeds of 50-100 MB(raw) / core / sec. For more information, please see the [strax documentation](https://strax.readthedocs.io).
 
