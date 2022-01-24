@@ -29,8 +29,7 @@ setuptools.setup(name='strax',
                  install_requires=requires,
                  tests_require=requires + tests_requires,
                  long_description=readme + '\n\n' + history,
-                 # We don't test 3.6 anymore, see #503
-                 python_requires=">=3.6",
+                 python_requires=">=3.8",
                  extras_require={
                      'docs': docs_requires
                  },
@@ -43,8 +42,6 @@ setuptools.setup(name='strax',
                      'Development Status :: 5 - Production/Stable',
                      'License :: OSI Approved :: BSD License',
                      'Natural Language :: English',
-                     'Programming Language :: Python :: 3.6',
-                     'Programming Language :: Python :: 3.7',
                      'Programming Language :: Python :: 3.8',
                      'Programming Language :: Python :: 3.9',
                      'Programming Language :: Python :: 3.10',
