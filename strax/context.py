@@ -878,7 +878,7 @@ class Context:
             if _is_superrun:
                 # In case of a superrun we are only interested in the specified targets 
                 # and not any other stuff provided by the corresponding plugin.
-                savers = self._add_saver(savers, run_id, target_i, target_plugin, 
+                savers = self._add_saver(savers, target_i, target_plugin,
                                          _is_superrun, loading_this_data)
             else:
                 for d_to_save in set([target_i] + list(target_plugin.provides)):
@@ -896,7 +896,7 @@ class Context:
                         assert target_plugin.multi_output
                         continue
                     
-                    savers = self._add_saver(savers, run_id, d_to_save, target_plugin,
+                    savers = self._add_saver(savers, d_to_save, target_plugin,
                                              _is_superrun, loading_this_data)
 
         for target_i in targets:
@@ -927,8 +927,26 @@ class Context:
             savers=savers,
             targets=strax.to_str_tuple(final_plugin))
     
-    def _add_saver(self, savers, run_id, d_to_save, target_plugin, _is_superrun, loading_this_data):
-        key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
+    def _add_saver(self,
+                   savers: dict,
+                   d_to_save: str,
+                   target_plugin: strax.Plugin,
+                   _is_superrun: bool,
+                   loading_this_data: bool):
+        """
+        Adds savers to already existing savers. Checks if data_type can
+        be stored in any storage frontend.
+
+        :param savers: Dictionary of already existing savers.
+        :param d_to_save: String of the data_type to be saved.
+        :param target_plugin: Plugin which produces the data_type
+        :param _is_superrun: Boolean if run is a superrun
+        :param loading_this_data: Boolean if data can be loaded. Required
+            for storing during storage_converter mode and writing of
+            superruns.
+        :return: Updated savers dictionary.
+        """
+        key = strax.DataKey(target_plugin.run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -952,7 +970,7 @@ class Context:
             try:
                 saver = sf.saver(
                     key,
-                    metadata=target_plugin.metadata(run_id, d_to_save),
+                    metadata=target_plugin.metadata(target_plugin.run_id, d_to_save),
                     saver_timeout=self.context_config['saver_timeout'])
                 # Now that we are surely saving, make an entry in savers
                 savers.setdefault(d_to_save, [])
