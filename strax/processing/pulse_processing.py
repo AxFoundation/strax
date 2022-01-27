@@ -81,12 +81,6 @@ def raw_to_records(raw_records):
 
 
 @export
-def copy_raw_records(old, new):
-    warn('Deprecated, use strax.copy_to_buffer')
-    strax.copy_to_buffer(old, new, '_copy_raw_records')
-
-
-@export
 def record_length_from_dtype(dtype):
     return len(np.zeros(1, dtype)[0]['data'])
 
