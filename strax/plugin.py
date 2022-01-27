@@ -116,11 +116,15 @@ class Plugin:
             del compute_pars[compute_pars.index('start')]
             del compute_pars[compute_pars.index('end')]
 
-        if hasattr(self, 'provides') and not isinstance(self.save_when, dict):
+        if not isinstance(self.save_when, (str, immutabledict)):
+            raise ValueError('save_when must be either a string or a immutabledict '
+                             'representing the different data_types provided.')
+
+        if hasattr(self, 'provides') and not isinstance(self.save_when, immutabledict):
             # The ParallelSource plugin does not provide anything as it 
             # inlines only already existing components, therefore we also do 
             # not have to updated save_when
-            self.save_when = dict.fromkeys(self.provides, self.save_when)
+            self.save_when = immutabledict.fromkeys(self.provides, self.save_when)
 
         self.compute_pars = compute_pars
         self.input_buffer = dict()
