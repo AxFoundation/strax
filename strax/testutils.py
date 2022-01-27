@@ -197,18 +197,29 @@ class Peaks(strax.Plugin):
 # Another peak-kind plugin, to test time_range selection
 # with unaligned chunks
 class PeakClassification(strax.Plugin):
-    provides = 'peak_classification'
-    data_kind = 'peaks'
+    provides = ('peak_classification',
+                'lone_hits')
+    data_kind = dict(peak_classification='peaks',
+                     lone_hits='lone_hits')
     depends_on = ('peaks',)
-    dtype = (
-        [('type', np.int8, 'Classification of the peak.')]
-        + strax.time_fields)
     rechunk_on_save = True
 
+    def infer_dtype(self):
+        peaks_dtype = strax.time_fields + [('type', np.int8, 'Classification of the peak.')]
+        lone_hits = strax.time_fields
+        return {'peak_classification': peaks_dtype,
+                'lone_hits': lone_hits}
+
     def compute(self, peaks):
-        return dict(type=np.zeros(len(peaks)),
-                    time=peaks['time'],
-                    endtime=strax.endtime(peaks))
+        p = np.zeros(len(peaks), self.dtype['peak_classification'])
+        p['time'] = peaks['time']
+        p['endtime'] = strax.endtime(peaks)
+
+        lh = np.zeros(len(peaks), self.dtype['lone_hits'])
+        lh['time'] = peaks['time']
+        lh['endtime'] = strax.endtime(peaks)
+        return dict(peak_classification=p,
+                    lone_hits=lh)
 
 # Used in test_core.py
 run_id = '0'

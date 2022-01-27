@@ -522,17 +522,19 @@ def multi_run(exec_function, run_ids, *args,
         final_result = []
         while futures:
             futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
-
             for f in futures_done:
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(f'Done with run_id: {_run_id} ' 
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
+                if f.exception() is not None:
+                    raise f.exception()
+                
                 if throw_away_result:
                     continue
-
                 result = f.result()
+ 
                 # Append the run id column
                 if add_run_id_field:
                     ids = np.array([_run_id] * len(result),
