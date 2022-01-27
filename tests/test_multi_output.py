@@ -2,6 +2,8 @@ import tempfile
 
 import strax
 from strax.testutils import *
+from immutabledict import immutabledict
+import pytest
 
 import unittest
 import os
@@ -139,7 +141,7 @@ class TestMultiOutputs(unittest.TestCase):
         # First check if default save_when is converted into a dict
         # and that all values are correct:
         p = self.mystrax.get_single_plugin('0', 'even_recs')
-        assert isinstance(p.save_when, dict)
+        assert isinstance(p.save_when, immutabledict)
         assert np.all([d in p.save_when for d in p.provides])
         assert np.all([p.save_when[d] == strax.SaveWhen.ALWAYS for d in p.provides])
 
@@ -157,10 +159,10 @@ class TestMultiOutputs(unittest.TestCase):
         Tests if save when works properly in case of different save when
         per provided data_type.
         """
-        _save_when = {'even_recs': strax.SaveWhen.NEVER,
-                      'odd_recs': strax.SaveWhen.TARGET,
-                      'rec_count': strax.SaveWhen.ALWAYS,
-                      }
+        _save_when = immutabledict({'even_recs': strax.SaveWhen.NEVER,
+                                    'odd_recs': strax.SaveWhen.TARGET,
+                                    'rec_count': strax.SaveWhen.ALWAYS,
+                                    })
         p = self.mystrax._plugin_class_registry['rec_count']
         p.save_when = _save_when
 
@@ -183,6 +185,16 @@ class TestMultiOutputs(unittest.TestCase):
         assert not self.mystrax.is_stored('0', 'odd_recs')
         assert self.mystrax.is_stored('0', 'rec_count')
 
+        # Also check if time_range selection only work for already made
+        # data:
+        # SaveWhen.NEVER and ALWAYS should work:
+        res = self.mystrax.get_array('0', 'even_recs', time_range=(0, 1))
+        assert len(res), res
+        res = self.mystrax.get_array('0', 'rec_count', time_range=(0, 1))
+        assert len(res), res
+        with pytest.raises(strax.DataNotAvailable):
+            self.mystrax.get_array('0', 'odd_recs', time_range=(0, 1))
+
         # Check if saver of already existing data dropped:
         components = self.mystrax.get_components('0', 'odd_recs')
         assert 'odd_recs' in components.savers
@@ -200,10 +212,10 @@ class TestMultiOutputs(unittest.TestCase):
         Checks whether the plugin inlining works for different
         combinations.
         """
-        _save_when = {'even_recs': strax.SaveWhen.NEVER,
-                      'odd_recs': strax.SaveWhen.TARGET,
-                      'rec_count': strax.SaveWhen.ALWAYS,
-                      }
+        _save_when = immutabledict({'even_recs': strax.SaveWhen.NEVER,
+                                    'odd_recs': strax.SaveWhen.TARGET,
+                                    'rec_count': strax.SaveWhen.ALWAYS,
+                                    })
         p = self.mystrax._plugin_class_registry['rec_count']
         p.save_when = _save_when
 
