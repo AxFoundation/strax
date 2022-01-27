@@ -29,7 +29,8 @@ setuptools.setup(name='strax',
                  install_requires=requires,
                  tests_require=requires + tests_requires,
                  long_description=readme + '\n\n' + history,
-                 python_requires=">=3.8",
+                 # You could try to use it in py3.6 or py3.7 this might not work
+                 python_requires=">=3.6",
                  extras_require={
                      'docs': docs_requires
                  },
