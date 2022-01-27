@@ -117,7 +117,7 @@ class Plugin:
             del compute_pars[compute_pars.index('end')]
 
         if not isinstance(self.save_when, (IntEnum, immutabledict)):
-            raise ValueError('save_when must be either a string or a immutabledict '
+            raise ValueError('save_when must be either a SaveWhen object or an immutabledict '
                              'representing the different data_types provided.')
 
         if hasattr(self, 'provides') and not isinstance(self.save_when, immutabledict):
