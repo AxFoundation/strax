@@ -8,6 +8,9 @@ import time
 import numpy as np
 import pandas as pd
 import strax
+import inspect
+import types
+from collections import defaultdict
 
 
 export, __all__ = strax.exporter()
@@ -309,19 +312,79 @@ class Context:
             if not len(plugins_to_deregister):
                 registry_changed = False
 
-    def search_field(self, pattern):
-        """Find and print which plugin(s) provides a field that matches
-        pattern (fnmatch)."""
-        cache = dict()
-        for d in self._plugin_class_registry:
-            if d not in cache:
-                cache.update(self._get_plugins((d,), run_id='0'))
-            p = cache[d]
+    def search_field(self,
+                     pattern: str,
+                     include_code_usage: bool = True,
+                     return_matches: bool = False,
+                     ) -> ty.Union[None, ty.Tuple[defaultdict, dict]]:
+        """
+        Find and print which plugin(s) provides a field that matches
+        pattern (fnmatch).
 
-            for field_name in p.dtype_for(d).fields:
+        :param pattern: pattern to match, e.g. 'time' or 'tim*'
+        :param include_code_usage:
+        :param return_matches:
+        :return:
+        """
+        cache = dict()
+        field_matches = defaultdict(list)
+        code_matches = dict()
+        for data_type in sorted(list(self._plugin_class_registry.keys())):
+            if data_type not in cache:
+                cache.update(self._get_plugins((data_type,), run_id='0'))
+            plugin = cache[data_type]
+
+            for field_name in plugin.dtype_for(data_type).names:
                 if fnmatch.fnmatch(field_name, pattern):
-                    print(f"{field_name} is part of {d} "
-                          f"(provided by {p.__class__.__name__})")
+                    field_matches[field_name].append((data_type, plugin.__class__.__name__))
+                    if field_name in code_matches:
+                        continue
+                    # we need to do this for 'field_name' rather than pattern
+                    # since we want an exact match (otherwise too fuzzy with
+                    # comments etc.) Do this once, for all the plugins.
+                    fields_used = self.search_field_usage(field_name, plugin=None)
+                    if include_code_usage and fields_used:
+                        code_matches[field_name] = fields_used
+        if return_matches:
+            return field_matches, code_matches
+
+        for field_name, matches in field_matches.items():
+            print()
+            for data_type, name in matches:
+                print(f"{field_name} is part of {data_type} (provided by {name})")
+        for field_name, functions in code_matches.items():
+            print()
+            for function in functions:
+                print(f"{field_name} is used in {function}")
+
+    def search_field_usage(self,
+                           search_string: str,
+                           plugin: ty.Union[strax.Plugin, ty.List[strax.Plugin], None] = None
+                           ) -> ty.List[str]:
+        """
+        Find and return which plugin(s) use a given field.
+
+        :param search_string: a field that matches pattern exact
+        :param plugin: plugin where to look for a field
+        :return: list of code occurrences in the form of PLUGIN.FUNCTION
+        """
+        if plugin is None:
+            plugin = list(self._plugin_class_registry.values())
+        if not isinstance(plugin, list):
+            plugin = [plugin]
+        result = []
+        for plug in plugin:
+            for attribute_name, class_attribute in plug.__dict__.items():
+                is_function = isinstance(class_attribute, types.FunctionType)
+                if is_function:
+                    for line in inspect.getsource(class_attribute).split('\n'):
+                        if search_string in line:
+                            if plug.__class__.__name__ == 'type':
+                                plug = plug()
+                            result += [f'{plug.__class__.__name__}.{attribute_name}']
+                            # Likely to be used several other times
+                            break
+        return result
 
     def show_config(self, data_type=None, pattern='*', run_id='9' * 20):
         """Return configuration options that affect data_type.
