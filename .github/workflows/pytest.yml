@@ -17,10 +17,10 @@ on:
 jobs:
   update:
     name: "${{ matrix.test }}_py${{ matrix.python-version }}"
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os: [ "ubuntu-latest", "windows-latest" ]
         python-version: [3.8, 3.9, "3.10"]
         test: ['coveralls', 'pytest']
         # Only run coverage on py3.8
@@ -29,6 +29,12 @@ jobs:
             test: coveralls
           - python-version: "3.10"
             test: coveralls
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.10"
+          - os: windows-latest
+            test: "coveralls"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v2
