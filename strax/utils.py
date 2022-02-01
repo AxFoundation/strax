@@ -38,9 +38,10 @@ else:
     from tqdm import tqdm
 
 # Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor == 6:
-    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
-         'upgrading to python 3.8.')
+if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
+    warn('Using strax in python 3.6-3.7 is deprecated since 2022/01 consider '
+         'upgrading to python 3.8, 3.9 or 3.10. This will result in an error'
+         ' in strax 1.2', DeprecationWarning)
 
 
 def exporter(export_self=False):
