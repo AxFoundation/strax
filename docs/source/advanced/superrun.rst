@@ -84,6 +84,12 @@ of the same kind too.
 To work more easily with superruns all chunks have also the properties `chunk.is_superun` as well as
 `chunk.first_subrun` and `chunk.last_subrun`.
 
+If you wish to make/store a superrun you have to specify the context option:
+
+    st.set_context_config({'write_superruns': True})
+
+Superruns follow the same saving rules (SaveWhen.TARGET, SaveWhen.EXPLICIT or SaveWhen.ALWAYS) as regular runs. 
+
 How superruns work
 --------------------
 
