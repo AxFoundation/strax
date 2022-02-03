@@ -370,7 +370,7 @@ class Context:
         """
         if plugin is None:
             plugin = list(self._plugin_class_registry.values())
-        if not isinstance(plugin, list):
+        if not isinstance(plugin, (list, tuple)):
             plugin = [plugin]
         result = []
         for plug in plugin:
