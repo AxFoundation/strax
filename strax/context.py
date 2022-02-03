@@ -322,9 +322,13 @@ class Context:
         pattern (fnmatch).
 
         :param pattern: pattern to match, e.g. 'time' or 'tim*'
-        :param include_code_usage:
-        :param return_matches:
-        :return:
+        :param include_code_usage: Also include the code occurrences of
+            the fields that match the pattern.
+        :param return_matches: If set, return a dictionary with the
+            matching fields and the occurrences in code.
+        :return: when return_matches is set, return a dictionary with
+            the matching fields and the occurrences in code. Otherwise,
+            we are not returning anything and just print the results
         """
         cache = dict()
         field_matches = defaultdict(list)
@@ -348,6 +352,7 @@ class Context:
         if return_matches:
             return field_matches, code_matches
 
+        # Print the results and return nothing
         for field_name, matches in field_matches.items():
             print()
             for data_type, name in matches:
@@ -380,6 +385,12 @@ class Context:
                     for line in inspect.getsource(class_attribute).split('\n'):
                         if search_string in line:
                             if plug.__class__.__name__ == 'type':
+                                # Make sure we have the instance, not the class:
+                                # >>> class A: pass
+                                # >>> A.__class__.__name__
+                                # 'type'
+                                # >>> A().__class__.__name__
+                                # 'A'
                                 plug = plug()
                             result += [f'{plug.__class__.__name__}.{attribute_name}']
                             # Likely to be used several other times
