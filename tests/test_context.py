@@ -322,6 +322,23 @@ class TestContext(unittest.TestCase):
         assert st.get_source(run_id, 'peaks') == {'peaks'}
         assert st.get_source(run_id, 'cut_peaks') == {'peaks'}
 
+    def test_print_versions(self):
+        """Test that we get that the "time" field from st.search_field"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        field = 'time'
+        field_matches, code_matches = st.search_field(field, return_matches=True)
+        fields_found_for_dtype = [matched_field[0] for matched_field in field_matches[field]]
+        self.assertTrue(
+            all(p in fields_found_for_dtype for p in 'records peaks'.split()),
+            f'{fields_found_for_dtype} is not correct, expected records or peaks')
+        self.assertTrue(
+            all(p in code_matches[field] for p in 'Records.compute Peaks.compute'.split()),
+            'code_matches[field] is not correct, expected Records.compute or Peaks.compute')
+        # Also test printing:
+        self.assertIsNone(st.search_field(field, return_matches=False))
+
     @staticmethod
     def get_dummy_peaks_dependency():
         class DummyDependsOnPeaks(strax.CutPlugin):
