@@ -25,7 +25,6 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
     buffer_top = np.zeros(max_buffer, dtype=np.float32)
-    buffer_bot = np.zeros(max_buffer, dtype=np.float32)
 
     for new_i, new_p in enumerate(new_peaks):
 
@@ -61,15 +60,6 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             ),
             len(buffer_top)
         )] = 0
-        buffer_bot[:min(
-            int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
-            ),
-            len(buffer_bot)
-        )] = 0
 
         for p in old_peaks:
             # Upsample the sum and top/bottom array waveforms into their buffers
@@ -80,8 +70,6 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
                 np.repeat(p['data'][:p['length']], upsample) / upsample
             buffer_top[i0: i0 + n_after] = \
                 np.repeat(p['data_top'][:p['length']], upsample) / upsample
-            buffer_bot[i0: i0 + n_after] = \
-                np.repeat(p['data_bot'][:p['length']], upsample) / upsample
 
             # Handle the other peak attributes
             new_p['area'] += p['area']
@@ -91,8 +79,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, buffer_top,
-                                         buffer_bot)
+        strax.store_downsampled_waveform(new_p, buffer, True, buffer_top)
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
@@ -193,5 +180,3 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
         if n_top_channels > 0:
             if lh_i['channel'] < n_top_channels:
                 p['data_top'][index] += lh_area
-            else:
-                p['data_bot'][index] += lh_area

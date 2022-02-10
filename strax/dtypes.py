@@ -196,8 +196,6 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'data'), np.float32, n_sum_wv_samples),
         (('Waveform data in PE/sample (not PE/ns!), top array',
           'data_top'), np.float32, n_sum_wv_samples),
-        (('Waveform data in PE/sample (not PE/ns!), bottom array',
-          'data_bot'), np.float32, n_sum_wv_samples),
         (('Peak widths in range of central area fraction [ns]',
           'width'), np.float32, n_widths),
         (('Peak widths: time between nth and 5th area decile [ns]',

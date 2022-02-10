@@ -123,8 +123,7 @@ def find_peaks(hits, adc_to_pe,
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def store_downsampled_waveform(p, wv_buffer, store_in_data_top=False,
-                               wv_buffer_top=np.ones(1, dtype=np.float32),
-                               wv_buffer_bot=np.ones(1, dtype=np.float32)):
+                               wv_buffer_top=np.ones(1, dtype=np.float32)):
     """Downsample the waveform in buffer and store it in p['data'] and
     in p['data_top'] if indicated to do so.
 
@@ -139,7 +138,6 @@ def store_downsampled_waveform(p, wv_buffer, store_in_data_top=False,
     shortened rather than extended. This causes data loss, but it is
     necessary to prevent overlaps between peaks.
     """
-    # TODO: remove separate bottom array waveform storage
 
     n_samples = len(p['data'])
 
@@ -153,10 +151,6 @@ def store_downsampled_waveform(p, wv_buffer, store_in_data_top=False,
                     wv_buffer_top[:p['length'] * downsample_factor] \
                     .reshape(-1, downsample_factor) \
                     .sum(axis=1)
-            p['data_bot'][:p['length']] = \
-                    wv_buffer_bot[:p['length'] * downsample_factor] \
-                    .reshape(-1, downsample_factor) \
-                    .sum(axis=1)
         p['data'][:p['length']] = \
             wv_buffer[:p['length'] * downsample_factor] \
                 .reshape(-1, downsample_factor) \
@@ -165,7 +159,6 @@ def store_downsampled_waveform(p, wv_buffer, store_in_data_top=False,
     else:
         if store_in_data_top:
             p['data_top'][:p['length']] = wv_buffer_top[:p['length']]
-            p['data_bot'][:p['length']] = wv_buffer_bot[:p['length']]
         p['data'][:p['length']] = wv_buffer[:p['length']]
 
 
@@ -208,7 +201,6 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, n_top_channels=0
 
     if n_top_channels > 0:
         twv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
-        bwv_buffer = np.zeros(peaks['length'].max() * 2, dtype=np.float32)
 
     n_channels = len(peaks[0]['area_per_channel'])
     area_per_channel = np.zeros(n_channels, dtype=np.float32)
@@ -227,7 +219,6 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, n_top_channels=0
 
         if n_top_channels > 0:
             twv_buffer[:min(2 * p_length, len(twv_buffer))] = 0
-            bwv_buffer[:min(2 * p_length, len(bwv_buffer))] = 0
 
         # Clear area and area per channel
         # (in case find_peaks already populated them)
@@ -298,16 +289,13 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, n_top_channels=0
             if n_top_channels > 0:
                 if ch < n_top_channels:
                     twv_buffer[p_start:p_end] += hit_data
-                else:
-                    bwv_buffer[p_start:p_end] += hit_data
 
             area_pe = hit_data.sum()
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
 
         if n_top_channels > 0:
-            store_downsampled_waveform(p, swv_buffer, True, twv_buffer,
-                                       bwv_buffer)
+            store_downsampled_waveform(p, swv_buffer, True, twv_buffer)
         else:
             store_downsampled_waveform(p, swv_buffer)
 
