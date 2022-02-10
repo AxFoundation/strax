@@ -1,3 +1,15 @@
+1.1.6 / 2022-02-03
+---------------------
+- Extend search field to also print occurrences (#638)
+- Extend save when (#631)
+- test straxen for coverage and backward compatibility (#635)
+- Failing example for test_conditional_entropy (#544)
+- python 3.10 (#630)
+- deprecate py3.6 py3.7 (#636)
+- remove deprecated function (#632)
+- Numba 0.55 (#634)
+  
+
 1.1.5 / 2022-01-10
 ---------------------
 - StorageFrontend remoteness attribute and test (#617)

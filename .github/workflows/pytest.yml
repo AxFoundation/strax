@@ -5,7 +5,7 @@ name: tests
 on:
   workflow_dispatch:
   release:
-    types: [created]
+    types: [ created ]
   pull_request:
     branches:
       - master
@@ -21,12 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.7, 3.8, 3.9, "3.10"]
+        python-version: [3.8, 3.9, "3.10"]
         test: ['coveralls', 'pytest']
         # Only run coverage on py3.8
         exclude:
-          - python-version: 3.7
-            test: coveralls
           - python-version: 3.9
             test: coveralls
           - python-version: "3.10"
@@ -48,19 +46,38 @@ jobs:
           mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest
       - name: Test package
-        if:  matrix.test == 'pytest'
+        if: matrix.test == 'pytest'
         env:
-          TEST_MONGO_URI:  'mongodb://localhost:27017/'
+          TEST_MONGO_URI: 'mongodb://localhost:27017/'
         run: |
           pytest -v --durations 0
-      - name: Coveralls
-        if:  matrix.test == 'coveralls'
+      - name: Coverage run
+        if: matrix.test == 'coveralls'
         env:
           NUMBA_DISABLE_JIT: 1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TEST_MONGO_URI:  'mongodb://localhost:27017/'
+          TEST_MONGO_URI: 'mongodb://localhost:27017/'
         run: |
-              coverage run --source=strax setup.py test -v
-              coveralls --service=github
+          coverage run --source=strax setup.py test -v
+      - name: Coverage run - backward compatibility check with straxen
+        if: matrix.test == 'coveralls'
+        env:
+          NUMBA_DISABLE_JIT: 1
+          TEST_MONGO_URI: 'mongodb://localhost:27017/'
+        run: |
+          echo "clone straxen"
+          straxen_dir="../straxen/"
+          git clone --single-branch --branch master https://github.com/XENONnT/straxen.git $straxen_dir
+          bash $straxen_dir/.github/scripts/create_pre_apply_function.sh $HOME
+          pip install -r $straxen_dir/extra_requirements/requirements-tests.txt
+          echo "Run straxen tests"
+          coverage run --append --source=strax -m pytest $straxen_dir
+          coverage report
+      - name: Coveralls upload
+        if: matrix.test == 'coveralls'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          coverage report
+          coveralls --service=github
       - name: goodbye
         run: echo goodbye

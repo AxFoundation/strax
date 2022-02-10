@@ -38,9 +38,10 @@ else:
     from tqdm import tqdm
 
 # Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor == 6:
-    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
-         'upgrading to python 3.8.')
+if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
+    warn('Using strax in python 3.6-3.7 is deprecated since 2022/01 consider '
+         'upgrading to python 3.8, 3.9 or 3.10. This will result in an error'
+         ' in strax 1.2', DeprecationWarning)
 
 
 def exporter(export_self=False):
@@ -522,17 +523,19 @@ def multi_run(exec_function, run_ids, *args,
         final_result = []
         while futures:
             futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
-
             for f in futures_done:
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(f'Done with run_id: {_run_id} ' 
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
+                if f.exception() is not None:
+                    raise f.exception()
+                
                 if throw_away_result:
                     continue
-
                 result = f.result()
+ 
                 # Append the run id column
                 if add_run_id_field:
                     ids = np.array([_run_id] * len(result),
