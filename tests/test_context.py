@@ -60,7 +60,6 @@ def test_byte_strings_as_run_id():
         assert np.all(records_bytes == records)
 
 
-
 @settings(deadline=None)
 @given(strategy.integers(min_value=-10, max_value=10))
 def test_apply_ch_shift_to_data(magic_shift: int):
@@ -279,6 +278,16 @@ class TestContext(unittest.TestCase):
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
         return sf
+
+    def test_scan_runs(self):
+        st = self.get_context()
+        st.scan_runs()
+
+    def test_provided_dtypes(self):
+        st = self.get_context()
+        st.register(Records)
+        st.register(Peaks)
+        st.provided_dtypes()
 
     @staticmethod
     def _has_per_run_default(plugin) -> bool:
