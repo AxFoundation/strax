@@ -11,6 +11,7 @@ import strax
 import inspect
 import types
 from collections import defaultdict
+from immutabledict import immutabledict
 
 
 export, __all__ = strax.exporter()
