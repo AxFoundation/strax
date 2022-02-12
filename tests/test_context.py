@@ -202,7 +202,8 @@ class TestContext(unittest.TestCase):
         assert not os.path.exists(self.tempdir)
 
     def tearDown(self):
-        shutil.rmtree(self.tempdir)
+        if os.path.exists(self.tempdir):
+            shutil.rmtree(self.tempdir)
 
     def test_register_no_defaults(self, runs_default_allowed=False):
         """Test if we only register a plugin with no run-defaults"""
@@ -280,11 +281,13 @@ class TestContext(unittest.TestCase):
         return sf
 
     def test_scan_runs(self):
-        st = self.get_context()
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
         st.scan_runs()
 
     def test_provided_dtypes(self):
-        st = self.get_context()
+        st = self.get_context(True)
         st.register(Records)
         st.register(Peaks)
         st.provided_dtypes()

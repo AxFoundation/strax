@@ -1960,7 +1960,7 @@ class Context:
                       for d in p.provides])
 
         return {dtype: dict(hash=h,
-                            save_when=get_save_when(dtype).name,
+                            save_when=self.get_save_when(dtype).name,
                             version=version)
                 for dtype, h, save_when, version in hashes}
 
