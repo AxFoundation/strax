@@ -69,6 +69,7 @@ jobs:
           git clone --single-branch --branch master https://github.com/XENONnT/straxen.git $straxen_dir
           bash $straxen_dir/.github/scripts/create_pre_apply_function.sh $HOME
           pip install -r $straxen_dir/extra_requirements/requirements-tests.txt
+          pip install -e $straxen_dir
           echo "Run straxen tests"
           coverage run --append --source=strax -m pytest $straxen_dir
           coverage report
