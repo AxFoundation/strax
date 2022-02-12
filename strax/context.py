@@ -1937,7 +1937,7 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
-    def get_save_when(self, target:str)->strax.SaveWhen:
+    def get_save_when(self, target: str)->strax.SaveWhen:
         """for a given plugin, get the save when attribute either being a
         dict or a number"""
         p = self._plugin_class_registry[target]
