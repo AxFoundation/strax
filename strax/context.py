@@ -1936,16 +1936,31 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
+    def get_save_when(self, target:str)->strax.SaveWhen:
+        """for a given plugin, get the save when attribute either being a
+        dict or a number"""
+        p = self._plugin_class_registry[target]
+        save_when = p.save_when
+        if isinstance(save_when, (dict, immutabledict)):
+            save_when = save_when[target]
+        return save_when
+
     def provided_dtypes(self, runid='0'):
         """
         Summarize useful dtype information provided by this context
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
-        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
-                  for p in self._plugin_class_registry.values()
-                  for d in p.provides])
 
-        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
+        hashes = set([(d,
+                       self.key_for(runid, d).lineage_hash,
+                       p.save_when,
+                       p.__version__)
+                      for p in self._plugin_class_registry.values()
+                      for d in p.provides])
+
+        return {dtype: dict(hash=h,
+                            save_when=get_save_when(dtype).name,
+                            version=version)
                 for dtype, h, save_when, version in hashes}
 
     @classmethod

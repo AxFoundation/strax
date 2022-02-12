@@ -91,8 +91,8 @@ def scan_runs(self: strax.Context,
         + list(self.context_config['check_available'])))
 
     for target in check_available:
-        p = self._plugin_class_registry[target]
-        if p.save_when < strax.SaveWhen.ALWAYS:
+        save_when = self.get_save_when(target)
+        if save_when < strax.SaveWhen.ALWAYS:
             self.log.warning(f'{p.__name__}-plugin is {str(p.save_when)}. '
                              f'Therefore {target} is most likely not stored!')
 
