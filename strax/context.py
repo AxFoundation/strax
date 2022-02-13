@@ -12,6 +12,7 @@ import inspect
 import types
 from collections import defaultdict
 from immutabledict import immutabledict
+from enum import IntEnum
 
 
 export, __all__ = strax.exporter()
@@ -1937,13 +1938,16 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
-    def get_save_when(self, target: str)->strax.SaveWhen:
+    def get_save_when(self, target: str) -> ty.Union[strax.SaveWhen, int]:
         """for a given plugin, get the save when attribute either being a
         dict or a number"""
-        p = self._plugin_class_registry[target]
-        save_when = p.save_when
-        if isinstance(save_when, (dict, immutabledict)):
+        plugin_class = self._plugin_class_registry[target]
+        save_when = plugin_class.save_when
+        if isinstance(save_when, immutabledict):
             save_when = save_when[target]
+        if not isinstance(save_when, (IntEnum, int)):
+            raise ValueError(f'SaveWhen of {plugin_class} should be IntEnum '
+                             f'or immutabledict')
         return save_when
 
     def provided_dtypes(self, runid='0'):
