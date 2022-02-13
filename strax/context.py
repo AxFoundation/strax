@@ -1948,21 +1948,20 @@ class Context:
 
     def provided_dtypes(self, runid='0'):
         """
-        Summarize useful dtype information provided by this context
+        Summarize dtype information provided by this context
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
+        hashes = set([(data_type,
+                       self.key_for(runid, data_type).lineage_hash,
+                       self.get_save_when(data_type).name,
+                       plugin.__version__)
+                      for plugin in self._plugin_class_registry.values()
+                      for data_type in p.provides])
 
-        hashes = set([(d,
-                       self.key_for(runid, d).lineage_hash,
-                       p.save_when,
-                       p.__version__)
-                      for p in self._plugin_class_registry.values()
-                      for d in p.provides])
-
-        return {dtype: dict(hash=h,
-                            save_when=self.get_save_when(dtype).name,
-                            version=version)
-                for dtype, h, save_when, version in hashes}
+        return {data_type: dict(hash=_hash,
+                                save_when=save_when.name,
+                                version=version)
+                for data_type, _hash, save_when, version in hashes}
 
     @classmethod
     def add_method(cls, f):
