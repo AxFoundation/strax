@@ -1956,7 +1956,7 @@ class Context:
                        self.get_save_when(data_type).name,
                        plugin.__version__)
                       for plugin in self._plugin_class_registry.values()
-                      for data_type in p.provides])
+                      for data_type in plugin.provides])
 
         return {data_type: dict(hash=_hash,
                                 save_when=save_when.name,
