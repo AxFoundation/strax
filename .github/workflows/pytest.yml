@@ -23,10 +23,8 @@ jobs:
       matrix:
         python-version: [3.8, 3.9, "3.10"]
         test: ['coveralls', 'pytest']
-        # Only run coverage on py3.8
+        # Installation on py3.10 is rather slow at the moment
         exclude:
-          - python-version: 3.9
-            test: coveralls
           - python-version: "3.10"
             test: coveralls
     steps:
@@ -69,7 +67,7 @@ jobs:
           git clone --single-branch --branch master https://github.com/XENONnT/straxen.git $straxen_dir
           bash $straxen_dir/.github/scripts/create_pre_apply_function.sh $HOME
           pip install -r $straxen_dir/extra_requirements/requirements-tests.txt
-          pip install -e $straxen_dir
+          pip install -e $straxen_dir  # Reinstall since tests might reflect new code.
           echo "Run straxen tests"
           coverage run --append --source=strax -m pytest $straxen_dir
           coverage report
