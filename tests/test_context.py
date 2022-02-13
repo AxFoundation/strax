@@ -1,5 +1,5 @@
 import strax
-from strax.testutils import Records, Peaks, run_id
+from strax.testutils import Records, Peaks, PeakClassification, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
@@ -280,17 +280,19 @@ class TestContext(unittest.TestCase):
             sf.write_run_metadata(d['name'], d)
         return sf
 
-    def test_scan_runs(self):
+    def test_scan_runs__provided_dtypes__available_for_run(self):
+        "Simple test with three plugins to test some basic context functions"
         st = self.get_context(True)
         st.register(Records)
         st.register(Peaks)
+        st.register(PeakClassification)
+        st.make(run_id, 'records')
+        
+        # Test these three functions. They could have seperate tests, but this
+        # speeds things up a bit
         st.scan_runs()
-
-    def test_provided_dtypes(self):
-        st = self.get_context(True)
-        st.register(Records)
-        st.register(Peaks)
         st.provided_dtypes()
+        st.available_for_run(run_id)
 
     @staticmethod
     def _has_per_run_default(plugin) -> bool:
