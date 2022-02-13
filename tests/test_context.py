@@ -281,14 +281,14 @@ class TestContext(unittest.TestCase):
         return sf
 
     def test_scan_runs__provided_dtypes__available_for_run(self):
-        "Simple test with three plugins to test some basic context functions"
+        """Simple test with three plugins to test some basic context functions"""
         st = self.get_context(True)
         st.register(Records)
         st.register(Peaks)
         st.register(PeakClassification)
         st.make(run_id, 'records')
         
-        # Test these three functions. They could have seperate tests, but this
+        # Test these three functions. They could have separate tests, but this
         # speeds things up a bit
         st.scan_runs()
         st.provided_dtypes()
