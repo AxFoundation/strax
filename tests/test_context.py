@@ -294,6 +294,19 @@ class TestContext(unittest.TestCase):
         st.provided_dtypes()
         st.available_for_run(run_id)
 
+    def test_bad_savewhen(self):
+        st = self.get_context(True)
+
+        class BadRecords(Records):
+            save_when = 'I don\'t know?!'
+
+        st.register(BadRecords)
+        with self.assertRaises(ValueError):
+            st.get_save_when('records')
+        with self.assertRaises(ValueError):
+            st.get_single_plugin(run_id, 'records')
+
+
     @staticmethod
     def _has_per_run_default(plugin) -> bool:
         """Does the plugin have at least one option that is a per-run default"""
