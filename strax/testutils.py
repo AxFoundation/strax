@@ -203,6 +203,7 @@ class PeakClassification(strax.Plugin):
                      lone_hits='lone_hits')
     depends_on = ('peaks',)
     rechunk_on_save = True
+    save_when = {k: strax.SaveWhen.ALWAYS for k in provides}
 
     def infer_dtype(self):
         peaks_dtype = strax.time_fields + [('type', np.int8, 'Classification of the peak.')]
