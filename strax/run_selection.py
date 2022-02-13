@@ -424,7 +424,8 @@ def available_for_run(self: strax.Context,
     is_stored = defaultdict(list)
     for target in self._plugin_class_registry.keys():
         # Skip targets that are not stored
-        if not self._plugin_class_registry[target].save_when > strax.SaveWhen.NEVER:
+        save_when = self.get_save_when(target)
+        if save_when == strax.SaveWhen.NEVER:
             continue
 
         # Should we include this target or exclude it?
