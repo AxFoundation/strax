@@ -1953,7 +1953,7 @@ class Context:
         """
         hashes = set([(data_type,
                        self.key_for(runid, data_type).lineage_hash,
-                       self.get_save_when(data_type).name,
+                       self.get_save_when(data_type),
                        plugin.__version__)
                       for plugin in self._plugin_class_registry.values()
                       for data_type in plugin.provides])
