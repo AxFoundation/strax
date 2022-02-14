@@ -11,6 +11,8 @@ import strax
 import inspect
 import types
 from collections import defaultdict
+from immutabledict import immutabledict
+from enum import IntEnum
 
 
 export, __all__ = strax.exporter()
@@ -1936,17 +1938,34 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
+    def get_save_when(self, target: str) -> ty.Union[strax.SaveWhen, int]:
+        """for a given plugin, get the save when attribute either being a
+        dict or a number"""
+        plugin_class = self._plugin_class_registry[target]
+        save_when = plugin_class.save_when
+        if isinstance(save_when, immutabledict):
+            save_when = save_when[target]
+        if not isinstance(save_when, (IntEnum, int)):
+            raise ValueError(f'SaveWhen of {plugin_class} should be IntEnum '
+                             f'or immutabledict')
+        return save_when
+
     def provided_dtypes(self, runid='0'):
         """
-        Summarize useful dtype information provided by this context
+        Summarize dtype information provided by this context
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
-        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
-                  for p in self._plugin_class_registry.values()
-                  for d in p.provides])
+        hashes = set([(data_type,
+                       self.key_for(runid, data_type).lineage_hash,
+                       self.get_save_when(data_type),
+                       plugin.__version__)
+                      for plugin in self._plugin_class_registry.values()
+                      for data_type in plugin.provides])
 
-        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
-                for dtype, h, save_when, version in hashes}
+        return {data_type: dict(hash=_hash,
+                                save_when=save_when.name,
+                                version=version)
+                for data_type, _hash, save_when, version in hashes}
 
     @classmethod
     def add_method(cls, f):

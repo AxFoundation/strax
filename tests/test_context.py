@@ -1,5 +1,5 @@
 import strax
-from strax.testutils import Records, Peaks, run_id
+from strax.testutils import Records, Peaks, PeakClassification, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
@@ -58,7 +58,6 @@ def test_byte_strings_as_run_id():
         records_bytes = st.get_array(b'0', 'records')
         records = st.get_array('0', 'records')
         assert np.all(records_bytes == records)
-
 
 
 @settings(deadline=None)
@@ -203,7 +202,8 @@ class TestContext(unittest.TestCase):
         assert not os.path.exists(self.tempdir)
 
     def tearDown(self):
-        shutil.rmtree(self.tempdir)
+        if os.path.exists(self.tempdir):
+            shutil.rmtree(self.tempdir)
 
     def test_register_no_defaults(self, runs_default_allowed=False):
         """Test if we only register a plugin with no run-defaults"""
@@ -279,6 +279,33 @@ class TestContext(unittest.TestCase):
         for d in mock_rundb:
             sf.write_run_metadata(d['name'], d)
         return sf
+
+    def test_scan_runs__provided_dtypes__available_for_run(self):
+        """Simple test with three plugins to test some basic context functions"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(PeakClassification)
+        st.make(run_id, 'records')
+        
+        # Test these three functions. They could have separate tests, but this
+        # speeds things up a bit
+        st.scan_runs()
+        st.provided_dtypes()
+        st.available_for_run(run_id)
+
+    def test_bad_savewhen(self):
+        st = self.get_context(True)
+
+        class BadRecords(Records):
+            save_when = 'I don\'t know?!'
+
+        st.register(BadRecords)
+        with self.assertRaises(ValueError):
+            st.get_save_when('records')
+        with self.assertRaises(ValueError):
+            st.get_single_plugin(run_id, 'records')
+
 
     @staticmethod
     def _has_per_run_default(plugin) -> bool:
