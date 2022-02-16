@@ -1,3 +1,10 @@
+1.1.7 / 2022-02-16
+---------------------
+- Fix savewhen issues (#648)
+- Fix testing from straxen (#650)
+- Small fix superruns define run (#651)
+
+
 1.1.6 / 2022-02-03
 ---------------------
 - Extend search field to also print occurrences (#638)
