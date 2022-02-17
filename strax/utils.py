@@ -1,3 +1,4 @@
+import warnings
 from base64 import b32encode
 import collections
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
@@ -6,7 +7,6 @@ import contextlib
 from functools import wraps
 import json
 import re
-
 import sys
 import traceback
 import typing as ty
@@ -439,11 +439,21 @@ def dict_to_rec(x, dtype=None):
     return r
 
 
+def forgiving_wrapper(r, func, *args, **kwargs):
+    try:
+        func(r, *args, **kwargs)
+    except Exception:
+        warnings.warn(f'Executing {str(func)}({r}, {args}, {kwargs}) '
+                      f'resulted in {formatted_exception()}')
+        return
+
+
 @export
 def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              return_despite_errors=False,
               log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
@@ -455,7 +465,10 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param return_despite_errors: Return the data for the runs that
+        successfully loaded, even if some runs failed executing.
     :param log: logger to be used.
+
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -511,6 +524,10 @@ def multi_run(exec_function, run_ids, *args,
                 disable=not multi_run_progress_bar,
                 )
 
+    # if return_despite_errors:
+    #     args = [exec_function, args]
+    #     exec_function = forgiving_wrapper
+
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
         # Submit first bunch of futures, add additional futures later
@@ -530,8 +547,11 @@ def multi_run(exec_function, run_ids, *args,
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
                 if f.exception() is not None:
+                    if return_despite_errors:
+                        log.warning(f'Ran into {f.exception()}, ignoring that for now!')
+                        continue
                     raise f.exception()
-                
+
                 if throw_away_result:
                     continue
                 result = f.result()
