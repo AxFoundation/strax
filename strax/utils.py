@@ -271,6 +271,10 @@ def hashablize(obj):
             return tuple(obj.tolist())
         elif hasattr(obj, '__iter__'):
             return tuple(hashablize(o) for o in obj)
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.float):
+            return float(obj)
         else:
             raise TypeError("Can't hashablize object of type %r" % type(obj))
     else:
