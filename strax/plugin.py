@@ -833,6 +833,7 @@ class RechunkerPlugin(Plugin):
         # Only one provide, so return one bare chunk
         return empty_chunks[provides[0]]
 
+    # could be optimized a bit / use numba
     def _find_split_in_input(self) -> int:
         """
         Find the latest time where the gap to the next start time is
