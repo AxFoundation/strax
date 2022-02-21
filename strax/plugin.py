@@ -769,7 +769,6 @@ class RechunkerPlugin(Plugin):
     def __init__(self):
         super().__init__()
         self.cached_input = {}
-        self.cached_results = None
 
     def iter(self, iters, executor=None) -> typing.Union[
         strax.Chunk,
@@ -777,8 +776,8 @@ class RechunkerPlugin(Plugin):
     ]:
         yield from super().iter(iters, executor=executor)
 
-        # Yield final results, kept at bay in fear of a new chunk
-        if self.cached_results:
+        # Yield final results
+        if self.cached_input:
             final_chunk = self.get_final()
             yield final_chunk
 
@@ -811,6 +810,7 @@ class RechunkerPlugin(Plugin):
         """Return an empty dict for each of the datatypes produced"""
         # Just get one chunk to copy the start of
         input_chunk = kwargs[strax.to_str_tuple(self.depends_on)[0]]
+        print(input_chunk)
         provides = strax.to_str_tuple(self.provides)
         empty_chunks = {
             data_type:
@@ -832,6 +832,8 @@ class RechunkerPlugin(Plugin):
             return empty_chunks
         # Only one provide, so return one bare chunk
         return empty_chunks[provides[0]]
+
+    _prev_empty_chunk = []
 
     # could be optimized a bit / use numba
     def _find_split_in_input(self) -> int:
@@ -872,8 +874,10 @@ class RechunkerPlugin(Plugin):
         typing.Dict[str, strax.Chunk]
     ]:
         self._input_to_cache(kwargs)
+
         if not self._input_is_old_enough():
-            return self._empty_chunk_for_kwargs(kwargs)
+            self._prev_empty_chunk.append(self._empty_chunk_for_kwargs(kwargs))
+            return self._prev_empty_chunk[0]
 
         # Should be plenty space after this point, but let's assume
         # someone (or me) can make an off by one error
