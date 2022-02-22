@@ -275,6 +275,8 @@ def hashablize(obj):
             return int(obj)
         elif isinstance(obj, np.float):
             return float(obj)
+        elif isinstance(obj, immutabledict):
+            return dict(obj)
         else:
             raise TypeError("Can't hashablize object of type %r" % type(obj))
     else:
