@@ -10,7 +10,7 @@ packaging
 pandas
 pdmongo
 psutil
-pymongo<4.0
+pymongo
 scipy
 tqdm>=4.46.0
 zarr
