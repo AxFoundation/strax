@@ -11,16 +11,15 @@ class TestPerRunDefaults(unittest.TestCase):
     def setUp(self):
         self.test_run_id = '0'
         self.target = 'records'
-        self.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
         self.st = strax.Context(use_per_run_defaults=True,
                                 register=[Records],
                                 storage=[strax.DataDirectory(self.path)])
         assert not self.st.is_stored(self.test_run_id, self.target)
 
     def tearDown(self):
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def test_savewhen_never(self, **kwargs):
         self.set_save_when('NEVER')
