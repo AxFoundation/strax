@@ -1,8 +1,7 @@
-from unittest import TestCase, skipIf
+from unittest import TestCase
 import strax
 from strax.testutils import Records
 import os
-import shutil
 import tempfile
 import numpy as np
 import typing as ty

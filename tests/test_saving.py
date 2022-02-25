@@ -2,7 +2,6 @@ import unittest
 import strax
 from strax.testutils import Records, Peaks
 import os
-import shutil
 import tempfile
 
 
