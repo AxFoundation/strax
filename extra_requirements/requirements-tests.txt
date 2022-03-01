@@ -22,7 +22,7 @@ psutil==5.9.0
 pymongo==3.12.1
 pytest==6.2.5
 pytest-cov==3.0.0
-scipy==1.7.3
+scipy==1.8.0
 tqdm==4.62.2
 zarr==2.10.3
 zstd==1.5.1.0
