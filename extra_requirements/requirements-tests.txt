@@ -14,7 +14,7 @@ mongomock==4.0.0
 npshmex==0.2.1
 numba==0.55.1
 numexpr==2.8.1
-numpy==1.21.5
+numpy==1.22.2
 pandas==1.4.1
 packaging==21.3
 pdmongo==0.1.0
