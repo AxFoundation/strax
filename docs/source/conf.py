@@ -297,3 +297,29 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'https://docs.python.org/': None}
 
+
+def write_contributing():
+    """Convert contributing to rst"""
+    from m2r import convert
+    import os
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    source = os.path.join(this_dir, 'developer', 'contributing.md')
+    with open(source, 'r') as f:
+        source = f.read()
+    rst = convert(source)
+    target = os.path.join(this_dir, 'developer', 'contributing.rst')
+
+    with open(target, 'w') as f:
+        f.write(rst)
+
+
+def setup(app):
+    # Hack to import something from this dir. Apparently we're in a weird
+    # situation where you get a __name__  is not in globals KeyError
+    # if you just try to do a relative import...
+    import os
+    import sys
+    sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+    import build_release_notes
+    build_release_notes.convert_release_notes()
+    write_contributing()

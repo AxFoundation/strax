@@ -58,6 +58,12 @@ The above pages describe how strax's processing framework works under the hood, 
 
     reference/strax
 
+.. toctree::
+    :maxdepth: 2
+    :caption: Release notes
+
+    reference/release_notes
+
 
 * :ref:`genindex`
 * :ref:`modindex`
