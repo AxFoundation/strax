@@ -49,7 +49,8 @@ class TestInline(TestCase):
         st.make(run_id,
                 list(targets),
                 allow_multiple=True,
-                max_workers=2
+                max_workers=2,
+                config=dict(bonus_area=10),
                 )
         for target in targets:
             if st.get_save_when(target) == strax.SaveWhen.ALWAYS:
