@@ -23,6 +23,7 @@ class ParallelEnds(strax.Plugin):
      output of ParallelPeakClassification
     """
     parallel = 'process'
+    provides = 'parallel_ends'
     depends_on = 'peak_classification'
     dtype = strax.time_fields
 
@@ -52,15 +53,19 @@ class TestInline(TestCase):
 
     def test_inline(self, **make_kwargs):
         st = self.st
-        targets = list(st._plugin_class_registry.keys())
+        targets = ('records', 'parallel_ends')
         st.make(run_id,
-                list(targets),
+                targets,
                 allow_multiple=True,
                 **make_kwargs,
                 )
-        for target in targets:
-            if st.get_save_when(target) == strax.SaveWhen.ALWAYS:
-                assert st.is_stored(run_id, target)
+        for target in list(st._plugin_class_registry.keys()):
+            should_be_stored = st.get_save_when(target) == strax.SaveWhen.ALWAYS
+            if target in targets and not should_be_stored:
+                # redundant check but just in case someone ever changes
+                # this test the records test plugin
+                should_be_stored = st.get_save_when(target) == strax.SaveWhen.TARGET
+            assert st.is_stored(run_id, target) == should_be_stored
 
     def test_inline_with_multi_processing(self, **make_kwargs):
         self.test_inline(
