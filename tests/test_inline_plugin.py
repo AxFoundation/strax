@@ -43,15 +43,23 @@ class TestInline(TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.store_at)
 
-    def test_inline(self):
+    def test_inline(self, **make_kwargs):
         st = self.st
         targets = list(st._plugin_class_registry.keys())
         st.make(run_id,
                 list(targets),
-                allow_multiple=True,
-                max_workers=2,
-                config=dict(bonus_area=10),
+                **make_kwargs,
                 )
         for target in targets:
             if st.get_save_when(target) == strax.SaveWhen.ALWAYS:
                 assert st.is_stored(run_id, target)
+
+    def test_inline_with_multi_processing(self, **make_kwargs):
+        self.test_inline(allow_multiple=True,
+                         max_workers=2,
+                         )
+
+    def test_inline_with_temp_config(self):
+        self.test_inline_with_multi_processing(
+            config=dict(secret_time_offset=10),
+        )
