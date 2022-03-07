@@ -73,3 +73,15 @@ class TestInline(TestCase):
             config=dict(secret_time_offset=10),
             **make_kwargs
         )
+
+    def test_inline_bare(self, n_chunks=3):
+        """Get the plugin from a bare processor and run in this thread"""
+        st = self.st
+        st.set_config(dict(n_chunks=n_chunks))
+        targets = list(st._plugin_class_registry.keys())
+        components = st.get_components(run_id, targets=targets)
+        parallel_components = strax.ParallelSourcePlugin.inline_plugins(
+            components, start_from='records', log=st.log)
+        parallel_plugin = parallel_components.plugins['parallel_ends']
+        for chunk_i in range(n_chunks):
+            assert len(parallel_plugin.do_compute(chunk_i=chunk_i))
