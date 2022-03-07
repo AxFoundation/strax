@@ -1,6 +1,6 @@
 import shutil
 from unittest import TestCase
-
+import immutabledict
 import strax
 from strax.testutils import Records, Peaks, PeakClassification, run_id
 
@@ -11,6 +11,8 @@ class ParrallelPeaks(Peaks):
 
 class ParrallelPeakClassification(PeakClassification):
     parallel = 'process'
+    save_when = immutabledict({k: strax.SaveWhen.EXPLICIT for k in super().provides})
+    save_when['lone_hits'] = strax.SaveWhen.ALWAYS
 
 
 class ParralelEnds(strax.Plugin):
