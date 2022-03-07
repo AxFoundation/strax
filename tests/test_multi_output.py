@@ -230,10 +230,12 @@ class TestMultiOutputs(unittest.TestCase):
         assert not self.mystrax.is_stored('0', 'even_recs')
         assert not self.mystrax.is_stored('0', 'even_recs_classified')
         assert not self.mystrax.is_stored('0', 'peaks')
+        assert not self.mystrax.is_stored('0', 'rec_count')
         self.mystrax.make('0', 'peaks')
         assert not self.mystrax.is_stored('0', 'even_recs')
         assert not self.mystrax.is_stored('0', 'even_recs_classified')
         assert self.mystrax.is_stored('0', 'peaks')
+        assert self.mystrax.is_stored('0', 'rec_count')
 
         # Test if saving EXPLICIT works:
         self.mystrax.make('0', 'even_recs_classified', save=('even_recs_classified', ))
