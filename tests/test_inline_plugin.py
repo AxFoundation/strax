@@ -48,6 +48,7 @@ class TestInline(TestCase):
         targets = list(st._plugin_class_registry.keys())
         st.make(run_id,
                 list(targets),
+                allow_multiple=True,
                 **make_kwargs,
                 )
         for target in targets:
@@ -55,10 +56,10 @@ class TestInline(TestCase):
                 assert st.is_stored(run_id, target)
 
     def test_inline_with_multi_processing(self, **make_kwargs):
-        self.test_inline(allow_multiple=True,
-                         max_workers=2,
-                         **make_kwargs
-                         )
+        self.test_inline(
+            max_workers=2,
+            **make_kwargs
+        )
 
     def test_inline_with_temp_config(self, **make_kwargs):
         self.test_inline_with_multi_processing(
