@@ -42,7 +42,7 @@ class TestInline(TestCase):
             config=dict(bonus_area=9),
         )
         st.storage = [strax.DataDirectory(self.store_at)]
-        for p in [Records, ParrallelPeaks, ParallelPeakClassification, ParallelEnds]:
+        for p in [Records, ParallelPeaks, ParallelPeakClassification, ParallelEnds]:
             st.register(p)
         self.st = st
         assert not any(st.is_stored(run_id, t) for t in st._plugin_class_registry.keys())
