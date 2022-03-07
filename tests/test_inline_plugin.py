@@ -11,10 +11,10 @@ class ParallelPeaks(Peaks):
 
 class ParallelPeakClassification(PeakClassification):
     parallel = 'process'
-    save_when = immutabledict.immutabledict(
-        {k: strax.SaveWhen.EXPLICIT for k in
-         PeakClassification.provides})
+    save_when = {k: strax.SaveWhen.EXPLICIT for k in
+                 PeakClassification.provides}
     save_when['lone_hits'] = strax.SaveWhen.ALWAYS
+    save_when = immutabledict.immutabledict(save_when)
 
 
 class ParallelEnds(strax.Plugin):
