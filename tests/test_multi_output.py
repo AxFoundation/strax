@@ -170,16 +170,10 @@ class TestMultiOutputs(unittest.TestCase):
         for d in p.provides:
             assert p.save_when[d] == _save_when[d]
 
-        # Test if call of NEVER data_type makes any data:
-        assert not self.mystrax.is_stored('0', 'even_recs')
-        assert not self.mystrax.is_stored('0', 'odd_recs')
-        assert not self.mystrax.is_stored('0', 'rec_count')
-        self.mystrax.make('0', 'even_recs')
-        assert not self.mystrax.is_stored('0', 'even_recs')
-        assert not self.mystrax.is_stored('0', 'odd_recs')
-        assert not self.mystrax.is_stored('0', 'rec_count')
-
         # See if only ALWAYS is made:
+        assert not self.mystrax.is_stored('0', 'even_recs')
+        assert not self.mystrax.is_stored('0', 'odd_recs')
+        assert not self.mystrax.is_stored('0', 'rec_count')
         self.mystrax.make('0', 'rec_count')
         assert not self.mystrax.is_stored('0', 'even_recs')
         assert not self.mystrax.is_stored('0', 'odd_recs')
@@ -230,10 +224,12 @@ class TestMultiOutputs(unittest.TestCase):
         assert not self.mystrax.is_stored('0', 'even_recs')
         assert not self.mystrax.is_stored('0', 'even_recs_classified')
         assert not self.mystrax.is_stored('0', 'peaks')
+        assert not self.mystrax.is_stored('0', 'rec_count')
         self.mystrax.make('0', 'peaks')
         assert not self.mystrax.is_stored('0', 'even_recs')
         assert not self.mystrax.is_stored('0', 'even_recs_classified')
         assert self.mystrax.is_stored('0', 'peaks')
+        assert self.mystrax.is_stored('0', 'rec_count')
 
         # Test if saving EXPLICIT works:
         self.mystrax.make('0', 'even_recs_classified', save=('even_recs_classified', ))
