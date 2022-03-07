@@ -920,12 +920,20 @@ class Context:
                 return
  
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
+            # In case of the storage converter mode we copy already existing data. So we do not
+            # have to check for the saving requirements here.
+            current_plugin_to_savers = [target_i]
             if (not self._target_should_be_saved(
                     target_plugin, target_i, targets, save, loader, _is_superrun)
                     and not self.context_config['storage_converter']):
-                # In case of the storage converter mode we copy already existing data. So we do not
-                # have to check for the saving requirements here.
-                return
+                if len(target_plugin.provides) > 1:
+                    # In case the plugin has more then a single provides we also have to check
+                    # whether any of the other data_types should be stored. Hence only remove 
+                    # the current traget from the list of plugins_to_savers.
+                    current_plugin_to_savers = []
+                else:
+                    # In case of a single-provide plugin we can return now.
+                    return 
             
             # Warn about conditions that preclude saving, but the user
             # might not expect.
@@ -957,7 +965,7 @@ class Context:
                 savers = self._add_saver(savers, target_i, target_plugin,
                                          _is_superrun, loading_this_data)
             else:
-                for d_to_save in set([target_i] + list(target_plugin.provides)):
+                for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save)
                     loader = self._get_partial_loader_for(key,
                                                           time_range=time_range,
