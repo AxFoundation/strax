@@ -38,6 +38,7 @@ class TestInline(TestCase):
         for p in [Records, ParrallelPeaks, ParrallelPeakClassification, ParralelEnds]:
             st.register(p)
         self.st = st
+        assert not any(st.is_stored(run_id, t) for t in st._plugin_class_registry.keys())
 
     def tearDown(self) -> None:
         shutil.rmtree(self.store_at)
