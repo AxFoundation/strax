@@ -57,9 +57,11 @@ class TestInline(TestCase):
     def test_inline_with_multi_processing(self, **make_kwargs):
         self.test_inline(allow_multiple=True,
                          max_workers=2,
+                         **make_kwargs
                          )
 
-    def test_inline_with_temp_config(self):
+    def test_inline_with_temp_config(self, **make_kwargs):
         self.test_inline_with_multi_processing(
             config=dict(secret_time_offset=10),
+            **make_kwargs
         )
