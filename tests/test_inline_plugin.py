@@ -5,18 +5,23 @@ import strax
 from strax.testutils import Records, Peaks, PeakClassification, run_id
 
 
-class ParrallelPeaks(Peaks):
+class ParallelPeaks(Peaks):
     parallel = 'process'
 
 
-class ParrallelPeakClassification(PeakClassification):
+class ParallelPeakClassification(PeakClassification):
     parallel = 'process'
-    save_when = immutabledict({k: strax.SaveWhen.EXPLICIT for k in super().provides})
+    save_when = immutabledict.immutabledict(
+        {k: strax.SaveWhen.EXPLICIT for k in
+         PeakClassification.provides})
     save_when['lone_hits'] = strax.SaveWhen.ALWAYS
 
 
-class ParralelEnds(strax.Plugin):
-    """The most stupid plugin to make sure that we depend on _some_ of the output of ParrallelPeakClassification"""
+class ParallelEnds(strax.Plugin):
+    """
+    The most stupid plugin to make sure that we depend on _some_ of the
+     output of ParallelPeakClassification
+    """
     parallel = 'process'
     depends_on = 'peak_classification'
     dtype = strax.time_fields
@@ -37,7 +42,7 @@ class TestInline(TestCase):
             config=dict(bonus_area=9),
         )
         st.storage = [strax.DataDirectory(self.store_at)]
-        for p in [Records, ParrallelPeaks, ParrallelPeakClassification, ParralelEnds]:
+        for p in [Records, ParrallelPeaks, ParallelPeakClassification, ParallelEnds]:
             st.register(p)
         self.st = st
         assert not any(st.is_stored(run_id, t) for t in st._plugin_class_registry.keys())
