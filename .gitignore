@@ -50,6 +50,8 @@ lib64
 
 # Sphinx
 docs/_build
+docs/source/developer/contributing.rst
+docs/source/reference/release_notes.rst
 
 # Pycharm
 .idea
