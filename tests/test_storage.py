@@ -1,8 +1,7 @@
-from unittest import TestCase, skipIf
+from unittest import TestCase
 import strax
 from strax.testutils import Records
 import os
-import shutil
 import tempfile
 import numpy as np
 import typing as ty
@@ -15,15 +14,14 @@ class TestPerRunDefaults(TestCase):
     """
 
     def setUp(self):
-        self.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
         self.st = strax.Context(use_per_run_defaults=True,
                                 register=[Records], )
         self.target = 'records'
 
     def tearDown(self):
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def test_write_data_dir(self):
         self.st.storage = [strax.DataDirectory(self.path)]
@@ -85,13 +83,12 @@ class TestStorageType(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Get a temp directory available of all the tests"""
-        cls.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        cls.tempdir = tempfile.TemporaryDirectory()
+        cls.path = cls.tempdir.name
 
     def tearDown(self):
         """After each test, delete the temporary directory"""
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def _sub_dir(self, subdir: str) -> str:
         return os.path.join(self.path, subdir)
