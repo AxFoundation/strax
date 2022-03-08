@@ -11,6 +11,8 @@ import strax
 import inspect
 import types
 from collections import defaultdict
+from immutabledict import immutabledict
+from enum import IntEnum
 
 
 export, __all__ = strax.exporter()
@@ -918,12 +920,20 @@ class Context:
                 return
  
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
+            # In case of the storage converter mode we copy already existing data. So we do not
+            # have to check for the saving requirements here.
+            current_plugin_to_savers = [target_i]
             if (not self._target_should_be_saved(
                     target_plugin, target_i, targets, save, loader, _is_superrun)
                     and not self.context_config['storage_converter']):
-                # In case of the storage converter mode we copy already existing data. So we do not
-                # have to check for the saving requirements here.
-                return
+                if len(target_plugin.provides) > 1:
+                    # In case the plugin has more then a single provides we also have to check
+                    # whether any of the other data_types should be stored. Hence only remove 
+                    # the current traget from the list of plugins_to_savers.
+                    current_plugin_to_savers = []
+                else:
+                    # In case of a single-provide plugin we can return now.
+                    return 
             
             # Warn about conditions that preclude saving, but the user
             # might not expect.
@@ -955,7 +965,7 @@ class Context:
                 savers = self._add_saver(savers, target_i, target_plugin,
                                          _is_superrun, loading_this_data)
             else:
-                for d_to_save in set([target_i] + list(target_plugin.provides)):
+                for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save)
                     loader = self._get_partial_loader_for(key,
                                                           time_range=time_range,
@@ -1936,17 +1946,34 @@ class Context:
             raise ValueError('This cannot happen, we just checked that this '
                              'run should be stored?!?')
 
+    def get_save_when(self, target: str) -> ty.Union[strax.SaveWhen, int]:
+        """for a given plugin, get the save when attribute either being a
+        dict or a number"""
+        plugin_class = self._plugin_class_registry[target]
+        save_when = plugin_class.save_when
+        if isinstance(save_when, immutabledict):
+            save_when = save_when[target]
+        if not isinstance(save_when, (IntEnum, int)):
+            raise ValueError(f'SaveWhen of {plugin_class} should be IntEnum '
+                             f'or immutabledict')
+        return save_when
+
     def provided_dtypes(self, runid='0'):
         """
-        Summarize useful dtype information provided by this context
+        Summarize dtype information provided by this context
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
-        hashes = set([(d, self.key_for(runid, d).lineage_hash, p.save_when, p.__version__)
-                  for p in self._plugin_class_registry.values()
-                  for d in p.provides])
+        hashes = set([(data_type,
+                       self.key_for(runid, data_type).lineage_hash,
+                       self.get_save_when(data_type),
+                       plugin.__version__)
+                      for plugin in self._plugin_class_registry.values()
+                      for data_type in plugin.provides])
 
-        return {dtype: dict(hash=h, save_when=save_when.name, version=version)
-                for dtype, h, save_when, version in hashes}
+        return {data_type: dict(hash=_hash,
+                                save_when=save_when.name,
+                                version=version)
+                for data_type, _hash, save_when, version in hashes}
 
     @classmethod
     def add_method(cls, f):
