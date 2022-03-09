@@ -4,9 +4,14 @@ import logging
 import typing as ty
 import os
 import sys
+import time
+import itertools
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
+
+from strax.plugin import Plugin
+from .base import ProcessorComponents, BaseProcessor, BasePluginRunner
 
 import strax
 export, __all__ = strax.exporter()
@@ -19,8 +24,10 @@ except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
 
-
 @export
+class InputTimeoutExceeded(Exception):
+    pass
+
 class ProcessorComponents(ty.NamedTuple):
     """Specification to assemble a processor"""
     plugins: ty.Dict[str, strax.Plugin]
@@ -29,6 +36,9 @@ class ProcessorComponents(ty.NamedTuple):
     savers:  ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
+@export
+class PluginGaveWrongOutput(Exception):
+    pass
 
 class MailboxDict(dict):
     def __init__(self, *args, lazy=False, **kwargs):
@@ -42,7 +52,7 @@ class MailboxDict(dict):
 
 
 @export
-class ThreadedMailboxProcessor:
+class ThreadedMailboxProcessor(BaseProcessor):
     mailboxes: ty.Dict[str, strax.Mailbox]
 
     def __init__(self,

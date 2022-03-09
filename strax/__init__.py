@@ -17,7 +17,7 @@ from .storage.zipfiles import *
 from .config import *
 from .plugin import *
 from .mailbox import *
-from .processor import *
+from .processors import *
 from .context import *
 from .run_selection import *
 from .corrections import *
@@ -32,3 +32,4 @@ from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
 from strax.processing.hitlets import *
 from strax.processing.statistics import *
+
