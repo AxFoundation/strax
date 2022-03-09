@@ -872,7 +872,7 @@ class CutPlugin(Plugin):
             self.compute_takes_start_end = True
             del compute_pars[compute_pars.index('start')]
             del compute_pars[compute_pars.index('end')]
-        self.compute_pars
+        self.compute_pars = compute_pars
         
         _name = strax.camel_to_snake(self.__class__.__name__)
         if not hasattr(self, 'provides'):
