@@ -1,3 +1,7 @@
+1.2.0 / 2022-03-09
+---------------------
+- Added lone hit area to area per channel (#649) 
+
 1.1.8 / 2022-03-08
 ---------------------
 - Fix saving behavior of multioutput plugins with different SaveWhens (#674)
