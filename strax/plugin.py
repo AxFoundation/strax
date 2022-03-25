@@ -1024,7 +1024,21 @@ class CutPlugin(Plugin):
 
     def __init__(self):
         super().__init__()
-
+        
+        compute_pars = list(
+            inspect.signature(self.cut_by).parameters.keys())
+        if 'chunk_i' in compute_pars:
+            self.compute_takes_chunk_i = True
+            del compute_pars[compute_pars.index('chunk_i')]
+        if 'start' in compute_pars:
+            if 'end' not in compute_pars:
+                raise ValueError(f"Compute of {self} takes start, "
+                                 f"so it should also take end.")
+            self.compute_takes_start_end = True
+            del compute_pars[compute_pars.index('start')]
+            del compute_pars[compute_pars.index('end')]
+        self.compute_pars = compute_pars
+        
         _name = strax.camel_to_snake(self.__class__.__name__)
         if not hasattr(self, 'provides'):
             self.provides = _name

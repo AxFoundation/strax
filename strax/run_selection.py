@@ -94,7 +94,7 @@ def scan_runs(self: strax.Context,
         save_when = self.get_save_when(target)
         if save_when < strax.SaveWhen.ALWAYS:
             p = self._plugin_class_registry[target]
-            self.log.warning(f'{p.__name__}-plugin is {save_when}. '
+            self.log.warning(f'{p.__name__}-plugin is {str(save_when)}. '
                              f'Therefore {target} is most likely not stored!')
 
     docs = None

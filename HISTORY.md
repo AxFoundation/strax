@@ -1,3 +1,18 @@
+1.2.0 / 2022-03-09
+---------------------
+- Added lone hit area to area per channel (#649) 
+
+1.1.8 / 2022-03-08
+---------------------
+- Fix saving behavior of multioutput plugins with different SaveWhens (#674)
+- Change tempdirs in test (#657)
+- Define extra kwargs based on cut_by (db14f809414fe91c4e16d04bd7f166970891e591)
+- Update run_selection.py (#658)
+- Ignore raises on testing (#669)
+- Documentation tweaks (#670)
+- Test for inline plugin (#673)
+
+
 1.1.7 / 2022-02-16
 ---------------------
 - Fix savewhen issues (#648)
