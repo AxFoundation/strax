@@ -9,9 +9,9 @@ updates:
     directory: "/"
     schedule:
       # Check for updates to GitHub Actions every weekday
-      interval: "weekly"
+      interval: "monthly"
     assignees:
-      - jorana
+      - JoranAngevaare
   # Maintain the requirements requirements folder
   - package-ecosystem: "pip"
     directory: "/extra_requirements"
@@ -20,4 +20,4 @@ updates:
       interval: "monthly"
     open-pull-requests-limit: 15
     assignees:
-      - jorana
+      - JoranAngevaare
