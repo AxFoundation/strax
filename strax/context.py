@@ -401,10 +401,11 @@ class Context:
 
     def show_config(self, data_type=None, pattern='*', run_id='9' * 20):
         """Return configuration options that affect data_type.
+
         :param data_type: Data type name
         :param pattern: Show only options that match (fnmatch) pattern
         :param run_id: Run id to use for run-dependent config options.
-        If omitted, will show defaults active for new runs.
+            If omitted, will show defaults active for new runs.
         """
         r = []
         if data_type is None:
@@ -1094,11 +1095,12 @@ class Context:
         return True
 
     def estimate_run_start_and_end(self, run_id, targets=None):
-        """Return run start and end time in ns since epoch.
+        """
+        Return run start and end time in ns since epoch.
 
         This fetches from run metadata, and if this fails, it estimates
-            it using data metadata from the targets or the underlying
-            data-types (if it is stored).
+        it using data metadata from the targets or the underlying
+        data-types (if it is stored).
         """
         try:
             res = []
@@ -1140,14 +1142,15 @@ class Context:
     def to_absolute_time_range(self, run_id, targets=None, time_range=None,
                                seconds_range=None, time_within=None,
                                full_range=None):
-        """Return (start, stop) time in ns since unix epoch corresponding
+        """
+        Return (start, stop) time in ns since unix epoch corresponding
         to time range.
 
         :param run_id: run id to get
         :param time_range: (start, stop) time in ns since unix epoch.
-        Will be returned without modification
+            Will be returned without modification
         :param targets: data types. Used only if run metadata is unavailable,
-        so run start time has to be estimated from data.
+            so run start time has to be estimated from data.
         :param seconds_range: (start, stop) seconds since start of run
         :param time_within: row of strax data (e.g. eent)
         :param full_range: If True returns full time_range of the run.
@@ -1543,11 +1546,12 @@ class Context:
 
     def get_zarr(self, run_ids, targets, storage='./strax_temp_data',
                  progress_bar=False, overwrite=True, **kwargs):
-        """get persistent  arrays using zarr. This is useful when
-            loading large amounts of data that cannot fit in memory
-            zarr is very compatible with dask.
-            Targets are loaded into separate arrays and runs are merged.
-            the data is added to any existing data in the storage location.
+        """
+        get persistent  arrays using zarr. This is useful when
+        loading large amounts of data that cannot fit in memory
+        zarr is very compatible with dask.
+        Targets are loaded into separate arrays and runs are merged.
+        the data is added to any existing data in the storage location.
 
         :param run_ids: (Iterable) Run ids you wish to load.
         :param targets: (Iterable) targets to load.
@@ -1634,12 +1638,13 @@ class Context:
     get_metadata = get_meta
 
     def run_metadata(self, run_id, projection=None) -> dict:
-        """Return run-level metadata for run_id, or raise DataNotAvailable
+        """
+        Return run-level metadata for run_id, or raise DataNotAvailable
         if this is not available
 
         :param run_id: run id to get
         :param projection: Selection of fields to get, following MongoDB
-        syntax. May not be supported by frontend.
+            syntax. May not be supported by frontend.
         """
         for sf in self._sorted_storage:
             if not sf.provide_run_metadata:
@@ -1961,6 +1966,7 @@ class Context:
     def provided_dtypes(self, runid='0'):
         """
         Summarize dtype information provided by this context
+
         :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
         """
         hashes = set([(data_type,
