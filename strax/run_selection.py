@@ -17,8 +17,7 @@ export, __all__ = strax.exporter()
 
 @strax.Context.add_method
 def list_available(self, target, **kwargs):
-    """Return sorted list of run_id's for which target is available
-    """
+    """Return sorted list of run_id's for which target is available"""
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)
