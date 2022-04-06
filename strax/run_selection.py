@@ -16,7 +16,7 @@ export, __all__ = strax.exporter()
 
 
 @strax.Context.add_method
-def list_available(self, target, **kwargs):
+def list_available(self, target, **kwargs) -> list:
     """Return sorted list of run_id's for which target is available"""
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
@@ -68,7 +68,8 @@ def keys_for_runs(self,
 @strax.Context.add_method
 def scan_runs(self: strax.Context,
               check_available=tuple(),
-              store_fields=tuple()):
+              store_fields=tuple(),
+             ) -> pd.DataFrame:
     """
     Update and return self.runs with runs currently available
     in all storage frontends.
