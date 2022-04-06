@@ -2033,9 +2033,9 @@ select_docs = """
     the start of the run to load.
 :param time_within: row of strax data (e.g. event) to use as time range
 :param time_selection: Kind of time selectoin to apply:
-- fully_contained: (default) select things fully contained in the range
-- touching: select things that (partially) overlap with the range
-- skip: Do not select a time range, even if other arguments say so
+    - fully_contained: (default) select things fully contained in the range
+    - touching: select things that (partially) overlap with the range
+    - skip: Do not select a time range, even if other arguments say so
 :param _chunk_number: For internal use: return data from one chunk.
 :param progress_bar: Display a progress bar if metedata exists.
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
