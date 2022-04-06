@@ -107,7 +107,8 @@ class Context:
                  register=None,
                  register_all=None,
                  **kwargs):
-        """Create a strax context.
+        """
+        Create a strax context.
 
         :param storage: Storage front-ends to use. Can be:
           - None (default). Will use DataDirectory('./strax_data').
@@ -148,9 +149,12 @@ class Context:
                     register_all=None,
                     replace=False,
                     **kwargs):
-        """Return a new context with new setting adding to those in
+        """
+        Return a new context with new setting adding to those in
         this context.
+
         :param replace: If True, replaces settings rather than adding them.
+        
         See Context.__init__ for documentation on other parameters.
         """
         if not isinstance(storage, (list, tuple)):
@@ -195,7 +199,8 @@ class Context:
             mode=mode)
 
     def set_context_config(self, context_config=None, mode='update'):
-        """Set new context configuration options
+        """
+        Set new context configuration options
 
         :param context_config: dict of new context configuration options
         :param mode: can be either
@@ -225,8 +230,11 @@ class Context:
                 self.log.warning(f"Invalid context option {k}; will do nothing.")
 
     def register(self, plugin_class):
-        """Register plugin_class as provider for data types in provides.
+        """
+        Register plugin_class as provider for data types in provides.
+
         :param plugin_class: class inheriting from strax.Plugin.
+
         You can also pass a sequence of plugins to register, but then
         you must omit the provides argument.
 
@@ -400,7 +408,8 @@ class Context:
         return result
 
     def show_config(self, data_type=None, pattern='*', run_id='9' * 20):
-        """Return configuration options that affect data_type.
+        """
+        Return configuration options that affect data_type.
 
         :param data_type: Data type name
         :param pattern: Show only options that match (fnmatch) pattern
@@ -440,13 +449,15 @@ class Context:
         return pd.DataFrame([])
 
     def lineage(self, run_id, data_type):
-        """Return lineage dictionary for data_type and run_id, based on the
+        """
+        Return lineage dictionary for data_type and run_id, based on the
         options in this context.
         """
         return self._get_plugins((data_type,), run_id)[data_type].lineage
 
     def register_all(self, module):
-        """Register all plugins defined in module.
+        """
+        Register all plugins defined in module.
 
         Can pass a list/tuple of modules to register all in each.
         """
@@ -477,8 +488,10 @@ class Context:
         return pd.DataFrame(result, columns=display_headers)
 
     def get_single_plugin(self, run_id, data_name):
-        """Return a single fully initialized plugin that produces
-        data_name for run_id. For use in custom processing."""
+        """
+        Return a single fully initialized plugin that produces
+        data_name for run_id. For use in custom processing.
+        """
         plugin = self._get_plugins((data_name,), run_id)[data_name]
         self._set_plugin_config(plugin, run_id, tolerant=False)
         plugin.setup()
@@ -613,7 +626,8 @@ class Context:
     def _get_plugins(self,
                      targets: ty.Tuple[str],
                      run_id: str) -> ty.Dict[str, strax.Plugin]:
-        """Return dictionary of plugin instances necessary to compute targets
+        """
+        Return dictionary of plugin instances necessary to compute targets
         from scratch.
         For a plugin that produces multiple outputs, we make only a single
         instance, which is referenced under multiple keys in the output dict.
@@ -730,7 +744,7 @@ class Context:
     def _get_end_targets(plugins: dict) -> ty.Tuple[str]:
         """
         Get the datatype that is provided by a plugin but not depended
-            on by any other plugin
+        on by any other plugin
         """
         provides = [prov for p in plugins.values()
                     for prov in strax.to_str_tuple(p.provides)]
@@ -770,6 +784,7 @@ class Context:
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """
         Get partial loaders to allow loading data later
+
         :param key: strax.DataKey
         :param time_range: 2-length arraylike of (start, exclusive end) of row
             numbers to get. Default is None, which means get the entire run.
@@ -796,7 +811,9 @@ class Context:
                        targets=tuple(), save=tuple(),
                        time_range=None, chunk_number=None,
                        ) -> strax.ProcessorComponents:
-        """Return components for setting up a processor
+        """
+        Return components for setting up a processor
+
         {get_docs}
         """
         save = strax.to_str_tuple(save)
@@ -1192,7 +1209,8 @@ class Context:
                  progress_bar=True,
                  _chunk_number=None,
                  **kwargs) -> ty.Iterator[strax.Chunk]:
-        """Compute target for run_id and iterate over results.
+        """
+        Compute target for run_id and iterate over results.
 
         Do NOT interrupt the iterator (i.e. break): it will keep running stuff
         in background threads...
@@ -1312,6 +1330,7 @@ class Context:
     def _make_progress_bar(self, run_id, targets, progress_bar=True):
         """
         Make a progress bar for get_iter
+
         :param run_id, targets: run_id and targets
         :param progress_bar: Bool whether or not to display the progress bar
         :return: progress bar, t_start (run) and t_end (run)
@@ -1369,7 +1388,9 @@ class Context:
              max_workers=None,
              _skip_if_built=True,
              **kwargs) -> None:
-        """Compute target for run_id. Returns nothing (None).
+        """
+        Compute target for run_id. Returns nothing (None).
+
         {get_docs}
         """
         kwargs.setdefault('progress_bar', False)
@@ -1394,7 +1415,9 @@ class Context:
     def get_array(self, run_id: ty.Union[str, tuple, list],
                   targets, save=tuple(), max_workers=None,
                   **kwargs) -> np.ndarray:
-        """Compute target for run_id and return as numpy array
+        """
+        Compute target for run_id and return as numpy array
+
         {get_docs}
         """
         run_ids = strax.to_str_tuple(run_id)
@@ -1427,7 +1450,8 @@ class Context:
                    store_first_for_others=True,
                    function_takes_fields=False,
                    **kwargs):
-        """Return a dictionary with the sum of the result of get_array.
+        """
+        Return a dictionary with the sum of the result of get_array.
 
         :param function: Apply this function to the array before summing the
             results. Will be called as function(array), where array is
@@ -1529,7 +1553,9 @@ class Context:
     def get_df(self, run_id: ty.Union[str, tuple, list],
                targets, save=tuple(), max_workers=None,
                **kwargs) -> pd.DataFrame:
-        """Compute target for run_id and return as pandas DataFrame
+        """
+        Compute target for run_id and return as pandas DataFrame
+        
         {get_docs}
         """
         df = self.get_array(
@@ -1620,7 +1646,8 @@ class Context:
         return strax.DataKey(run_id, target, lineage)
 
     def get_meta(self, run_id, target) -> dict:
-        """Return metadata for target for run_id, or raise DataNotAvailable
+        """
+        Return metadata for target for run_id, or raise DataNotAvailable
         if data is not yet available.
 
         :param run_id: run id to get
@@ -1663,7 +1690,8 @@ class Context:
         return sum([x['nbytes'] for x in md['chunks']]) / 1e6
 
     def run_defaults(self, run_id):
-        """Get configuration defaults from the run metadata (if these exist)
+        """
+        Get configuration defaults from the run metadata (if these exist)
 
         This will only call the rundb once for each run while the context is
         in existence; further calls to this will return a cached value.
@@ -1707,8 +1735,10 @@ class Context:
         return False
 
     def _check_forbidden(self):
-        """Check that the forbid_creation_of config is of tuple type.
-        Otherwise, try to make it a tuple"""
+        """
+        Check that the forbid_creation_of config is of tuple type.
+        Otherwise, try to make it a tuple
+        """
         self.context_config['forbid_creation_of'] = strax.to_str_tuple(
             self.context_config['forbid_creation_of'])
 
@@ -1722,6 +1752,7 @@ class Context:
             get_array, get_df or accumulate. Functions stored in
             context_config['apply_data_function'] should take exactly two positional
             arguments: data and targets.
+
         :param data: Any type of data
         :param run_id: run_id of the data.
         :param targets: list/tuple of strings of data type names to get
@@ -1859,7 +1890,8 @@ class Context:
                             _targets_stored: ty.Optional[dict] = None,
                             ) -> ty.Optional[dict]:
         """
-        For a given run_id and target(s) get a dictionary of all the datatypes that:
+        For a given run_id and target(s) get a dictionary of all the datatypes
+        that are required to build the requested target.
 
         :param run_id: run_id
         :param target: target or a list of targets
@@ -1925,7 +1957,7 @@ class Context:
         """
         :param run_id, target: run_id, target
         :param storage_frontend: strax.StorageFrontend to check if it has the
-        requested datakey for the run_id and target.
+            requested datakey for the run_id and target.
         :return: if the frontend has the key or not.
         """
         key = self.key_for(run_id, target)
@@ -1938,11 +1970,12 @@ class Context:
     def _get_source_sf(self, run_id, target, should_exist=False):
         """
         Get the source storage frontend for a given run_id and target
+
         :param run_id, target: run_id, target
         :param should_exist: Raise a ValueError if we cannot find one
-        (e.g. we already checked the data is stored)
+            (e.g. we already checked the data is stored)
         :return: strax.StorageFrontend or None (when raise_error is
-        False)
+            False)
         """
         for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
