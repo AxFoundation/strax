@@ -1991,7 +1991,7 @@ select_docs = """
     either keep or drop column.)
 :param time_range: (start, stop) range to load, in ns since the epoch
 :param seconds_range: (start, stop) range of seconds since
-the start of the run to load.
+    the start of the run to load.
 :param time_within: row of strax data (e.g. event) to use as time range
 :param time_selection: Kind of time selectoin to apply:
 - fully_contained: (default) select things fully contained in the range
