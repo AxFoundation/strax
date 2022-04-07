@@ -2032,7 +2032,7 @@ select_docs = """
 :param seconds_range: (start, stop) range of seconds since
     the start of the run to load.
 :param time_within: row of strax data (e.g. event) to use as time range
-:param time_selection: Kind of time selectoin to apply:
+:param time_selection: Kind of time selection to apply:
     - fully_contained: (default) select things fully contained in the range
     - touching: select things that (partially) overlap with the range
     - skip: Do not select a time range, even if other arguments say so
