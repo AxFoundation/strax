@@ -57,7 +57,7 @@ class Plugin:
     # indicates such an inheritance.
     child_plugin = False
     
-    compressor = 'blosc'
+    compressor = 'zstd'
 
     rechunk_on_save = True    # Saver is allowed to rechunk
     # How large (uncompressed) should re-chunked chunks be?
