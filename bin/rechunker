@@ -31,6 +31,20 @@ def main():
   saver = source._saver(dest, md)
   saver.save_from(loader, rechunk=rechunk)
   
+def write_report(source, dest):
+  """
+  Create a small logfile that states:
+   - Did we run succesfully
+   - Time to rechunk
+   - Source size (and compressor)
+   - Dest size (and compressor)
+  """
+  pass
+                          
+def replace_old(source, dest):
+  # Move dest -> source and remove source
 
+  
+                          
 if __name__ == '__main__':
   main()
