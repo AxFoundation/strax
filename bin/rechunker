@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+import strax
+import os
+
+
+def main():
+  ARGPARSE
+  
+  path = args.source
+  destination = args.dest
+  compressor = args.compressor
+  rechunk = args.rechunk
+  target_size_mb = args.target_size_mb
+
+  backend = strax.FileSytemBackend()
+
+  
+  dest = os.path.join(destination,
+    # TODO check for tailing '/'
+    os.path.split(source)[-1
+        )
+
+  md = backend.get_metadata(path)
+  loader=source.loader(path)
+  if compressor is not None:
+    # TODO 
+    assert compressor in strax.compressor_list_or_something
+    md['compressor'] = compressor
+  if rechunk:
+    md['target_size_mb'] = target_size_mb
+  saver = source._saver(dest, md)
+  saver.save_from(loader, rechunk=rechunk)
+  
+
+if __name__ == '__main__':
+  main()
