@@ -1847,7 +1847,7 @@ class Context:
                     f'to {rechunk_to_mb}.')
                 md.update({'chunk_target_size_mb': rechunk_to_mb})
             else:
-                self.log.warning('Asked for rechunking of data, but did not 
+                self.log.warning('Asked for rechunking of data, but did not '
                                  'specify a new chunk size, use <rechunk_to_mb>!')
         for t_sf in target_sf:
             try:
