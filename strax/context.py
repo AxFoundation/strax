@@ -1780,7 +1780,7 @@ class Context:
                          target: str,
                          target_frontend_id: ty.Optional[int] = None,
                          target_compressor: ty.Optional[str] = None,
-                         rechunk: bool = False):
+                         rechunk_to_mb: int = None):
         """
         Copy data from one frontend to another
 
@@ -1836,7 +1836,10 @@ class Context:
             self.log.info(f'Changing compressor from {md["compressor"]} '
                            f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
-
+        if rechunk_to_mb is not None:
+            self.log.info(f'Changing target mb size from {md["target_size_mb"]} '
+               f'to {rechunk_to_mb}.')
+            md.update({'target_size_mb': target_rechunk_to_mbcompressor})
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
@@ -1846,7 +1849,7 @@ class Context:
                 t_be_str, t_be_key = t_sf.find(data_key, write=True)
                 target_be = t_sf._get_backend(t_be_str)
                 saver = target_be._saver(t_be_key, md)
-                saver.save_from(loader, rechunk=rechunk)
+                saver.save_from(loader, rechunk=rechunk_to_mb is not None)
             except NotImplementedError:
                 # Target is not susceptible
                 continue
