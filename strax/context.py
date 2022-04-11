@@ -1780,7 +1780,8 @@ class Context:
                          target: str,
                          target_frontend_id: ty.Optional[int] = None,
                          target_compressor: ty.Optional[str] = None,
-                         rechunk_to_mb: int = None):
+                         rechunk: False = None,
+                         rechunk_to_mb: int = strax.default_chunk_size_mb):
         """
         Copy data from one frontend to another
 
@@ -1790,6 +1791,8 @@ class Context:
             in context.storage. If no index is specified, try all.
         :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
+        :param rechunk_to_mb: rechunk to specified target size. Only works if 
+            rechunk is True.
         """
 
         # NB! We don't want to use self._sorted_storage here since the order matters!
@@ -1836,11 +1839,15 @@ class Context:
             self.log.info(f'Changing compressor from {md["compressor"]} '
                            f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
-        if rechunk_to_mb is not None:
-            self.log.info(
-                f'Changing target mb size from {md["chunk_target_size_mb"]} '
-                f'to {rechunk_to_mb}.')
-            md.update({'chunk_target_size_mb': rechunk_to_mb})
+        if rechunk:
+            if md["chunk_target_size_mb"] != md["chunk_target_size_mb"]
+                self.log.info(
+                    f'Changing target mb size from {md["chunk_target_size_mb"]} '
+                    f'to {rechunk_to_mb}.')
+                md.update({'chunk_target_size_mb': rechunk_to_mb})
+            else:
+                self.log.warning('Asked for rechunking of data, but did not 
+                                 'specify a new chunk size, use <rechunk_to_mb>!')
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
