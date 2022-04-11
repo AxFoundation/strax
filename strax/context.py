@@ -1837,9 +1837,10 @@ class Context:
                            f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
         if rechunk_to_mb is not None:
-            self.log.info(f'Changing target mb size from {md["target_size_mb"]} '
-               f'to {rechunk_to_mb}.')
-            md.update({'target_size_mb': target_rechunk_to_mbcompressor})
+            self.log.info(
+                f'Changing target mb size from {md["chunk_target_size_mb"]} '
+                f'to {rechunk_to_mb}.')
+            md.update({'chunk_target_size_mb': rechunk_to_mb})
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
