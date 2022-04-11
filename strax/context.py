@@ -1783,7 +1783,7 @@ class Context:
         if len(strax.to_str_tuple(target)) > 1:
             raise ValueError(
                 'copy_to_frontend only works for a single target at the time')
-        if target_frontend_id is not None or target_frontend_id >= len(self.storage):
+        if target_frontend_id is not None and target_frontend_id >= len(self.storage):
             raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
                              f'we only have {len(self.storage)} frontends!')
         if rechunk and rechunk_to_mb == strax.default_chunk_size_mb:
