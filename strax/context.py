@@ -1840,15 +1840,14 @@ class Context:
             self.log.info(f'Changing compressor from {md["compressor"]} '
                            f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
-        if rechunk:
-            if md["chunk_target_size_mb"] != md["chunk_target_size_mb"]:
-                self.log.info(
-                    f'Changing target mb size from {md["chunk_target_size_mb"]} '
-                    f'to {rechunk_to_mb}.')
-                md.update({'chunk_target_size_mb': rechunk_to_mb})
-            else:
-                self.log.warning('Asked for rechunking of data, but did not '
-                                 'specify a new chunk size, use <rechunk_to_mb>!')
+        if rechunk and md["chunk_target_size_mb"] != md["chunk_target_size_mb"]:
+            self.log.info(
+                f'Changing target mb size from {md["chunk_target_size_mb"]} '
+                f'to {rechunk_to_mb}.')
+            md.update({'chunk_target_size_mb': rechunk_to_mb})
+        elif rechunk:
+            self.log.warning('Asked for rechunking of data, but did not '
+                             'specify a new chunk size, use <rechunk_to_mb>!')
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
