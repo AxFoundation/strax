@@ -1781,7 +1781,8 @@ class Context:
                          target_frontend_id: ty.Optional[int] = None,
                          target_compressor: ty.Optional[str] = None,
                          rechunk: False = None,
-                         rechunk_to_mb: int = strax.default_chunk_size_mb):
+                         rechunk_to_mb: int = strax.default_chunk_size_mb,
+                        ):
         """
         Copy data from one frontend to another
 
@@ -1840,7 +1841,7 @@ class Context:
                            f'to {target_compressor}.')
             md.update({'compressor': target_compressor})
         if rechunk:
-            if md["chunk_target_size_mb"] != md["chunk_target_size_mb"]
+            if md["chunk_target_size_mb"] != md["chunk_target_size_mb"]:
                 self.log.info(
                     f'Changing target mb size from {md["chunk_target_size_mb"]} '
                     f'to {rechunk_to_mb}.')
