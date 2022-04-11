@@ -189,6 +189,14 @@ def test_copy_to_frontend():
                     os.listdir(os.path.join(temp_dir_2, rec_folder))
             )
 
+            # Clear the temp dir
+            shutil.rmtree(temp_dir_2)
+
+            # Now try again with rechunking
+            context.copy_to_frontend(run_id, 
+                                     'records',
+                                     target_compressor='lz4',
+                                     rechunk_to_mb=400)
 
 class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
