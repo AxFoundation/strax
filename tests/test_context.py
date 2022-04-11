@@ -196,7 +196,9 @@ def test_copy_to_frontend():
             context.copy_to_frontend(run_id, 
                                      'records',
                                      target_compressor='lz4',
-                                     rechunk_to_mb=400)
+                                     rechunk_to_mb=400,
+                                     rechunk=True,
+                                    )
 
 class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
