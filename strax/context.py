@@ -1782,7 +1782,7 @@ class Context:
                          target_compressor: ty.Optional[str] = None,
                          rechunk: False = None,
                          rechunk_to_mb: int = strax.default_chunk_size_mb,
-                        ):
+                         ):
         """
         Copy data from one frontend to another
 
@@ -1795,7 +1795,6 @@ class Context:
         :param rechunk_to_mb: rechunk to specified target size. Only works if 
             rechunk is True.
         """
-
         # NB! We don't want to use self._sorted_storage here since the order matters!
         if not self.is_stored(run_id, target):
             raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
@@ -1806,7 +1805,6 @@ class Context:
         if target_frontend_id is None:
             target_sf = self.storage
         elif len(self.storage) > target_frontend_id:
-            # only write to selected other frontend
             target_sf = [self.storage[target_frontend_id]]
         else:
             raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
@@ -1835,19 +1833,14 @@ class Context:
         s_be_str, s_be_key = source_sf.find(data_key)
         s_be = source_sf._get_backend(s_be_str)
         md = s_be.get_metadata(s_be_key)
-
         if target_compressor is not None:
-            self.log.info(f'Changing compressor from {md["compressor"]} '
-                           f'to {target_compressor}.')
+            self.log.info(f'Changing compressor {md["compressor"]} -> {target_compressor}.')
             md.update({'compressor': target_compressor})
-        if rechunk and md["chunk_target_size_mb"] != md["chunk_target_size_mb"]:
-            self.log.info(
-                f'Changing target mb size from {md["chunk_target_size_mb"]} '
-                f'to {rechunk_to_mb}.')
+        if rechunk and md["chunk_target_size_mb"] != rechunk_to_mb:
+            self.log.info(f'Changing chunk-size: {md["chunk_target_size_mb"]} -> {rechunk_to_mb}.')
             md.update({'chunk_target_size_mb': rechunk_to_mb})
         elif rechunk:
-            self.log.warning('Asked for rechunking of data, but did not '
-                             'specify a new chunk size, use <rechunk_to_mb>!')
+            self.log.warning('No <rechunk_to_mb> specified!')
         for t_sf in target_sf:
             try:
                 # Need to load a new loader each time since it's a generator
@@ -1857,7 +1850,7 @@ class Context:
                 t_be_str, t_be_key = t_sf.find(data_key, write=True)
                 target_be = t_sf._get_backend(t_be_str)
                 saver = target_be._saver(t_be_key, md)
-                saver.save_from(loader, rechunk=rechunk_to_mb is not None)
+                saver.save_from(loader, rechunk=rechunk)
             except NotImplementedError:
                 # Target is not susceptible
                 continue
