@@ -1794,7 +1794,7 @@ class Context:
                          target: str,
                          target_frontend_id: ty.Optional[int] = None,
                          target_compressor: ty.Optional[str] = None,
-                         rechunk: False = None,
+                         rechunk: bool = False,
                          rechunk_to_mb: int = strax.default_chunk_size_mb,
                          ):
         """
