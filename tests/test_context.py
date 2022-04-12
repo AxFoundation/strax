@@ -1,5 +1,5 @@
 import strax
-from strax.testutils import Records, Peaks, run_id
+from strax.testutils import Records, Peaks, PeakClassification, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
@@ -58,7 +58,6 @@ def test_byte_strings_as_run_id():
         records_bytes = st.get_array(b'0', 'records')
         records = st.get_array('0', 'records')
         assert np.all(records_bytes == records)
-
 
 
 @settings(deadline=None)
@@ -190,6 +189,16 @@ def test_copy_to_frontend():
                     os.listdir(os.path.join(temp_dir_2, rec_folder))
             )
 
+            # Clear the temp dir
+            shutil.rmtree(temp_dir_2)
+
+            # Now try again with rechunking
+            context.copy_to_frontend(run_id, 
+                                     'records',
+                                     target_compressor='lz4',
+                                     rechunk_to_mb=400,
+                                     rechunk=True,
+                                    )
 
 class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
@@ -203,7 +212,8 @@ class TestContext(unittest.TestCase):
         assert not os.path.exists(self.tempdir)
 
     def tearDown(self):
-        shutil.rmtree(self.tempdir)
+        if os.path.exists(self.tempdir):
+            shutil.rmtree(self.tempdir)
 
     def test_register_no_defaults(self, runs_default_allowed=False):
         """Test if we only register a plugin with no run-defaults"""
@@ -280,6 +290,33 @@ class TestContext(unittest.TestCase):
             sf.write_run_metadata(d['name'], d)
         return sf
 
+    def test_scan_runs__provided_dtypes__available_for_run(self):
+        """Simple test with three plugins to test some basic context functions"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(PeakClassification)
+        st.make(run_id, 'records')
+        
+        # Test these three functions. They could have separate tests, but this
+        # speeds things up a bit
+        st.scan_runs()
+        st.provided_dtypes()
+        st.available_for_run(run_id)
+
+    def test_bad_savewhen(self):
+        st = self.get_context(True)
+
+        class BadRecords(Records):
+            save_when = 'I don\'t know?!'
+
+        st.register(BadRecords)
+        with self.assertRaises(ValueError):
+            st.get_save_when('records')
+        with self.assertRaises(ValueError):
+            st.get_single_plugin(run_id, 'records')
+
+
     @staticmethod
     def _has_per_run_default(plugin) -> bool:
         """Does the plugin have at least one option that is a per-run default"""
@@ -321,6 +358,23 @@ class TestContext(unittest.TestCase):
         assert st.get_source(run_id, ('records', 'peaks')) == {'records', 'peaks'}
         assert st.get_source(run_id, 'peaks') == {'peaks'}
         assert st.get_source(run_id, 'cut_peaks') == {'peaks'}
+
+    def test_print_versions(self):
+        """Test that we get that the "time" field from st.search_field"""
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        field = 'time'
+        field_matches, code_matches = st.search_field(field, return_matches=True)
+        fields_found_for_dtype = [matched_field[0] for matched_field in field_matches[field]]
+        self.assertTrue(
+            all(p in fields_found_for_dtype for p in 'records peaks'.split()),
+            f'{fields_found_for_dtype} is not correct, expected records or peaks')
+        self.assertTrue(
+            all(p in code_matches[field] for p in 'Records.compute Peaks.compute'.split()),
+            'code_matches[field] is not correct, expected Records.compute or Peaks.compute')
+        # Also test printing:
+        self.assertIsNone(st.search_field(field, return_matches=False))
 
     @staticmethod
     def get_dummy_peaks_dependency():

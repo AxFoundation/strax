@@ -4,7 +4,7 @@ import shutil
 import strax
 import numpy as np
 import tempfile
-from strax.testutils import Records, Peaks
+from strax.testutils import Records, Peaks, PeakClassification
 import datetime
 import pytz
 import json
@@ -29,7 +29,8 @@ class TestSuperRuns(unittest.TestCase):
                                                                   provide_run_metadata=True,
                                                                   readonly=False,
                                                                   deep_scan=True)],
-                                     register=[Records, RecordsExtension, Peaks, PeaksExtension],
+                                     register=[Records, RecordsExtension,
+                                               Peaks, PeaksExtension, PeakClassification],
                                      config={'bonus_area': 42,},
                                      store_run_fields=('name', 'number', 'start', 'end',
                                                        'livetime', 'mode', 'source',
@@ -244,7 +245,7 @@ class TestSuperRuns(unittest.TestCase):
         assert not self.context.is_stored(self.superrun_name, 'peaks_extension')
         self.context._plugin_class_registry['peaks'].save_when = strax.SaveWhen.EXPLICIT
         
-        self.context.make(self.superrun_name, 'peaks_extension')
+        self.context.make(self.superrun_name, 'peaks_extension', save=('peaks_extension',))
         assert not self.context.is_stored(self.superrun_name, 'peaks')
         assert not self.context.is_stored(self.subrun_ids[0], 'peaks')
         assert self.context.is_stored(self.superrun_name, 'peaks_extension')
@@ -280,6 +281,16 @@ class TestSuperRuns(unittest.TestCase):
         assert pd.api.types.is_string_dtype(df_runs['source'])
         assert df_runs.loc[mask_superrun, 'source'].values[0] == 'test'
         assert pd.api.types.is_timedelta64_dtype(df_runs['livetime'])
+
+    def test_if_only_target_produces_savers(self):
+        """
+        Normally we produce for a multi-output plugin for each data_type
+        we are producing and want to store a saver. But for superruns
+        we only want to store the target data_type.
+        """
+        components = self.context.get_components(self.superrun_name, 'peak_classification')
+        assert 'peak_classification' in components.savers
+        assert 'lone_hits' not in components.savers
 
     def tearDown(self):
         if os.path.exists(self.tempdir):

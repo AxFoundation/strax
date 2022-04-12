@@ -116,6 +116,16 @@ class Plugin:
             del compute_pars[compute_pars.index('start')]
             del compute_pars[compute_pars.index('end')]
 
+        if not isinstance(self.save_when, (IntEnum, immutabledict, int)):
+            raise ValueError('save_when must be either a SaveWhen object or an immutabledict '
+                             'representing the different data_types provided.')
+
+        if hasattr(self, 'provides') and not isinstance(self.save_when, immutabledict):
+            # The ParallelSource plugin does not provide anything as it 
+            # inlines only already existing components, therefore we also do 
+            # not have to updated save_when
+            self.save_when = immutabledict.fromkeys(self.provides, self.save_when)
+
         self.compute_pars = compute_pars
         self.input_buffer = dict()
 
@@ -459,7 +469,11 @@ class Plugin:
                         f"Plugin {d} terminated without fetching last {d}!")
 
             # This can happen especially in time range selections
-            if int(self.save_when) > strax.SaveWhen.EXPLICIT:
+            if hasattr(self.save_when, 'values'):
+                save_when = max([int(save_when) for save_when in self.save_when.values()])
+            else:
+                save_when = self.save_when
+            if save_when > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
@@ -517,7 +531,13 @@ class Plugin:
 
             # For non-saving plugins, don't be strict, just take whatever
             # endtimes are available and don't check time-consistency
-            if int(self.save_when) <= strax.SaveWhen.EXPLICIT:
+            # Side mark this wont work for a plugin which has a SaveWhen.NEVER and other
+            # SaveWhen type.
+            if hasattr(self.save_when, 'values'):
+                save_when = max([int(save_when) for save_when in self.save_when.values()])
+            else:
+                save_when = self.save_when
+            if save_when <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     end = max([v.end for v in kwargs.values()])  # Don't delete
@@ -839,7 +859,21 @@ class CutPlugin(Plugin):
 
     def __init__(self):
         super().__init__()
-
+        
+        compute_pars = list(
+            inspect.signature(self.cut_by).parameters.keys())
+        if 'chunk_i' in compute_pars:
+            self.compute_takes_chunk_i = True
+            del compute_pars[compute_pars.index('chunk_i')]
+        if 'start' in compute_pars:
+            if 'end' not in compute_pars:
+                raise ValueError(f"Compute of {self} takes start, "
+                                 f"so it should also take end.")
+            self.compute_takes_start_end = True
+            del compute_pars[compute_pars.index('start')]
+            del compute_pars[compute_pars.index('end')]
+        self.compute_pars = compute_pars
+        
         _name = strax.camel_to_snake(self.__class__.__name__)
         if not hasattr(self, 'provides'):
             self.provides = _name

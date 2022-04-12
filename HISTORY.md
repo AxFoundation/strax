@@ -1,3 +1,44 @@
+1.2.1 / 2022-04-12
+---------------------
+- run dependabot remotely (#683)
+- Docs fixing (#684)
+- Allow different chunk size (#687)
+
+
+1.2.0 / 2022-03-09
+---------------------
+- Added lone hit area to area per channel (#649) 
+
+1.1.8 / 2022-03-08
+---------------------
+- Fix saving behavior of multioutput plugins with different SaveWhens (#674)
+- Change tempdirs in test (#657)
+- Define extra kwargs based on cut_by (db14f809414fe91c4e16d04bd7f166970891e591)
+- Update run_selection.py (#658)
+- Ignore raises on testing (#669)
+- Documentation tweaks (#670)
+- Test for inline plugin (#673)
+
+
+1.1.7 / 2022-02-16
+---------------------
+- Fix savewhen issues (#648)
+- Fix testing from straxen (#650)
+- Small fix superruns define run (#651)
+
+
+1.1.6 / 2022-02-03
+---------------------
+- Extend search field to also print occurrences (#638)
+- Extend save when (#631)
+- test straxen for coverage and backward compatibility (#635)
+- Failing example for test_conditional_entropy (#544)
+- python 3.10 (#630)
+- deprecate py3.6 py3.7 (#636)
+- remove deprecated function (#632)
+- Numba 0.55 (#634)
+  
+
 1.1.5 / 2022-01-10
 ---------------------
 - StorageFrontend remoteness attribute and test (#617)

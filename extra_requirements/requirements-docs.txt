@@ -4,3 +4,4 @@ sphinx_rtd_theme
 nbsphinx
 recommonmark
 graphviz
+m2r
