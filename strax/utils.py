@@ -1,4 +1,3 @@
-import warnings
 from base64 import b32encode
 import collections
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
@@ -514,11 +513,7 @@ def multi_run(exec_function, run_ids, *args,
                 desc="Loading %d runs" % len(run_ids),
                 disable=not multi_run_progress_bar,
                 )
-
-    # if return_despite_errors:
-    #     args = [exec_function, args]
-    #     exec_function = forgiving_wrapper
-
+    failures = []
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
         # Submit first bunch of futures, add additional futures later
@@ -540,6 +535,7 @@ def multi_run(exec_function, run_ids, *args,
                 if f.exception() is not None:
                     if ignore_errors:
                         log.warning(f'Ran into {f.exception()}, ignoring that for now!')
+                        failures.append(_run_id)
                         continue
                     raise f.exception()
 
@@ -572,6 +568,8 @@ def multi_run(exec_function, run_ids, *args,
             start_of_runs = [np.min(res['time']) for res in final_result]
             final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
+        if ignore_errors and len(failures):
+            log.warning(f'Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}')
         return final_result
 
 
@@ -698,4 +696,3 @@ def apply_selection(x,
         del x2
 
     return x
-
