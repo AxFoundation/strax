@@ -439,21 +439,12 @@ def dict_to_rec(x, dtype=None):
     return r
 
 
-def forgiving_wrapper(r, func, *args, **kwargs):
-    try:
-        func(r, *args, **kwargs)
-    except Exception:
-        warnings.warn(f'Executing {str(func)}({r}, {args}, {kwargs}) '
-                      f'resulted in {formatted_exception()}')
-        return
-
-
 @export
 def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
-              return_despite_errors=False,
+              ignore_errors=False,
               log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
@@ -465,7 +456,7 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
-    :param return_despite_errors: Return the data for the runs that
+    :param ignore_errors: Return the data for the runs that
         successfully loaded, even if some runs failed executing.
     :param log: logger to be used.
 
@@ -547,7 +538,7 @@ def multi_run(exec_function, run_ids, *args,
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
                 if f.exception() is not None:
-                    if return_despite_errors:
+                    if ignore_errors:
                         log.warning(f'Ran into {f.exception()}, ignoring that for now!')
                         continue
                     raise f.exception()
@@ -707,3 +698,4 @@ def apply_selection(x,
         del x2
 
     return x
+
