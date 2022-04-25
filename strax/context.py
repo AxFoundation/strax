@@ -700,10 +700,9 @@ class Context:
                         configs[option_name] = v
 
                 # Also adding name and version of the parent to the lineage:
-                parent_plugin = self.get_single_plugin(
-                    run_id,
-                    strax.to_str_tuple(parent_class.provides)[0])
-                configs[parent_class.__name__] = parent_plugin.version(run_id)
+                # NB: tracking the parents Plugin.__version__, not the
+                # run_id dependent Plugin.version
+                configs[parent_class.__name__] = parent_class.__version__
 
                 plugin.lineage = {last_provide: (
                     plugin.__class__.__name__,
