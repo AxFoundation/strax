@@ -13,6 +13,7 @@ import types
 from collections import defaultdict
 from immutabledict import immutabledict
 from enum import IntEnum
+from pandas.util._decorators import deprecate_kwarg
 
 
 export, __all__ = strax.exporter()
@@ -545,6 +546,11 @@ class Context:
         """
         base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
+
+        # Despite github.com/AxFoundation/strax/issues/688, we use
+        # __version__ here. This might cause ambiguity _only_ when one
+        # re-registers a new plugin with a different method for
+        # Plugin.version.
         base_hash_on_config.update(
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
              for data_type, plugin in self._plugin_class_registry.items()
@@ -692,7 +698,10 @@ class Context:
                         configs[option_name] = v
 
                 # Also adding name and version of the parent to the lineage:
-                configs[parent_class.__name__] = parent_class.__version__
+                parent_plugin = self.get_single_plugin(
+                    run_id,
+                    strax.to_str_tuple(parent_class.provides)[0])
+                configs[parent_class.__name__] = parent_plugin.version(run_id)
 
                 plugin.lineage = {last_provide: (
                     plugin.__class__.__name__,
@@ -2009,18 +2018,26 @@ class Context:
                              f'or immutabledict')
         return save_when
 
-    def provided_dtypes(self, runid='0'):
+    @deprecate_kwarg('runid', 'run_id')
+    def provided_dtypes(self, run_id='0'):
         """
-        Summarize dtype information provided by this context
+        Summarize dtype information provided by this context for a
+        given run_id
 
-        :return: dictionary of provided dtypes with their corresponding lineage hash, save_when, version
+        :param run_id: Run-id, only important if:
+            self.context_config['use_per_run_defaults'] = True
+        :return: dictionary of provided dtypes with their corresponding
+            lineage hash, save_when, version
         """
-        hashes = set([(data_type,
-                       self.key_for(runid, data_type).lineage_hash,
-                       self.get_save_when(data_type),
-                       plugin.__version__)
-                      for plugin in self._plugin_class_registry.values()
-                      for data_type in plugin.provides])
+        dtypes = tuple(self._plugin_class_registry.key())
+        plugins = self._get_plugins(targets=dtypes, run_id=run_id)
+        hashes = set([
+            (data_type,
+             self.key_for(run_id, data_type).lineage_hash,
+             self.get_save_when(data_type),
+             plugins[data_type].version(run_id),
+             )
+             for data_type in dtypes])
 
         return {data_type: dict(hash=_hash,
                                 save_when=save_when.name,
