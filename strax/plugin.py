@@ -242,13 +242,14 @@ class Plugin:
 
         Activate with setting __version__ to None
         """
-        attributes = [attr for attr in self.__dir__() if not attr.startswith('__')]
+        attributes = [attr for attr in self.__dir__()
+                      if not attr.startswith('__')]
 
         def _return_hashable(attr):
-            obj = getattr(self, attr)
-            if attr in ['takes_config']:
-                # handled by context
+            if attr in ['takes_config', '_auto_version']:
+                # handled by context (or not worth tracking)
                 return
+            obj = getattr(self, attr)
             try:
                 return strax.deterministic_hash(inspect.getsource(obj))
             except TypeError:
