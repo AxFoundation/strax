@@ -2031,7 +2031,7 @@ class Context:
         :return: dictionary of provided dtypes with their corresponding
             lineage hash, save_when, version
         """
-        dtypes = tuple(self._plugin_class_registry.key())
+        dtypes = tuple(self._plugin_class_registry.keys())
         plugins = self._get_plugins(targets=dtypes, run_id=run_id)
         hashes = set([
             (data_type,
