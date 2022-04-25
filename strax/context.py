@@ -550,7 +550,9 @@ class Context:
         # Despite github.com/AxFoundation/strax/issues/688, we use
         # __version__ here. This might cause ambiguity _only_ when one
         # re-registers a new plugin with a different method for
-        # Plugin.version.
+        # Plugin.version. Additionally, we only add up in this piece of
+        # logic if we don't allow per-run defaults. So we really
+        # shouldn't have run_id dependent versions in the first place.
         base_hash_on_config.update(
             {data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
              for data_type, plugin in self._plugin_class_registry.items()
