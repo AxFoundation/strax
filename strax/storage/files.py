@@ -375,6 +375,37 @@ def rechunker(source_directory:str,
               target_size_mb: typing.Optional[str] = None,
               rechunk: bool = True,
               )-> dict:
+    """
+    Rechunk/Recompress a strax-datatype saved in a FileSystemBackend
+    outside of a strax.Context.
+
+    One can either specify a destination directory where to store a new
+    copy of this data with <dest_directory> or replace the input file
+    with it's rechunked version.
+
+    This function can either:
+     - rechunk (if <rechunk? is True), probably incrementing the
+        <target_size_mb> is also useful (create larger chunks)
+     - recompress (if a <compressor> is specified)
+
+    One can also rechunk and recompress simultaneously
+
+    :param source_directory: Path to a folder containing a single
+        strax.DataType.
+    :param dest_directory: Head of a folder whereto write new data. If
+        nothing is specified, write to a temporary directory.
+    :param replace: Delete the source_directory and replace it with it's
+        rechunked version
+    :param compressor: Compressor to be used in saving the rechunked
+        data
+    :param target_size_mb: Target size of chunks (uncompressed). As long
+        as a chunk is smaller than this many MB, keep adding new MBs
+        until the chunk is at least target_size_mb or we run out of
+        chunks.
+    :param rechunk: Do we want to rechunk?
+    :return: Dictionary with some information on the write/load times
+        involved.
+    """
     if not os.path.exists(source_directory):
         raise FileNotFoundError(f'No file at {source_directory}')
     if not replace and dest_directory is None:
@@ -421,7 +452,7 @@ def rechunker(source_directory:str,
     write_time_start = time.time()
     saver.save_from(loader(), rechunk=rechunk)
     load_time = sum(load_time_seconds)
-    write_time = time.time() - write_time_start - load_time_seconds
+    write_time = time.time() - write_time_start - load_time
 
     if replace:
         print(f'move {dest_directory} to {source_directory}')
