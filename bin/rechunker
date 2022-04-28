@@ -6,7 +6,10 @@ import argparse
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Rechunker for FileSytemBackend")
+    parser = argparse.ArgumentParser(
+        description="Rechunker for FileSytemBackend. Interfaces with strax.rechunker."
+                    "Please see the documentation of strax.rechunker for more information: "
+                    "github.com/AxFoundation/strax/blob/31c114c5f8329e53289d5127fb2125e71c3d6aae/strax/storage/files.py#L371")
     parser.add_argument(
         '--source',
         type=str,
