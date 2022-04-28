@@ -699,7 +699,7 @@ def apply_selection(x,
     return x
 
 
-def file_get_size(start_path = '.'):
+def file_size_mb(start_path = '.'):
     """Thanks https://stackoverflow.com/a/1392549/18280620"""
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
@@ -709,4 +709,4 @@ def file_get_size(start_path = '.'):
             if not os.path.islink(fp):
                 total_size += os.path.getsize(fp)
 
-    return total_size
+    return total_size / 1e6
