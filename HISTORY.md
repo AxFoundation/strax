@@ -1,3 +1,10 @@
+1.2.1 / 2022-04-12
+---------------------
+- run dependabot remotely (#683)
+- Docs fixing (#684)
+- Allow different chunk size (#687)
+
+
 1.2.0 / 2022-03-09
 ---------------------
 - Added lone hit area to area per channel (#649) 

@@ -189,6 +189,16 @@ def test_copy_to_frontend():
                     os.listdir(os.path.join(temp_dir_2, rec_folder))
             )
 
+            # Clear the temp dir
+            shutil.rmtree(temp_dir_2)
+
+            # Now try again with rechunking
+            context.copy_to_frontend(run_id, 
+                                     'records',
+                                     target_compressor='lz4',
+                                     rechunk_to_mb=400,
+                                     rechunk=True,
+                                    )
 
 class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
@@ -365,6 +375,29 @@ class TestContext(unittest.TestCase):
             'code_matches[field] is not correct, expected Records.compute or Peaks.compute')
         # Also test printing:
         self.assertIsNone(st.search_field(field, return_matches=False))
+
+    def test_multi_run_loading_with_errors(self):
+        st = self.get_context(True)
+        st.register(Records)
+        runs = [f'{i:06}' for i in range(10)]
+
+        # make a copy and delete one random run
+        make_runs = [r for r in runs]
+        del make_runs[4]
+        assert len(make_runs) < len(runs)
+
+        for r in make_runs:
+            st.make(r, 'records')
+
+        st.set_context_config(dict(forbid_creation_of='*'))
+        with self.assertRaises(strax.DataNotAvailable):
+            st.get_array(runs, 'records', ignore_errors=False)
+        records = st.get_array(runs, 'records', ignore_errors=True)
+        records_run_ids = np.unique(records['run_id'])
+        assert all(r in records_run_ids for r in make_runs)
+        assert set(runs) - set(make_runs) not in records_run_ids
+
+
 
     @staticmethod
     def get_dummy_peaks_dependency():

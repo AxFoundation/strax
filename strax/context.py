@@ -1775,12 +1775,28 @@ class Context:
             chunk_data = function(chunk_data, run_id, targets)
         return chunk_data
 
+    def _check_copy_to_frontend_kwargs(self, run_id, target, target_frontend_id, rechunk, rechunk_to_mb) -> None:
+        """Simple kwargs checks for copy_to_frontend"""
+        if not self.is_stored(run_id, target):
+            raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
+                                         f'does not exist')
+        if len(strax.to_str_tuple(target)) > 1:
+            raise ValueError(
+                'copy_to_frontend only works for a single target at the time')
+        if target_frontend_id is not None and target_frontend_id >= len(self.storage):
+            raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
+                             f'we only have {len(self.storage)} frontends!')
+        if rechunk and rechunk_to_mb == strax.default_chunk_size_mb:
+            self.log.warning('No <rechunk_to_mb> specified!')
+
     def copy_to_frontend(self,
                          run_id: str,
                          target: str,
                          target_frontend_id: ty.Optional[int] = None,
                          target_compressor: ty.Optional[str] = None,
-                         rechunk: bool = False):
+                         rechunk: bool = False,
+                         rechunk_to_mb: int = strax.default_chunk_size_mb,
+                         ):
         """
         Copy data from one frontend to another
 
@@ -1790,23 +1806,16 @@ class Context:
             in context.storage. If no index is specified, try all.
         :param target_compressor: if specified, recompress with this compressor.
         :param rechunk: allow re-chunking for saving
+        :param rechunk_to_mb: rechunk to specified target size. Only works if 
+            rechunk is True.
         """
-
         # NB! We don't want to use self._sorted_storage here since the order matters!
-        if not self.is_stored(run_id, target):
-            raise strax.DataNotAvailable(f'Cannot copy {run_id} {target} since it '
-                                         f'does not exist')
-        if len(strax.to_str_tuple(target)) > 1:
-            raise ValueError(
-                'copy_to_frontend only works for a single target at the time')
+
+        self._check_copy_to_frontend_kwargs(run_id, target, target_frontend_id, rechunk, rechunk_to_mb)
         if target_frontend_id is None:
             target_sf = self.storage
         elif len(self.storage) > target_frontend_id:
-            # only write to selected other frontend
             target_sf = [self.storage[target_frontend_id]]
-        else:
-            raise ValueError(f'Cannot select {target_frontend_id}-th frontend as '
-                             f'we only have {len(self.storage)} frontends!')
 
         # Figure out which of the frontends has the data. Raise error when none
         source_sf = self._get_source_sf(run_id, target, should_exist=True)
@@ -1820,6 +1829,7 @@ class Context:
                       t_sf._we_take(target) and
                       t_sf.readonly is False)]
         self.log.info(f'Copy data from {source_sf} to {target_sf}')
+
         if not len(target_sf):
             raise ValueError('No frontend to copy to! Perhaps you already stored '
                              'it or none of the frontends is willing to take it?')
@@ -1833,9 +1843,12 @@ class Context:
         md = s_be.get_metadata(s_be_key)
 
         if target_compressor is not None:
-            self.log.info(f'Changing compressor from {md["compressor"]} '
-                           f'to {target_compressor}.')
+            self.log.info(f'Changing compressor {md["compressor"]} -> {target_compressor}.')
             md.update({'compressor': target_compressor})
+
+        if rechunk and md["chunk_target_size_mb"] != rechunk_to_mb:
+            self.log.info(f'Changing chunk-size: {md["chunk_target_size_mb"]} -> {rechunk_to_mb}.')
+            md.update({'chunk_target_size_mb': rechunk_to_mb})
 
         for t_sf in target_sf:
             try:

@@ -6,7 +6,6 @@ import contextlib
 from functools import wraps
 import json
 import re
-
 import sys
 import traceback
 import typing as ty
@@ -445,6 +444,7 @@ def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              ignore_errors=False,
               log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
@@ -456,7 +456,10 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param ignore_errors: Return the data for the runs that
+        successfully loaded, even if some runs failed executing.
     :param log: logger to be used.
+
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -511,7 +514,7 @@ def multi_run(exec_function, run_ids, *args,
                 desc="Loading %d runs" % len(run_ids),
                 disable=not multi_run_progress_bar,
                 )
-
+    failures = []
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
         # Submit first bunch of futures, add additional futures later
@@ -531,8 +534,12 @@ def multi_run(exec_function, run_ids, *args,
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
                 if f.exception() is not None:
+                    if ignore_errors:
+                        log.warning(f'Ran into {f.exception()}, ignoring that for now!')
+                        failures.append(_run_id)
+                        continue
                     raise f.exception()
-                
+
                 if throw_away_result:
                     continue
                 result = f.result()
@@ -562,6 +569,8 @@ def multi_run(exec_function, run_ids, *args,
             start_of_runs = [np.min(res['time']) for res in final_result]
             final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
+        if ignore_errors and len(failures):
+            log.warning(f'Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}')
         return final_result
 
 
