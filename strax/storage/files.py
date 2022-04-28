@@ -377,7 +377,9 @@ def rechunker(source_directory:str,
               )-> dict:
     """
     Rechunk/Recompress a strax-datatype saved in a FileSystemBackend
-    outside of a strax.Context.
+    outside of a strax.Context. For a user-friendly context centered
+    alternative, see strax.Context.copy_to_frontend:
+    github.com/AxFoundation/strax/blob/a0d51fdd3bea52c228c8f74c614fc77bb7cf1bc5/strax/context.py#L1792  # noqa
 
     One can either specify a destination directory where to store a new
     copy of this data with <dest_directory> or replace the input file
