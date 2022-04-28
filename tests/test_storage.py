@@ -1,4 +1,6 @@
 from unittest import TestCase
+
+import hypothesis
 import strax
 from strax.testutils import Records
 import os
@@ -216,3 +218,45 @@ class TestStorageType(TestCase):
             st.storage = [storage_slightly_slow]
             print(st.storage)
             st.is_stored(self.run_id, self.target)
+
+
+class TestRechunking(TestCase):
+    """
+    Test the saving behavior of the context
+    """
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
+        self.st = strax.Context(use_per_run_defaults=True,
+                                register=[Records], )
+        self.target = 'records'
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_rechunking(self):
+        for compressor in strax.io.COMPRESSORS.keys():
+            with self.subTest(compressor = compressor):
+                self._rechunking(compressor)
+
+    def _rechunking(self, compressor):
+        target_path = tempfile.TemporaryDirectory()
+        source_sf = strax.DataDirectory(self.path)
+        st= self.st
+        st.storage = [source_sf]
+        run_id = '0'
+        st.make(run_id, self.target)
+        assert st.is_stored(run_id, self.target)
+
+        _, backend_key = source_sf.find(st.key_for(run_id, self.target))
+        strax.rechunker(source_directory=backend_key,
+                        dest_directory=target_path.name,
+                        replace=True,
+                        compressor=compressor,
+                        target_size_mb=strax.default_chunk_size_mb * 2,
+                        )
+        assert st.is_stored(run_id, self.target)
+        st.set_context_config(dict(forbid_creation_of='*'))
+        st.get_array(run_id, self.target)
+        target_path.cleanup()

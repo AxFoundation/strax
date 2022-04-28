@@ -3,7 +3,8 @@ import json
 import tempfile
 import os
 import os.path as osp
-
+import typing
+import time
 from bson import json_util
 import shutil
 
@@ -364,3 +365,61 @@ class FileSaver(strax.Saver):
 @export
 class InvalidFolderNameFormat(Exception):
     pass
+
+
+@export
+def rechunker(source_directory:str,
+              dest_directory: typing.Optional[str] = None,
+              replace: bool = False,
+              compressor: typing.Optional[str] = None,
+              target_size_mb: typing.Optional[str] = None,
+              rechunk: bool = True,
+              )-> typing.Tuple[float, float]:
+    if not os.path.exists(source_directory):
+        raise FileNotFoundError(f'No file at {source_directory}')
+    if not replace and dest_directory is None:
+        raise ValueError(f'Specify a destination path <dest_file> when '
+                         f'not replacing the original path')
+    backend_key = os.path.split(source_directory)[-1]
+    if dest_directory is None and replace:
+        dest_directory = tempfile.TemporaryDirectory().name
+    elif dest_directory:
+        # New key should be correct! If there is not an exact match,
+        # we want to make sure that we append the backend_key correctly
+        if os.path.split(dest_directory)[-1] != backend_key:
+            dest_directory = os.path.join(dest_directory, backend_key)
+    backend = strax.FileSytemBackend()
+    meta_data = backend.get_metadata(source_directory)
+
+    if compressor is not None:
+        meta_data['compressor'] = compressor
+    if target_size_mb is not None:
+        meta_data['chunk_target_size_mb'] = target_size_mb
+
+    data_loader = backend.loader(source_directory)
+
+    load_time_seconds = []
+    def loader():
+        """Wrapped loader for bookkeeping load time"""
+        while True:
+            try:
+                t0 = time.time()
+                data = next(data_loader)
+                load_time_seconds.append(time.time()-t0)
+            except StopIteration:
+                return
+            yield data
+
+    saver = backend._saver(dest_directory, metadata=meta_data)
+
+    write_time_start = time.time()
+    saver.save_from(loader(), rechunk=rechunk)
+    write_time = time.time() - write_time_start
+
+    load_time = sum(load_time_seconds)
+
+    if replace:
+        shutil.rmtree(source_directory)
+        shutil.move(dest_directory, source_directory)
+
+    return load_time, write_time
