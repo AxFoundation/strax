@@ -420,9 +420,8 @@ def rechunker(source_directory:str,
 
     write_time_start = time.time()
     saver.save_from(loader(), rechunk=rechunk)
-    write_time = time.time() - write_time_start
-
     load_time = sum(load_time_seconds)
+    write_time = time.time() - write_time_start - load_time_seconds
 
     if replace:
         print(f'move {dest_directory} to {source_directory}')
