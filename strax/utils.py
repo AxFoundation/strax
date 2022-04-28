@@ -701,6 +701,9 @@ def apply_selection(x,
 
 def file_size_mb(start_path = '.'):
     """Thanks https://stackoverflow.com/a/1392549/18280620"""
+    if not os.path.exists(start_path):
+        return 0
+
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
         for f in filenames:

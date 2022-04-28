@@ -374,22 +374,28 @@ def rechunker(source_directory:str,
               compressor: typing.Optional[str] = None,
               target_size_mb: typing.Optional[str] = None,
               rechunk: bool = True,
-              )-> typing.Tuple[float, float]:
+              )-> dict:
     if not os.path.exists(source_directory):
         raise FileNotFoundError(f'No file at {source_directory}')
     if not replace and dest_directory is None:
         raise ValueError(f'Specify a destination path <dest_file> when '
                          f'not replacing the original path')
-    backend_key = os.path.split(source_directory)[-1]
+    backend_key = os.path.basename(os.path.normpath(source_directory))
+
     if dest_directory is None and replace:
-        dest_directory = tempfile.TemporaryDirectory().name
-    elif dest_directory:
+        _temp_dir = tempfile.TemporaryDirectory()
+        dest_directory = _temp_dir.name
+    else:
+        _temp_dir = False
+
+
+    if os.path.basename(os.path.normpath(dest_directory)) != backend_key:
         # New key should be correct! If there is not an exact match,
         # we want to make sure that we append the backend_key correctly
-        if os.path.split(dest_directory)[-1] != backend_key:
-            dest_directory = os.path.join(dest_directory, backend_key)
+        dest_directory = os.path.join(dest_directory, backend_key)
     backend = strax.FileSytemBackend()
     meta_data = backend.get_metadata(source_directory)
+    source_compressor = meta_data['compressor']
 
     if compressor is not None:
         meta_data['compressor'] = compressor
@@ -409,7 +415,7 @@ def rechunker(source_directory:str,
             except StopIteration:
                 return
             yield data
-
+    print(f'Rechunking {source_directory} to {dest_directory}')
     saver = backend._saver(dest_directory, metadata=meta_data)
 
     write_time_start = time.time()
@@ -419,7 +425,15 @@ def rechunker(source_directory:str,
     load_time = sum(load_time_seconds)
 
     if replace:
+        print(f'move {dest_directory} to {source_directory}')
         shutil.rmtree(source_directory)
         shutil.move(dest_directory, source_directory)
+    if _temp_dir:
+        _temp_dir.cleanup()
 
-    return load_time, write_time
+    return dict(load_time=load_time,
+                write_time=write_time,
+                uncompressed_mb= sum([x['nbytes'] for x in meta_data['chunks']]) / 1e6,
+                source_compressor=source_compressor,
+                dest_compressor=meta_data['compressor'],
+                )

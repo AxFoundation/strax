@@ -241,6 +241,10 @@ class TestRechunking(TestCase):
                 self._rechunking(compressor)
 
     def _rechunking(self, compressor):
+        """
+        Test that we can use the strax.files.rechunking function to
+        rechunk data outside the context
+        """
         target_path = tempfile.TemporaryDirectory()
         source_sf = strax.DataDirectory(self.path)
         st= self.st
@@ -248,6 +252,7 @@ class TestRechunking(TestCase):
         run_id = '0'
         st.make(run_id, self.target)
         assert st.is_stored(run_id, self.target)
+        assert strax.utils.file_size_mb(source_sf) > 0
 
         _, backend_key = source_sf.find(st.key_for(run_id, self.target))
         strax.rechunker(source_directory=backend_key,
@@ -257,6 +262,8 @@ class TestRechunking(TestCase):
                         target_size_mb=strax.default_chunk_size_mb * 2,
                         )
         assert st.is_stored(run_id, self.target)
+        # Should be empty, we just replaced the source
+        assert strax.utils.file_size_mb(target_path.name) == 0
         st.set_context_config(dict(forbid_creation_of='*'))
         st.get_array(run_id, self.target)
         target_path.cleanup()
