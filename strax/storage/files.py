@@ -463,7 +463,8 @@ def rechunker(source_directory:str,
     if _temp_dir:
         _temp_dir.cleanup()
 
-    return dict(load_time=load_time,
+    return dict(backend_key=backend_key,
+                load_time=load_time,
                 write_time=write_time,
                 uncompressed_mb= sum([x['nbytes'] for x in meta_data['chunks']]) / 1e6,
                 source_compressor=source_compressor,
