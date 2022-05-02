@@ -30,10 +30,11 @@ You might also find these presentations useful:
     :maxdepth: 1
     :caption: Advanced usage
 
+    advanced/plugin_dev
+    advanced/config
     advanced/chunking
     advanced/superrun
     advanced/out_of_core
-    advanced/plugin_dev
     advanced/recompression
     advanced/fuzzy_for
     advanced/overview
