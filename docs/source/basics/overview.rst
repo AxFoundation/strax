@@ -93,6 +93,7 @@ Plugins take options (also see the advanced documentation on plugins and configs
 
 
 .. code-block:: python
+
     import numpy as np
 
     class PeakProcessing(strax.Plugin):
