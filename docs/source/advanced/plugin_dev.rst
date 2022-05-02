@@ -46,6 +46,11 @@ out into much greater detail, see e.g. the
 
 strax.Plugin
 ____________
+In the example below, we are going to set the ``BasePlugin.__version__`` to ``None`` which is useful for development, since the class automatically generates a version when the code is changed.
+For mature pipelines, like ``straxen``, specifying the ``__version__`` manually is recommended since it allows users
+to specify if any code-change should be reflected in the plugins' lineage.
+
+
 .. code-block:: python
 
     # To tests, one can use these dummy Peaks and Records from strax
@@ -62,7 +67,7 @@ ____________
         provides = 'simple_data'
         # When you are developing a new plugin, you can set this version to None to
         # auto-infer this from the code of the plugin.
-        __version__ = '0.0.0'
+        __version__ = None  # Only for development! Otherwise '0.0.0'
 
         # We need to specify the datatype, for this example, we are
         # going to calculate some areas

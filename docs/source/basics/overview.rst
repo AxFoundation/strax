@@ -23,11 +23,14 @@ At this point, we still need to add the plugins and storage (explained below) to
 Plugins
 -------------
 To a context several classes are registered that are responsible for processing/generating the data. In the example-figure above, we have three plugins:
+
  - PulseProcessing
  - PeakProcessing
  - EventProcessing
 
 Let's start by adding the first plugin (``PulseProcessing``):
+
+
 .. code-block:: python
 
     >>> import strax
@@ -41,6 +44,7 @@ Let's start by adding the first plugin (``PulseProcessing``):
 
 Now one can load data via the context (because our PulseProcessing plugin provides new data at request)
 
+
 .. code-block:: python
 
     >>> pulses = context.get_array(run_id = 'some_run',
@@ -51,6 +55,7 @@ Now one can load data via the context (because our PulseProcessing plugin provid
 You can see that in the figure above, we asked for data at **A**, at which point the context checked which plugin was responsible for generating the data `'records'`, processed this data (**C**) and returned the data back to the user (**A**).
 
 This data is not stored, but generated on the fly:
+
 
 .. code-block:: python
 
@@ -66,6 +71,7 @@ If we now add a storage site (which is called a storage frontend, see the develo
 Just after adding the storage site, the data is not stored.
 However, If we now ask for data again, we will see that the context will again process the data (**C**) and will appart from returning it only to the user (**A**), also store it to disk (**B**).
 The next time a user will request this data, the context will load it directly from disk.
+
 
 .. code-block:: python
 
@@ -127,13 +133,14 @@ Plugins take options (also see the advanced documentation on plugins and configs
 
 Now we can load peaks just as we did for our records-data. Because of the ``peak_type`` configuration, we can now test that all the data is of the same type:
 
+
 .. code-block:: python
 
     >>> peaks = context.get_array('some_run', targets='peaks')
     >>> assert np.all(peaks['type']==1)
 
 
-Strax trackes options via the "lineage" of a plugin, by bookkeeping the options, with which data was processed.
+Strax tracks options via the "lineage" of a plugin, by bookkeeping the options, with which data was processed.
 Let's have a look what this looks like for our current context:
 
 
@@ -160,6 +167,8 @@ We can also change the options set in plugins, again, using the context:
      'records': ('Records', '0.0.0', {'crash': False, 'dummy_tracked_option': 42})}
 
 If we now request data again, the context will check if the plugin with this configuration is stored, and since this is not the case, recompute it.
+
+
 .. code-block:: python
 
     >>> peaks = context.get_array('some_run', targets='peaks')
@@ -178,6 +187,7 @@ We will now see that if we check the data-folder, there are two versions of the 
 
 Strax will create a hash for the ``lineage`` as in the examples above. Which is different when whe changed the ``peak_type`` in our examples above.
 You can check the lineage e.g. by using the ``context.key_for`` method (which computes the lineage and corresponding hash for the requested datatype:
+
 
 .. code-block:: python
 
