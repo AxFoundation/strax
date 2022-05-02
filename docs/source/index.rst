@@ -25,6 +25,7 @@ You might also find these presentations useful:
     :caption: Setup and basics
 
     basics/setup
+    basics/overview
 
 .. toctree::
     :maxdepth: 1
@@ -37,7 +38,6 @@ You might also find these presentations useful:
     advanced/out_of_core
     advanced/recompression
     advanced/fuzzy_for
-    advanced/overview
 
 .. toctree::
     :maxdepth: 1
