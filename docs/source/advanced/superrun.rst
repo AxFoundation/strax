@@ -24,7 +24,7 @@ _background_january, _background_february, etc.
 Defining superruns and making data:
 -----------------------------------
 Use the `define_run` context method to define a new superrun. Currently it is only supported to
-define superruns from a list of run_ids::
+define superruns from a list of run_ids:
 
 
 .. code-block:: python
@@ -32,7 +32,7 @@ define superruns from a list of run_ids::
     st.define_run('_awesome_superrun', ['123', '124'])
 
 
-From a dictionary of time range tuples. The times must be 64-bit integer UTC timestamps since the unix epoch::
+From a dictionary of time range tuples. The times must be 64-bit integer UTC timestamps since the unix epoch:
 
 .. code-block:: python
 
@@ -40,7 +40,7 @@ From a dictionary of time range tuples. The times must be 64-bit integer UTC tim
             '123': [(start, stop), (start, stop), ...],
             '124': [(start, stop), (start, stop), ...],})
 
-From a dataframe (or record array) with strax data::
+From a dataframe (or record array) with strax data:
 
 
 .. code-block:: python
@@ -55,7 +55,7 @@ generally only have permissions to create a new run in the `DataDirectory` (loca
 frontend, where runs are recorded in json files.
 
 Making superrun data is as easy as creating any other data. Once a superrun is defined we can make
-for example event_info via::
+for example event_info via:
 
 
 .. code-block:: python
