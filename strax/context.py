@@ -1856,11 +1856,11 @@ class Context:
                 # and will be exhausted otherwise.
                 loader = s_be.loader(s_be_key)
 
-                # pylint: disable=cell-var-from-loop
                 def wrapped_loader():
                     """Wrapped loader for changing the target_size_mb"""
                     while True:
                         try:
+                            # pylint: disable=cell-var-from-loop
                             data = next(loader)
                             # Update target chunk size for re-chunking
                             data.target_size_mb = md['chunk_target_size_mb']
