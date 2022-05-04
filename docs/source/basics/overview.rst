@@ -89,7 +89,7 @@ The next time a user will request this data, the context will load it directly f
 Options
 -------------
 
-Plugins take options (also see the advanced documentation on plugins and configs). A basic plugin to do PeakProcessing could look like this:
+Plugins take options (also see the advanced documentation on plugins and configs). A basic plugin to process the Peak-Processing could look like this:
 
 
 .. code-block:: python
