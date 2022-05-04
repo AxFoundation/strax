@@ -1872,7 +1872,7 @@ class Context:
                 t_be_str, t_be_key = t_sf.find(data_key, write=True)
                 target_be = t_sf._get_backend(t_be_str)
                 saver = target_be._saver(t_be_key, md)
-                saver.save_from(wrapped_loader, rechunk=rechunk)
+                saver.save_from(wrapped_loader(), rechunk=rechunk)
             except NotImplementedError:
                 # Target is not susceptible
                 continue
