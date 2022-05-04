@@ -444,6 +444,8 @@ def rechunker(source_directory:str,
             try:
                 t0 = time.time()
                 data = next(data_loader)
+                # Update target chunk size for re-chunking
+                data.target_size_mb = meta_data['chunk_target_size_mb']
                 load_time_seconds.append(time.time()-t0)
             except StopIteration:
                 return

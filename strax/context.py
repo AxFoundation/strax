@@ -1855,11 +1855,22 @@ class Context:
                 # Need to load a new loader each time since it's a generator
                 # and will be exhausted otherwise.
                 loader = s_be.loader(s_be_key)
+                def wrapped_loader():
+                    """Wrapped loader for bookkeeping load time"""
+                    while True:
+                        try:
+                            data = next(loader)
+                            # Update target chunk size for re-chunking
+                            data.target_size_mb = md['chunk_target_size_mb']
+                        except StopIteration:
+                            return
+                        yield data
+
                 # Fill the target buffer
                 t_be_str, t_be_key = t_sf.find(data_key, write=True)
                 target_be = t_sf._get_backend(t_be_str)
                 saver = target_be._saver(t_be_key, md)
-                saver.save_from(loader, rechunk=rechunk)
+                saver.save_from(wrapped_loader, rechunk=rechunk)
             except NotImplementedError:
                 # Target is not susceptible
                 continue
