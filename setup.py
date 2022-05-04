@@ -34,6 +34,9 @@ setuptools.setup(name='strax',
                  extras_require={
                      'docs': docs_requires
                  },
+                 scripts=[
+                     'bin/rechunker',
+                     ],
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages() + ['extra_requirements'],
                  package_dir={'extra_requirements': 'extra_requirements'},
