@@ -1855,8 +1855,10 @@ class Context:
                 # Need to load a new loader each time since it's a generator
                 # and will be exhausted otherwise.
                 loader = s_be.loader(s_be_key)
+
+                # pylint: disable=cell-var-from-loop
                 def wrapped_loader():
-                    """Wrapped loader for bookkeeping load time"""
+                    """Wrapped loader for changing the target_size_mb"""
                     while True:
                         try:
                             data = next(loader)
