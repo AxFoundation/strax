@@ -178,7 +178,10 @@ This script can easily be used to profile different compressors:
 
     for COMPRESSOR in zstd bz2 lz4 blosc zstd; \
         do echo $COMPRESSOR; \
-        rechunker --source 009104-raw_records_aqmon-rfzvpzj4mf  --write_stats_to test.csv --compressor $COMPRESSOR; \
+        rechunker \
+            --source 009104-raw_records-rfzvpzj4mf \
+            --write_stats_to test.csv \
+            --compressor $COMPRESSOR; \
         done
 
 We can check the output in python using:
@@ -186,13 +189,13 @@ We can check the output in python using:
 .. code-block:: python
 
   >>> import pandas as pd
-  >>> df=pd.read_csv('test.csv')
+  >>> df = pd.read_csv('test.csv')
   >>> df['read_mbs'] = df['uncompressed_mb']/df['load_time']
-  >>> df['write_mbs']=df['uncompressed_mb']/df['write_time']
+  >>> df['write_mbs'] = df['uncompressed_mb']/df['write_time']
   >>> print(df[['source_compressor', 'read_mbs', 'dest_compressor', 'write_mbs']].to_string())
-      source_compressor  read_mbs dest_compressor  write_mbs
-    0               lz4  2.816152            zstd  19.134902
-    1              zstd  2.675780             bz2   6.960238
-    2               bz2  2.476841             lz4  17.747656
-    3               lz4  2.934852           blosc  17.537368
-    4             blosc  2.589207            zstd  17.995295
+      source_compressor    read_mbs dest_compressor   write_mbs
+    0              zstd  313.922890            zstd  298.429123
+    1              zstd  284.530054             bz2    8.932259
+    2               bz2   20.289876             lz4  228.932498
+    3               lz4  372.491150           blosc  433.494794
+    4             blosc  725.154966            zstd  215.765177
