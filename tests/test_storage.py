@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-import hypothesis
+import glob
 import strax
 from strax.testutils import Records
 import os
@@ -238,7 +238,9 @@ class TestRechunking(TestCase):
     def test_rechunking(self):
         for compressor in strax.io.COMPRESSORS.keys():
             with self.subTest(compressor = compressor):
+                self.setUp()
                 self._rechunking(compressor)
+                self.tearDown()
 
     def _rechunking(self, compressor):
         """
@@ -248,12 +250,15 @@ class TestRechunking(TestCase):
         target_path = tempfile.TemporaryDirectory()
         source_sf = strax.DataDirectory(self.path)
         st= self.st
+        st.set_context_config(dict(allow_rechunk=False,
+                                   n_chunks=10))
         st.storage = [source_sf]
         run_id = '0'
         st.make(run_id, self.target)
         assert st.is_stored(run_id, self.target)
-        assert strax.utils.file_size_mb(self.path) > 0
-
+        assert strax.utils.dir_size_mb(self.path) > 0
+        original_n_files = len(glob.glob(os.path.join(self.path, '*', '*')))
+        assert original_n_files > 3 # At least two files + metadata
         _, backend_key = source_sf.find(st.key_for(run_id, self.target))
         strax.rechunker(source_directory=backend_key,
                         dest_directory=target_path.name,
@@ -263,7 +268,9 @@ class TestRechunking(TestCase):
                         )
         assert st.is_stored(run_id, self.target)
         # Should be empty, we just replaced the source
-        assert strax.utils.file_size_mb(target_path.name) == 0
+        assert strax.utils.dir_size_mb(target_path.name) == 0
+        new_n_files = len(glob.glob(os.path.join(self.path, '*', '*',)))
+        assert original_n_files > new_n_files
         st.set_context_config(dict(forbid_creation_of='*'))
         st.get_array(run_id, self.target)
         target_path.cleanup()

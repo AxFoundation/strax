@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 import os.path
-
-import strax
 import argparse
-
+import strax
+import pandas as pd
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -51,7 +50,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    source_mb = strax.utils.file_size_mb(args.source)
+    source_mb = strax.utils.dir_size_mb(args.source)
     report = strax.rechunker(source_directory=args.source,
                              dest_directory=args.dest,
                              replace=args.dest is None,
@@ -60,14 +59,13 @@ def main():
                              rechunk=args.rechunk,
                              )
     if args.dest is not None:
-        recompressed_mb = strax.utils.file_size_mb(args.dest)
+        recompressed_mb = strax.utils.dir_size_mb(args.dest)
     else:
-        recompressed_mb = strax.utils.file_size_mb(args.source)
+        recompressed_mb = strax.utils.dir_size_mb(args.source)
     report.update(dict(source_mb=source_mb,
                        dest_mb=recompressed_mb)
                   )
     if args.write_stats_to:
-        import pandas as pd
         if os.path.exists(args.write_stats_to):
             df = pd.read_csv(args.write_stats_to)
         else:

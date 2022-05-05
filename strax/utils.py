@@ -699,8 +699,11 @@ def apply_selection(x,
     return x
 
 
-def file_size_mb(start_path = '.'):
-    """Thanks https://stackoverflow.com/a/1392549/18280620"""
+def dir_size_mb(start_path ='.'):
+    """
+    Calculate the total size of all files in start_path
+    Thanks https://stackoverflow.com/a/1392549/18280620
+    """
     if not os.path.exists(start_path):
         return 0
 

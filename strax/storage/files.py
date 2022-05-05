@@ -425,6 +425,7 @@ def rechunker(source_directory:str,
     if os.path.basename(os.path.normpath(dest_directory)) != backend_key:
         # New key should be correct! If there is not an exact match,
         # we want to make sure that we append the backend_key correctly
+        print(f'Will write to {dest_directory} and make sub-folder {backend_key}')
         dest_directory = os.path.join(dest_directory, backend_key)
     backend = strax.FileSytemBackend()
     meta_data = backend.get_metadata(source_directory)
