@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from collections.abc import Mapping
 from warnings import warn
+import os
 
 
 # Change numba's caching backend from pickle to dill
@@ -696,3 +697,22 @@ def apply_selection(x,
         del x2
 
     return x
+
+
+def dir_size_mb(start_path ='.'):
+    """
+    Calculate the total size of all files in start_path
+    Thanks https://stackoverflow.com/a/1392549/18280620
+    """
+    if not os.path.exists(start_path):
+        return 0
+
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+
+    return total_size / 1e6
