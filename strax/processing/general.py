@@ -13,20 +13,21 @@ export, __all__ = strax.exporter()
 def sort_by_time(x):
     """Sort pulses by time, then channel.
     """
+    if not len(x):
+        return x
     with warnings.catch_warnings():
         warnings.filterwarnings('error')
         try:
-            max_channel = x['channel'].max()
-            max_channel = np.max((10_000, max_channel))
-            # Check if we trigger a overflow warning:
-            (x['time'].max() - x['time'].min()) * max_channel
-            x = _sort_by_time(x)
+            max_channeL_plus_one = x['channel'].max() + 1
+            # Check if we trigger an overflow warning:
+            (x['time'].max() - x['time'].min()) * max_channeL_plus_one
+            x = _sort_by_time(x, max_channeL_plus_one)
         except RuntimeWarning:
             x = np.sort(x, order=('time', 'channel'))
     return x
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sort_by_time(x):
+def _sort_by_time(x, max_channeL_plus_one):
     """
     Assumes you have no more than 10k channels, and records don't span
     more than 11 days.
@@ -38,7 +39,7 @@ def _sort_by_time(x):
         return x
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min()) * 10000 + x['channel']
+    sort_key = (x['time'] - x['time'].min()) * max_channeL_plus_one + x['channel']
     sort_i = np.argsort(sort_key)
     return x[sort_i]
 
