@@ -280,3 +280,18 @@ def test_raw_to_records(r):
     strax.copy_to_buffer(r, buffer, "_test_r_to_buffer")
     if len(r):
         assert np.all(buffer == r)
+
+
+def test_sort_by_time():
+    # Example which failed due to np.int64 overflow:
+    dummy = np.array([(1654588478912814293, 2092),
+                      (1654588478912814312, 2071),
+                      (1653587233233335047, 2063),
+                      (1653587233233335060, 2053)],
+                     dtype=[(('Start time since unix epoch [ns]', 'time'), '<i8'),
+                            (('Psuedo hitlet channel', 'channel'), '<i2')]
+                     )
+
+    correct_channel_order = [2063, 2053, 2092, 2071]
+    res = strax.sort_by_time(dummy)
+    assert np.all(res['channel'] == correct_channel_order)

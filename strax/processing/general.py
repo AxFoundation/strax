@@ -4,19 +4,34 @@ import strax
 import numba
 from numba.typed import List
 import numpy as np
+import warnings
 
 export, __all__ = strax.exporter()
 
 
-# (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
-# TODO: maybe this should be a factory?
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
     """Sort pulses by time, then channel.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
+        try:
+            max_channel = x['channel'].max()
+            max_channel = np.max((10_000, max_channel))
+            # Check if we trigger a overflow warning:
+            (x['time'].max() - x['time'].min()) * max_channel
+            x = _sort_by_time(x)
+        except RuntimeWarning:
+            x = np.sort(x, order=('time', 'channel'))
+    return x
 
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _sort_by_time(x):
+    """
     Assumes you have no more than 10k channels, and records don't span
-    more than 100 days. TODO: FIX this
+    more than 11 days.
+
+    (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
     """
     if len(x) == 0:
         # Nothing to do, and .min() on empty array doesn't work, so:
