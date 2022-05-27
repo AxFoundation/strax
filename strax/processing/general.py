@@ -13,7 +13,7 @@ export, __all__ = strax.exporter()
 def sort_by_time(x):
     """Sort pulses by time, then channel.
     """
-    if not len(x):
+    if len(x) == 0:
         return x
     with warnings.catch_warnings():
         warnings.filterwarnings('error')
@@ -34,9 +34,6 @@ def _sort_by_time(x, max_channeL_plus_one):
 
     (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
     """
-    if len(x) == 0:
-        # Nothing to do, and .min() on empty array doesn't work, so:
-        return x
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
     sort_key = (x['time'] - x['time'].min()) * max_channeL_plus_one + x['channel']
