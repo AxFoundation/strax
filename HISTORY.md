@@ -1,3 +1,8 @@
+1.2.3 / 2022-06-07
+---------------------
+* Prevent float/int funkyness in hitlet processing by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/694
+
+
 1.2.2 / 2022-05-11
 ---------------------
 - Add option to ignore errors in multirun loading (#653) 
