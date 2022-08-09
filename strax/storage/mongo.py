@@ -123,9 +123,8 @@ class MongoBackend(StorageBackend):
                     # Convert JSON to numpy
             chunk_len = len(doc.get('data', []))
             result = np.zeros(chunk_len, dtype=dtype)
-            for i in range(chunk_len):
-                for key in np.dtype(dtype).names:
-                    result[i][key] = doc['data'][i][key]
+            for key in np.dtype(dtype).names:
+                result[key] = [dd['data'][key] for dd in doc]
             self.chunks_registry[backend_key + str(chunk_key)] = result
             del doc
 
