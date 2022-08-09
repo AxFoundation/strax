@@ -124,7 +124,7 @@ class MongoBackend(StorageBackend):
             chunk_len = len(doc.get('data', []))
             result = np.zeros(chunk_len, dtype=dtype)
             for key in np.dtype(dtype).names:
-                result[key] = [dd['data'][key] for dd in doc]
+                result[key] = [dd[key] for dd in doc['data']]
             self.chunks_registry[backend_key + str(chunk_key)] = result
             del doc
 
