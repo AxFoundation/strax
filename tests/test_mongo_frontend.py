@@ -238,22 +238,23 @@ class TestMongoFrontend(unittest.TestCase):
         assert self.is_stored_in_mongo
 
         # Allow the frontend to cache a lof of runs, but only little data
-        self.mongo_sf.backends[0]._buff_mb = one_run.nbytes/1e6
-        self.mongo_sf.backends[0]._buff_nruns = make_n_runs
+        mongo_backend = self.mongo_sf.backends[0]
+        mongo_backend._buff_mb = one_run.nbytes/1e6
+        mongo_backend._buff_nruns = make_n_runs
 
         self.st.make(list(str(i) for i in range(make_n_runs)), self.mongo_target)
 
         # We should have at most 1 run (assuming all are the same number of bytes)
-        assert len(self.mongo_sf._buffered_backend_keys) <= 2
+        assert len(mongo_backend._buffered_backend_keys) <= 2
 
         # Allow the frontend to cache a lof of runs, but only little data
-        self.mongo_sf.backends[0]._buff_mb = 10 * one_run.nbytes / 1e6
-        self.mongo_sf.backends[0]._buff_nruns = 1
+        mongo_backend._buff_mb = 10 * one_run.nbytes / 1e6
+        mongo_backend._buff_nruns = 1
 
         self.st.make(list(str(i) for i in range(make_n_runs)), self.mongo_target)
 
         # We should have exactly one run cached
-        assert len(self.mongo_sf._buffered_backend_keys) == 1
+        assert len(mongo_backend._buffered_backend_keys) == 1
 
     @staticmethod
     def _return_file_info(file: dict,

@@ -114,7 +114,7 @@ class MongoBackend(StorageBackend):
             chunk_key = doc.get('chunk_i', None)
             if chunk_key is None:
                 # Should not happen because of the projection in find
-                # but let's double check:
+                # but let's double-check:
                 raise ValueError(
                     f'Projection failed, got doc with no "chunk_i":\n{doc}')
             # Update our registry with this chunks info. Use chunk_i as
@@ -136,7 +136,7 @@ class MongoBackend(StorageBackend):
             self._buffered_backend_keys.append(backend_key)
         while (
                 (len(self._buffered_backend_keys) > 1 and
-                 sum(ch.nbytes for ch in self.chunks_registry.values) / 1e6 > self._buff_mb)
+                 sum(ch.nbytes for ch in self.chunks_registry.values()) / 1e6 > self._buff_mb)
                 or len(self._buffered_backend_keys) > self._buff_nruns
             ):
             self._clean_first_key_from_registry()
