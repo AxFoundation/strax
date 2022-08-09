@@ -120,7 +120,6 @@ class MongoBackend(StorageBackend):
             # Update our registry with this chunks info. Use chunk_i as
             # chunk_key. Make it a *string* to avoid potential key-error
             # issues or json-encoding headaches.
-                    # Convert JSON to numpy
             chunk_len = len(doc.get('data', []))
             result = np.zeros(chunk_len, dtype=dtype)
             for key in np.dtype(dtype).names:
