@@ -134,9 +134,11 @@ class MongoBackend(StorageBackend):
         # See: https://github.com/AxFoundation/strax/issues/346
         if backend_key not in self._buffered_backend_keys:
             self._buffered_backend_keys.append(backend_key)
-        while ((getsizeof(self.chunks_registry) / 1e6 > self._buff_mb
-                and len(self._buffered_backend_keys) > 1)
-               or len(self._buffered_backend_keys) > self._buff_nruns):
+        while (
+                (len(self._buffered_backend_keys) > 1 and
+                 sum(ch.nbytes for ch in self.chunks_registry.values) / 1e6 > self._buff_mb)
+                or len(self._buffered_backend_keys) > self._buff_nruns
+            ):
             self._clean_first_key_from_registry()
 
     def _clean_first_key_from_registry(self):
@@ -320,7 +322,7 @@ class MongoSaver(Saver):
         update = {f'metadata.{k}': v
                   for k, v in self.md.items()
                   if k in ('writing_ended', 'exception')}
-        # Also update all of the chunk-documents with the run_start_time
+        # Also update all the chunk-documents with the run_start_time
         self.col.update_one({'_id': self.id_md}, {'$set': update})
 
 
