@@ -49,7 +49,7 @@ class TestCMT(unittest.TestCase):
         return df
 
     def test_db(self):
-        cmt = self.cmt()
+        cmt = self.cmt
         df = self.make_dummy_df()
         # write to the DB
         cmt.write('test_db', df)
