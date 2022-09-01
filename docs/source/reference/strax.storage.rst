@@ -28,14 +28,6 @@ strax.storage.mongo module
    :undoc-members:
    :show-inheritance:
 
-strax.storage.rucio module
---------------------------
-
-.. automodule:: strax.storage.rucio
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 strax.storage.zipfiles module
 -----------------------------
 
@@ -43,7 +35,6 @@ strax.storage.zipfiles module
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Module contents
 ---------------

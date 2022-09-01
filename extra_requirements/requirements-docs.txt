@@ -4,3 +4,5 @@ sphinx_rtd_theme
 nbsphinx
 recommonmark
 graphviz
+m2r
+mistune==0.8.4 

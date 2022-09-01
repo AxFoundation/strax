@@ -6,7 +6,6 @@ import contextlib
 from functools import wraps
 import json
 import re
-
 import sys
 import traceback
 import typing as ty
@@ -19,6 +18,7 @@ import numpy as np
 import pandas as pd
 from collections.abc import Mapping
 from warnings import warn
+import os
 
 
 # Change numba's caching backend from pickle to dill
@@ -38,9 +38,10 @@ else:
     from tqdm import tqdm
 
 # Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor == 6:
-    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
-         'upgrading to python 3.8.')
+if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
+    warn('Using strax in python 3.6-3.7 is deprecated since 2022/01 consider '
+         'upgrading to python 3.8, 3.9 or 3.10. This will result in an error'
+         ' in strax 1.2', DeprecationWarning)
 
 
 def exporter(export_self=False):
@@ -443,6 +444,7 @@ def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              ignore_errors=False,
               log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
@@ -454,7 +456,10 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param ignore_errors: Return the data for the runs that
+        successfully loaded, even if some runs failed executing.
     :param log: logger to be used.
+
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -509,7 +514,7 @@ def multi_run(exec_function, run_ids, *args,
                 desc="Loading %d runs" % len(run_ids),
                 disable=not multi_run_progress_bar,
                 )
-
+    failures = []
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
         # Submit first bunch of futures, add additional futures later
@@ -522,17 +527,23 @@ def multi_run(exec_function, run_ids, *args,
         final_result = []
         while futures:
             futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
-
             for f in futures_done:
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(f'Done with run_id: {_run_id} ' 
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
+                if f.exception() is not None:
+                    if ignore_errors:
+                        log.warning(f'Ran into {f.exception()}, ignoring that for now!')
+                        failures.append(_run_id)
+                        continue
+                    raise f.exception()
+
                 if throw_away_result:
                     continue
-
                 result = f.result()
+ 
                 # Append the run id column
                 if add_run_id_field:
                     ids = np.array([_run_id] * len(result),
@@ -558,6 +569,8 @@ def multi_run(exec_function, run_ids, *args,
             start_of_runs = [np.min(res['time']) for res in final_result]
             final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
+        if ignore_errors and len(failures):
+            log.warning(f'Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}')
         return final_result
 
 
@@ -684,3 +697,22 @@ def apply_selection(x,
         del x2
 
     return x
+
+
+def dir_size_mb(start_path ='.'):
+    """
+    Calculate the total size of all files in start_path
+    Thanks https://stackoverflow.com/a/1392549/18280620
+    """
+    if not os.path.exists(start_path):
+        return 0
+
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+
+    return total_size / 1e6

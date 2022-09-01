@@ -21,7 +21,7 @@ with open('HISTORY.md') as file:
     history = file.read()
 
 setuptools.setup(name='strax',
-                 version='1.1.5',
+                 version='1.2.3',
                  description='Streaming analysis for xenon TPCs',
                  author='Jelle Aalbers',
                  url='https://github.com/AxFoundation/strax',
@@ -29,11 +29,14 @@ setuptools.setup(name='strax',
                  install_requires=requires,
                  tests_require=requires + tests_requires,
                  long_description=readme + '\n\n' + history,
-                 # We don't test 3.6 anymore, see #503
+                 # You could try to use it in py3.6 or py3.7 this might not work
                  python_requires=">=3.6",
                  extras_require={
                      'docs': docs_requires
                  },
+                 scripts=[
+                     'bin/rechunker',
+                     ],
                  long_description_content_type="text/markdown",
                  packages=setuptools.find_packages() + ['extra_requirements'],
                  package_dir={'extra_requirements': 'extra_requirements'},
@@ -43,8 +46,6 @@ setuptools.setup(name='strax',
                      'Development Status :: 5 - Production/Stable',
                      'License :: OSI Approved :: BSD License',
                      'Natural Language :: English',
-                     'Programming Language :: Python :: 3.6',
-                     'Programming Language :: Python :: 3.7',
                      'Programming Language :: Python :: 3.8',
                      'Programming Language :: Python :: 3.9',
                      'Programming Language :: Python :: 3.10',
