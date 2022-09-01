@@ -5,3 +5,4 @@ nbsphinx
 recommonmark
 graphviz
 m2r
+sphinxcontrib-openapi==0.7.0
