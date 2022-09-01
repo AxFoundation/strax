@@ -43,7 +43,7 @@ class Plugin:
     You should NOT instantiate plugins directly.
     Do NOT add unpickleable things (e.g. loggers) as attributes.
     """
-    __version__ = '0.0.0'
+    __version__: typing.Optional[str] = '0.0.0'
 
     # For multi-output plugins these should be (immutable)dicts
     data_kind: typing.Union[str, immutabledict, dict]
@@ -177,7 +177,7 @@ class Plugin:
             if isinstance(self.takes_config[name], strax.Config):
                 return self.takes_config[name].__get__(self)
             return self.config[name]
-            
+
 
         raise AttributeError(f'{self.__class__.__name__} instance has no attribute {name}')
 
@@ -234,12 +234,41 @@ class Plugin:
         # implementing all abstract methods...
         raise RuntimeError("No infer dtype method defined")
 
+    @property
+    def _auto_version(self):
+        """
+        Generate some auto-incremented version for the context hashing
+        system, see github.com/AxFoundation/strax/issues/217
+
+        Activate with setting __version__ to None
+        """
+        attributes = [attr for attr in self.__dir__()
+                      if not attr.startswith('__')]
+
+        def _return_hashable(attr):
+            if attr in ['takes_config', '_auto_version']:
+                # handled by context (or not worth tracking)
+                return
+            obj = getattr(self, attr)
+            try:
+                return strax.deterministic_hash(inspect.getsource(obj))
+            except TypeError:
+                pass
+            try:
+                return strax.deterministic_hash(obj)
+            except TypeError:
+                return str(obj)
+        res = {attr: _return_hashable(attr) for attr in attributes}
+        return 'auto_' + strax.deterministic_hash(res)
+
     def version(self, run_id=None):
         """Return version number applicable to the run_id.
         Most plugins just have a single version (in .__version__)
         but some may be at different versions for different runs
         (e.g. time-dependent corrections).
         """
+        if self.__version__ is None:
+            return self._auto_version
         return self.__version__
 
     def __repr__(self):
@@ -859,7 +888,21 @@ class CutPlugin(Plugin):
 
     def __init__(self):
         super().__init__()
-
+        
+        compute_pars = list(
+            inspect.signature(self.cut_by).parameters.keys())
+        if 'chunk_i' in compute_pars:
+            self.compute_takes_chunk_i = True
+            del compute_pars[compute_pars.index('chunk_i')]
+        if 'start' in compute_pars:
+            if 'end' not in compute_pars:
+                raise ValueError(f"Compute of {self} takes start, "
+                                 f"so it should also take end.")
+            self.compute_takes_start_end = True
+            del compute_pars[compute_pars.index('start')]
+            del compute_pars[compute_pars.index('end')]
+        self.compute_pars = compute_pars
+        
         _name = strax.camel_to_snake(self.__class__.__name__)
         if not hasattr(self, 'provides'):
             self.provides = _name

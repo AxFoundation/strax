@@ -189,6 +189,16 @@ def test_copy_to_frontend():
                     os.listdir(os.path.join(temp_dir_2, rec_folder))
             )
 
+            # Clear the temp dir
+            shutil.rmtree(temp_dir_2)
+
+            # Now try again with rechunking
+            context.copy_to_frontend(run_id, 
+                                     'records',
+                                     target_compressor='lz4',
+                                     rechunk_to_mb=400,
+                                     rechunk=True,
+                                    )
 
 class TestContext(unittest.TestCase):
     """Test the per-run defaults options of a context"""
@@ -365,6 +375,70 @@ class TestContext(unittest.TestCase):
             'code_matches[field] is not correct, expected Records.compute or Peaks.compute')
         # Also test printing:
         self.assertIsNone(st.search_field(field, return_matches=False))
+
+    def test_multi_run_loading_with_errors(self):
+        st = self.get_context(True)
+        st.register(Records)
+        runs = [f'{i:06}' for i in range(10)]
+
+        # make a copy and delete one random run
+        make_runs = [r for r in runs]
+        del make_runs[4]
+        assert len(make_runs) < len(runs)
+
+        for r in make_runs:
+            st.make(r, 'records')
+
+        st.set_context_config(dict(forbid_creation_of='*'))
+        with self.assertRaises(strax.DataNotAvailable):
+            st.get_array(runs, 'records', ignore_errors=False)
+        records = st.get_array(runs, 'records', ignore_errors=True)
+        records_run_ids = np.unique(records['run_id'])
+        assert all(r in records_run_ids for r in make_runs)
+        assert set(runs) - set(make_runs) not in records_run_ids
+
+    def test_auto_lineage(self):
+        """
+        Test that auto inferring a lineage from the plugin code works
+
+        Set auto-inferring version by setting __version__ = None for
+        a plugin.
+        """
+        st = self.get_context(True)
+        class DevelopRecords(Records):
+            __version__ = None
+        st.register(DevelopRecords)
+        key = st.key_for(run_id, 'records')
+        plugin = st.get_single_plugin(run_id, 'records')
+        # Check that the version is auto-inferred
+        assert plugin.version().startswith('auto_')
+
+        # Check that loading and saving works as expected
+        st.make(run_id, 'records')
+        assert st.is_stored(run_id, 'records')
+        st.set_context_config(dict(forbid_creation_of='*'))
+        st.get_array(run_id, 'records')
+
+        # Plugin version (and therefore lineage) should not change when
+        # making a new class. Let's try:
+        class DevelopRecords(DevelopRecords):
+            # New class, same properties (class name is encoded in
+            # lineage!)
+            pass
+
+        st2 = st.new_context(register=DevelopRecords)
+        assert key.lineage == st2.key_for(run_id, 'records').lineage
+
+        # When changing the class to have a different code, it should
+        # get a new version and therefore a different lineage.
+        class DevelopRecords(DevelopRecords):
+            def compute(self, **kwargs):
+                res = super().compute(**kwargs)
+                return res
+
+        st3 = st.new_context(register=DevelopRecords)
+        assert key.lineage != st3.key_for(run_id, 'records').lineage
+
 
     @staticmethod
     def get_dummy_peaks_dependency():

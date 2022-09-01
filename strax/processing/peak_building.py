@@ -71,7 +71,11 @@ def find_peaks(hits, adc_to_pe,
             p['max_gap'] = 0
 
         # Add hit's properties to the current peak candidate
+
+        # NB! One pulse can result in two hits, if it occours at the 
+        # boundary of a record. This is the default of strax.find_hits.
         p['n_hits'] += 1
+
         peak_endtime = max(peak_endtime, t1)
         hit_area_pe = hit['area'] * adc_to_pe[hit['channel']]
         area_per_channel[hit['channel']] += hit_area_pe

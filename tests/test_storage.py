@@ -1,8 +1,9 @@
-from unittest import TestCase, skipIf
+from unittest import TestCase
+
+import glob
 import strax
 from strax.testutils import Records
 import os
-import shutil
 import tempfile
 import numpy as np
 import typing as ty
@@ -15,15 +16,14 @@ class TestPerRunDefaults(TestCase):
     """
 
     def setUp(self):
-        self.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
         self.st = strax.Context(use_per_run_defaults=True,
                                 register=[Records], )
         self.target = 'records'
 
     def tearDown(self):
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def test_write_data_dir(self):
         self.st.storage = [strax.DataDirectory(self.path)]
@@ -85,13 +85,12 @@ class TestStorageType(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Get a temp directory available of all the tests"""
-        cls.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        cls.tempdir = tempfile.TemporaryDirectory()
+        cls.path = cls.tempdir.name
 
     def tearDown(self):
         """After each test, delete the temporary directory"""
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def _sub_dir(self, subdir: str) -> str:
         return os.path.join(self.path, subdir)
@@ -219,3 +218,59 @@ class TestStorageType(TestCase):
             st.storage = [storage_slightly_slow]
             print(st.storage)
             st.is_stored(self.run_id, self.target)
+
+
+class TestRechunking(TestCase):
+    """
+    Test the saving behavior of the context
+    """
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
+        self.st = strax.Context(use_per_run_defaults=True,
+                                register=[Records], )
+        self.target = 'records'
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_rechunking(self):
+        for compressor in strax.io.COMPRESSORS.keys():
+            with self.subTest(compressor = compressor):
+                self.setUp()
+                self._rechunking(compressor)
+                self.tearDown()
+
+    def _rechunking(self, compressor):
+        """
+        Test that we can use the strax.files.rechunking function to
+        rechunk data outside the context
+        """
+        target_path = tempfile.TemporaryDirectory()
+        source_sf = strax.DataDirectory(self.path)
+        st= self.st
+        st.set_context_config(dict(allow_rechunk=False,
+                                   n_chunks=10))
+        st.storage = [source_sf]
+        run_id = '0'
+        st.make(run_id, self.target)
+        assert st.is_stored(run_id, self.target)
+        assert strax.utils.dir_size_mb(self.path) > 0
+        original_n_files = len(glob.glob(os.path.join(self.path, '*', '*')))
+        assert original_n_files > 3 # At least two files + metadata
+        _, backend_key = source_sf.find(st.key_for(run_id, self.target))
+        strax.rechunker(source_directory=backend_key,
+                        dest_directory=target_path.name,
+                        replace=True,
+                        compressor=compressor,
+                        target_size_mb=strax.default_chunk_size_mb * 2,
+                        )
+        assert st.is_stored(run_id, self.target)
+        # Should be empty, we just replaced the source
+        assert strax.utils.dir_size_mb(target_path.name) == 0
+        new_n_files = len(glob.glob(os.path.join(self.path, '*', '*',)))
+        assert original_n_files > new_n_files
+        st.set_context_config(dict(forbid_creation_of='*'))
+        st.get_array(run_id, self.target)
+        target_path.cleanup()
