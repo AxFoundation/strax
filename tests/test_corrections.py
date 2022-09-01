@@ -38,9 +38,9 @@ class TestCMT(unittest.TestCase):
         Make a dummy pandas.dataframe()
         """
         dates = [datetime(2017, 1, 1), datetime(2021, 1, 1), datetime(2021, 9, 23)]
-        df = pd.DataFrame({'ONLINE' : [10.,10., 8.],
-                           'v1' : [12., 12., 14.],
-                           'v2' : [13., 14., np.nan],
+        df = pd.DataFrame({'ONLINE': [10., 10., 8.],
+                           'v1': [12., 12., 14.],
+                           'v2': [13., 14., np.nan],
                            'time': dates})
 
         df['time'] = pd.to_datetime(df['time'], utc=True)
@@ -88,7 +88,7 @@ class TestCMT(unittest.TestCase):
         df2.loc[pd.to_datetime(datetime(2021, 1, 1, 0, 0, 0, 0, tzinfo=pytz.utc))] = [7.0, 24.0, 14.3]
         df2 = df2.sort_index()
         with unittest.TestCase().assertRaises(ValueError):
-             cmt.write('test_change_past', df2)
+            cmt.write('test_change_past', df2)
 
     def test_add_row(self):
         # add a new row for a new past date, allowed example
