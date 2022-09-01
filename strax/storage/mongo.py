@@ -54,7 +54,7 @@ class MongoBackend(StorageBackend):
         # the key is not in the registry (will fail below if also not
         # there on rebuild).
         if registry_key not in self.chunks_registry.keys():
-            self._build_chunk_registry(backend_key)
+            self._build_chunk_registry(backend_key, dtype)
 
         # Unpack info about this chunk from the query. Return empty if
         # not available. Use a *string* in the registry to lookup the
@@ -69,18 +69,7 @@ class MongoBackend(StorageBackend):
             raise ValueError(
                 f'Metadata claims chunk{chunk_i} exists but it is unknown to '
                 f'the chunks_registry')
-
-        chunk_doc = doc.get('data', None)
-        if chunk_doc is None:
-            raise ValueError(f'Doc for chunk_{chunk_i} in wrong format:\n{doc}')
-
-        # Convert JSON to numpy
-        chunk_len = len(chunk_doc)
-        result = np.zeros(chunk_len, dtype=dtype)
-        for i in range(chunk_len):
-            for key in np.dtype(dtype).names:
-                result[i][key] = chunk_doc[i][key]
-        return result
+        return doc
 
     def _saver(self, key, metadata, **kwargs):
         """See strax.Backend"""
@@ -103,7 +92,7 @@ class MongoBackend(StorageBackend):
             return doc['metadata']
         raise strax.DataNotAvailable
 
-    def _build_chunk_registry(self, backend_key):
+    def _build_chunk_registry(self, backend_key, dtype):
         """
         Build chunk info in a single registry using only one query to
         the database. This is much faster as one does not have to do
@@ -125,22 +114,29 @@ class MongoBackend(StorageBackend):
             chunk_key = doc.get('chunk_i', None)
             if chunk_key is None:
                 # Should not happen because of the projection in find
-                # but let's double check:
+                # but let's double-check:
                 raise ValueError(
                     f'Projection failed, got doc with no "chunk_i":\n{doc}')
             # Update our registry with this chunks info. Use chunk_i as
             # chunk_key. Make it a *string* to avoid potential key-error
             # issues or json-encoding headaches.
-            self.chunks_registry[backend_key + str(chunk_key)] = doc.copy()
+            chunk_len = len(doc.get('data', []))
+            result = np.zeros(chunk_len, dtype=dtype)
+            for key in np.dtype(dtype).names:
+                result[key] = [dd[key] for dd in doc['data']]
+            self.chunks_registry[backend_key + str(chunk_key)] = result
+            del doc
 
         # Some bookkeeping to make sure we don't buffer too much in this
         # backend. We still need to return at least one hence the 'and'.
         # See: https://github.com/AxFoundation/strax/issues/346
         if backend_key not in self._buffered_backend_keys:
             self._buffered_backend_keys.append(backend_key)
-        while ((getsizeof(self.chunks_registry) / 1e6 > self._buff_mb
-                and len(self._buffered_backend_keys) > 1)
-               or len(self._buffered_backend_keys) > self._buff_nruns):
+        while (
+                (len(self._buffered_backend_keys) > 1 and
+                 sum(ch.nbytes for ch in self.chunks_registry.values()) / 1e6 > self._buff_mb)
+                or len(self._buffered_backend_keys) > self._buff_nruns
+            ):
             self._clean_first_key_from_registry()
 
     def _clean_first_key_from_registry(self):
@@ -324,7 +320,7 @@ class MongoSaver(Saver):
         update = {f'metadata.{k}': v
                   for k, v in self.md.items()
                   if k in ('writing_ended', 'exception')}
-        # Also update all of the chunk-documents with the run_start_time
+        # Also update all the chunk-documents with the run_start_time
         self.col.update_one({'_id': self.id_md}, {'$set': update})
 
 
