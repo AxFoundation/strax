@@ -1,8 +1,7 @@
-import inspect
-import numpy as np
 import strax
-from .plugin import Plugin, SaveWhen
+from .plugin import Plugin
 export, __all__ = strax.exporter()
+
 
 @export
 class OverlapWindowPlugin(Plugin):
@@ -103,4 +102,3 @@ class OverlapWindowPlugin(Plugin):
             raise ValueError(f'Buffer start time inconsistency cannot be '
                              f'resolved after {max_trials} tries')
         return result
-

@@ -4,7 +4,6 @@ from .plugin import Plugin
 export, __all__ = strax.exporter()
 
 
-
 @export
 class ParallelSourcePlugin(Plugin):
     """An plugin that inlines the computations of other plugins
