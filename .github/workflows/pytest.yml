@@ -31,7 +31,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
       - name: Setup python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -39,7 +39,7 @@ jobs:
       - name: Install requirements
         run: pip install -r extra_requirements/requirements-tests.txt
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.7.0
+        uses: supercharge/mongodb-github-action@1.8.0
         with:
           mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest
