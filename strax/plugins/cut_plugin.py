@@ -4,6 +4,7 @@ import strax
 from .plugin import Plugin, SaveWhen
 export, __all__ = strax.exporter()
 
+
 @export
 class CutPlugin(Plugin):
     """Generate a plugin that provides a boolean for a given cut specified by 'cut_by'"""

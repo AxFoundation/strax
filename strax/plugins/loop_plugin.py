@@ -125,4 +125,3 @@ class LoopPlugin(Plugin):
 
     def compute_loop(self, *args, **kwargs):
         raise NotImplementedError
-
