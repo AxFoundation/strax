@@ -1,3 +1,24 @@
+1.2.3 / 2022-06-07
+---------------------
+* Prevent float/int funkyness in hitlet processing by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/694
+
+
+1.2.2 / 2022-05-11
+---------------------
+- Add option to ignore errors in multirun loading (#653) 
+- Auto version, fix #217 (#689)
+- Add basics documentation - split Config and Plugin docs (#691)
+- Add n_hits comment in code (#692) 
+- Rechunker script (#686)
+
+
+1.2.1 / 2022-04-12
+---------------------
+- run dependabot remotely (#683)
+- Docs fixing (#684)
+- Allow different chunk size (#687)
+
+
 1.2.0 / 2022-03-09
 ---------------------
 - Added lone hit area to area per channel (#649) 

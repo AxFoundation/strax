@@ -16,9 +16,8 @@ export, __all__ = strax.exporter()
 
 
 @strax.Context.add_method
-def list_available(self, target, **kwargs):
-    """Return sorted list of run_id's for which target is available
-    """
+def list_available(self, target, **kwargs) -> list:
+    """Return sorted list of run_id's for which target is available"""
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)
@@ -69,14 +68,17 @@ def keys_for_runs(self,
 @strax.Context.add_method
 def scan_runs(self: strax.Context,
               check_available=tuple(),
-              store_fields=tuple()):
-    """Update and return self.runs with runs currently available
+              store_fields=tuple(),
+             ) -> pd.DataFrame:
+    """
+    Update and return self.runs with runs currently available
     in all storage frontends.
+
     :param check_available: Check whether these data types are available
-    Availability of xxx is stored as a boolean in the xxx_available
-    column.
+        Availability of xxx is stored as a boolean in the xxx_available
+        column.
     :param store_fields: Additional fields from run doc to include
-    as rows in the dataframe.
+        as rows in the dataframe.
 
     The context options scan_availability and store_run_fields list
     data types and run fields, respectively, that will always be scanned.
@@ -199,13 +201,14 @@ def select_runs(self, run_mode=None, run_id=None,
                 include_tags=None, exclude_tags=None,
                 available=tuple(),
                 pattern_type='fnmatch', ignore_underscore=True):
-    """Return pandas.DataFrame with basic info from runs
-    that match selection criteria.
+    """
+    Return pandas.DataFrame with basic info from runs
+        that match selection criteria.
+   
     :param run_mode: Pattern to match run modes (reader.ini.name)
     :param run_id: Pattern to match a run_id or run_ids
     :param available: str or tuple of strs of data types for which data
-    must be available according to the runs DB.
-
+        must be available according to the runs DB.
     :param include_tags: String or list of strings of patterns
         for required tags
     :param exclude_tags: String / list of strings of patterns
@@ -228,7 +231,7 @@ def select_runs(self, run_mode=None, run_id=None,
         ... with blinded OR unblinded, but not blablinded.
      - `run_selection(include_tags='blinded',
                       exclude_tags=['bad', 'messy'])`
-       select blinded dsatasets that aren't bad or messy
+        ... select blinded dsatasets that aren't bad or messy
     """
     if self.runs is None:
         self.scan_runs(check_available=strax.to_str_tuple(available))
@@ -400,7 +403,8 @@ def available_for_run(self: strax.Context,
                       pattern_type: str = 'fnmatch') -> pd.DataFrame:
     """
     For a given single run, check all the targets if they are stored.
-        Excludes the target if never stored anyway.
+    Excludes the target if never stored anyway.
+
     :param run_id: requested run
     :param include_targets: targets to include e.g. raw_records,
         raw_records* or *_nv. If multiple targets (e.g. a list) is
