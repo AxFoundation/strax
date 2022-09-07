@@ -3,6 +3,7 @@ import strax
 from .plugin import Plugin
 from immutabledict import immutabledict
 from warnings import warn
+
 export, __all__ = strax.exporter()
 
 

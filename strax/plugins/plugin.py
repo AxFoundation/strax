@@ -14,10 +14,13 @@ from immutabledict import immutabledict
 import numpy as np
 from copy import copy, deepcopy
 import strax
+
 export, __all__ = strax.exporter()
 
 
 LOGGERS = {}
+
+
 @export
 class SaveWhen(IntEnum):
     """Plugin's preference for having it's data saved"""

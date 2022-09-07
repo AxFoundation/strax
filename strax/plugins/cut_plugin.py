@@ -2,6 +2,7 @@ import inspect
 import numpy as np
 import strax
 from .plugin import Plugin, SaveWhen
+
 export, __all__ = strax.exporter()
 
 
