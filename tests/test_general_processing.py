@@ -282,10 +282,14 @@ def test_raw_to_records(r):
         assert np.all(buffer == r)
 
     
-@given(harray(np.int64, 10**2, elements=st.integers(10**9, 5*10**9)),
-harray(np.int16, 10**2, elements=st.integers(-1, 10**3)))
+@hypothesis.given(
+    hyp_numpy.arrays(np.int64, 10**2, elements=hypothesis.strategies.integers(10**9, 5*10**9)),
+    hyp_numpy.arrays(np.int16, 10**2, elements=hypothesis.strategies.integers(-1, 10**3))
+)
+@hypothesis.settings(deadline=None)
 def test_sort_by_time(time, channel):
-    dummy_array = np.zeros(len(time), strax.time_fields)
+    n_events = len(time)
+    dummy_array = np.zeros(n_events, strax.time_fields)
     dummy_array2 = np.zeros(n_events, strax.time_fields 
                             + [(('dummy_channel_number', 'channel'), np.int16)]
                            )
@@ -296,4 +300,20 @@ def test_sort_by_time(time, channel):
     
     res1 = strax.sort_by_time(dummy_array2)
     res2 = np.sort(dummy_array2, order='time')
+    assert np.all(res1 == res2)
+    
+    _test_sort_by_time_peaks(time)
+    
+    
+def _test_sort_by_time_peaks(time):
+    """Explicit test to check if peaks a re sorted correctly.
+    """
+    dummy_array = np.zeros(len(time), strax.time_fields 
+                            + [(('dummy_channel_number', 'channel'), np.int16)]
+                           )
+    dummy_array['time'] = time
+    dummy_array['channel'] = -1
+    
+    res1 = strax.sort_by_time(dummy_array)
+    res2 = np.sort(dummy_array, order='time')
     assert np.all(res1 == res2)

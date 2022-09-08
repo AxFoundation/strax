@@ -13,16 +13,20 @@ export, __all__ = strax.exporter()
 def sort_by_time(x):
     """Sorts things. Either by time or by time, then channel if both
     fields are in the given array.
+    
+    Does not work for channels < -1.
     """
     if len(x) == 0:
         return x
     
-    if 'channel' in x.dtype.names:
+    if 'channel' in x.dtype.names and np.any(x['channel'] != -1):
+        if np.any(x['channel'] < -1):
+            raise ValueError('Channel lower than -1 are not allowed!')
         channel = x['channel']
     else:
         channel = np.ones(len(x))
         
-    max_time_difference = (np.iinfo(np.int64).max - 10) / np.abs(channel.max()+1)
+    max_time_difference = (np.iinfo(np.int64).max - 10) / channel.max()+1
     # Subtract 10 to have some extra margin, just in case.
     # Use absolute to account for peaks which are channel -1.
     _time_range_too_large = (x['time'].max() - x['time'].min()) > max_time_difference
