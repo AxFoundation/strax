@@ -13,16 +13,15 @@ export, __all__ = strax.exporter()
 def sort_by_time(x):
     """Sorts things. Either by time or by time, then channel if both
     fields are in the given array.
-    
-    Does not work for channels < -1.
     """
     if len(x) == 0:
         return x
     
-    if 'channel' in x.dtype.names and np.any(x['channel'] != -1):
-        if np.any(x['channel'] < -1):
-            raise ValueError('Channel lower than -1 are not allowed!')
+    if 'channel' in x.dtype.names:
+        min_channel = x['channel'].min()
         channel = x['channel']
+        if min_channel < 0:
+            channel -= min_channel
     else:
         channel = np.ones(len(x))
         
