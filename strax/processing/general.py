@@ -18,24 +18,25 @@ def sort_by_time(x):
         return x
     
     if 'channel' in x.dtype.names:
-        max_channel_plus_one = x['channel'].max() + 1
-        max_time_difference = (np.iinfo(np.int64).max - 100) / max_channel_plus_one
-        #Subtract 100 to have some extra margin, just in case.
-        if not (x['time'].max() - x['time'].min()) > max_time_difference:
-            # Faster sorting:
-            x = _sort_by_time_and_channel(x, max_channel_plus_one)
-        else:
-            x = np.sort(x, order=('time', 'channel'))
+        channel = x['channel']
     else:
-        if not (x['time'].max() - x['time'].min()) > (np.iinfo(np.int64).max - 100):
-            # Faster sorting:
-            x = _sort_by_time(x)
-        else:
-            x = np.sort(x, order=('time',))
+        channel = np.ones(len(x))
+        
+    max_time_difference = (np.iinfo(np.int64).max - 10) / np.abs(channel.max()+1)
+    # Subtract 10 to have some extra margin, just in case.
+    # Use absolute to account for peaks which are channel -1.
+    _time_range_too_large = (x['time'].max() - x['time'].min()) > max_time_difference
+    if not _time_range_too_large:
+        # Faster sorting:
+        x = _sort_by_time_and_channel(x, channel, channel.max()+1)
+    elif 'channel' in x.dtype.names:
+        x = np.sort(x, order=('time', 'channel'))
+    else:
+        x = np.sort(x, order=('time',))
     return x
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sort_by_time_and_channel(x, max_channel_plus_one):
+def _sort_by_time_and_channel(x, channel, max_channel_plus_one):
     """
     Assumes you have no more than 10k channels, and records don't span
     more than 11 days.
@@ -44,19 +45,7 @@ def _sort_by_time_and_channel(x, max_channel_plus_one):
     """
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + x['channel']
-    sort_i = np.argsort(sort_key)
-    return x[sort_i]
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _sort_by_time(x):
-    """Sorts array if oit only contains a time field.
-    
-    (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
-    """
-    # I couldn't get fast argsort on multiple keys to work in numba
-    # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min())
+    sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + channel
     sort_i = np.argsort(sort_key)
     return x[sort_i]
 
