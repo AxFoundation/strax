@@ -25,7 +25,7 @@ def sort_by_time(x):
     else:
         channel = np.ones(len(x))
         
-    max_time_difference = (np.iinfo(np.int64).max - 10) / channel.max()+1
+    max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max()+1)
     # Subtract 10 to have some extra margin, just in case.
     # Use absolute to account for peaks which are channel -1.
     _time_range_too_large = (x['time'].max() - x['time'].min()) > max_time_difference
