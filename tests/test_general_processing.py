@@ -280,3 +280,57 @@ def test_raw_to_records(r):
     strax.copy_to_buffer(r, buffer, "_test_r_to_buffer")
     if len(r):
         assert np.all(buffer == r)
+
+    
+@hypothesis.given(
+    hyp_numpy.arrays(np.int64, 10**2, elements=hypothesis.strategies.integers(10**9, 5*10**9)),
+    hyp_numpy.arrays(np.int16, 10**2, elements=hypothesis.strategies.integers(-10, 10**3))
+)
+@hypothesis.settings(deadline=None)
+def test_sort_by_time(time, channel):
+    n_events = len(time)
+    dummy_array = np.zeros(n_events, strax.time_fields)
+    dummy_array2 = np.zeros(n_events, strax.time_fields 
+                            + [(('dummy_channel_number', 'channel'), np.int16)]
+                           )
+    dummy_array['time'] = time
+    dummy_array2['time'] = time
+
+    res1 = strax.sort_by_time(dummy_array)
+    res2 = np.sort(dummy_array, order='time')
+    assert np.all(res1 == res2)
+    
+    res1 = strax.sort_by_time(dummy_array2)
+    res2 = np.sort(dummy_array2, order='time')
+    assert np.all(res1 == res2)
+
+    # Test again with random channels
+    dummy_array3 = dummy_array2.copy()
+    dummy_array3['channel'] = channel
+    res1 = strax.sort_by_time(dummy_array3)
+    res2 = np.sort(dummy_array3, order=('time', 'channel'))
+    assert np.all(res1 == res2)
+
+    # Create some large time difference that would cause a bug before https://github.com/AxFoundation/strax/pull/695
+    # Do make sure that we can actually fit the time difference in an int.64 (hence the //2 +- 1)
+    dummy_array3['time'][0] = np.iinfo(np.int64).min // 2 + 1
+    dummy_array3['time'][-1] = np.iinfo(np.int64).max // 2 - 1
+    res1 = strax.sort_by_time(dummy_array3)
+    res2 = np.sort(dummy_array3, order=('time', 'channel'))
+    assert np.all(res1 == res2)
+
+    _test_sort_by_time_peaks(time)
+    
+    
+def _test_sort_by_time_peaks(time):
+    """Explicit test to check if peaks a re sorted correctly.
+    """
+    dummy_array = np.zeros(len(time), strax.time_fields 
+                            + [(('dummy_channel_number', 'channel'), np.int16)]
+                           )
+    dummy_array['time'] = time
+    dummy_array['channel'] = -1
+    
+    res1 = strax.sort_by_time(dummy_array)
+    res2 = np.sort(dummy_array, order='time')
+    assert np.all(res1 == res2)
