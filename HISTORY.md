@@ -1,3 +1,12 @@
+1.3.0 / 2022-09-09
+---------------------
+* Restructure plugins by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/700
+* Numpy caching of data in online monitor storage by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/698
+* Fix overflow bug in sort_by_time add little test by @WenzDaniel in https://github.com/AxFoundation/strax/pull/695
+* Refactor in preparation for PyMongo 4.0 by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/656
+* Plugin log property by @jmosbacher in https://github.com/AxFoundation/strax/pull/588
+
+
 1.2.3 / 2022-06-07
 ---------------------
 * Prevent float/int funkyness in hitlet processing by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/694
