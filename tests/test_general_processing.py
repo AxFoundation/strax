@@ -284,7 +284,7 @@ def test_raw_to_records(r):
     
 @hypothesis.given(
     hyp_numpy.arrays(np.int64, 10**2, elements=hypothesis.strategies.integers(10**9, 5*10**9)),
-    hyp_numpy.arrays(np.int16, 10**2, elements=hypothesis.strategies.integers(-1, 10**3))
+    hyp_numpy.arrays(np.int16, 10**2, elements=hypothesis.strategies.integers(-10, 10**3))
 )
 @hypothesis.settings(deadline=None)
 def test_sort_by_time(time, channel):
@@ -301,7 +301,13 @@ def test_sort_by_time(time, channel):
     res1 = strax.sort_by_time(dummy_array2)
     res2 = np.sort(dummy_array2, order='time')
     assert np.all(res1 == res2)
-    
+
+    dummy_array3 = dummy_array2.copy()
+    dummy_array3['channel'] = channel
+    res1 = strax.sort_by_time(dummy_array3)
+    res2 = np.sort(dummy_array3, order=('time', 'channel'))
+    assert np.all(res1 == res2)
+
     _test_sort_by_time_peaks(time)
     
     
