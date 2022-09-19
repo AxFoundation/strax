@@ -4,26 +4,51 @@ import strax
 import numba
 from numba.typed import List
 import numpy as np
+import warnings
 
 export, __all__ = strax.exporter()
 
 
-# (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
-# TODO: maybe this should be a factory?
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
 def sort_by_time(x):
-    """Sort pulses by time, then channel.
-
-    Assumes you have no more than 10k channels, and records don't span
-    more than 100 days. TODO: FIX this
+    """Sorts things. Either by time or by time, then channel if both
+    fields are in the given array.
     """
     if len(x) == 0:
-        # Nothing to do, and .min() on empty array doesn't work, so:
         return x
+    
+    if 'channel' in x.dtype.names:
+        min_channel = x['channel'].min()
+        channel = x['channel']
+        if min_channel < 0:
+            channel -= min_channel
+    else:
+        channel = np.ones(len(x))
+        
+    max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max()+1)
+    # Subtract 10 to have some extra margin, just in case.
+    # Use absolute to account for peaks which are channel -1.
+    _time_range_too_large = (x['time'].max() - x['time'].min()) > max_time_difference
+    if not _time_range_too_large:
+        # Faster sorting:
+        x = _sort_by_time_and_channel(x, channel, channel.max()+1)
+    elif 'channel' in x.dtype.names:
+        x = np.sort(x, order=('time', 'channel'))
+    else:
+        x = np.sort(x, order=('time',))
+    return x
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _sort_by_time_and_channel(x, channel, max_channel_plus_one):
+    """
+    Assumes you have no more than 10k channels, and records don't span
+    more than 11 days.
+
+    (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
+    """
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min()) * 10000 + x['channel']
+    sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + channel
     sort_i = np.argsort(sort_key)
     return x[sort_i]
 

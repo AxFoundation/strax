@@ -1,3 +1,55 @@
+1.3.0 / 2022-09-09
+---------------------
+* Restructure plugins by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/700
+* Numpy caching of data in online monitor storage by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/698
+* Fix overflow bug in sort_by_time add little test by @WenzDaniel in https://github.com/AxFoundation/strax/pull/695
+* Refactor in preparation for PyMongo 4.0 by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/656
+* Plugin log property by @jmosbacher in https://github.com/AxFoundation/strax/pull/588
+
+
+1.2.3 / 2022-06-07
+---------------------
+* Prevent float/int funkyness in hitlet processing by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/694
+
+
+1.2.2 / 2022-05-11
+---------------------
+- Add option to ignore errors in multirun loading (#653) 
+- Auto version, fix #217 (#689)
+- Add basics documentation - split Config and Plugin docs (#691)
+- Add n_hits comment in code (#692) 
+- Rechunker script (#686)
+
+
+1.2.1 / 2022-04-12
+---------------------
+- run dependabot remotely (#683)
+- Docs fixing (#684)
+- Allow different chunk size (#687)
+
+
+1.2.0 / 2022-03-09
+---------------------
+- Added lone hit area to area per channel (#649) 
+
+1.1.8 / 2022-03-08
+---------------------
+- Fix saving behavior of multioutput plugins with different SaveWhens (#674)
+- Change tempdirs in test (#657)
+- Define extra kwargs based on cut_by (db14f809414fe91c4e16d04bd7f166970891e591)
+- Update run_selection.py (#658)
+- Ignore raises on testing (#669)
+- Documentation tweaks (#670)
+- Test for inline plugin (#673)
+
+
+1.1.7 / 2022-02-16
+---------------------
+- Fix savewhen issues (#648)
+- Fix testing from straxen (#650)
+- Small fix superruns define run (#651)
+
+
 1.1.6 / 2022-02-03
 ---------------------
 - Extend search field to also print occurrences (#638)
