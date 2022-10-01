@@ -5,4 +5,4 @@ nbsphinx
 recommonmark
 graphviz
 m2r
-mistune==0.8.4 
+mistune==2.0.4 
