@@ -94,8 +94,9 @@ def test_sum_waveform(records):
 
         assert np.all(p['data'][:p['length']] == sum_wv)
 
-        # top array waveforms must be smaller than total waveform
-        np.testing.assert_array_less(p['data_top'], p['data'])
+        # top array waveforms must be equal or smaller than total waveform
+        if not np.array_equal(p['data_top'], p['data']):
+              np.testing.assert_array_less(p['data_top'], p['data'])
 
         # Finally check that we also can use a selection of peaks to sum
         strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels,
