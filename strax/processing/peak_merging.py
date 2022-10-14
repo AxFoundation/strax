@@ -161,5 +161,5 @@ def add_lone_hits(peaks, lone_hits, to_pe):
         p['area_per_channel'][lh_i['channel']] += lh_area
 
         # Add lone hit as delta pulse to waveform:
-        index = (p['time'] - lh_i['time'])//p['dt']
+        index = (lh_i['time'] - p['time'])//p['dt']
         p['data'][index] += lh_area
