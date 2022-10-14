@@ -175,14 +175,14 @@ def hitlet_with_data_dtype(n_samples=2):
     return dtype + additional_fields
 
 
-def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
+def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=True):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
     """
     if n_channels == 1:
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
-    return peak_interval_dtype + [
+    dtype =  peak_interval_dtype + [
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8),
@@ -194,8 +194,6 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
           'n_hits'), np.int32),
         (('Waveform data in PE/sample (not PE/ns!)',
           'data'), np.float32, n_sum_wv_samples),
-        (('Waveform data in PE/sample (not PE/ns!), top array',
-          'data_top'), np.float32, n_sum_wv_samples),
         (('Peak widths in range of central area fraction [ns]',
           'width'), np.float32, n_widths),
         (('Peak widths: time between nth and 5th area decile [ns]',
@@ -211,6 +209,11 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11):
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
     ]
+    if digitize_top:
+        top_field = (('Waveform data in PE/sample (not PE/ns!), top array',
+                      'data_top'), np.float32, n_sum_wv_samples)
+        dtype.insert(5, top_field)
+    return dtype
 
 
 def copy_to_buffer(source: np.ndarray,
