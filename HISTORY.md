@@ -1,3 +1,15 @@
+1.4.0 / 2022-10-17
+---------------------
+* Add capability for building summed waveform over channel subset by @DCichon in https://github.com/AxFoundation/strax/pull/565
+* Fixed delta peak timestamp problem by @FaroutYLq in https://github.com/AxFoundation/strax/pull/702
+
+Notes
+ -  Breaking changes in the peak-building chain due to #565
+New Contributors
+ - @DCichon made their first contribution in https://github.com/AxFoundation/strax/pull/565
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.3.0...v1.4.0
+
 1.3.0 / 2022-09-09
 ---------------------
 * Restructure plugins by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/700
