@@ -174,8 +174,10 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
         p['area'] += lh_area
         p['area_per_channel'][lh_i['channel']] += lh_area
 
-        # Add lone hit as delta pulse to waveforms:
-        index = (p['time'] - lh_i['time'])//p['dt']
+        # Add lone hit as delta pulse to waveform:
+        index = (lh_i['time'] - p['time'])//p['dt']
+        if index < 0 or index > len(p['data']):
+            raise ValueError('Hit outside of full containment!')
         p['data'][index] += lh_area
 
         if n_top_channels > 0:

@@ -51,12 +51,18 @@ def test_replace_merged(intervals, merge_instructions):
 
 
 @hypothesis.given(fake_hits,
-                  hypothesis.strategies.integers(min_value=0, max_value=100))
+                  hypothesis.strategies.integers(min_value=0, max_value=int(1e18)),
+                  hypothesis.strategies.integers(min_value=0, max_value=100),
+                  hypothesis.strategies.integers(min_value=1, max_value=2),
+                  )
 @hypothesis.settings(deadline=None)
-def test_add_lone_hits(hits, peak_length):
+def test_add_lone_hits(hits, time_offset, peak_length, dt):
     peak = np.zeros(1, dtype=strax.peak_dtype())
+    peak['time'] = time_offset
+    hits['time'] += time_offset
     peak['length'] = peak_length
-    peak['dt'] = 1
+    hits['area'] = 1
+    peak['dt'] = dt
 
     to_pe = np.ones(10000)
     strax.add_lone_hits(peak, hits, to_pe)
@@ -70,7 +76,7 @@ def test_add_lone_hits(hits, peak_length):
     dummy_peak = np.zeros(peak_length)
 
     for h in split_hits:
-        dummy_peak[h['time']] += h['area']
+        dummy_peak[(h['time']-time_offset)//dt] += h['area']
     peak = peak[0]
     assert peak['area'] == np.sum(split_hits['area'])
-    assert np.all(peak['data'][:peak['length']] == dummy_peak)
+    assert np.all(peak['data'][:peak_length] == dummy_peak)
