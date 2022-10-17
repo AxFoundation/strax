@@ -7,7 +7,7 @@ export, __all__ = strax.exporter()
 
 @export
 def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
-                data_type='peaks', **kwargs):
+                data_type='peaks', n_top_channels=0, **kwargs):
     """Return peaks split according to algorithm, with waveforms summed
     and widths computed.
 
@@ -27,6 +27,7 @@ def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
     :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
         sum_wavefrom or get_hitlets_data to compute the waveform of
         the new split peaks/hitlets.
+    :param n_top_channels: Number of top array channels.
     :param result_dtype: dtype of the result.
 
     Any other options are passed to the algorithm.
@@ -37,7 +38,8 @@ def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
     data_type_is_not_supported = data_type not in ('hitlets', 'peaks')
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, hits, records, rlinks, to_pe, data_type, **kwargs)
+    return splitter(peaks, hits, records, rlinks, to_pe, data_type,
+                    n_top_channels=n_top_channels, **kwargs)
 
 
 NO_MORE_SPLITS = -9999999
@@ -55,6 +57,7 @@ class PeakSplitter:
         new split peaks/hitlets.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
+    :param n_top_channels: Number of top array channels.
 
     The function find_split_points(), implemented in each subclass
     defines the algorithm, which takes in a peak's waveform and
@@ -65,7 +68,7 @@ class PeakSplitter:
     find_split_args_defaults: tuple
 
     def __call__(self, peaks, hits, records, rlinks, to_pe, data_type,
-                 do_iterations=1, min_area=0, **kwargs):
+                 do_iterations=1, min_area=0, n_top_channels=0, **kwargs):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
@@ -102,7 +105,7 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == 'peaks':
-                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe)
+                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels)
                 strax.compute_widths(new_peaks)
             elif data_type == 'hitlets':
                 # Add record fields here
@@ -111,7 +114,8 @@ class PeakSplitter:
             # ... and recurse (if needed)
             new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
                              do_iterations=do_iterations - 1,
-                             min_area=min_area, **kwargs)
+                             min_area=min_area,
+                             n_top_channels=n_top_channels, **kwargs)
             if np.any(new_peaks['length'] == 0):
                 raise ValueError('Want to add a new zero-length peak after splitting!')
 
