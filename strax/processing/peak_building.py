@@ -310,7 +310,7 @@ def sum_waveform(peaks, hits, records, record_links, adc_to_pe, n_top_channels=0
             area_per_channel[ch] += area_pe
             p['area'] += area_pe
 
-        nest_peak_start = peaks[peak_i+1]['time'] if len(peaks) >= peak_i+1 else np.iinfo(np.int64).max
+        nest_peak_start = peaks[peak_i+1]['time'] if len(peaks) > peak_i+1 else np.iinfo(np.int64).max
         if n_top_channels > 0:
             store_downsampled_waveform(p, swv_buffer,
                                        max_endtime=nest_peak_start,
