@@ -50,6 +50,7 @@ def test_replace_merged(intervals, merge_instructions):
     for x in result:
         assert np.isin(x, merged_itvs) or np.isin(x, kept_itvs), "Invented itv"
 
+
 def bounds_to_intervals_w_data(bs, dt_max=10, dtype=strax.interval_dtype):
     """Similar to bounds_to_intervals from strax.testutils but with a data field"""
     x = np.zeros(len(bs), dtype=dtype)

@@ -151,6 +151,8 @@ def store_downsampled_waveform(p,
     n_samples = len(p['data'])
 
     downsample_factor = int(np.ceil(p['length'] / n_samples))
+    check_trucation = False
+
     if downsample_factor > 1:
         # Compute peak length after downsampling.
         if max_endtime:
@@ -158,10 +160,13 @@ def store_downsampled_waveform(p,
             if p['dt'] * p['length'] + p['time'] >= max_endtime:
                 # We HAVE to truncate this wf to prevent overlapping to the next peak
                 p['length'] -= 1
+                check_trucation=True
         else:
             # We truncate this wf to prevent overlapping to the next
             # peak because otherwise we might overlap
             p['length'] = int(np.floor(p['length'] / downsample_factor))
+            check_trucation=True
+
         if store_in_data_top:
             p['data_top'][:p['length']] = \
                     wv_buffer_top[:p['length'] * downsample_factor] \
@@ -172,6 +177,15 @@ def store_downsampled_waveform(p,
                 .reshape(-1, downsample_factor) \
                 .sum(axis=1)
         p['dt'] *= downsample_factor
+
+        if check_trucation:
+            # Store any samples that might fall off the peak due to tructation back
+            # as area in the very last sample of the peak
+            area_ignored = wv_buffer[p['length'] * downsample_factor:].sum()
+            p['data'][p['length']] += area_ignored
+            if store_in_data_top:
+                area_ignored_top = wv_buffer_top[p['length'] * downsample_factor:].sum()
+                p['data_top'][p['length']] += area_ignored_top
     else:
         if store_in_data_top:
             p['data_top'][:p['length']] = wv_buffer_top[:p['length']]
