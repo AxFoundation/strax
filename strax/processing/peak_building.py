@@ -155,7 +155,7 @@ def store_downsampled_waveform(p,
         # Compute peak length after downsampling.
         if max_endtime:
             p['length'] = int(np.ceil(p['length'] / downsample_factor))
-            if p['dt']*p['length']+p['time']>max_endtime:
+            if p['dt'] * p['length'] + p['time'] >= max_endtime:
                 # We HAVE to truncate this wf to prevent overlapping to the next peak
                 p['length'] -= 1
         else:

@@ -36,8 +36,10 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         new_p['time'] = first_peak['time']
         new_p['dt'] = common_dt
-        next_start = peaks['time'][end_merge_at[new_i]+1] if len(peaks) >= end_merge_at[new_i]+1 else np.iinfo(np.int64).max
-        new_p['length'] = int(np.ceil(strax.endtime(last_peak) - new_p['time']) / common_dt) + 1
+        next_start = (peaks['time'][end_merge_at[new_i] + 1]
+                      if len(peaks) >= end_merge_at[new_i] + 1
+                      else np.iinfo(np.int64).max)
+        new_p['length'] = int(np.ceil(strax.endtime(last_peak) - new_p['time']) / common_dt)
         if strax.endtime(new_p) >= next_start:
             # The new endtime must be at or before the last peak endtime
             # to avoid possibly overlapping peaks
