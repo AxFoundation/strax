@@ -36,14 +36,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         new_p['time'] = first_peak['time']
         new_p['dt'] = common_dt
-        next_start = (peaks['time'][end_merge_at[new_i] + 1]
-                      if len(peaks) >= end_merge_at[new_i] + 1
-                      else np.iinfo(np.int64).max)
         new_p['length'] = int(np.ceil(strax.endtime(last_peak) - new_p['time']) / common_dt)
-        if strax.endtime(new_p) >= next_start:
-            # The new endtime must be at or before the last peak endtime
-            # to avoid possibly overlapping peaks
-            new_p['length'] -= 1
 
         # re-zero relevant part of buffers (overkill? not sure if
         # this saves much time)
@@ -74,6 +67,11 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
             new_p['n_hits'] += p['n_hits']
             new_p['saturated_channel'][p['saturated_channel'] == 1] = 1
 
+        # Clip endtime of new peak before next start time
+        # Remember end_merge_at is exclusive so end_merge_at[new_i] is the next peak!
+        next_start = (peaks['time'][end_merge_at[new_i]]
+                      if len(peaks) > end_merge_at[new_i]
+                      else np.iinfo(np.int64).max)
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
         strax.store_downsampled_waveform(new_p,

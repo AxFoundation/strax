@@ -55,9 +55,16 @@ def bounds_to_intervals_w_data(bs, dt_max=10, dtype=strax.interval_dtype):
     """Similar to bounds_to_intervals from strax.testutils but with a data field"""
     x = np.zeros(len(bs), dtype=dtype)
     x['time'] = [x[0] for x in bs]
-    x['dt'] = np.random.randint(1, dt_max, size=len(x))
-    # Remember: exclusive right bound...
-    x['length'] = [(x[1] - x[0]) // dt for x, dt in zip(bs, x['dt'])]
+    # Remember: exclusive right bound... First assume dt=1
+    x['length'] = [(x[1] - x[0]) for x in bs]
+    # Now assign random dt (at most equal to length as otherwise length becomes < 1
+    x['dt'] = [np.random.randint(1, min(dt_max, l))
+               if l > 1
+               else 1
+               for l in x['length']
+               ]
+    x['length'] = x['length'] // x['dt']
+
     # Clip length to be at least shorter than the 'data' field
     x['length'] = np.clip(x['length'], 0, x['data'].shape[1])
     for x_i in x:
@@ -105,14 +112,34 @@ def test_data_field(peaks):
     Test https://github.com/AxFoundation/strax/issues/704
     merge all the peaks - which should give us a similarly large peak as all the input peaks
     """
-    new_peaks = strax.merge_peaks(peaks,
-                                  np.array([0]),
-                                  np.array([len(peaks)]),
-                                  len(peaks['data']) * len(peaks) * 10
-                                  )
-
+    new_peaks = strax.merge_peaks(
+        peaks,
+        np.array([0]),
+        np.array([len(peaks)]),
+        len(peaks['data']) * len(peaks) * 10
+    )
+    # Tolerance only allows numerical artifacts! Not rounding errors
     np.testing.assert_allclose(peaks['data'].sum(), new_peaks['data'].sum(), atol=0, rtol=1e-6)
 
+    # insert a peak that falls directly after the last merge
+    extra_peak = np.zeros(1, dtype=peaks.dtype)
+    extra_peak['time'] = strax.endtime(peaks[-1])
+    extra_peak['dt'] = 1
+    extra_peak['length'] = 1
+
+    peaks_w_extra = np.concatenate([peaks, extra_peak])
+
+    new_peaks_with_truncation = strax.merge_peaks(
+        peaks_w_extra,
+        np.array([0]),
+        np.array([len(peaks)]),
+        len(peaks['data']) * len(peaks) * 10
+    )
+    np.testing.assert_allclose(peaks['data'].sum(), new_peaks_with_truncation['data'].sum(), atol=0, rtol=1e-6)
+    # No such thing as less_equal (equal would also be ok) so adding 0.1 to time (times are ints)
+    np.testing.assert_array_less(
+        strax.endtime(new_peaks_with_truncation), float(extra_peak['time'][0])+0.1,
+    )
 
 @hypothesis.given(fake_hits,
                   hypothesis.strategies.integers(min_value=0, max_value=int(1e18)),

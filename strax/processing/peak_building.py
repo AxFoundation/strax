@@ -144,32 +144,36 @@ def store_downsampled_waveform(p,
     into p['data_top']
 
     When downsampling results in a fractional number of samples, the peak is
-    shortened IF max_endtime is spefified. This causes data loss, but it is
-    necessary to prevent overlaps between peaks.
+    shortened IF max_endtime is specified. This causes data loss, but it is
+    necessary to prevent overlaps between peaks. We add any data that would
+    otherwise end up in a bin after the endtime to the last bin.
     """
 
     n_samples = len(p['data'])
 
     downsample_factor = int(np.ceil(p['length'] / n_samples))
-    check_trucation = False
+
+    # If we have to clip the data, check if any data comes after the new endtime
+    # of the peak and add that leftover information to the last sample of the peak
+    check_truncation = False
 
     if downsample_factor > 1:
         # Compute peak length after downsampling.
         if max_endtime:
             p['length'] = int(np.ceil(p['length'] / downsample_factor))
-            if p['dt'] * p['length'] + p['time'] >= max_endtime:
+            if p['dt'] * downsample_factor * p['length'] + p['time'] >= max_endtime:
                 # We HAVE to truncate this wf to prevent overlapping to the next peak
                 p['length'] -= 1
-                check_trucation=True
+                check_truncation = True
         else:
             # We truncate this wf to prevent overlapping to the next
             # peak because otherwise we might overlap
             p['length'] = int(np.floor(p['length'] / downsample_factor))
-            check_trucation=True
+            check_truncation = True
 
         if store_in_data_top:
             p['data_top'][:p['length']] = \
-                    wv_buffer_top[:p['length'] * downsample_factor] \
+                wv_buffer_top[:p['length'] * downsample_factor] \
                     .reshape(-1, downsample_factor) \
                     .sum(axis=1)
         p['data'][:p['length']] = \
@@ -178,8 +182,8 @@ def store_downsampled_waveform(p,
                 .sum(axis=1)
         p['dt'] *= downsample_factor
 
-        if check_trucation:
-            # Store any samples that might fall off the peak due to tructation back
+        if check_truncation:
+            # Store any samples that might fall off the peak due to truncation back
             # as area in the very last sample of the peak
             area_ignored = wv_buffer[p['length'] * downsample_factor:].sum()
             p['data'][p['length']] += area_ignored

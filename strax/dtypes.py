@@ -192,7 +192,7 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=T
           'area_per_channel'), np.float32, n_channels),
         (("Number of hits contributing at least one sample to the peak ",
           'n_hits'), np.int32),
-        (('Waveform data in PE/sample (not PE/ns!)',
+        (('Waveform data in PE/sample (not PE/ns!). Last sample stores any overflow',
           'data'), np.float32, n_sum_wv_samples),
         (('Peak widths in range of central area fraction [ns]',
           'width'), np.float32, n_widths),
@@ -210,7 +210,8 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=T
           'max_goodness_of_split'), np.float32),
     ]
     if digitize_top:
-        top_field = (('Waveform data in PE/sample (not PE/ns!), top array',
+        top_field = (('Waveform data top array in PE/sample (not PE/ns!). '
+                      'Last sample stores any overflow',
                       'data_top'), np.float32, n_sum_wv_samples)
         dtype.insert(5, top_field)
     return dtype
