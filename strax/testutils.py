@@ -19,6 +19,7 @@ import strax
 def sorted_bounds(disjoint=False,
                   max_value=50,
                   max_len=10,
+                  min_size=0,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
@@ -26,7 +27,7 @@ def sorted_bounds(disjoint=False,
 
     s = strategies.lists(strategies.integers(min_value=0,
                                              max_value=max_value),
-                         min_size=0, max_size=20)
+                         min_size=min_size, max_size=20)
     if disjoint:
         s = s.map(accumulate).map(list)
 
@@ -69,6 +70,7 @@ disjoint_sorted_intervals = sorted_bounds(disjoint=True).\
 
 fake_hits = sorted_bounds().map(partial(bounds_to_intervals,
                                         dtype=strax.hit_dtype))
+
 
 ##
 # Fake pulses with 0 or 1 as waveform (e.g. to test hitfinder)

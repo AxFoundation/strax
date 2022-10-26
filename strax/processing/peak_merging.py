@@ -33,33 +33,28 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         first_peak, last_peak = old_peaks[0], old_peaks[-1]
         new_p['channel'] = first_peak['channel']
 
-        # The new endtime must be at or before the last peak endtime
-        # to avoid possibly overlapping peaks
+
         new_p['time'] = first_peak['time']
         new_p['dt'] = common_dt
-        new_p['length'] = \
-            (strax.endtime(last_peak) - new_p['time']) // common_dt
+        next_start = peaks['time'][end_merge_at[new_i]+1] if len(peaks) >= end_merge_at[new_i]+1 else np.iinfo(np.int64).max
+        new_p['length'] = int(np.ceil(strax.endtime(last_peak) - new_p['time']) / common_dt) + 1
+        if strax.endtime(new_p) >= next_start:
+            # The new endtime must be at or before the last peak endtime
+            # to avoid possibly overlapping peaks
+            new_p['length'] -= 1
 
         # re-zero relevant part of buffers (overkill? not sure if
         # this saves much time)
-        buffer[:min(
+        clear_until = min(
             int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
+                (last_peak['time']
+                 + (last_peak['length'] * old_peaks['dt'].max())
+                 - first_peak['time']) / common_dt
             ),
-            len(buffer)
-        )] = 0
-        buffer_top[:min(
-            int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
-            ),
-            len(buffer_top)
-        )] = 0
+            max_buffer
+        )
+        buffer[:clear_until] = 0
+        buffer_top[:clear_until] = 0
 
         for p in old_peaks:
             # Upsample the sum and top/bottom array waveforms into their buffers
@@ -79,7 +74,12 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, buffer_top)
+        strax.store_downsampled_waveform(new_p,
+                                         buffer,
+                                         max_endtime=next_start,
+                                         store_in_data_top=True,
+                                         wv_buffer_top=buffer_top
+                                         )
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
