@@ -1664,6 +1664,67 @@ class Context:
 
     get_metadata = get_meta
 
+    def compare_metadata(self, run_id, target, compared_meta):
+        """
+        Compare the metadata between two strax data
+
+        :param run_id: run id to get
+        :param target: data type to get
+        :param compared_meta: path to metadata to compare, or a dictionary, or a tuple with
+            another run_id,target to compare against the metadata of the first id-target pair
+        """
+        import click, deepdiff, json
+        color_values = lambda oldval, newval: (
+            click.style(oldval, fg='red', bold=True), click.style(newval, fg='green', bold=True))
+        underline = lambda text, bold=True: click.style(text, bold=bold, underline=True)
+
+        # metadata for the given runid + target; fetch from context
+        metadata_current = self.get_metadata(run_id, target)
+        # metadata to compare
+        if isinstance(compared_meta, str):
+            with open(compared_meta) as json_file:
+                metadata_compared = json.load(json_file)
+        elif isinstance(compared_meta, dict):
+            metadata_compared = compared_meta
+        elif isinstance(compared_meta, (tuple, list)):
+            metadata_compared = self.get_metadata(compared_meta[0], compared_meta[1])
+        else:
+            raise ValueError(f"Expected compared_meta as `str` or `dict` got {type(compared_meta)}")
+
+        differences = deepdiff.DeepDiff(metadata_current, metadata_compared)
+        for key, value in differences.items():
+            if key in ['values_changed', 'iterable_item_added', 'iterable_item_removed']:
+                print(underline(f"\n> {key}"))
+                for kk, vv in value.items():
+                    if key == "values_changed":
+                        old_values = vv['old_value']
+                        new_values = vv['new_value']
+                    elif key == "iterable_item_added":
+                        old_values = "-"
+                        new_values = vv
+                    else:  # if key == "iterable_item_removed":
+                        old_values = vv
+                        new_values = "-"
+                    old, new = color_values(old_values, new_values)
+                    click.secho(f"\t in {kk[4:]}", bold=False)
+                    print(f"\t\t{old} -> {new}")
+            elif key in ['dictionary_item_added', 'dictionary_item_removed']:
+                color = "red" if "removed" in key else "green"
+                print(underline(f"\n> {key:25s}"), end="->")
+                click.secho(f"\t{', '.join(value)}", fg=color)
+            elif key in ['type_changes']:
+                print(underline(f"\n> {key}"))
+                for kk, vv in value.items():
+                    click.secho(f"\t{kk}")
+                    oldtype = vv['old_type']
+                    newtype = vv['new_type']
+                    keyold, keynew = color_values('old_type', 'new_type')
+                    valueold, valuenew = color_values(vv['old_value'], vv['new_value'])
+                    print(f"\t\t{keyold:10s} : {oldtype} ({valueold})")
+                    print(f"\t\t{keynew:10s} : {newtype} ({valuenew})")
+            else:
+                raise KeyError(f"Unkown key in comparison {key}")
+
     def run_metadata(self, run_id, projection=None) -> dict:
         """
         Return run-level metadata for run_id, or raise DataNotAvailable
