@@ -108,8 +108,6 @@ hit_dtype = interval_dtype + [
         'threshold'), np.float32),
     (('Maximum amplitude above baseline [ADC counts]',
         'height'), np.float32),
-    (('Time when hit reach its height [ns]',
-        'max_time'), np.int64),
 ]
 
 
