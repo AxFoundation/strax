@@ -108,6 +108,8 @@ hit_dtype = interval_dtype + [
         'threshold'), np.float32),
     (('Maximum amplitude above baseline [ADC counts]',
         'height'), np.float32),
+    (('Time when hit reach its height [ns]',
+        'max_time'), np.int64),
 ]
 
 
@@ -208,6 +210,10 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=T
           'max_gap'), np.int32),
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
+        (('Largest difference between hits max_time inside peak [ns]',
+          'max_diff'), np.int32),
+        (('Smallest difference between hits max_time inside peak [ns]',
+          'min_diff'), np.int32),
     ]
     if digitize_top:
         top_field = (('Waveform data in PE/sample (not PE/ns!), top array',

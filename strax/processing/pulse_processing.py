@@ -252,7 +252,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
             if not in_interval and satisfy_threshold:
                 # Start of a hit
                 in_interval = True
-                hit_start = i
+                hit_start = max_time_i = i
                 height = max(x, height)
 
             if in_interval:
@@ -262,7 +262,9 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
                     in_interval = False
                 else:
                     area += x
-                    height = max(height, x)
+                    if height >= x:
+                        height = x
+                        max_time_i = i
 
                     if i == n_samples - 1:
                         # Hit ends at the *end* of this sample
@@ -294,6 +296,7 @@ def _find_hits(records, min_amplitude, min_height_over_noise,
                     area += res['length'] * baseline_fpart
                     res['area'] = area
                     res['height'] = height + baseline_fpart
+                    res['max_time'] = r['time'] + max_time_i * r['dt']
                     area = height = 0
 
                     # Yield buffer to caller if needed
