@@ -374,6 +374,7 @@ def rechunker(source_directory:str,
               compressor: typing.Optional[str] = None,
               target_size_mb: typing.Optional[str] = None,
               rechunk: bool = True,
+              progress_bar: bool = True,
               )-> dict:
     """
     Rechunk/Recompress a strax-datatype saved in a FileSystemBackend
@@ -405,6 +406,7 @@ def rechunker(source_directory:str,
         until the chunk is at least target_size_mb or we run out of
         chunks.
     :param rechunk: Do we want to rechunk?
+    :param progress_bar: display progress bar
     :return: Dictionary with some information on the write/load times
         involved.
     """
@@ -437,7 +439,7 @@ def rechunker(source_directory:str,
         meta_data['chunk_target_size_mb'] = target_size_mb
 
     data_loader = backend.loader(source_directory)
-
+    pbar = strax.utils.tqdm(total = len(meta_data['chunks']), disable=not progress_bar)
     load_time_seconds = []
     def loader():
         """Wrapped loader for bookkeeping load time"""
@@ -448,7 +450,10 @@ def rechunker(source_directory:str,
                 # Update target chunk size for re-chunking
                 data.target_size_mb = meta_data['chunk_target_size_mb']
                 load_time_seconds.append(time.time()-t0)
+                pbar.n += 1
+                pbar.display()
             except StopIteration:
+                pbar.close()
                 return
             yield data
     print(f'Rechunking {source_directory} to {dest_directory}')
