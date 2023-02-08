@@ -70,7 +70,9 @@ def rechunker(source_directory: str,
     executor = _get_executor(parallel, max_workers)
 
     data_loader = backend.loader(source_directory, executor=executor)
-    pbar = strax.utils.tqdm(total=len(meta_data['chunks']), disable=not progress_bar)
+    pbar = strax.utils.tqdm(total=len(meta_data['chunks']),
+                            disable=not progress_bar,
+                            desc=backend_key)
     load_time_seconds = []
 
     def load_wrapper(generator):
