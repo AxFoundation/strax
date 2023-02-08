@@ -7,7 +7,6 @@ import strax
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
-
 export, __all__ = strax.exporter()
 
 
@@ -111,6 +110,7 @@ def rechunker(source_directory: str,
                 dest_directory=dest_directory,
                 )
 
+
 def _check_arguments(source_directory, replace, dest_directory, parallel):
     if not os.path.exists(source_directory):
         raise FileNotFoundError(f'No file at {source_directory}')
@@ -119,6 +119,7 @@ def _check_arguments(source_directory, replace, dest_directory, parallel):
                          f'not replacing the original path')
     if parallel not in [False, True, 'thread', 'process']:
         raise ValueError('Choose from False, "thread" or "process"')
+
 
 def _get_dest_and_tempdir(dest_directory, replace, backend_key):
     if dest_directory is None and replace:
@@ -133,6 +134,8 @@ def _get_dest_and_tempdir(dest_directory, replace, backend_key):
         print(f'Will write to {dest_directory} and make sub-folder {backend_key}')
         dest_directory = os.path.join(dest_directory, backend_key)
     return dest_directory, _temp_dir
+
+
 def _move_directories(replace, source_directory, dest_directory, _temp_dir):
     if replace:
         print(f'move {dest_directory} to {source_directory}')
@@ -140,30 +143,37 @@ def _move_directories(replace, source_directory, dest_directory, _temp_dir):
         shutil.move(dest_directory, source_directory)
     if _temp_dir:
         _temp_dir.cleanup()
+
+
 def _exhaust_generator(executor, saver, load_wrapper, data_loader, rechunk, _timeout):
     if executor is None:
         saver.save_from(load_wrapper(data_loader), rechunk=rechunk)
-    else:
-        mailbox = strax.Mailbox(name='rechunker', timeout=_timeout)
-        mailbox.add_sender(data_loader)
-        mailbox.add_reader(partial(
-            saver.save_from,
-            executor=executor,
-            rechunk=rechunk,
-        ))
-        mailbox.start()
-        final_generator = mailbox.subscribe()
-        for _ in load_wrapper(final_generator):
-            pass
-        mailbox.cleanup()
-        executor.shutdown(wait=True)
-def _get_meta_data(backend,source_directory, compressor, target_size_mb):
+        return
+
+    mailbox = strax.Mailbox(name='rechunker', timeout=_timeout)
+    mailbox.add_sender(data_loader)
+    mailbox.add_reader(partial(
+        saver.save_from,
+        executor=executor,
+        rechunk=rechunk,
+    ))
+    mailbox.start()
+    final_generator = mailbox.subscribe()
+    for _ in load_wrapper(final_generator):
+        pass
+    mailbox.cleanup()
+    executor.shutdown(wait=True)
+
+
+def _get_meta_data(backend, source_directory, compressor, target_size_mb):
     meta_data = backend.get_metadata(source_directory)
     if compressor is not None:
         meta_data['compressor'] = compressor
     if target_size_mb is not None:
         meta_data['chunk_target_size_mb'] = target_size_mb
     return meta_data
+
+
 def _get_executor(parallel, max_workers):
     # nested import - prevent circular imports
     from strax.processor import SHMExecutor

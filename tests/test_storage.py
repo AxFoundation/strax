@@ -274,6 +274,7 @@ class TestRechunking(TestCase):
                         target_size_mb=strax.default_chunk_size_mb * 2,
                         parallel=parallel,
                         max_workers=2,
+                        _timeout=90,
                         )
         assert st.is_stored(run_id, self.target)
         # Should be empty, we just replaced the source
