@@ -242,11 +242,11 @@ class TestRechunking(TestCase):
                 self._rechunking(compressor)
                 self.tearDown()
 
-    def test_rechunk_prarillellization(self):
+    def test_rechunk_parallelization(self):
         for parallel in [False, True, 'process']:
             with self.subTest(parallel = parallel):
                 self.setUp()
-                self._rechunking(compressor = 'blocs', parallel = parallel)
+                self._rechunking(compressor = 'blosc', parallel = parallel)
                 self.tearDown()
 
     def _rechunking(self, compressor, parallel=False):
@@ -273,6 +273,7 @@ class TestRechunking(TestCase):
                         compressor=compressor,
                         target_size_mb=strax.default_chunk_size_mb * 2,
                         parallel=parallel,
+                        max_workers=2,
                         )
         assert st.is_stored(run_id, self.target)
         # Should be empty, we just replaced the source

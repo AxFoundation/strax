@@ -77,7 +77,7 @@ def main(args):
                              max_workers=args.max_workers,
                              )
     if args.dest is not None:
-        recompressed_mb = strax.utils.dir_size_mb(args.dest)
+        recompressed_mb = strax.utils.dir_size_mb(report.get('dest_directory', args.dest))
     else:
         recompressed_mb = strax.utils.dir_size_mb(args.source)
     report.update(dict(source_mb=source_mb,
