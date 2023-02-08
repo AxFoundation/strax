@@ -157,8 +157,10 @@ def _exhaust_generator(executor, saver, load_wrapper, data_loader, rechunk, _tim
         executor=executor,
         rechunk=rechunk,
     ))
-    mailbox.start()
     final_generator = mailbox.subscribe()
+
+    # Make sure everything is added to the mailbox before starting!
+    mailbox.start()
     for _ in load_wrapper(final_generator):
         pass
     mailbox.cleanup()
