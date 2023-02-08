@@ -378,4 +378,3 @@ class FileSaver(strax.Saver):
 @export
 class InvalidFolderNameFormat(Exception):
     pass
-
