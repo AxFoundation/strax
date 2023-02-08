@@ -250,7 +250,7 @@ class TestRechunking(TestCase):
                 self.tearDown()
 
     def test_replace(self):
-        self._rechunking(replace=True)
+        self._rechunking(compressor = 'blosc', replace=True)
 
     def _rechunking(self, compressor, parallel=False, replace=False):
         """
