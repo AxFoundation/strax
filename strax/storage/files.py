@@ -244,6 +244,7 @@ class FileSytemBackend(strax.StorageBackend):
 
         with open(md_path, mode='r') as f:
             return json.loads(f.read())
+
     def _read_and_format_chunk(self, *args, **kwargs):
         chunk = super()._read_and_format_chunk(*args, **kwargs)
         if self.set_chunk_size_mb:
