@@ -242,7 +242,14 @@ class TestRechunking(TestCase):
                 self._rechunking(compressor)
                 self.tearDown()
 
-    def _rechunking(self, compressor):
+    def test_rechunk_prarillellization(self):
+        for parallel in [False, True, 'process']:
+            with self.subTest(parallel = parallel):
+                self.setUp()
+                self._rechunking(compressor = 'blocs', parallel = parallel)
+                self.tearDown()
+
+    def _rechunking(self, compressor, parallel=False):
         """
         Test that we can use the strax.files.rechunking function to
         rechunk data outside the context
