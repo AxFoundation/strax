@@ -272,6 +272,7 @@ class TestRechunking(TestCase):
                         replace=True,
                         compressor=compressor,
                         target_size_mb=strax.default_chunk_size_mb * 2,
+                        parallel=parallel,
                         )
         assert st.is_stored(run_id, self.target)
         # Should be empty, we just replaced the source
