@@ -1,3 +1,10 @@
+1.4.1 / 2023-02-13
+---------------------
+* Rechunker using Mailbox by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/710
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.0...v1.4.1
+
 1.4.0 / 2022-10-17
 ---------------------
 * Add capability for building summed waveform over channel subset by @DCichon in https://github.com/AxFoundation/strax/pull/565
