@@ -94,10 +94,12 @@ def rechunker(source_directory: str,
             yield data
 
     print(f'Rechunking {source_directory} to {dest_directory}')
-    saver = backend._saver(dest_directory, metadata=meta_data)
+    saver = backend._saver(dest_directory, metadata=meta_data, saver_timeout=_timeout)
 
     write_time_start = time.time()
     _exhaust_generator(executor, saver, load_wrapper, data_loader, rechunk, _timeout)
+    if not os.path.exists(dest_directory):
+        raise FileNotFoundError(f'{dest_directory} not found, did one of the savers die?')
     load_time = sum(load_time_seconds)
     write_time = time.time() - write_time_start - load_time
 
@@ -165,6 +167,7 @@ def _exhaust_generator(executor, saver, load_wrapper, data_loader, rechunk, _tim
     mailbox.start()
     for _ in load_wrapper(final_generator):
         pass
+
     mailbox.cleanup()
     executor.shutdown(wait=True)
 
