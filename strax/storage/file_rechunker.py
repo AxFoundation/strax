@@ -65,8 +65,8 @@ def rechunker(source_directory: str,
     dest_directory, _temp_dir = _get_dest_and_tempdir(dest_directory, replace, backend_key)
 
     backend = strax.FileSytemBackend(set_target_chunk_mb=target_size_mb)
-    meta_data = _get_meta_data(backend, source_directory, compressor, target_size_mb)
-    source_compressor = meta_data['compressor']
+    meta_data, source_compressor = _get_meta_data_and_compressor(
+        backend, source_directory, compressor, target_size_mb)
     executor = _get_executor(parallel, max_workers)
 
     data_loader = backend.loader(source_directory, executor=executor)
@@ -172,13 +172,14 @@ def _exhaust_generator(executor, saver, load_wrapper, data_loader, rechunk, _tim
     executor.shutdown(wait=True)
 
 
-def _get_meta_data(backend, source_directory, compressor, target_size_mb):
+def _get_meta_data_and_compressor(backend, source_directory, compressor, target_size_mb):
     meta_data = backend.get_metadata(source_directory)
+    old_compressor = meta_data['compressor']
     if compressor is not None:
         meta_data['compressor'] = compressor
     if target_size_mb is not None:
         meta_data['chunk_target_size_mb'] = target_size_mb
-    return meta_data
+    return meta_data, old_compressor
 
 
 def _get_executor(parallel, max_workers):
