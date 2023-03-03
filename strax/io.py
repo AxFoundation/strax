@@ -89,8 +89,8 @@ def _save_file(f, data, compressor='zstd'):
     return len(d_comp)
 
 def _compress_blosc(data):
-    if data.nbytes >= 2e9:
-        raise ValueError('Blosc\'s input buffer cannot exceed 2 GB')
+    if data.nbytes >= blosc.MAX_BUFFERSIZE:
+        raise ValueError('Blosc\'s input buffer cannot exceed ~2 GB')
     return blosc.compress(data, shuffle=False)
 
 COMPRESSORS['blosc']['compress'] = _compress_blosc
