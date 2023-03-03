@@ -23,7 +23,7 @@ COMPRESSORS = dict(
         compress=zstd.compress,
         decompress=zstd.decompress),
     blosc=dict(
-        compress=partial(blosc.compress, shuffle=False),
+        compress=None,  # add special function to prevent overflow at bottom module
         decompress=blosc.decompress),
     lz4=dict(compress=lz4.compress, decompress=lz4.decompress)
 )
@@ -87,3 +87,10 @@ def _save_file(f, data, compressor='zstd'):
     d_comp = COMPRESSORS[compressor]['compress'](data)
     f.write(d_comp)
     return len(d_comp)
+
+def _compress_blosc(data):
+    if data.nbytes >= 2e9:
+        raise ValueError('Blosc\'s input buffer cannot exceed 2 GB')
+    return blosc.compress(data, shuffle=False)
+
+COMPRESSORS['blosc']['compress'] = _compress_blosc
