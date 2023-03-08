@@ -287,3 +287,13 @@ class TestRechunking(TestCase):
         st.set_context_config(dict(forbid_creation_of='*'))
         st.get_array(run_id, self.target)
         target_path.cleanup()
+
+
+class TestBlosc(TestCase):
+    """Blosc does not handle 2GB chunks, assert it fails with an useful error"""
+    def test_blosc_fails(self):
+        chunk = np.zeros(int(3e8), np.int64)
+        assert chunk.nbytes > 2e9, "Test only works for >2GB chunks"
+        assert chunk.nbytes < 3e9, "Don't go crazy here"
+        with self.assertRaises(ValueError):
+            strax.io.COMPRESSORS['blosc']['compress'](chunk)
