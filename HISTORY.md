@@ -1,3 +1,12 @@
+1.4.2 / 2023-03-08
+---------------------
+* Patch md access in the rechunker by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/711
+* Raise compression errors if unable by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/714
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.1...v1.4.2
+
+
 1.4.1 / 2023-02-13
 ---------------------
 * Rechunker using Mailbox by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/710
