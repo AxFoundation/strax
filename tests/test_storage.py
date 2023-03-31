@@ -242,7 +242,17 @@ class TestRechunking(TestCase):
                 self._rechunking(compressor)
                 self.tearDown()
 
-    def _rechunking(self, compressor):
+    def test_rechunk_parallelization(self):
+        for parallel in [True, 'process', False]:
+            with self.subTest(parallel = parallel):
+                self.setUp()
+                self._rechunking(compressor = 'blosc', parallel = parallel)
+                self.tearDown()
+
+    def test_replace(self):
+        self._rechunking(compressor = 'blosc', replace=True)
+
+    def _rechunking(self, compressor, parallel=False, replace=False):
         """
         Test that we can use the strax.files.rechunking function to
         rechunk data outside the context
@@ -261,10 +271,13 @@ class TestRechunking(TestCase):
         assert original_n_files > 3 # At least two files + metadata
         _, backend_key = source_sf.find(st.key_for(run_id, self.target))
         strax.rechunker(source_directory=backend_key,
-                        dest_directory=target_path.name,
+                        dest_directory=target_path.name if not replace else None,
                         replace=True,
                         compressor=compressor,
                         target_size_mb=strax.default_chunk_size_mb * 2,
+                        parallel=parallel,
+                        max_workers=4,
+                        _timeout=5,
                         )
         assert st.is_stored(run_id, self.target)
         # Should be empty, we just replaced the source
@@ -274,3 +287,13 @@ class TestRechunking(TestCase):
         st.set_context_config(dict(forbid_creation_of='*'))
         st.get_array(run_id, self.target)
         target_path.cleanup()
+
+
+class TestBlosc(TestCase):
+    """Blosc does not handle 2GB chunks, assert it fails with an useful error"""
+    def test_blosc_fails(self):
+        chunk = np.zeros(int(3e8), np.int64)
+        assert chunk.nbytes > 2e9, "Test only works for >2GB chunks"
+        assert chunk.nbytes < 3e9, "Don't go crazy here"
+        with self.assertRaises(ValueError):
+            strax.io.COMPRESSORS['blosc']['compress'](chunk)
