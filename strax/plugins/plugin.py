@@ -580,6 +580,7 @@ class Plugin:
             if save_when <= strax.SaveWhen.EXPLICIT:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
+                    start = min([v.start for v in kwargs.values()])
                     end = max([v.end for v in kwargs.values()])  # Don't delete
                     message = (
                         f"New feature, we are ignoring inconsistent the "
