@@ -1,3 +1,12 @@
+1.4.3 / 2023-04-22
+---------------------
+* Select max gaps from positive gaps by @dachengx in https://github.com/AxFoundation/strax/pull/708
+
+New Contributors
+* @dachengx made their first contribution in https://github.com/AxFoundation/strax/pull/708
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.2...v1.4.3
+
 1.4.2 / 2023-03-08
 ---------------------
 * Patch md access in the rechunker by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/711
