@@ -431,7 +431,8 @@ class Mailbox:
                         try:
                             res = msg.result(timeout=self.timeout)
                         except TimeoutError:
-                            raise TimeoutError(f"Future {msg_number} timed out!")
+                            raise TimeoutError(
+                                f"Future {msg_number} timed out!")
                         self.log.debug(f"Future {msg_number} completed")
                     else:
                         res = msg.result()
