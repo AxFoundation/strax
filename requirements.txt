@@ -3,9 +3,9 @@ dill
 fsspec
 immutabledict
 lz4
-numba>=0.43.1
+numba==0.55.2
 numexpr
-numpy>=1.18.5
+numpy==1.22.4
 packaging
 pandas
 pdmongo
