@@ -1,4 +1,4 @@
-# pylint: disable=redefined-builtin
+# pylint: disable=W0622
 from concurrent.futures import Future, TimeoutError
 import heapq
 import sys
