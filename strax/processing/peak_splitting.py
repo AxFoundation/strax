@@ -162,8 +162,6 @@ class PeakSplitter:
                 r['max_gap'] = -1
                 r['max_diff'] = -1
                 r['min_diff'] = -1
-                r['max_hit_height'] = np.nan
-                r['min_hit_height'] = np.nan
                 if r['length'] <= 0:
                     print(p['data'])
                     print(prev_split_i, split_i)

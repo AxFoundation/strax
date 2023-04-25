@@ -172,10 +172,6 @@ def hitlet_with_data_dtype(n_samples=2):
                            'max_diff'), np.int32),
                          (('Dummy min_diff required for splitting',
                            'min_diff'), np.int32),
-                         (('Dummy max_hit_height required for splitting',
-                           'max_hit_height'), np.float32),
-                         (('Dummy min_hit_height required for splitting',
-                           'min_hit_height'), np.float32),
                          (('Maximum interior goodness of split',
                            'max_goodness_of_split'), np.float32),
                          ]
@@ -220,10 +216,6 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=T
           'max_diff'), np.int32),
         (('Smallest time difference between apexes of hits inside peak [ns]',
           'min_diff'), np.int32),
-        (('Largest height of hits inside peak [ADC counts]',
-          'max_hit_height'), np.float32),
-        (('Smallest height of hits inside peak [ADC counts]',
-          'min_hit_height'), np.float32),
     ]
     if digitize_top:
         top_field = (('Waveform data in PE/sample (not PE/ns!), top array',
