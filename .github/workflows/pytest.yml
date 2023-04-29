@@ -74,9 +74,8 @@ jobs:
         if: matrix.test == 'coveralls'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # run: |
-        #   coverage report
-        #   coveralls --service=github
-        uses: coverallsapp/github-action@v1
+        run: |
+          coverage report
+          coveralls --service=github
       - name: goodbye
         run: echo goodbye
