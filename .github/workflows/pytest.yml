@@ -71,6 +71,7 @@ jobs:
           coverage run --append --source=strax -m pytest $straxen_dir
           coverage report
       - name: Coveralls upload
+        uses: coverallsapp/github-action@v2
         if: matrix.test == 'coveralls'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
