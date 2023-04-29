@@ -71,12 +71,12 @@ jobs:
           coverage run --append --source=strax -m pytest $straxen_dir
           coverage report
       - name: Coveralls upload
-        uses: coverallsapp/github-action@v1
         if: matrix.test == 'coveralls'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          coverage report
-          coveralls --service=github
+        # run: |
+        #   coverage report
+        #   coveralls --service=github
+        uses: coverallsapp/github-action@v1
       - name: goodbye
         run: echo goodbye
