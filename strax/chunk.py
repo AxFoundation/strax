@@ -328,7 +328,7 @@ class CannotSplit(Exception):
 
 
 @export
-# @numba.njit(cache=True, nogil=True)
+@numba.njit(cache=True, nogil=True)
 def split_array(data, t, allow_early_split=False):
     """Return (data left of t, data right of t, t), or raise CannotSplit
     if that would split a data element in two.
