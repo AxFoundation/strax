@@ -16,15 +16,15 @@ def sort_by_time(x):
     """
     if len(x) == 0:
         return x
-    
+
     if 'channel' in x.dtype.names:
         min_channel = x['channel'].min()
-        channel = x['channel']
+        channel = x['channel'].copy()
         if min_channel < 0:
             channel -= min_channel
     else:
         channel = np.ones(len(x))
-        
+
     max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max()+1)
     # Subtract 10 to have some extra margin, just in case.
     # Use absolute to account for peaks which are channel -1.
