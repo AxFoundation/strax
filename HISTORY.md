@@ -1,3 +1,12 @@
+1.5.0 / 2023-05-02
+---------------------
+* Fix ipython version by @dachengx in https://github.com/AxFoundation/strax/pull/719
+* Do not change channel when sort_by_time by @dachengx in https://github.com/AxFoundation/strax/pull/718
+* Save hits level information(hits time difference) in peaks by @dachengx in https://github.com/AxFoundation/strax/pull/716
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.3...v1.5.0
+
+
 1.4.3 / 2023-04-22
 ---------------------
 * Select max gaps from positive gaps by @dachengx in https://github.com/AxFoundation/strax/pull/708
@@ -7,11 +16,11 @@ New Contributors
 
 **Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.2...v1.4.3
 
+
 1.4.2 / 2023-03-08
 ---------------------
 * Patch md access in the rechunker by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/711
 * Raise compression errors if unable by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/714
-
 
 **Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.1...v1.4.2
 
@@ -20,8 +29,8 @@ New Contributors
 ---------------------
 * Rechunker using Mailbox by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/710
 
-
 **Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.0...v1.4.1
+
 
 1.4.0 / 2022-10-17
 ---------------------
@@ -34,6 +43,7 @@ New Contributors
  - @DCichon made their first contribution in https://github.com/AxFoundation/strax/pull/565
 
 **Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.3.0...v1.4.0
+
 
 1.3.0 / 2022-09-09
 ---------------------
