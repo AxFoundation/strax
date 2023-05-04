@@ -543,7 +543,7 @@ def multi_run(exec_function, run_ids, *args,
                 if throw_away_result:
                     continue
                 result = f.result()
- 
+
                 # Append the run id column
                 if add_run_id_field:
                     ids = np.array([_run_id] * len(result),
