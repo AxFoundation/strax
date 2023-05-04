@@ -49,7 +49,7 @@ def _sort_by_time_and_channel(x, channel, max_channel_plus_one):
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
     sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + channel
-    sort_i = np.argsort(sort_key)
+    sort_i = np.argsort(sort_key, kind='mergesort')
     return x[sort_i]
 
 
