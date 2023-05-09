@@ -83,11 +83,12 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
-        # Use the tight coincidence of the peak with the highest amplitude
+        # Use other properties of the peak with the highest amplitude
         i_max_subpeak = old_peaks['data'].max(axis=1).argmax()
-        new_p['tight_coincidence'] = old_peaks['tight_coincidence'][i_max_subpeak]
-        
-        # If the endtime was in the peaks we have to recompute it here 
+        for p in 'tight_coincidence max_gap max_goodness_of_split max_diff min_diff'.split():
+            new_p[p] = old_peaks[p][i_max_subpeak]
+
+        # If the endtime was in the peaks we have to recompute it here
         # because otherwise it will stay set to zero due to the buffer
         if 'endtime' in new_p.dtype.names:
             new_p['endtime'] = strax.endtime(last_peak)
@@ -150,7 +151,7 @@ def _replace_merged(result, orig, merge, skip_windows):
     assert result_i == len(result)
     assert window_i == len(skip_windows)
 
-    
+
 @export
 @numba.njit(cache=True, nogil=True)
 def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
