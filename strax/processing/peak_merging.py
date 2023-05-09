@@ -44,19 +44,15 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         # this saves much time)
         buffer[:min(
             int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
+                (last_peak['time']- first_peak['time']
+                 + (last_peak['length'] * old_peaks['dt'].max())) / common_dt
             ),
             len(buffer)
         )] = 0
         buffer_top[:min(
             int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
+                (last_peak['time'] - first_peak['time']
+                 + (last_peak['length'] * old_peaks['dt'].max())) / common_dt
             ),
             len(buffer_top)
         )] = 0
@@ -83,10 +79,14 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
-        # Use other properties of the peak with the highest amplitude
+        # Use tight_coincidence of the peak with the highest amplitude
         i_max_subpeak = old_peaks['data'].max(axis=1).argmax()
-        for p in 'tight_coincidence max_gap max_goodness_of_split max_diff min_diff'.split():
-            new_p[p] = old_peaks[p][i_max_subpeak]
+        new_p['tight_coincidence'] = old_peaks['tight_coincidence'][i_max_subpeak]
+
+        # Too lazy to compute these
+        for p in 'max_gap max_diff min_diff'.split():
+            new_p[p] = -1
+        new_p['max_goodness_of_split'] = np.nan
 
         # If the endtime was in the peaks we have to recompute it here
         # because otherwise it will stay set to zero due to the buffer
