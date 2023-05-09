@@ -5,4 +5,5 @@ nbsphinx
 recommonmark
 graphviz
 m2r
-mistune==0.8.4 
+mistune==0.8.4
+urllib3==1.26.15
