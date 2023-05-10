@@ -123,8 +123,6 @@ def hitlet_dtype():
           'amplitude'), np.float32),
         (('Position of the Amplitude in ns (minus "time")',
           'time_amplitude'), np.int16),
-        (('Hit entropy',
-          'entropy'), np.float32),
         (('Width (in ns) of the central 50% area of the hitlet',
           'range_50p_area'), np.float32),
         (('Width (in ns) of the central 80% area of the hitlet',
@@ -133,22 +131,7 @@ def hitlet_dtype():
           'left_area'), np.float32),
         (('Position of the 10% area decile [ns]',
           'low_left_area'), np.float32),
-        (('Width (in ns) of the highest density region covering a 50% area of the hitlet',
-          'range_hdr_50p_area'), np.float32),
-        (('Width (in ns) of the highest density region covering a 80% area of the hitlet',
-          'range_hdr_80p_area'), np.float32),
-        (('Left edge of the 50% highest density region  [ns]',
-          'left_hdr'), np.float32),
-        (('Left edge of the 80% highest density region  [ns]',
-          'low_left_hdr'), np.float32),
-        (('FWHM of the PMT pulse [ns]',
-          'fwhm'), np.float32),
-        (('Left edge of the FWHM [ns] (minus "time")',
-          'left'), np.float32),
-        (('FWTM of the PMT pulse [ns]', 'fwtm'),
-         np.float32),
-        (('Left edge of the FWTM [ns] (minus "time")',
-          'low_left'), np.float32),]
+    ]
     return dtype
 
 

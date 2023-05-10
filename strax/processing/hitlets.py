@@ -296,19 +296,6 @@ def hitlet_properties(hitlets):
         h['amplitude'] = height
         h['time_amplitude'] = amp_time
 
-        # Computing FWHM:
-        left_edge, right_edge = get_fwxm(h, 0.5)
-        width = right_edge - left_edge
-
-        # Computing FWTM:
-        left_edge_low, right_edge = get_fwxm(h, 0.1)
-        width_low = right_edge - left_edge_low
-
-        h['fwhm'] = width
-        h['left'] = left_edge
-        h['low_left'] = left_edge_low
-        h['fwtm'] = width_low
-
         # Compute area deciles & width:
         if not h['area'] == 0:
             # Due to noise total area can sum up to zero
@@ -321,18 +308,6 @@ def hitlet_properties(hitlets):
             h['low_left_area'] = res[0]
             h['range_50p_area'] = res[2]-res[1]
             h['range_80p_area'] = res[3]-res[0]
-            
-        # Compute width based on HDR:
-        resh = highest_density_region_width(data, 
-                                            fractions_desired=np.array([0.5, 0.8]),
-                                            dt=h['dt'],
-                                            fractionl_edges=True,
-                                            )
-
-        h['left_hdr'] = resh[0,0]
-        h['low_left_hdr'] = resh[1,0]
-        h['range_hdr_50p_area'] = resh[0,1]-resh[0,0]
-        h['range_hdr_80p_area'] = resh[1,1]-resh[1,0]
 
 
 @export
