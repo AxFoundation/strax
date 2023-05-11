@@ -165,6 +165,43 @@ def store_downsampled_waveform(p, wv_buffer, store_in_data_top=False,
             p['data_top'][:p['length']] = wv_buffer_top[:p['length']]
         p['data'][:p['length']] = wv_buffer[:p['length']]
 
+        
+@export          
+def simple_summed_waveform(records, containers, to_pe):
+    """Computes simple (downsampled) summed waveform based on raw data 
+    touching a certain container.
+    
+    :param container: Things for which summed waveform should be 
+        computed. Must contain data field of desired length.
+    :param records: Record infromation which should be used to compute 
+        summed waveform.
+        
+    Note: To keep this function simple the floating part of the baseline 
+        is not added if the data field in records uses integers instead 
+        of floats. This will lead to a biased representation of the 
+        summed waveform!
+    """
+    
+    touching_windows = strax.touching_windows(records, containers)
+    _simple_summed_waveform(records, containers, touching_windows, to_pe)
+    
+@numba.njit
+def _simple_summed_waveform(records, containers, touching_windows, to_pe):   
+    summed_wf_buffer = np.zeros(2*containers['length'].max(), np.float32)
+    for (tw_s, tw_e), container in zip(touching_windows, containers):
+        records_in_wf = records[tw_s:tw_e]
+
+        for r in records_in_wf:
+            (r_start, r_end), (c_start, c_end) = strax.overlap_indices(
+                r['time']//r['dt'], r['length'], 
+                container['time']//container['dt'], container['length']
+            )
+
+            summed_wf_buffer[c_start:c_end] += (r['data'][r_start:r_end]) * to_pe[r['channel']]
+
+        strax.store_downsampled_waveform(container, summed_wf_buffer)
+        summed_wf_buffer[:] = 0
+        
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
