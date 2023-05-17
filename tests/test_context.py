@@ -439,10 +439,16 @@ class TestContext(unittest.TestCase):
         st3 = st.new_context(register=DevelopRecords)
         assert key.lineage != st3.key_for(run_id, 'records').lineage
 
-
     @staticmethod
     def get_dummy_peaks_dependency():
         class DummyDependsOnPeaks(strax.CutPlugin):
             depends_on = 'peaks'
             provides = 'cut_peaks'
         return DummyDependsOnPeaks
+
+    def test_compare_metadata(self):
+        st = self.get_context(True)
+        st.register(Records)
+        old_metadata = st.get_metadata(run_id, 'records')
+        old_metadata.pop('strax_version')
+        st.compare_metadata(run_id, 'records', old_metadata)

@@ -5,8 +5,11 @@ import fnmatch
 from functools import partial
 import typing as ty
 import time
+import json
 import numpy as np
 import pandas as pd
+import click
+import deepdiff
 import strax
 import inspect
 import types
@@ -1664,34 +1667,33 @@ class Context:
 
     get_metadata = get_meta
 
-    def compare_metadata(self, run_id, target, compared_meta):
+    def compare_metadata(self, run_id, target, old_metadata):
         """
         Compare the metadata between two strax data
 
         :param run_id: run id to get
         :param target: data type to get
-        :param compared_meta: path to metadata to compare, or a dictionary, or a tuple with
-            another run_id,target to compare against the metadata of the first id-target pair
+        :param old_metadata: path to metadata to compare, or a dictionary, or a tuple with
+            another run_id, target to compare against the metadata of the first id-target pair
         """
-        import click, deepdiff, json
         color_values = lambda oldval, newval: (
             click.style(oldval, fg='red', bold=True), click.style(newval, fg='green', bold=True))
         underline = lambda text, bold=True: click.style(text, bold=bold, underline=True)
 
-        # metadata for the given runid + target; fetch from context
-        metadata_current = self.get_metadata(run_id, target)
-        # metadata to compare
-        if isinstance(compared_meta, str):
-            with open(compared_meta) as json_file:
-                metadata_compared = json.load(json_file)
-        elif isinstance(compared_meta, dict):
-            metadata_compared = compared_meta
-        elif isinstance(compared_meta, (tuple, list)):
-            metadata_compared = self.get_metadata(compared_meta[0], compared_meta[1])
+        # new metadata for the given runid + target; fetch from context
+        new_metadata = self.get_metadata(run_id, target)
+        # old metadata to compare
+        if isinstance(old_metadata, str):
+            with open(old_metadata) as json_file:
+                old_metadata = json.load(json_file)
+        elif isinstance(old_metadata, dict):
+            old_metadata = old_metadata
+        elif isinstance(old_metadata, (tuple, list)):
+            old_metadata = self.get_metadata(old_metadata[0], old_metadata[1])
         else:
-            raise ValueError(f"Expected compared_meta as `str` or `dict` got {type(compared_meta)}")
+            raise ValueError(f"Expected old_metadata as `str` or `dict` got {type(old_metadata)}")
 
-        differences = deepdiff.DeepDiff(metadata_current, metadata_compared)
+        differences = deepdiff.DeepDiff(old_metadata, new_metadata)
         for key, value in differences.items():
             if key in ['values_changed', 'iterable_item_added', 'iterable_item_removed']:
                 print(underline(f"\n> {key}"))
