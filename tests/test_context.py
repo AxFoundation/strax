@@ -449,6 +449,7 @@ class TestContext(unittest.TestCase):
     def test_compare_metadata(self):
         st = self.get_context(True)
         st.register(Records)
+        st.make(run_id, 'records')
         old_metadata = st.get_metadata(run_id, 'records')
         old_metadata.pop('strax_version')
         st.compare_metadata(run_id, 'records', old_metadata)
