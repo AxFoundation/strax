@@ -176,6 +176,7 @@ def split_by_containment(things, containers):
         empty_list = empty_list[:0]
         return empty_list
 
+    _check_sorted(things, containers)
     return _split_by_containment(things, containers)
 
 
@@ -331,6 +332,7 @@ def touching_windows(things, containers, window=0):
          (i.e. container endtime equals the thing starttime, since strax
           endtimes are exclusive)
     """
+    _check_sorted(things, containers)
     return _touching_windows(
         things['time'], strax.endtime(things),
         containers['time'], strax.endtime(containers),
@@ -364,3 +366,14 @@ def _touching_windows(thing_start, thing_end,
         result[i] = left_i, right_i
 
     return result
+
+def _check_sorted(things, containers):
+    """
+    Check whether things and containers are sorted
+    :param things: Sorted array of interval-like data
+    :param containers: Sorted array of interval-like data
+    """
+    for array, name in zip([things, containers], ['things', 'containers']):
+        assert np.all(np.diff(array['time']) >= 0), f'{name} should be sorted'
+        assert np.all(array['endtime'] - array['time'] >= 0), f'{name} should'\
+            + ' have non-negative length'
