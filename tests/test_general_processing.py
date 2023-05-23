@@ -1,5 +1,7 @@
 from hypothesis.extra import numpy as hyp_numpy
 import hypothesis.strategies
+
+import unittest
 import strax.testutils
 
 import numpy as np
