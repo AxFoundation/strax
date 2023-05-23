@@ -346,7 +346,7 @@ class Test_abs_time_to_prev_next_interval(unittest.TestCase):
 
         events['time'] = [5, 10]
         events['endtime'] = [15, 20]
-        self.assertRaises(AssertionError, abs_time_to_prev_next_interval, events, vetos)
+        self.assertRaises(AssertionError, strax.abs_time_to_prev_next_interval, events, vetos)
 
         
     def test_empty_inputs(self):
@@ -355,7 +355,7 @@ class Test_abs_time_to_prev_next_interval(unittest.TestCase):
 
         events['time'] = 1
         events['endtime'] = 2
-        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+        res_prev, res_next = strax.abs_time_to_prev_next_interval(events, vetos)
         assert res_prev == res_next, f'{res_prev}, {res_next}'
         assert np.all(res_prev == -1)
 
@@ -364,14 +364,14 @@ class Test_abs_time_to_prev_next_interval(unittest.TestCase):
 
         vetos['time'] = 1
         vetos['endtime'] = 2
-        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+        res_prev, res_next = strax.abs_time_to_prev_next_interval(events, vetos)
 
         _results_are_empty = (len(res_prev) == 0) and (len(res_next) == 0) 
         assert _results_are_empty
 
         events = np.zeros(0, strax.time_fields)
         vetos = np.zeros(0, strax.time_fields)
-        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+        res_prev, res_next = strax.abs_time_to_prev_next_interval(events, vetos)
 
     
     def test_with_dt_fields(self):
@@ -392,7 +392,7 @@ class Test_abs_time_to_prev_next_interval(unittest.TestCase):
     @hypothesis.settings(deadline=None)
     def test_correct_time_delays(self, things, intervals):
         _things, _intervals = self._make_correct_things_and_intervals(things, intervals)
-        res_prev, res_next = abs_time_to_prev_next_interval(_things, _intervals)
+        res_prev, res_next = strax.abs_time_to_prev_next_interval(_things, _intervals)
         
         # Compare for each event:
         for thing_i, e in enumerate(_things):
