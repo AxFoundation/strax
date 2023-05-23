@@ -306,7 +306,7 @@ def define_run(self: strax.Context,
     if isinstance(data, (pd.DataFrame, np.ndarray)):
         if isinstance(data, np.ndarray):
             data = pd.DataFrame.from_records(data)
-      
+
         # strax.endtime does not work with DataFrames due to numba
         if 'endtime' in data.columns:
             end = data['endtime']

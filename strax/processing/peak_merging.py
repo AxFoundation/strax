@@ -44,19 +44,15 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
         # this saves much time)
         buffer[:min(
             int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
+                (last_peak['time']- first_peak['time']
+                 + (last_peak['length'] * old_peaks['dt'].max())) / common_dt
             ),
             len(buffer)
         )] = 0
         buffer_top[:min(
             int(
-                (
-                        last_peak['time']
-                        + (last_peak['length'] * old_peaks['dt'].max())
-                        - first_peak['time']) / common_dt
+                (last_peak['time'] - first_peak['time']
+                 + (last_peak['length'] * old_peaks['dt'].max())) / common_dt
             ),
             len(buffer_top)
         )] = 0
@@ -83,11 +79,16 @@ def merge_peaks(peaks, start_merge_at, end_merge_at,
 
         new_p['n_saturated_channels'] = new_p['saturated_channel'].sum()
 
-        # Use the tight coincidence of the peak with the highest amplitude
+        # Use tight_coincidence of the peak with the highest amplitude
         i_max_subpeak = old_peaks['data'].max(axis=1).argmax()
         new_p['tight_coincidence'] = old_peaks['tight_coincidence'][i_max_subpeak]
-        
-        # If the endtime was in the peaks we have to recompute it here 
+
+        # Too lazy to compute these
+        for p in 'max_gap max_diff min_diff'.split():
+            new_p[p] = -1
+        new_p['max_goodness_of_split'] = np.nan
+
+        # If the endtime was in the peaks we have to recompute it here
         # because otherwise it will stay set to zero due to the buffer
         if 'endtime' in new_p.dtype.names:
             new_p['endtime'] = strax.endtime(last_peak)
@@ -150,7 +151,7 @@ def _replace_merged(result, orig, merge, skip_windows):
     assert result_i == len(result)
     assert window_i == len(skip_windows)
 
-    
+
 @export
 @numba.njit(cache=True, nogil=True)
 def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):

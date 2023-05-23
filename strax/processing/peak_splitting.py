@@ -158,7 +158,10 @@ class PeakSplitter:
                 # is computed
                 r['dt'] = orig_dt
                 r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
-                r['max_gap'] = -1  # Too lazy to compute this
+                # Too lazy to compute these
+                r['max_gap'] = -1
+                r['max_diff'] = -1
+                r['min_diff'] = -1
                 if r['length'] <= 0:
                     print(p['data'])
                     print(prev_split_i, split_i)

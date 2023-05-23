@@ -39,7 +39,7 @@ jobs:
       - name: Install requirements
         run: pip install -r extra_requirements/requirements-tests.txt
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
+        uses: supercharge/mongodb-github-action@1.9.0
         with:
           mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest

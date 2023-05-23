@@ -55,7 +55,7 @@ def find_peaks(hits, adc_to_pe,
 
         if in_peak:
             # This hit continues an existing peak
-            p['max_gap'] = max(p['max_gap'], t0 - peak_endtime)
+            p['max_gap'] = max(p['max_gap'], abs(t0 - peak_endtime))
 
         else:
             # This hit starts a new peak candidate

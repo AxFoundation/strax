@@ -1,2 +1,4 @@
 # File for the requirements of strax with the automated tests
 git+https://github.com/XENONnT/ax_env
+deepdiff==6.3.0
+ipython==8.12.1

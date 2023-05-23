@@ -166,8 +166,12 @@ def hitlet_with_data_dtype(n_samples=2):
     dtype = hitlet_dtype()
     additional_fields = [(('Hitlet data in PE/sample with ZLE (only the first length samples are filled)', 'data'),
                            np.float32, n_samples),
-                         (('Dummy field required for splitting',
+                         (('Dummy max_gap required for splitting',
                            'max_gap'), np.int32),
+                         (('Dummy max_diff required for splitting',
+                           'max_diff'), np.int32),
+                         (('Dummy min_diff required for splitting',
+                           'min_diff'), np.int32),
                          (('Maximum interior goodness of split',
                            'max_goodness_of_split'), np.float32),
                          ]
@@ -175,14 +179,14 @@ def hitlet_with_data_dtype(n_samples=2):
     return dtype + additional_fields
 
 
-def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=True):
+def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=True, hits_timing=True):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
     """
     if n_channels == 1:
         raise ValueError("Must have more than one channel")
         # Otherwise array changes shape?? badness ensues
-    dtype =  peak_interval_dtype + [
+    dtype = peak_interval_dtype + [
         # For peaklets this is likely to be overwritten:
         (('Classification of the peak(let)',
           'type'), np.int8),
@@ -209,10 +213,17 @@ def peak_dtype(n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=T
         (('Maximum interior goodness of split',
           'max_goodness_of_split'), np.float32),
     ]
+    if hits_timing:
+        dtype += [
+            (('Largest time difference between apexes of hits inside peak [ns]',
+              'max_diff'), np.int32),
+            (('Smallest time difference between apexes of hits inside peak [ns]',
+              'min_diff'), np.int32),
+        ]
     if digitize_top:
         top_field = (('Waveform data in PE/sample (not PE/ns!), top array',
                       'data_top'), np.float32, n_sum_wv_samples)
-        dtype.insert(5, top_field)
+        dtype.insert(9, top_field)
     return dtype
 
 

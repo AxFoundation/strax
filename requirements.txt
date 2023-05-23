@@ -1,4 +1,6 @@
 blosc
+click
+deepdiff
 dill
 fsspec
 immutabledict
