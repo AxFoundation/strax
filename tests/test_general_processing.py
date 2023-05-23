@@ -334,3 +334,106 @@ def _test_sort_by_time_peaks(time):
     res1 = strax.sort_by_time(dummy_array)
     res2 = np.sort(dummy_array, order='time')
     assert np.all(res1 == res2)
+
+    
+class Test_abs_time_to_prev_next_interval(unittest.TestCase):
+
+    def test_overlapping_raises_error(self):
+        events = np.zeros(2, strax.time_fields)
+        vetos = np.zeros(1, strax.time_fields)
+
+        events['time'] = [5, 10]
+        events['endtime'] = [15, 20]
+        self.assertRaises(AssertionError, abs_time_to_prev_next_interval, events, vetos)
+
+        
+    def test_empty_inputs(self):
+        events = np.zeros(1, strax.time_fields)
+        vetos = np.zeros(0, strax.time_fields)
+
+        events['time'] = 1
+        events['endtime'] = 2
+        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+        assert res_prev == res_next, f'{res_prev}, {res_next}'
+        assert np.all(res_prev == -1)
+
+        events = np.zeros(0, strax.time_fields)
+        vetos = np.zeros(1, strax.time_fields)
+
+        vetos['time'] = 1
+        vetos['endtime'] = 2
+        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+
+        _results_are_empty = (len(res_prev) == 0) and (len(res_next) == 0) 
+        assert _results_are_empty
+
+        events = np.zeros(0, strax.time_fields)
+        vetos = np.zeros(0, strax.time_fields)
+        res_prev, res_next = abs_time_to_prev_next_interval(events, vetos)
+
+    
+    def test_with_dt_fields(self):
+        pass
+    
+    @hypothesis.given(things=
+                      hyp_numpy.arrays(np.int64,
+                    hypothesis.strategies.integers(1, 10),
+                    elements=hypothesis.strategies.integers(0, 1000),
+                    unique=False),
+        intervals=
+                      hyp_numpy.arrays(np.int64,
+                       hypothesis.strategies.integers(1, 100),
+                       elements=hypothesis.strategies.integers(0, 100),
+                       unique=True),
+        )
+    
+    @hypothesis.settings(deadline=None)
+    def test_correct_time_delays(self, things, intervals):
+        _things, _intervals = self._make_correct_things_and_intervals(things, intervals)
+        res_prev, res_next = abs_time_to_prev_next_interval(_things, _intervals)
+        
+        # Compare for each event:
+        for thing_i, e in enumerate(_things):
+            dt_prev = e['time'] - _intervals['endtime'] 
+            dt_prev[dt_prev < 0] = 99999
+            dt_prev = np.min(dt_prev)
+            
+            msg = (f'Found {res_prev[thing_i]}, but expected {dt_prev}'
+            f' for thing number {thing_i} of things: {_things} and intervals: {_intervals}')
+            if res_prev[thing_i] != -1:
+                assert dt_prev == res_prev[thing_i], msg
+            else:
+                assert dt_prev == 99999, msg
+            
+            dt_next = _intervals['time']  - e['endtime'] 
+            dt_next[dt_next < 0] = 99999
+            dt_next = np.min(dt_next)
+            
+            msg = (f'Found {res_next[thing_i]}, but expected {dt_next}'
+            f' for thing number {thing_i} of things: {_things} and intervals: {_intervals}')
+            if res_next[thing_i] != -1:
+                assert dt_next == res_next[thing_i], msg
+            else:
+                assert dt_next == 99999, msg
+                
+    def _make_correct_things_and_intervals(self, things, intervals):
+        _things = np.zeros(len(things), strax.time_fields)
+        _things['time'] = things
+        _things['endtime'] = things + 100
+        
+        _intervals = np.zeros(len(intervals), strax.time_fields)
+        _intervals['time'] = intervals
+        _intervals['endtime'] = intervals + 10
+        
+        _things = strax.sort_by_time(_things)
+        _intervals = strax.sort_by_time(_intervals)
+        
+        # Cut down overlapping _things and remove empty intervals to not 
+        # trigger overlapping error:
+        dt = _things['endtime'][:-1] - _things['time'][1:]
+        dt[dt < 0] = 0
+        _things['endtime'][:-1] = _things['endtime'][:-1] - dt
+        _is_not_empty_interval =( _things['endtime'] - _things['time']) > 0
+        _things = _things[_is_not_empty_interval]
+        
+        return _things, _intervals    
