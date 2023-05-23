@@ -442,4 +442,3 @@ def _check_overlapping(things, containers):
     assert mask, 'things should not be overlapping'
     mask = np.all(strax.endtime(containers)[:-1] - containers['time'][1:] >= 0)
     assert mask, 'containers should not be overlapping'
-
