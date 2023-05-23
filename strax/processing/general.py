@@ -438,7 +438,7 @@ def _check_overlapping(things, containers):
     :param things: Sorted array of interval-like data
     :param containers: Sorted array of interval-like data
     """
-    mask = np.all(strax.endtime(things)[:-1] - things['time'][1:] >= 0)
+    mask = np.all(strax.endtime(things)[1:] - things['time'][:-1] >= 0)
     assert mask, 'things should not be overlapping'
-    mask = np.all(strax.endtime(containers)[:-1] - containers['time'][1:] >= 0)
+    mask = np.all(strax.endtime(containers)[1:] - containers['time'][:-1] >= 0)
     assert mask, 'containers should not be overlapping'
