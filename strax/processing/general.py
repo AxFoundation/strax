@@ -16,15 +16,15 @@ def sort_by_time(x):
     """
     if len(x) == 0:
         return x
-    
+
     if 'channel' in x.dtype.names:
         min_channel = x['channel'].min()
-        channel = x['channel']
+        channel = x['channel'].copy()
         if min_channel < 0:
             channel -= min_channel
     else:
         channel = np.ones(len(x))
-        
+
     max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max()+1)
     # Subtract 10 to have some extra margin, just in case.
     # Use absolute to account for peaks which are channel -1.
@@ -39,7 +39,7 @@ def sort_by_time(x):
     return x
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sort_by_time_and_channel(x, channel, max_channel_plus_one):
+def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind='mergesort'):
     """
     Assumes you have no more than 10k channels, and records don't span
     more than 11 days.
@@ -49,7 +49,7 @@ def _sort_by_time_and_channel(x, channel, max_channel_plus_one):
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
     sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + channel
-    sort_i = np.argsort(sort_key)
+    sort_i = np.argsort(sort_key, kind=sort_kind)
     return x[sort_i]
 
 
