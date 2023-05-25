@@ -16,7 +16,9 @@ export, __all__ = strax.exporter()
 
 
 @strax.Context.add_method
-def list_available(self, target, **kwargs) -> list:
+def list_available(self, target,
+                   runs=None,
+                   **kwargs) -> list:
     """Return sorted list of run_id's for which target is available"""
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
@@ -25,9 +27,12 @@ def list_available(self, target, **kwargs) -> list:
     if self.runs is None:
         self.scan_runs()
 
-    keys = set(self.keys_for_runs(
-        target,
-        self.runs['name'].values))
+    if runs is None:
+        runs = self.runs['name'].values
+    else:
+        runs = strax.to_str_tuple(runs)
+
+    keys = set(self.keys_for_runs(target, runs))
 
     found = set()
     for sf in self.storage:
@@ -68,6 +73,7 @@ def keys_for_runs(self,
 @strax.Context.add_method
 def scan_runs(self: strax.Context,
               check_available=tuple(),
+              if_check_available='skip',
               store_fields=tuple(),
              ) -> pd.DataFrame:
     """
@@ -77,6 +83,7 @@ def scan_runs(self: strax.Context,
     :param check_available: Check whether these data types are available
         Availability of xxx is stored as a boolean in the xxx_available
         column.
+    :param if_check_available: 'skip' (default) or 'raise', check whether to do the check
     :param store_fields: Additional fields from run doc to include
         as rows in the dataframe.
 
@@ -88,9 +95,12 @@ def scan_runs(self: strax.Context,
         + ['name', 'number', 'tags', 'mode',
            strax.RUN_DEFAULTS_KEY]
         + list(self.context_config['store_run_fields'])))
-    check_available = tuple(set(
-        list(strax.to_str_tuple(check_available))
-        + list(self.context_config['check_available'])))
+    if if_check_available == 'raise':
+        check_available = tuple(set(
+            list(strax.to_str_tuple(check_available))
+            + list(self.context_config['check_available'])))
+    elif if_check_available == 'skip':
+        check_available = tuple()
 
     for target in check_available:
         save_when = self.get_save_when(target)
@@ -137,22 +147,22 @@ def scan_runs(self: strax.Context,
                 doc.setdefault('livetime', doc['end'] - doc['start'])
 
             if _is_superrun:
-                # In contrast to regular run-docs, 
-                # superruns are timezone aware. So strip off timezone 
+                # In contrast to regular run-docs,
+                # superruns are timezone aware. So strip off timezone
                 # again:
                 start = doc.get('start')
                 if start:
                     doc['start'] = start.replace(tzinfo=None)
-                    
+
                 start = doc.get('end')
                 if start:
                     doc['end'] = start.replace(tzinfo=None)
-                    
+
                 if type(doc.get('livetime')) == float:
                     # If we have a superrun livetime is stored as intger seconds
-                    # as timedelta is not json serializable 
+                    # as timedelta is not json serializable
                     doc['livetime'] = datetime.timedelta(seconds=doc['livetime'])
-            
+
             # Put the strax defaults stuff into a different cache
             if strax.RUN_DEFAULTS_KEY in doc:
                 self._run_defaults_cache[doc['name']] = \
@@ -204,7 +214,7 @@ def select_runs(self, run_mode=None, run_id=None,
     """
     Return pandas.DataFrame with basic info from runs
         that match selection criteria.
-   
+
     :param run_mode: Pattern to match run modes (reader.ini.name)
     :param run_id: Pattern to match a run_id or run_ids
     :param available: str or tuple of strs of data types for which data
@@ -234,7 +244,7 @@ def select_runs(self, run_mode=None, run_id=None,
         ... select blinded dsatasets that aren't bad or messy
     """
     if self.runs is None:
-        self.scan_runs(check_available=strax.to_str_tuple(available))
+        self.scan_runs(if_check_available='skip')
     dsets = self.runs.copy()
 
     if pattern_type not in ('re', 'fnmatch'):
@@ -247,7 +257,7 @@ def select_runs(self, run_mode=None, run_id=None,
 
         if requested_value is None:
             continue
-            
+
         requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
@@ -255,7 +265,7 @@ def select_runs(self, run_mode=None, run_id=None,
 
         if pattern_type == 'fnmatch':
             for i, x in enumerate(values):
-                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value]) 
+                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value])
         elif pattern_type == 're':
             for i, x in enumerate(values):
                 mask[i] = np.any([re.match(rv, x) for rv in requested_value])
@@ -266,15 +276,24 @@ def select_runs(self, run_mode=None, run_id=None,
                                   ignore_underscore,
                                   )
 
+    check_available = tuple(set(
+        list(strax.to_str_tuple(available))
+        + list(self.context_config['check_available'])))
+
+    for d in tqdm(check_available,
+                  desc='Checking data availability'):
+        dsets[d + '_available'] = np.in1d(
+            dsets.name.values,
+            self.list_available(target=d, runs=dsets.name.values))
+
     have_available = strax.to_str_tuple(available)
     for d in have_available:
         if not d + '_available' in dsets.columns:
             # Get extra availability info from the run db
-            d_available = np.in1d(self.runs.name.values,
-                                  self.list_available(d))
+            d_available = np.in1d(dsets.name.values,
+                                  list_available(target=d, runs=dsets.name.values))
             # Save both in the context and for this selection using
             # available = ('data_type',)
-            self.runs[d + '_available'] = d_available
             dsets[d + '_available'] = d_available
     for d in have_available:
         dsets = dsets[dsets[d + '_available']]
