@@ -19,7 +19,11 @@ export, __all__ = strax.exporter()
 def list_available(self, target,
                    runs=None,
                    **kwargs) -> list:
-    """Return sorted list of run_id's for which target is available"""
+    """Return sorted list of run_id's for which target is available
+    :param target: Data type to check
+    :param runs: Runs to check. If None, check all runs.
+    """
+
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)
@@ -73,7 +77,7 @@ def keys_for_runs(self,
 @strax.Context.add_method
 def scan_runs(self: strax.Context,
               check_available=tuple(),
-              if_check_available='skip',
+              if_check_available='raise',
               store_fields=tuple(),
              ) -> pd.DataFrame:
     """
@@ -83,7 +87,7 @@ def scan_runs(self: strax.Context,
     :param check_available: Check whether these data types are available
         Availability of xxx is stored as a boolean in the xxx_available
         column.
-    :param if_check_available: 'skip' (default) or 'raise', check whether to do the check
+    :param if_check_available: 'raise' (default) or 'skip', check whether to do the check
     :param store_fields: Additional fields from run doc to include
         as rows in the dataframe.
 
@@ -276,6 +280,7 @@ def select_runs(self, run_mode=None, run_id=None,
                                   ignore_underscore,
                                   )
 
+    # Check data availability only for selected datasets
     check_available = tuple(set(
         list(strax.to_str_tuple(available))
         + list(self.context_config['check_available'])))
