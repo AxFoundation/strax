@@ -87,7 +87,7 @@ def scan_runs(self: strax.Context,
     :param check_available: Check whether these data types are available
         Availability of xxx is stored as a boolean in the xxx_available
         column.
-    :param if_check_available: 'raise' (default) or 'skip', check whether to do the check
+    :param if_check_available: 'raise' (default) or 'skip', whether to do the check
     :param store_fields: Additional fields from run doc to include
         as rows in the dataframe.
 
@@ -105,6 +105,9 @@ def scan_runs(self: strax.Context,
             + list(self.context_config['check_available'])))
     elif if_check_available == 'skip':
         check_available = tuple()
+    else:
+        raise ValueError(
+            f"Invalid value for if_check_available: {if_check_available}")
 
     for target in check_available:
         save_when = self.get_save_when(target)
@@ -201,6 +204,8 @@ def scan_runs(self: strax.Context,
                             if x != 'name']]
     self.runs = docs
 
+    # Add available data types,
+    # this is kept for the case users directly call list_available
     for d in tqdm(check_available,
                   desc='Checking data availability'):
         self.runs[d + '_available'] = np.in1d(
@@ -214,7 +219,8 @@ def scan_runs(self: strax.Context,
 def select_runs(self, run_mode=None, run_id=None,
                 include_tags=None, exclude_tags=None,
                 available=tuple(),
-                pattern_type='fnmatch', ignore_underscore=True):
+                pattern_type='fnmatch', ignore_underscore=True,
+                force_reload=False):
     """
     Return pandas.DataFrame with basic info from runs
         that match selection criteria.
@@ -235,6 +241,8 @@ def select_runs(self, run_mode=None, run_id=None,
         full python regular expressions.
     :param ignore_underscore: Ignore the underscore at the start of tags
         (indicating some degree of officialness or automation).
+    :param force_reload: Force reloading of runs from storage.
+        Otherwise, runs are cached after the first time they are loaded in self.runs.
 
     Examples:
      - `run_selection(include_tags='blinded')`
@@ -247,14 +255,14 @@ def select_runs(self, run_mode=None, run_id=None,
                       exclude_tags=['bad', 'messy'])`
         ... select blinded dsatasets that aren't bad or messy
     """
-    if self.runs is None:
+    if self.runs is None or force_reload:
         self.scan_runs(if_check_available='skip')
     dsets = self.runs.copy()
 
     if pattern_type not in ('re', 'fnmatch'):
         raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
-    # Filter datasets by run mode and/or name
+    # Filter datasets by run mode and/or name first
     for field_name, requested_value in (
             ('name', run_id),
             ('mode', run_mode)):
@@ -291,15 +299,19 @@ def select_runs(self, run_mode=None, run_id=None,
             dsets.name.values,
             self.list_available(target=d, runs=dsets.name.values))
 
+    # This will help users call select_runs multiple times
+    # with same run mode and/or name, but different available
     have_available = strax.to_str_tuple(available)
     for d in have_available:
         if not d + '_available' in dsets.columns:
             # Get extra availability info from the run db
             d_available = np.in1d(dsets.name.values,
-                                  list_available(target=d, runs=dsets.name.values))
+                                  self.list_available(target=d, runs=dsets.name.values))
             # Save both in the context and for this selection using
             # available = ('data_type',)
             dsets[d + '_available'] = d_available
+
+    # Only return dsets available
     for d in have_available:
         dsets = dsets[dsets[d + '_available']]
 
