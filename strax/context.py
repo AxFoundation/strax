@@ -628,14 +628,16 @@ class Context:
 
     def _get_plugins(self,
                      targets: ty.Tuple[str],
-                     run_id: str) -> ty.Dict[str, strax.Plugin]:
+                     run_id: str,
+                     get_from_cache = False) -> ty.Dict[str, strax.Plugin]:
         """
         Return dictionary of plugin instances necessary to compute targets
         from scratch.
         For a plugin that produces multiple outputs, we make only a single
         instance, which is referenced under multiple keys in the output dict.
+        If get_from_cache is True, try to load the plugins from the cache.
         """
-        if self._plugins_are_cached(targets):
+        if self._plugins_are_cached(targets) and get_from_cache:
             return self.__get_plugins_from_cache(run_id)
 
         # Check all config options are taken by some registered plugin class
