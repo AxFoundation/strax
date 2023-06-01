@@ -50,7 +50,7 @@ class OverlapWindowPlugin(Plugin):
 
         # Throw away results we already sent out
         _, result = result.split(t=self.sent_until,
-                                 allow_early_split=False)
+                                 allow_early_split=True)
 
         # When does this batch of inputs end?
         ends = [c.end for c in kwargs.values()]
