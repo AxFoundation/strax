@@ -88,7 +88,7 @@ class OverlapWindowPlugin(Plugin):
                 self.log.debug(
                     f'Inconsistent start times of the cashed chunks after'
                     f' {try_counter}/{max_trials} passes.')
-            invalid_beyond -= min(_potential_invalid_beyond) - 1  # ns
+            invalid_beyond = min(_potential_invalid_beyond) - 1  # ns
         else:
             raise ValueError(f'Buffer start time inconsistency cannot be '
                              f'resolved after {max_trials} tries')
