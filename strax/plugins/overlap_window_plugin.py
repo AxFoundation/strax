@@ -59,26 +59,16 @@ class OverlapWindowPlugin(Plugin):
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
         invalid_beyond = int(end - self.get_window_size() - 1)
-        # Slightly change the invalid_beyond,
+        # Slightly change the invalid_beyond in case sometimes the result are overlapping
         # make sure that it is not sitting inside an item
         # prevent issues in result splitting later on
         prev_split = invalid_beyond
         max_trials = 10
         for try_counter in range(max_trials):
-            # temporary list to store the potential invalid_beyond
-            potential_invalid_beyond = []
-            # make sure not to split items in input
-            for data_kind, chunk in kwargs.items():
-                _flag = (chunk.data['time'] <= invalid_beyond)
-                _flag &= (strax.endtime(chunk.data) > invalid_beyond)
-                if _flag.sum() > 0:
-                    potential_invalid_beyond.append(chunk.data['time'][_flag].min())
-            # also make sure not to split items in result(output)
+            # make sure not to split items in result(output)
             _flag = (result.data['time'] <= invalid_beyond)
             _flag &= (strax.endtime(result.data) > invalid_beyond)
-            if _flag.sum() > 0:
-                potential_invalid_beyond.append(result.data['time'][_flag].min())
-            if len(potential_invalid_beyond) == 0:
+            if _flag.sum() == 0:
                 self.log.debug(
                     f'Success after {try_counter}. '
                     f'Extra time = {prev_split-invalid_beyond} ns')
@@ -87,7 +77,7 @@ class OverlapWindowPlugin(Plugin):
                 self.log.debug(
                     f'Inconsistent start times of the cashed chunks after'
                     f' {try_counter}/{max_trials} passes.')
-            invalid_beyond = min(potential_invalid_beyond) - 1  # ns
+            invalid_beyond = min(result.data['time'][_flag].min()) - 1  # ns
         else:
             raise ValueError(f'Buffer start time inconsistency cannot be '
                              f'resolved after {max_trials} tries')
