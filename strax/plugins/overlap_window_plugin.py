@@ -65,21 +65,20 @@ class OverlapWindowPlugin(Plugin):
         prev_split = invalid_beyond
         max_trials = 10
         for try_counter in range(max_trials):
-            in_flag = False
             # temporary list to store the potential invalid_beyond
-            _potential_invalid_beyond = []
+            potential_invalid_beyond = []
             # make sure not to split items in input
             for data_kind, chunk in kwargs.items():
                 _flag = (chunk.data['time'] <= invalid_beyond)
                 _flag &= (strax.endtime(chunk.data) > invalid_beyond)
-                _potential_invalid_beyond.append(chunk.data['time'][_flag].min())
-                in_flag |= _flag.any() > 0
+                if _flag.sum() > 0:
+                    potential_invalid_beyond.append(chunk.data['time'][_flag].min())
             # also make sure not to split items in result(output)
             _flag = (result.data['time'] <= invalid_beyond)
             _flag &= (strax.endtime(result.data) > invalid_beyond)
-            in_flag |= _flag.any() > 0
-            _potential_invalid_beyond.append(result.data['time'][_flag].min())
-            if not in_flag:
+            if _flag.sum() > 0:
+                potential_invalid_beyond.append(result.data['time'][_flag].min())
+            if len(potential_invalid_beyond) == 0:
                 self.log.debug(
                     f'Success after {try_counter}. '
                     f'Extra time = {prev_split-invalid_beyond} ns')
@@ -88,7 +87,7 @@ class OverlapWindowPlugin(Plugin):
                 self.log.debug(
                     f'Inconsistent start times of the cashed chunks after'
                     f' {try_counter}/{max_trials} passes.')
-            invalid_beyond = min(_potential_invalid_beyond) - 1  # ns
+            invalid_beyond = min(potential_invalid_beyond) - 1  # ns
         else:
             raise ValueError(f'Buffer start time inconsistency cannot be '
                              f'resolved after {max_trials} tries')
