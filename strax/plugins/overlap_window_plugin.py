@@ -45,13 +45,6 @@ class OverlapWindowPlugin(Plugin):
                 kwargs[data_kind] = strax.Chunk.concatenate(
                     [self.cached_input[data_kind], chunk])
 
-        # Compute new results
-        result = super().do_compute(chunk_i=chunk_i, **kwargs)
-
-        # Throw away results we already sent out
-        _, result = result.split(t=self.sent_until,
-                                 allow_early_split=True)
-
         # When does this batch of inputs end?
         ends = [c.end for c in kwargs.values()]
         if not len(set(ends)) == 1:
@@ -59,10 +52,46 @@ class OverlapWindowPlugin(Plugin):
                 f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
         end = ends[0]
 
+        # Compute new results
+        result = super().do_compute(chunk_i=chunk_i, **kwargs)
+
         # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
         invalid_beyond = int(end - self.get_window_size() - 1)
+        # Slightly change the invalid_beyond,
+        # make sure that it is not sitting inside an item
+        # prevent issues in result splitting later on
+        prev_split = invalid_beyond
+        max_trials = 100
+        for try_counter in range(max_trials):
+            in_flag = False
+            # make sure not to split items in input
+            for data_kind, chunk in kwargs.items():
+                _flag = (chunk.data['time'] <= invalid_beyond)
+                _flag &= (strax.endtime(chunk.data) > invalid_beyond)
+                in_flag |= _flag.any() > 0
+            # also make sure not to split items in result(output)
+            _flag = (result.data['time'] <= invalid_beyond)
+            _flag &= (strax.endtime(result.data) > invalid_beyond)
+            in_flag |= _flag.any() > 0
+            if not in_flag:
+                self.log.debug(
+                    f'Success after {try_counter}. '
+                    f'Extra time = {prev_split-invalid_beyond} ns')
+                break
+            else:
+                self.log.debug(
+                    f'Inconsistent start times of the cashed chunks after'
+                    f' {try_counter}/{max_trials} passes.')
+            invalid_beyond -= 1000  # ns
+        else:
+            raise ValueError(f'Buffer start time inconsistency cannot be '
+                             f'resolved after {max_trials} tries')
+
+        # Throw away results we already sent out
+        _, result = result.split(t=self.sent_until,
+                                 allow_early_split=False)
 
         # Prepare to send out valid results, cache the rest
         # Do not modify result anymore after this
