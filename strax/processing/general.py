@@ -425,7 +425,7 @@ def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
             if _current_interval_before_thing_ends:
                 continue
 
-            # Now current event is after event so store time:
+            # Now current veto is after event so store time:
             times_to_next[thing_ind] = veto_interval['time']  - current_event_endtime
             break
             
