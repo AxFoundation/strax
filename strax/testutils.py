@@ -33,7 +33,7 @@ def sorted_bounds(disjoint=False,
     # Select only cases with even-length lists
     s = s.filter(lambda x: len(x) % 2 == 0)
 
-    if disjoint:
+    if not disjoint:
         s = s.map(sorted)
 
     # Convert to list of 2-tuples
