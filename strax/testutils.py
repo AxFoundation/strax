@@ -48,7 +48,15 @@ def sorted_bounds(disjoint=False,
         s = s.filter(lambda x: x == list(set(x)))
 
     # Sort intervals and result
-    return s.map(sorted)
+    s = s.map(sorted)
+
+    if not disjoint:
+        # adjacent intervals must overlap!
+        # Remove cases without overlapping intervals
+        s = s.filter(lambda x: all([
+            a[1] > b[0] for a, b in zip(x[:-1], x[1:])]))
+
+    return s
 
 
 ##
