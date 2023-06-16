@@ -33,9 +33,12 @@ def sorted_bounds(disjoint=False,
     # Select only cases with even-length lists
     s = s.filter(lambda x: len(x) % 2 == 0)
 
+    if disjoint:
+        s = s.map(sorted)
+
     # Convert to list of 2-tuples
     s = s.map(lambda x: [tuple(q)
-                         for q in iterutils.chunked(sorted(x), size=2)])
+                         for q in iterutils.chunked(x, size=2)])
 
     # Remove cases with zero-length intervals
     s = s.filter(lambda x: all([a[0] != a[1] for a in x]))
