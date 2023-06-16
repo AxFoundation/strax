@@ -33,12 +33,13 @@ def sorted_bounds(disjoint=False,
     # Select only cases with even-length lists
     s = s.filter(lambda x: len(x) % 2 == 0)
 
-    if not disjoint:
-        s = s.map(sorted)
-
     # Convert to list of 2-tuples
-    s = s.map(lambda x: [tuple(q)
-                         for q in iterutils.chunked(x, size=2)])
+    if disjoint:
+        s = s.map(lambda x: [tuple(q)
+                            for q in iterutils.chunked(sorted(x), size=2)])
+    else:
+        s = s.map(lambda x: [tuple(sorted(q))
+                            for q in iterutils.chunked(x, size=2)])
 
     # Remove cases with zero-length intervals
     s = s.filter(lambda x: all([a[0] != a[1] for a in x]))
@@ -48,15 +49,7 @@ def sorted_bounds(disjoint=False,
         s = s.filter(lambda x: x == list(set(x)))
 
     # Sort intervals and result
-    s = s.map(sorted)
-
-    if not disjoint:
-        # adjacent intervals must overlap!
-        # Remove cases without overlapping intervals
-        s = s.filter(lambda x: all([
-            a[1] > b[0] for a, b in zip(x[:-1], x[1:])]))
-
-    return s
+    return s.map(sorted)
 
 
 ##
