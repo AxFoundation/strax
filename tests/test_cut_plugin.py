@@ -28,7 +28,7 @@ def get_some_array():
         return x
 
     # Randomly input either of full_dt_dtype or full_time_dtype
-    sorted_intervals = testutils.sorted_bounds().map(bounds_to_intervals)
+    sorted_intervals = testutils.sorted_bounds(disjoint=True).map(bounds_to_intervals)
     return sorted_intervals
 
 
