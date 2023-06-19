@@ -17,10 +17,10 @@ import strax
 # Since we use np.cumsum to get disjoint intervals, we don't want stuff
 # wrapping around to the integer boundary. Hence max_value is limited.
 def sorted_bounds(disjoint=False,
-                  max_value=100,
+                  max_value=50,
                   max_len=10,
-                  min_size=10,
-                  max_size=30,
+                  min_size=0,
+                  max_size=20,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
