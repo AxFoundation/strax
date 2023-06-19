@@ -1,5 +1,7 @@
 import os
-from functools import wraps
+import warnings
+warnings.simplefilter('always', UserWarning)
+# for these fundamental functions, we throw warnings each time they are called
 
 import strax
 import numba
@@ -126,18 +128,41 @@ def _find_break_i(data, safe_break, not_before):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
 def fully_contained_in(things, containers):
-    """Return array of len(things) with index of interval in containers
+    """
+    Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
     exists.
-    We assume all intervals are sorted by time, and b_intervals
-    nonoverlapping.
+    We assume all things and containers are sorted by time.
+    If containers are overlapping, the first container of the thing is chosen.
     """
-    _check_time_is_sorted(things['time'], '"Time" of things')
-    _check_time_is_sorted(containers['time'], '"Time" of container')
-    _check_objects_are_not_overlapping(containers, 'Containers')
+    try:
+        _check_time_is_sorted(things['time'])
+    except Exception:
+        raise ValueError('time of things should be sorted!')
+    try:
+        _check_time_is_sorted(containers['time'])
+    except Exception:
+        raise ValueError('time of containers should be sorted!')
+    try:
+        _check_objects_are_not_overlapping(containers)
+    except Exception:
+        warnings.warn(
+            'Overlapping of containers detected! '
+            'fully_contained_in function will only return '
+            'the first container of the thing.')
+    for objects, names in zip([things, containers], ['things', 'containers']):
+        try:
+            _check_objects_non_negative_length(objects)
+        except Exception:
+            raise ValueError(f'{names} should have non-negative length!')
 
+    return _fully_contained_in(things, containers)
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _fully_contained_in(things, containers):
+    """Core function of fully_contained_in"""
     result = np.ones(len(things), dtype=np.int32) * -1
     a_starts = things['time']
     b_starts = containers['time']
@@ -326,8 +351,10 @@ def touching_windows(things, containers, window=0):
     """Return array of (start, exclusive end) indices into things which extend
     to within window of the container, for each container in containers.
 
-    :param things: Sorted array of interval-like data. Time and endtime must be
-        sorted!
+    :param things: Sorted array of interval-like data. 
+        We assume all things and containers are sorted by time.
+        When endtime are not sorted, it will return indices
+        of the first and last things which are touching the container.
     :param containers: Sorted array of interval-like data. Containers are
         allowed to overlap.
     :param window: threshold distance for touching check.
@@ -337,9 +364,26 @@ def touching_windows(things, containers, window=0):
          (i.e. container endtime equals the thing starttime, since strax
           endtimes are exclusive)
     """
-    _check_time_is_sorted(things['time'], '"Time" of things')
-    _check_time_is_sorted(things['endtime'], '"Endtime" of things')
-    _check_time_is_sorted(containers['time'], '"Time" of container')
+    try:
+        _check_time_is_sorted(things['time'])
+    except Exception:
+        raise ValueError('time of things should be sorted!')
+    try:
+        _check_time_is_sorted(strax.endtime(things))
+    except Exception:
+        warnings.warn(
+            'endtime of things is not sorted! '
+            'touching_windows will return the indices of the '
+            'first and last things which are touching the container')
+    try:
+        _check_time_is_sorted(containers['time'])
+    except Exception:
+        raise ValueError('time of containers should be sorted!')
+    for objects, names in zip([things, containers], ['things', 'containers']):
+        try:
+            _check_objects_non_negative_length(objects)
+        except Exception:
+            raise ValueError(f'{names} should have non-negative length!')
 
     return _touching_windows(
         things['time'], strax.endtime(things),
@@ -361,7 +405,7 @@ def _touching_windows(thing_start, thing_end,
             # Container overlapped with previous one so we have to
             # go back to first left_i before current container, and
             # reset right_i
-            while left_i >= 0 and thing_end[left_i] >= t0 - window:
+            while left_i > 0 and thing_end[left_i] > t0 - window:
                 left_i -= 1
                 right_i = left_i
 
@@ -384,17 +428,24 @@ def _touching_windows(thing_start, thing_end,
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _check_time_is_sorted(time, object_which_needs_to_be_sorted):
+def _check_time_is_sorted(time):
     """Check if times are sorted"""
     mask = np.all((time[1:] - time[:-1]) >= 0)
-    assert mask, f'{object_which_needs_to_be_sorted} should be sorted!'
+    assert mask
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _check_objects_are_not_overlapping(objects, objects_which_should_not_overlap):
+def _check_objects_non_negative_length(objects):
+    """Checks if objects have non-negative length"""
+    mask = np.all(strax.endtime(objects) - objects['time'] >= 0)
+    assert mask
+
+
+@numba.jit(nopython=True, nogil=True, cache=True)
+def _check_objects_are_not_overlapping(objects):
     """Checks if objects overlap in time"""
     mask = np.all(objects['time'][1:] - strax.endtime(objects)[:-1] >= 0)
-    assert mask, f'{objects_which_should_not_overlap} should not be overlapping'
+    assert mask
 
 
 @export
