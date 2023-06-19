@@ -127,15 +127,17 @@ def _find_break_i(data, safe_break, not_before):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
-def fully_contained_in(things, containers, length_threshold=0, needs_check_timing=True):
+def fully_contained_in(things, containers):
     """Return array of len(things) with index of interval in containers
     for which things are fully contained in a container, or -1 if no such
     exists.
     We assume all intervals are sorted by time, and b_intervals
     nonoverlapping.
     """
-    if needs_check_timing:
-        _check_things_containers(things, containers, length_threshold, sorted_endtime=False)
+    _check_time_is_sorted(things['time'], '"Time" of things')
+    _check_time_is_sorted(containers['time'], '"Time" of container')
+    _check_objects_are_not_overlapping(containers, 'Containers')
+
     result = np.ones(len(things), dtype=np.int32) * -1
     a_starts = things['time']
     b_starts = containers['time']
@@ -163,15 +165,13 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
 
 
 @export
-def split_by_containment(things, containers, length_threshold=0, needs_check_timing=True):
+def split_by_containment(things, containers):
     """
     Return list of thing-arrays contained in each container. Result is
     returned as a numba.typed.List or list if containers are empty.
 
     Assumes everything is sorted, and containers are non-overlapping.
     """
-    if needs_check_timing:
-        _check_things_containers(things, containers, length_threshold, sorted_endtime=False)
     if not len(containers):
         # No containers so return empty numba.typed.List
         empty_list = List()
@@ -180,13 +180,13 @@ def split_by_containment(things, containers, length_threshold=0, needs_check_tim
         empty_list = empty_list[:0]
         return empty_list
 
-    return _split_by_containment(things, containers, length_threshold, needs_check_timing)
+    return _split_by_containment(things, containers)
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _split_by_containment(things, containers, length_threshold=0, needs_check_timing=True):
+def _split_by_containment(things, containers):
     # Index of which container each thing belongs to, or -1
-    which_container = fully_contained_in(things, containers, length_threshold, needs_check_timing)
+    which_container = fully_contained_in(things, containers)
 
     # Restrict to things in containers
     mask = which_container != -1
@@ -322,21 +322,25 @@ def _split_by_window(r, windows):
 
 
 @export
-def touching_windows(things, containers, window=0, length_threshold=1, needs_check_timing=True):
+def touching_windows(things, containers, window=0):
     """Return array of (start, exclusive end) indices into things which extend
     to within window of the container, for each container in containers.
 
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    :param window: threshold distance for touching check
+    :param things: Sorted array of interval-like data. Time and endtime must be
+        sorted!
+    :param containers: Sorted array of interval-like data. Containers are
+        allowed to overlap.
+    :param window: threshold distance for touching check.
     For example:
        - window = 0: things must overlap one sample
        - window = -1: things can start right after container ends
          (i.e. container endtime equals the thing starttime, since strax
           endtimes are exclusive)
     """
-    if needs_check_timing:
-        _check_things_containers(things, containers, length_threshold, sorted_endtime=True)
+    _check_time_is_sorted(things['time'], '"Time" of things')
+    _check_time_is_sorted(things['endtime'], '"Endtime" of things')
+    _check_time_is_sorted(containers['time'], '"Time" of container')
+
     return _touching_windows(
         things['time'], strax.endtime(things),
         containers['time'], strax.endtime(containers),
@@ -355,7 +359,7 @@ def _touching_windows(thing_start, thing_end,
         t1 = container_end[i]
         if t0 < thing_start[right_i]:
             # Container overlapped with previous one so we have to
-            # go back to first left_i before current conatiner, and
+            # go back to first left_i before current container, and
             # reset right_i
             while left_i >= 0 and thing_end[left_i] >= t0 - window:
                 left_i -= 1
@@ -381,75 +385,17 @@ def _touching_windows(thing_start, thing_end,
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def numbadiff(x):
-    return x[1:] - x[:-1]
+def _check_time_is_sorted(time, object_which_needs_to_be_sorted):
+    """Check if times are sorted"""
+    mask = np.all((time[1:] - time[:-1]) >= 0)
+    assert mask, f'{object_which_needs_to_be_sorted} should be sorted!'
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _check_things_containers(things, containers, length_threshold=0, sorted_endtime=True):
-    """
-    Check whether things and containers have correct timing
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    """
-    # It seems numba error massage should be constant
-    _check_sorted_time(things, containers)
-    if sorted_endtime:
-        _check_sorted_endtime(things, containers)
-    _check_length(things, containers, length_threshold)
-    # _check_overlapping(things, containers)
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _check_sorted_time(things, containers):
-    """
-    Check whether things and containers are sorted
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    """
-    mask = np.all(numbadiff(things['time']) >= 0)
-    assert mask, "things's time should be sorted"
-    mask = np.all(numbadiff(containers['time']) >= 0)
-    assert mask, "containers's time should be sorted"
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _check_sorted_endtime(things, containers):
-    """
-    Check whether things and containers are sorted
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    """
-    mask = np.all(numbadiff(strax.endtime(things)) >= 0)
-    assert mask, "things's endtime should be sorted"
-    mask = np.all(numbadiff(strax.endtime(containers)) >= 0)
-    assert mask, "containers's endtime should be sorted"
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _check_length(things, containers, length_threshold=0):
-    """
-    Check whether things and containers have large enough length
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    """
-    mask = np.all(strax.endtime(things) - things['time'] >= length_threshold)
-    assert mask, 'things should have non-negative length'
-    mask = np.all(strax.endtime(containers) - containers['time'] >= length_threshold)
-    assert mask, 'containers should have non-negative length'
-
-
-@numba.jit(nopython=True, nogil=True, cache=True)
-def _check_overlapping(things, containers):
-    """
-    Check whether things and containers are not overlapping
-    :param things: Sorted array of interval-like data
-    :param containers: Sorted array of interval-like data
-    """
-    mask = np.all(things['time'][1:] - strax.endtime(things)[:-1] >= 0)
-    assert mask, 'things should not be overlapping'
-    mask = np.all(containers['time'][1:] - strax.endtime(containers)[:-1] >= 0)
-    assert mask, 'containers should not be overlapping'
+def _check_objects_are_not_overlapping(objects, objects_which_should_not_overlap):
+    """Checks if objects overlap in time"""
+    mask = np.all(objects['time'][1:] - strax.endtime(objects)[:-1] >= 0)
+    assert mask, f'{objects_which_should_not_overlap} should not be overlapping'
 
 
 @export
