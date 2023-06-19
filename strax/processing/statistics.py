@@ -40,7 +40,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
                          'with a total probability of less-equal 0.')
 
     # Need an index which sorted by amplitude
-    max_to_min = np.argsort(data)[::-1]
+    max_to_min = np.argsort(data, kind='mergesort')[::-1]
 
     lowest_sample_seen = np.inf
     for j in range(1, len(data)):
