@@ -127,7 +127,7 @@ def _find_break_i(data, safe_break, not_before):
     raise NoBreakFound
 
 
-def _fully_sanity(things, containers):
+def _fully_contained_in_sanity(things, containers):
     """
     Since both fully_contained_in and split_by_containment use the same
     core function _fully_contained_in, we check the sanity of the inputs here.
@@ -163,7 +163,7 @@ def fully_contained_in(things, containers):
     We assume all things and containers are sorted by time.
     If containers are overlapping, the first container of the thing is chosen.
     """
-    _fully_sanity(things, containers)
+    _fully_contained_in_sanity(things, containers)
 
     return _fully_contained_in(things, containers)
 
@@ -205,7 +205,7 @@ def split_by_containment(things, containers):
 
     Assumes everything is sorted, and containers are non-overlapping.
     """
-    _fully_sanity(things, containers)
+    _fully_contained_in_sanity(things, containers)
 
     if not len(containers):
         # No containers so return empty numba.typed.List

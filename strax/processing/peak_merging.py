@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 import strax
-from strax.processing.general import _fully_sanity
+from strax.processing.general import _fully_contained_in, _fully_contained_in_sanity
 
 export, __all__ = strax.exporter()
 
@@ -166,14 +166,14 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
     """
-    _fully_sanity(lone_hits, peaks)
+    _fully_contained_in_sanity(lone_hits, peaks)
     _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0)
 
 
 @numba.njit(cache=True, nogil=True)
 def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
     """The core function of add_lone_hits"""
-    fully_contained_index = strax._fully_contained_in(lone_hits, peaks)
+    fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
     for fc_i, lh_i in zip(fully_contained_index, lone_hits):
         if fc_i == -1:
