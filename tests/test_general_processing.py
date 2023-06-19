@@ -44,7 +44,7 @@ def test_fully_contained_in(things, containers):
 @hypothesis.example(
     things=np.array([(0, 1, 1, 0),
                      (1, 5, 1, 0),
-                     (2, 1, 1, 0)],
+                     (2, 3, 2, 0)],
                     dtype=strax.interval_dtype),
     containers=np.array([(0, 4, 1, 0)],
                         dtype=strax.interval_dtype),
