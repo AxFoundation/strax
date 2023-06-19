@@ -365,7 +365,6 @@ def _touching_windows(thing_start, thing_end,
                 left_i -= 1
                 right_i = left_i
 
-        print(left_i, right_i)
         while left_i <= n - 1 and thing_end[left_i] <= t0 - window:
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
