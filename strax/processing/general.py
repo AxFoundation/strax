@@ -127,14 +127,10 @@ def _find_break_i(data, safe_break, not_before):
     raise NoBreakFound
 
 
-@export
-def fully_contained_in(things, containers):
+def _fully_sanity(things, containers):
     """
-    Return array of len(things) with index of interval in containers
-    for which things are fully contained in a container, or -1 if no such
-    exists.
-    We assume all things and containers are sorted by time.
-    If containers are overlapping, the first container of the thing is chosen.
+    Since both fully_contained_in and split_by_containment use the same
+    core function _fully_contained_in, we check the sanity of the inputs here.
     """
     try:
         _check_time_is_sorted(things['time'])
@@ -156,6 +152,18 @@ def fully_contained_in(things, containers):
             _check_objects_non_negative_length(objects)
         except Exception:
             raise ValueError(f'{names} should have non-negative length!')
+
+
+@export
+def fully_contained_in(things, containers):
+    """
+    Return array of len(things) with index of interval in containers
+    for which things are fully contained in a container, or -1 if no such
+    exists.
+    We assume all things and containers are sorted by time.
+    If containers are overlapping, the first container of the thing is chosen.
+    """
+    _fully_sanity(things, containers)
 
     return _fully_contained_in(things, containers)
 
@@ -197,6 +205,8 @@ def split_by_containment(things, containers):
 
     Assumes everything is sorted, and containers are non-overlapping.
     """
+    _fully_sanity(things, containers)
+
     if not len(containers):
         # No containers so return empty numba.typed.List
         empty_list = List()
@@ -211,7 +221,7 @@ def split_by_containment(things, containers):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _split_by_containment(things, containers):
     # Index of which container each thing belongs to, or -1
-    which_container = fully_contained_in(things, containers)
+    which_container = _fully_contained_in(things, containers)
 
     # Restrict to things in containers
     mask = which_container != -1
