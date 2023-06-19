@@ -385,6 +385,10 @@ def touching_windows(things, containers, window=0):
         except Exception:
             raise ValueError(f'{names} should have non-negative length!')
 
+    # return zeros if either things or containers are empty
+    if len(things) == 0 or len(containers) == 0:
+        return np.zeros((len(containers), 2), dtype=np.int32)
+
     return _touching_windows(
         things['time'], strax.endtime(things),
         containers['time'], strax.endtime(containers),
