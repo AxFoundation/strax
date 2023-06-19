@@ -405,13 +405,12 @@ def _touching_windows(thing_start, thing_end,
 
     for i, t0 in enumerate(container_start):
         t1 = container_end[i]
-        if t0 < thing_start[right_i]:
-            # Container overlapped with previous one so we have to
-            # go back to first left_i before current container, and
-            # reset right_i
-            while left_i > 0 and thing_end[left_i] > t0 - window:
-                left_i -= 1
-                right_i = left_i
+        # Container overlapped with previous one so we have to
+        # go back to first left_i before current container, and
+        # reset right_i
+        while left_i > 0 and left_i <= n - 1 and thing_end[left_i] > t0 - window:
+            left_i -= 1
+            right_i = left_i
 
         while left_i <= n - 1 and thing_end[left_i] <= t0 - window:
             # left_i ends before the window starts (so it's still outside)
