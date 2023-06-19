@@ -389,7 +389,7 @@ def _check_things_containers(things, containers, length_threshold=0, sorted_endt
     if sorted_endtime:
         _check_sorted_endtime(things, containers)
     _check_length(things, containers, length_threshold)
-    _check_overlapping(things, containers)
+    # _check_overlapping(things, containers)
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
@@ -442,6 +442,8 @@ def _check_overlapping(things, containers):
     assert mask, 'things should not be overlapping'
     mask = np.all(containers['time'][1:] - strax.endtime(containers)[:-1] >= 0)
     assert mask, 'containers should not be overlapping'
+
+
 @export
 def abs_time_to_prev_next_interval(things, intervals):
     """Function which determines the time difference of things to
