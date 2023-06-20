@@ -10,7 +10,7 @@ full_dt_dtype = [(_cut_dtype, np.float64)] + strax.time_dt_fields
 full_time_dtype = [(_cut_dtype, np.float64)] + strax.time_fields
 
 
-def get_some_array():
+def get_some_array(disjoint=True):
     # Either 0 or 1
     take_dt = np.random.choice(2)
 
@@ -28,7 +28,7 @@ def get_some_array():
         return x
 
     # Randomly input either of full_dt_dtype or full_time_dtype
-    sorted_intervals = testutils.sorted_bounds().map(bounds_to_intervals)
+    sorted_intervals = testutils.sorted_bounds(disjoint=disjoint).map(bounds_to_intervals)
     return sorted_intervals
 
 
