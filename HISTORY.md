@@ -1,3 +1,24 @@
+1.5.1 / 2023-06-22
+---------------------
+* Fix argsort inside numba.jit using kind='mergesort' by @dachengx in https://github.com/AxFoundation/strax/pull/721
+* Fix urllib3 version to 1.26.15 by @dachengx in https://github.com/AxFoundation/strax/pull/723
+* Save other fields in the merged peaks to their default value by @dachengx in https://github.com/AxFoundation/strax/pull/722
+* add a metadata comparison method by @KaraMelih in https://github.com/AxFoundation/strax/pull/706
+* Accelerate select_runs by @shenyangshi in https://github.com/AxFoundation/strax/pull/727
+* Stop assigning dependabot to Joran by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/732
+* Bump urllib3 from 1.26.15 to 2.0.2 in /extra_requirements by @dependabot in https://github.com/AxFoundation/strax/pull/729
+* Add new general fucntion which computes dt to some interval by @WenzDaniel in https://github.com/AxFoundation/strax/pull/726
+* Check whether `things` and `containers` are sorted by @dachengx in https://github.com/AxFoundation/strax/pull/725
+* Set start of further chunk to be the smallest start of dependencies by @dachengx in https://github.com/AxFoundation/strax/pull/715
+* Fix touching window by @dachengx in https://github.com/AxFoundation/strax/pull/736
+
+New Contributors
+* @KaraMelih made their first contribution in https://github.com/AxFoundation/strax/pull/706
+* @shenyangshi made their first contribution in https://github.com/AxFoundation/strax/pull/727
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.0...v1.5.1
+
+
 1.5.0 / 2023-05-02
 ---------------------
 * Fix ipython version by @dachengx in https://github.com/AxFoundation/strax/pull/719
