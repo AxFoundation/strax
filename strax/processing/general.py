@@ -409,8 +409,7 @@ def touching_windows(things, containers, window=0):
 def _touching_windows(thing_start, thing_end,
                       container_start, container_end,
                       window=0, endtime_sort_kind='mergesort'):
-    thing_n = len(thing_start)
-    container_n = len(container_start)
+    n = len(thing_start)
     thing_end_argsort = np.argsort(thing_end, kind=endtime_sort_kind)
     thing_end_sort = thing_end[thing_end_argsort]
     container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
@@ -422,17 +421,17 @@ def _touching_windows(thing_start, thing_end,
     # first search for the beginning of the interval
     # containers' time is already sorted, but things' endtime is not
     for i, t0 in enumerate(container_start):
-        while left_i <= thing_n - 1 and thing_end_sort[left_i] <= t0 - window:
+        while left_i <= n - 1 and thing_end_sort[left_i] <= t0 - window:
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
         # save the most left index of things touching the container
-        result[i, 0] = left_i if left_i == thing_n else min(thing_end_argsort[left_i:])
+        result[i, 0] = left_i if left_i == n else min(thing_end_argsort[left_i:])
 
     # then search for the end of the interval
     # containers' endtime is not sorted but things' endtime is
     for i in container_end_argsort:
         t1 = container_end[i]
-        while right_i <= thing_n - 1 and thing_start[right_i] < t1 + window:
+        while right_i <= n - 1 and thing_start[right_i] < t1 + window:
             # right_i starts before the window ends (so it could be inside)
             right_i += 1
         # now right_i is the last index inside the window or outside the array
