@@ -411,10 +411,13 @@ def _touching_windows(thing_start, thing_end,
                       window=0, endtime_sort_kind='mergesort'):
     thing_n = len(thing_start)
     container_n = len(container_start)
-    thing_end_sort = np.sort(thing_end, kind=endtime_sort_kind)
     thing_end_argsort = np.argsort(thing_end, kind=endtime_sort_kind)
+    thing_end_sort = thing_end[thing_end_argsort]
+    # append extra element to the end of the array to avoid index out of bound
+    thing_end_argsort = np.append(thing_end_argsort, thing_n)
     container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
 
+    # we search twice, first for the beginning of the interval, then for the end
     left_i = right_i = 0
     left = np.zeros(container_n, dtype=np.int32)
     right = np.zeros(container_n, dtype=np.int32)
@@ -422,14 +425,11 @@ def _touching_windows(thing_start, thing_end,
     # first search for the beginning of the interval
     # containers' time is already sorted, but things' endtime is not
     for i, t0 in enumerate(container_start):
-        min_thing_end_index = thing_end_argsort[left_i]
         while left_i <= thing_n - 1 and thing_end_sort[left_i] <= t0 - window:
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
-            # the most left index of things touching the container is stored
-            min_thing_end_index = min(min_thing_end_index, thing_end_argsort[left_i])
-        # Now left_i is the first index inside the window
-        left[i] = min_thing_end_index
+        # save the most left index of things touching the container
+        left[i] = min(thing_end_argsort[left_i:])
 
     # then search for the end of the interval
     # containers' endtime is not sorted but things' endtime is
@@ -438,11 +438,10 @@ def _touching_windows(thing_start, thing_end,
         while right_i <= thing_n - 1 and thing_start[right_i] < t1 + window:
             # right_i starts before the window ends (so it could be inside)
             right_i += 1
-        # Now right_i is the last index inside the window
-        # or outside the array.
+        # now right_i is the last index inside the window or outside the array
         right[i] = right_i
 
-    result = list(zip(left, right))
+    result = np.vstack([left, right]).T
 
     return result
 
