@@ -408,34 +408,32 @@ def touching_windows(things, containers, window=0):
 @numba.njit(nogil=True, cache=True)
 def _touching_windows(thing_start, thing_end,
                       container_start, container_end,
-                      window=0):
-    result = np.zeros((len(container_start), 2), dtype=np.int32)
+                      window=0, endtime_sort_kind='mergesort'):
     n = len(thing_start)
+    container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
+
+    # we search twice, first for the beginning of the interval, then for the end
     left_i = right_i = 0
+    result = np.zeros((len(container_start), 2), dtype=np.int32)
 
+    # first search for the beginning of the interval
+    # containers' time is already sorted, but things' endtime is not
     for i, t0 in enumerate(container_start):
-        t1 = container_end[i]
-        # Container overlapped with previous one so we have to
-        # go back to first left_i before current container, and
-        # reset right_i
-        while left_i > 0 and left_i <= n - 1 and thing_end[left_i] > t0 - window:
-            left_i -= 1
-            right_i = left_i
-
         while left_i <= n - 1 and thing_end[left_i] <= t0 - window:
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
-        # Now left_i is the first index inside the window
-        # -- unless it is outside the array, in which case right_i
-        # will also be.
+        # save the most left index of things touching the container
+        result[i, 0] = left_i
 
+    # then search for the end of the interval
+    # containers' endtime is not sorted but things' endtime is
+    for i in container_end_argsort:
+        t1 = container_end[i]
         while right_i <= n - 1 and thing_start[right_i] < t1 + window:
             # right_i starts before the window ends (so it could be inside)
             right_i += 1
-        # Now right_i is the last index inside the window
-        # or outside the array.
-
-        result[i] = left_i, right_i
+        # now right_i is the last index inside the window or outside the array
+        result[i, 1] = right_i
 
     return result
 
