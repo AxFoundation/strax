@@ -419,8 +419,7 @@ def _touching_windows(thing_start, thing_end,
 
     # we search twice, first for the beginning of the interval, then for the end
     left_i = right_i = 0
-    left = np.zeros(container_n, dtype=np.int32)
-    right = np.zeros(container_n, dtype=np.int32)
+    result = np.zeros((len(container_start), 2), dtype=np.int32)
 
     # first search for the beginning of the interval
     # containers' time is already sorted, but things' endtime is not
@@ -429,7 +428,7 @@ def _touching_windows(thing_start, thing_end,
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
         # save the most left index of things touching the container
-        left[i] = min(thing_end_argsort[left_i:])
+        result[i, 0] = min(thing_end_argsort[left_i:])
 
     # then search for the end of the interval
     # containers' endtime is not sorted but things' endtime is
@@ -439,9 +438,7 @@ def _touching_windows(thing_start, thing_end,
             # right_i starts before the window ends (so it could be inside)
             right_i += 1
         # now right_i is the last index inside the window or outside the array
-        right[i] = right_i
-
-    result = np.vstack([left, right]).T
+        result[i, 1] = right_i
 
     return result
 
