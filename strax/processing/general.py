@@ -413,8 +413,6 @@ def _touching_windows(thing_start, thing_end,
     container_n = len(container_start)
     thing_end_argsort = np.argsort(thing_end, kind=endtime_sort_kind)
     thing_end_sort = thing_end[thing_end_argsort]
-    # append extra element to the end of the array to avoid index out of bound
-    thing_end_argsort = np.append(thing_end_argsort, thing_n)
     container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
 
     # we search twice, first for the beginning of the interval, then for the end
@@ -428,7 +426,7 @@ def _touching_windows(thing_start, thing_end,
             # left_i ends before the window starts (so it's still outside)
             left_i += 1
         # save the most left index of things touching the container
-        result[i, 0] = min(thing_end_argsort[left_i:])
+        result[i, 0] = left_i if left_i == thing_n else min(thing_end_argsort[left_i:])
 
     # then search for the end of the interval
     # containers' endtime is not sorted but things' endtime is
