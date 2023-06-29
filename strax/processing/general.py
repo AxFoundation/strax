@@ -384,7 +384,7 @@ def touching_windows(things, containers, window=0):
         warnings.warn(
             'endtime of things is not sorted! '
             'touching_windows will return the indices of the '
-            'first and last things which are touching the container')
+            'first and last things which are touching the container.')
     try:
         _check_time_is_sorted(containers['time'])
     except Exception:
@@ -470,29 +470,42 @@ def abs_time_to_prev_next_interval(things, intervals):
     :returns: Two integer arrays with the time difference to the 
         previous and next intervals. 
     """
-    _things_do_not_overlap = (strax.endtime(things)[:-1] - things['time'][1:]) <= 0
-    assert np.all(_things_do_not_overlap), 'Things overlap!'
+    try:
+        _check_time_is_sorted(things['time'])
+    except Exception:
+        raise ValueError('time of things should be sorted!')
+    try:
+        _check_time_is_sorted(strax.endtime(things))
+    except Exception:
+        warnings.warn(
+            'endtime of things is not sorted! '
+            'times_to_next returned by abs_time_to_prev_next_interval '
+            'might be larger than expected.')
+    try:
+        _check_time_is_sorted(intervals['time'])
+    except Exception:
+        raise ValueError('time of intervals should be sorted!')
 
     times_to_prev = np.ones(len(things), dtype=np.int64) * -1
     times_to_next = np.ones(len(things), dtype=np.int64) * -1
-    
+
     _empty_events_or_intervals = ((len(things) == 0) 
-                                  or (len(intervals)== 0))
+                                  or (len(intervals) == 0))
     if _empty_events_or_intervals:
         return times_to_prev, times_to_next
-        
+
     _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next)
-    
+
     return times_to_prev, times_to_next
+
 
 @numba.njit
 def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
     veto_intervals_seen = 0
-    last_thing_end = 0
     for thing_ind, thing_i in enumerate(things):
         current_event_time = thing_i['time']
         current_event_endtime = strax.endtime(thing_i)
-        
+
         # Exploit the fact that events cannot overlap...
         # Loop over veto intervals until:
         #   - current veto interval endtime starts overlapping with 
@@ -505,14 +518,14 @@ def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
             _interval_start_after_thing = veto_interval['time'] >= current_event_time
             if _interval_start_after_thing:             
                 break
-            
+
             # Always update endtime until it becomes negative:
             dt = current_event_time - strax.endtime(veto_interval)
             _ends_befor_event = dt >= 0
             if _ends_befor_event:
                 times_to_prev[thing_ind] = dt
                 veto_intervals_seen += 1
-        
+
         # Now check if current veto is still within event or already after it:
         for veto_interval in intervals[veto_intervals_seen:]:
             _current_interval_before_thing_ends = veto_interval['time'] < current_event_endtime
@@ -520,7 +533,7 @@ def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
                 continue
 
             # Now current veto is after event so store time:
-            times_to_next[thing_ind] = veto_interval['time']  - current_event_endtime
+            times_to_next[thing_ind] = veto_interval['time'] - current_event_endtime
             break
-            
+
         veto_intervals_seen = max(0, veto_intervals_seen-1)
