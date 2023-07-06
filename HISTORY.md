@@ -1,3 +1,11 @@
+1.5.2 / 2023-07-06
+---------------------
+* Use warning also in `abs_time_to_prev_next_interval` by @dachengx in https://github.com/AxFoundation/strax/pull/738
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.1...v1.5.2
+
+
 1.5.1 / 2023-06-22
 ---------------------
 * Fix argsort inside numba.jit using kind='mergesort' by @dachengx in https://github.com/AxFoundation/strax/pull/721
