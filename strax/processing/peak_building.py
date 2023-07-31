@@ -177,9 +177,10 @@ def simple_summed_waveform(records, containers, to_pe):
         summed waveform.
         
     Note: To keep this function simple the floating part of the baseline 
-        is not added if the data field in records uses integers instead 
-        of floats. This will lead to a biased representation of the 
-        summed waveform!
+        is only added if the data field in records is not zero. 
+        This will lead to a biased representation of the summed waveform!
+        However, this bias is small for shape estimates, but the total 
+        charge of the signal should be estimated in an unbiased way.
     """
     
     touching_windows = strax.touching_windows(records, containers)
@@ -196,8 +197,10 @@ def _simple_summed_waveform(records, containers, touching_windows, to_pe):
                 r['time']//r['dt'], r['length'], 
                 container['time']//container['dt'], container['length']
             )
-
-            summed_wf_buffer[c_start:c_end] += (r['data'][r_start:r_end]) * to_pe[r['channel']]
+            bl_fpart = r['baseline'] % 1
+            _is_not_zero = r['data'][r_start:r_end] != 0
+            bl_fpart = _is_not_zero.astype(np.float32) * bl_fpart
+            summed_wf_buffer[c_start:c_end] += (r['data'][r_start:r_end] + bl_fpart) * to_pe[r['channel']]
 
         strax.store_downsampled_waveform(container, summed_wf_buffer)
         summed_wf_buffer[:] = 0
