@@ -19,6 +19,8 @@ import strax
 def sorted_bounds(disjoint=False,
                   max_value=50,
                   max_len=10,
+                  min_size=0,
+                  max_size=20,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
@@ -26,7 +28,7 @@ def sorted_bounds(disjoint=False,
 
     s = strategies.lists(strategies.integers(min_value=0,
                                              max_value=max_value),
-                         min_size=0, max_size=20)
+                         min_size=min_size, max_size=max_size)
     if disjoint:
         s = s.map(accumulate).map(list)
 
@@ -34,8 +36,20 @@ def sorted_bounds(disjoint=False,
     s = s.filter(lambda x: len(x) % 2 == 0)
 
     # Convert to list of 2-tuples
-    s = s.map(lambda x: [tuple(q)
-                         for q in iterutils.chunked(sorted(x), size=2)])
+    if disjoint:
+        s = s.map(lambda x: [tuple(q)
+                            for q in iterutils.chunked(sorted(x), size=2)])
+    else:
+        s = s.map(lambda x: [tuple(sorted(q))
+                            for q in iterutils.chunked(x, size=2)])
+
+    s = s.map(sorted)
+
+    if not disjoint:
+        # Remove cases with not sorted endtime
+        s = s.filter(lambda x: all([a[1] < b[1] for a, b in zip(x[:-1], x[1:])]))
+        # Remove cases without overlapping window
+        s = s.filter(lambda x: all([a[1] > b[0] for a, b in zip(x[:-1], x[1:])]))
 
     # Remove cases with zero-length intervals
     s = s.filter(lambda x: all([a[0] != a[1] for a in x]))
@@ -45,7 +59,7 @@ def sorted_bounds(disjoint=False,
         s = s.filter(lambda x: x == list(set(x)))
 
     # Sort intervals and result
-    return s.map(sorted)
+    return s
 
 
 ##
