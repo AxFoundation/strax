@@ -306,4 +306,3 @@ def _test_simple_summed_waveform_has_correct_pattern(fake_event, fake_records):
         indicies = np.arange(r['time'], r['time']+r['length'], np.int64)
         buffer[indicies] += 1
     return np.all(buffer == fake_event['data'])
-
