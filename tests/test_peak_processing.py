@@ -1,4 +1,4 @@
-from strax.testutils import fake_hits, several_fake_records
+from strax.testutils import fake_hits, several_fake_records, sorted_intervals
 import numpy as np
 from hypothesis import given, settings, example
 import hypothesis.strategies as st
@@ -271,3 +271,39 @@ def test_peak_overflow(records,
     assert len(peaklets) <= len(r)
     # Integer overflow will manifest itself here again:
     assert np.all(peaklets['dt'] > 0)
+
+
+@settings(deadline=None)
+@given(sorted_intervals)
+def test_simple_summed_waveform(pulses):
+    fake_event_dtype = strax.time_dt_fields + [('data', np.float32, 200), ('data_top', np.float32, 200)]
+    
+    records = np.zeros(len(pulses), dtype=strax.record_dtype())
+    records['time'] = pulses['time']
+    records['length'] = pulses['length']
+    records['dt'] = pulses['dt']
+    records['data'] = 1
+
+    if len(pulses):
+        fake_event = np.zeros(1, dtype=fake_event_dtype)
+        fake_event['time'] = records[0]['time']
+        fake_event['length'] = records[-1]['time'] + records[-1]['length'] - records[0]['time']
+        fake_event['dt'] = records['dt'][0]
+    else:
+        fake_event = np.zeros(0, dtype=fake_event_dtype)
+
+    strax.simple_summed_waveform(records, fake_event, np.ones(2000))
+    assert fake_event['data'].sum() == records['length'].sum(), 'Event has wrong total area.'
+    assert _test_simple_summed_waveform_has_correct_pattern, 'Summed waveform has incorrect shape.'
+
+
+def _test_simple_summed_waveform_has_correct_pattern(fake_event, fake_records):
+    """Test if summed wavefrom has correct structure.
+    """
+    buffer = np.zeros(len(fake_event['data']))
+
+    for r in fake_records:
+        indicies = np.arange(r['time'], r['time']+r['length'], np.int64)
+        buffer[indicies] += 1
+    return np.all(buffer == fake_event['data'])
+
