@@ -182,7 +182,9 @@ def simple_summed_waveform(records, containers, to_pe):
         However, this bias is small for shape estimates, but the total 
         charge of the signal should be estimated in an unbiased way.
     """
-    
+    if not len(containers):
+        return
+        
     touching_windows = strax.touching_windows(records, containers)
     _simple_summed_waveform(records, containers, touching_windows, to_pe)
     
