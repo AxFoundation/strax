@@ -100,3 +100,48 @@ def compute_widths(peaks, select_peaks_indices=None):
     i = len(desired_fr) // 2
     peaks['width'][select_peaks_indices] = fr_times[:, i:] - fr_times[:, ::-1][:, i:]
     peaks['area_decile_from_midpoint'][select_peaks_indices] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
+
+@export
+@numba.njit(nopython=True, cache=True)
+def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=False):
+    """
+    Compute waveform attribures
+    Quantiles: represent the amount of time elapsed for
+    a given fraction of the total waveform area to be observed in n_samples
+    i.e. n_samples = 10, then quantiles are equivalent deciles 
+    Waveforms: downsampled waveform to n_samples
+    :param data: waveform e.g. peaks or peaklets
+    :param n_samples: number of samples 
+    :return: waveforms and quantiles of size n_samples
+    """    
+    assert len(data) == len(sample_length), "ararys must have same size"
+
+    waveforms = np.zeros((len(data), n_samples), dtype=np.float64)
+    quantiles = np.zeros((len(data), n_samples), dtype=np.float64)
+
+    num_samples = data.shape[1]
+    step_size = int(num_samples / n_samples)
+    steps = np.arange(0, num_samples + 1, step_size)
+    inter_points = np.linspace(0., 1. - (1. / n_samples), n_samples)
+    cumsum_steps = np.zeros(n_samples + 1, dtype=np.float64)
+    frac_of_cumsum = np.zeros(num_samples + 1)
+    sample_number_div_dt = np.arange(0, num_samples + 1, 1)
+
+    for i, (samples, dt) in enumerate(zip(data, sample_length)):
+        # reset buffers
+        frac_of_cumsum[:] = 0
+        cumsum_steps[:] = 0
+
+        frac_of_cumsum[1:] = np.cumsum(samples)
+        frac_of_cumsum[1:] = frac_of_cumsum[1:] / frac_of_cumsum[-1]
+
+        cumsum_steps[:-1] = np.interp(inter_points, frac_of_cumsum, sample_number_div_dt * dt)
+        cumsum_steps[-1] = sample_number_div_dt[-1] * dt
+        quantiles[i] = cumsum_steps[1:] - cumsum_steps[:-1]
+    
+        for j in range(n_samples if downsample_wf else 0):
+            waveforms[i][j] = np.sum(samples[steps[j]:steps[j + 1]])
+        waveforms[i] /= (step_size * dt)
+
+    return quantiles, waveforms
+    

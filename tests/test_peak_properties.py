@@ -79,3 +79,14 @@ def test_compute_widths(peak_length, data_length, n_widths):
         mess = ("Highly unlikely that from at least 10 positive area peaks "
                 "none were able to compute the width")
         assert np.any(peaks['width'] != pre_peaks['width']), mess
+
+def test_compute_wf_attributes(data, sample_length, n_samples):
+    """
+    Test strax.compute_wf_attribute
+    """
+    peaks = get_filled_peaks(peak_length, data_length, n_widths)
+
+    d, wf = strax.compute_wf_attribures(peaks['data'], peaks['dt'], 10, True)
+    assert d.size > 0  and wf.size > 0, "Emtpy arrays"
+
+    assert np.all(~np.isnan(d)) and np.all(~np.isnan(wf)), "attributes contains NaN values"
