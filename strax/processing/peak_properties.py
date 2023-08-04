@@ -102,7 +102,7 @@ def compute_widths(peaks, select_peaks_indices=None):
     peaks['area_decile_from_midpoint'][select_peaks_indices] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
 
 @export
-@numba.njit(nopython=True, cache=True)
+#@numba.njit(nopython=True, cache=True)
 def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=False):
     """
     Compute waveform attribures
@@ -111,15 +111,18 @@ def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=Fal
     i.e. n_samples = 10, then quantiles are equivalent deciles 
     Waveforms: downsampled waveform to n_samples
     :param data: waveform e.g. peaks or peaklets
-    :param n_samples: number of samples 
+    :param n_samples: compute quantiles for a given number of samples 
     :return: waveforms and quantiles of size n_samples
     """    
     assert len(data) == len(sample_length), "ararys must have same size"
 
+    num_samples = data.shape[1]
+
     waveforms = np.zeros((len(data), n_samples), dtype=np.float64)
     quantiles = np.zeros((len(data), n_samples), dtype=np.float64)
+    # Cannot compute with with more samples than actual waveform sample
+    assert num_samples > n_samples, "cannot compute with more samples than the actual waveform"
 
-    num_samples = data.shape[1]
     step_size = int(num_samples / n_samples)
     steps = np.arange(0, num_samples + 1, step_size)
     inter_points = np.linspace(0., 1. - (1. / n_samples), n_samples)
