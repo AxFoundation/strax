@@ -120,8 +120,11 @@ def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=Fal
 
     waveforms = np.zeros((len(data), n_samples), dtype=np.float64)
     quantiles = np.zeros((len(data), n_samples), dtype=np.float64)
+
+    assert np.all(data == 0), "cannot compute a zero waveform"
     # Cannot compute with with more samples than actual waveform sample
     assert num_samples > n_samples, "cannot compute with more samples than the actual waveform"
+
 
     step_size = int(num_samples / n_samples)
     steps = np.arange(0, num_samples + 1, step_size)
@@ -134,17 +137,15 @@ def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=Fal
         # reset buffers
         frac_of_cumsum[:] = 0
         cumsum_steps[:] = 0
-
         frac_of_cumsum[1:] = np.cumsum(samples)
         frac_of_cumsum[1:] = frac_of_cumsum[1:] / frac_of_cumsum[-1]
-
         cumsum_steps[:-1] = np.interp(inter_points, frac_of_cumsum, sample_number_div_dt * dt)
         cumsum_steps[-1] = sample_number_div_dt[-1] * dt
         quantiles[i] = cumsum_steps[1:] - cumsum_steps[:-1]
-    
-        for j in range(n_samples if downsample_wf else 0):
-            waveforms[i][j] = np.sum(samples[steps[j]:steps[j + 1]])
-        waveforms[i] /= (step_size * dt)
-
+   
+        if downsample_wf:
+            
+            for j in range(n_samples):
+                waveforms[i][j] = np.sum(samples[steps[j]:steps[j + 1]])
+            waveforms[i] /= (step_size * dt)
     return quantiles, waveforms
-    
