@@ -114,14 +114,13 @@ def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=Fal
     :param n_samples: compute quantiles for a given number of samples 
     :return: waveforms and quantiles of size n_samples
     """    
-    assert len(data) == len(sample_length), "ararys must have same size"
+    assert data.shape[0] == len(sample_length), "ararys must have same size"
 
     num_samples = data.shape[1]
 
     waveforms = np.zeros((len(data), n_samples), dtype=np.float64)
     quantiles = np.zeros((len(data), n_samples), dtype=np.float64)
 
-    assert np.all(data == 0), "cannot compute a zero waveform"
     # Cannot compute with with more samples than actual waveform sample
     assert num_samples > n_samples, "cannot compute with more samples than the actual waveform"
 
@@ -132,8 +131,9 @@ def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=Fal
     cumsum_steps = np.zeros(n_samples + 1, dtype=np.float64)
     frac_of_cumsum = np.zeros(num_samples + 1)
     sample_number_div_dt = np.arange(0, num_samples + 1, 1)
-
     for i, (samples, dt) in enumerate(zip(data, sample_length)):
+        if np.sum(samples) == 0: 
+            continue
         # reset buffers
         frac_of_cumsum[:] = 0
         cumsum_steps[:] = 0
