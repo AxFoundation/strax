@@ -100,9 +100,10 @@ def test_compute_wf_attributes(peak_length, data_length, n_widths):
 
     try:        
         q, wf = strax.compute_wf_attributes(peaks['data'], peaks['dt'], 10, True)
-    except AssertionError:
-        print("cannot compute with a zero waveform")
-    except AssertionError: 
-        print("cannot compute with more samples than the actual waveform") 
+    except AssertionError as e:
+        if "zero waveform" in str(e):
+            print("cannot compute with a zero waveform")
+        elif "more samples than the actual waveform" in str(e):
+            print("cannot compute with more samples than the actual waveform")
 
     assert np.all(~np.isnan(q)) and np.all(~np.isnan(wf)), "attributes contains NaN values"
