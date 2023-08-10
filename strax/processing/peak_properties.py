@@ -102,7 +102,7 @@ def compute_widths(peaks, select_peaks_indices=None):
     peaks['area_decile_from_midpoint'][select_peaks_indices] = fr_times[:, ::2] - fr_times[:, i].reshape(-1,1)
 
 @export
-#@numba.njit(nopython=True, cache=True)
+@numba.jit(nopython=True, cache=True)
 def compute_wf_attributes(data, sample_length, n_samples: int, downsample_wf=False):
     """
     Compute waveform attribures
