@@ -636,7 +636,19 @@ class Context:
         instance, which is referenced under multiple keys in the output dict.
         """
         if self._plugins_are_cached(targets):
-            return self.__get_plugins_from_cache(run_id)
+            cached_plugins = self.__get_plugins_from_cache(run_id)
+            plugins = {}
+            targets = list(targets)
+            for target in targets:
+                if target in plugins:
+                    continue
+                    
+                target_plugin = cached_plugins[target]
+                for provides in target_plugin.provides:
+                    plugins[provides] = target_plugin
+            
+                targets += list(target_plugin.depends_on)
+            return plugins
 
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
