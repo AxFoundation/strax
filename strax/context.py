@@ -1205,6 +1205,7 @@ class Context:
                  seconds_range=None,
                  time_within=None,
                  time_selection='fully_contained',
+                 selection=None,
                  selection_str=None,
                  keep_columns=None,
                  drop_columns=None,
@@ -1306,6 +1307,7 @@ class Context:
                     result.data = strax.apply_selection(
                         result.data,
                         selection_str=selection_str,
+                        selection=selection,
                         keep_columns=keep_columns,
                         drop_columns=drop_columns,
                         time_range=time_range,
@@ -2110,7 +2112,10 @@ class Context:
 
 
 select_docs = """
-:param selection_str: Query string or sequence of strings to apply.
+:param selection: Query string, sequence of strings, or simple function to apply.
+    The function must take a single argument which represents the structure 
+    numpy array of the loaded data.
+:param selection_str: Same as selection (deprecated)
 :param keep_columns: Array field/dataframe column names to keep. 
     Useful to reduce amount of data in memory. (You can only specify 
     either keep or drop column.)
