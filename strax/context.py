@@ -639,14 +639,14 @@ class Context:
             cached_plugins = self.__get_plugins_from_cache(run_id)
             plugins = {}
             targets = list(targets)
-            for target in targets:
+            while targets:
+                target = targets.pop(0)
                 if target in plugins:
                     continue
-                    
+            
                 target_plugin = cached_plugins[target]
                 for provides in target_plugin.provides:
                     plugins[provides] = target_plugin
-            
                 targets += list(target_plugin.depends_on)
             return plugins
 
