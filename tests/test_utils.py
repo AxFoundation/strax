@@ -115,7 +115,29 @@ def test_selection_str(d):
     mask = (d['data'] > mean_data) & (d['data'] < max_data)
     selections_str = [f'data > {mean_data}', 
                       f'data < {max_data}']
-    selected_data = strax.apply_selection(d, selection_str=selections_str)
+    selected_data = strax.apply_selection(d, selection=selections_str)
+    assert np.all(selected_data == d[mask])
+
+
+@settings(deadline=None)
+@given(get_dummy_data(
+    data_length=(1, 10),
+    dt=(1, 10),
+    max_time=(1, 20)))
+def test_selection_function(d):
+    """
+    Test selection string. We are going for this example check that
+        selecting the data based on the data field is the same as if we
+        were to use a mask NB: data must have some length!
+
+    :param d: test-data from get_dummy_data
+    :return: None
+    """
+    mean_data = np.mean(d['data'])
+    max_data = np.max(d['data'])
+    mask = (d['data'] > mean_data) & (d['data'] < max_data)
+    selections_function = lambda data: (data['data'] > mean_data) & (d['data'] < max_data)
+    selected_data = strax.apply_selection(d, selection=selections_function)
     assert np.all(selected_data == d[mask])
 
 

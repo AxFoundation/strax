@@ -611,6 +611,7 @@ def iter_chunk_meta(md):
 
 @export
 def apply_selection(x,
+                    selection=None,
                     selection_str=None,
                     keep_columns=None,
                     drop_columns=None,
@@ -619,7 +620,8 @@ def apply_selection(x,
     """Return x after applying selections
 
     :param x: Numpy structured array
-    :param selection_str: Query string or sequence of strings to apply.
+    :param selection: Query string, sequence of strings, or simple function to apply.
+    :param selection_str: Same as selection (deprecated)
     :param time_range: (start, stop) range to load, in ns since the epoch
     :param keep_columns: Field names of the columns to keep.
     :param drop_columns: Field names of the columns to drop.
@@ -649,12 +651,21 @@ def apply_selection(x,
         raise ValueError(f"Unknown time_selection {time_selection}")
 
     if selection_str:
-        if isinstance(selection_str, (list, tuple)):
-            selection_str = ' & '.join(f'({x})' for x in selection_str)
-
-        mask = numexpr.evaluate(selection_str, local_dict={
-            fn: x[fn]
-            for fn in x.dtype.names})
+        warn('The option "selection_str" is depricated and will be removed in a future release. '
+             'Please use "selection" instead.')
+        selection = selection_str
+        
+    if selection:
+        if hasattr(selection, '__call__'):
+            mask = selection(x)
+        else:
+            if isinstance(selection, (list, tuple)):
+                selection = ' & '.join(f'({x})' for x in selection)
+    
+            mask = numexpr.evaluate(selection, local_dict={
+                fn: x[fn]
+                for fn in x.dtype.names})
+             
         x = x[mask]
 
     if keep_columns:

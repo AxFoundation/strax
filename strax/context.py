@@ -636,7 +636,19 @@ class Context:
         instance, which is referenced under multiple keys in the output dict.
         """
         if self._plugins_are_cached(targets):
-            return self.__get_plugins_from_cache(run_id)
+            cached_plugins = self.__get_plugins_from_cache(run_id)
+            plugins = {}
+            targets = list(targets)
+            while targets:
+                target = targets.pop(0)
+                if target in plugins:
+                    continue
+            
+                target_plugin = cached_plugins[target]
+                for provides in target_plugin.provides:
+                    plugins[provides] = target_plugin
+                targets += list(target_plugin.depends_on)
+            return plugins
 
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
@@ -1205,6 +1217,7 @@ class Context:
                  seconds_range=None,
                  time_within=None,
                  time_selection='fully_contained',
+                 selection=None,
                  selection_str=None,
                  keep_columns=None,
                  drop_columns=None,
@@ -1306,6 +1319,7 @@ class Context:
                     result.data = strax.apply_selection(
                         result.data,
                         selection_str=selection_str,
+                        selection=selection,
                         keep_columns=keep_columns,
                         drop_columns=drop_columns,
                         time_range=time_range,
@@ -2110,7 +2124,10 @@ class Context:
 
 
 select_docs = """
-:param selection_str: Query string or sequence of strings to apply.
+:param selection: Query string, sequence of strings, or simple function to apply.
+    The function must take a single argument which represents the structure 
+    numpy array of the loaded data.
+:param selection_str: Same as selection (deprecated)
 :param keep_columns: Array field/dataframe column names to keep. 
     Useful to reduce amount of data in memory. (You can only specify 
     either keep or drop column.)

@@ -1,5 +1,5 @@
 import strax
-from strax.testutils import Records, Peaks, PeakClassification, run_id
+from strax.testutils import Records, Peaks, PeaksWoPerRunDefault, PeakClassification, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
@@ -214,6 +214,17 @@ class TestContext(unittest.TestCase):
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
+
+    def test_get_plugins_with_cache(self):
+        st = self.get_context(False)
+        st.register(Records)
+        st.register(PeaksWoPerRunDefault)
+        st.register(PeakClassification)
+
+        not_cached_plugins = st._get_plugins(('peaks',), run_id)
+        st._get_plugins(('peak_classification',), run_id)
+        cached_plugins = st._get_plugins(('peaks',), run_id)
+        assert not_cached_plugins.keys() == cached_plugins.keys(), f'_get_plugins returns different plugins if cached!'
 
     def test_register_no_defaults(self, runs_default_allowed=False):
         """Test if we only register a plugin with no run-defaults"""
