@@ -14,6 +14,7 @@ from immutabledict import immutabledict
 import numpy as np
 from copy import copy, deepcopy
 import strax
+import types
 
 export, __all__ = strax.exporter()
 
@@ -484,7 +485,7 @@ class Plugin:
                     inputs_merged = {
                         kind: strax.Chunk.merge([inputs[d] for d in deps_of_kind])
                         for kind, deps_of_kind in self.dependencies_by_kind().items()}
-
+                
                 # Submit the computation
                 # print(f"{self} calling with {inputs_merged}")
                 if self.parallel and executor is not None:
@@ -496,7 +497,13 @@ class Plugin:
                     pending_futures = [f for f in pending_futures if not f.done()]
                     yield new_future
                 else:
-                    yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+                    chunk = self.do_compute(chunk_i=chunk_i, **inputs_merged)
+                    if isinstance(chunk, types.GeneratorType):
+                        print('Iter genertor', chunk, type(chunk), isinstance(chunk, types.GeneratorType))
+                        yield from chunk
+                    else:
+                        print('Iter default', chunk, type(chunk), isinstance(chunk, types.GeneratorType))
+                        yield chunk
 
         except IterDone:
             # Check all sources are exhausted.
@@ -605,9 +612,11 @@ class Plugin:
         if self.compute_takes_start_end:
             kwargs['start'] = start
             kwargs['end'] = end
+            
         result = self.compute(**kwargs)
-
-        return self._fix_output(result, start, end)
+        if isinstance(result, types.GeneratorType):
+            return result
+        return self._fix_output(result, start, end) 
 
     def _fix_output(self, result, start, end, _dtype=None):
         if self.multi_output and _dtype is None:
