@@ -499,10 +499,8 @@ class Plugin:
                 else:
                     chunk = self.do_compute(chunk_i=chunk_i, **inputs_merged)
                     if isinstance(chunk, types.GeneratorType):
-                        print('Iter genertor', chunk, type(chunk), isinstance(chunk, types.GeneratorType))
                         yield from chunk
                     else:
-                        print('Iter default', chunk, type(chunk), isinstance(chunk, types.GeneratorType))
                         yield chunk
 
         except IterDone:
