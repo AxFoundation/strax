@@ -489,6 +489,10 @@ class Plugin:
                 # Submit the computation
                 # print(f"{self} calling with {inputs_merged}")
                 if self.parallel and executor is not None:
+                    if inspect.isgeneratorfunction(self.compute):
+                        raise NotImplementedError(
+                            f'Plugin "{self.__class__.__name__}" uses an iterator as compute method. ' 
+                            'This is not supported in multi-threading/processing.')
                     new_future = executor.submit(
                         self.do_compute,
                         chunk_i=chunk_i,
