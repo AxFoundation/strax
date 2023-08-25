@@ -1,5 +1,5 @@
 import strax
-from strax.testutils import Records, Peaks, PeaksWoPerRunDefault, PeakClassification, run_id
+from strax.testutils import Records, Peaks, PeaksWoPerRunDefault, PeakClassification, RecordsWithTimeStructure, DownSampleRecords, run_id
 import tempfile
 import numpy as np
 from hypothesis import given, settings
@@ -215,6 +215,33 @@ class TestContext(unittest.TestCase):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
 
+    def test_down_chunking(self):
+        st = self.get_context(False)
+        st.register(RecordsWithTimeStructure)
+        st.register(DownSampleRecords)
+
+        st.make(run_id, 'records')
+        st.make(run_id, 'records_down_chunked')
+
+        chunks_records = st.get_meta(run_id, 'records')['chunks']
+        chunks_records_down_chunked = st.get_meta(run_id, 'records_down_chunked')['chunks']
+
+        _chunks_are_downsampled = len(chunks_records)*2 == len(chunks_records_down_chunked) 
+        assert _chunks_are_downsampled
+        
+        _chunks_are_continues = np.all([chunks_records_down_chunked[i]['end'] == chunks_records_down_chunked[i+1]['start'] for i in range(len(chunks_records_down_chunked)-1)])
+        assert _chunks_are_continues
+
+    def test_down_chunking_multi_processing(self):
+        st = self.get_context(False, allow_multiprocess=True)
+        st.set_context_config({'use_per_run_defaults': False})
+        st.register(RecordsWithTimeStructure)
+        st.register(DownSampleRecords)
+
+        st.make(run_id, 'records', max_workers=1)
+        with self.assertRaises(NotImplementedError):
+            st.make(run_id, 'records_down_chunked', max_workers=2)
+    
     def test_get_plugins_with_cache(self):
         st = self.get_context(False)
         st.register(Records)
@@ -283,11 +310,12 @@ class TestContext(unittest.TestCase):
         st.deregister_plugins_with_missing_dependencies()
         assert st._plugin_class_registry.pop('peaks', None) is None
 
-    def get_context(self, use_defaults):
+    def get_context(self, use_defaults, **kwargs):
         """Get simple context where we have one mock run in the only storage frontend"""
         assert isinstance(use_defaults, bool)
         st = strax.Context(storage=self.get_mock_sf(),
-                           check_available=('records',)
+                           check_available=('records',),
+                           **kwargs
                            )
         st.set_context_config({'use_per_run_defaults': use_defaults})
         return st
