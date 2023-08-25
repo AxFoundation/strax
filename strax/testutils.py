@@ -313,6 +313,8 @@ class DownSampleRecords(strax.Plugin):
     def compute(self, records, start, end):
         offset = 0
         last_start = start
+
+        count=0
         for count, r in enumerate(records):
             if count == 5:
                 res = records[offset:count]
