@@ -1,4 +1,5 @@
 import typing as ty
+from functools import wraps
 
 import numpy as np
 import numba
@@ -425,3 +426,18 @@ def _update_subruns_in_chunk(chunks):
             else:
                 subruns[subrun_id] = subrun_start_end
     return subruns
+
+
+@export
+def check_chunk_n(f):
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        # assume chunk_info is the second argument
+        chunk_info = kwargs['chunk_info']
+        chunk = f(self, *args, **kwargs)
+        if len(chunk) != chunk_info['n']:
+            raise ValueError(
+                f"Chunk {chunk_info['filename']} of {chunk_info['run_id']} has {len(chunk)} items, "
+                f"but chunk_info {chunk_info} says {chunk_info['n']}")
+        return chunk
+    return wrapper

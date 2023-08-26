@@ -251,6 +251,7 @@ class FileSytemBackend(strax.StorageBackend):
             chunk.target_size_mb = self.set_chunk_size_mb
         return chunk
 
+    @strax.check_chunk_n
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = osp.join(dirname, chunk_info['filename'])
         return strax.load_file(fn, dtype=dtype, compressor=compressor)
