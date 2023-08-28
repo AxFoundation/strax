@@ -433,6 +433,12 @@ def check_chunk_n(f):
     @wraps(f)
     def wrapper(self, *args, **kwargs):
         # assume chunk_info is the second argument
+        if 'chunk_info' not in kwargs:
+            raise ValueError(
+                "chunk_info not passed to function, check_chunk_n ",
+                "can only be used with functions that take chunk_info as an argument, ",
+                "usually it is the strax.StorageBackend._read_chunk method."
+            )
         chunk_info = kwargs['chunk_info']
         chunk = f(self, *args, **kwargs)
         if len(chunk) != chunk_info['n']:
