@@ -1,3 +1,14 @@
+1.5.3 / 2023-08-29
+---------------------
+* Add small selection functions by @WenzDaniel in https://github.com/AxFoundation/strax/pull/746
+* Patch plugin cache by @WenzDaniel in https://github.com/AxFoundation/strax/pull/748
+* Update version of urllib3, remove version control of deepdiff by @dachengx in https://github.com/AxFoundation/strax/pull/749
+* Check chunk size right after loading chunk by @dachengx in https://github.com/AxFoundation/strax/pull/752
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.2...v1.5.3
+
+
 1.5.2 / 2023-07-06
 ---------------------
 * Use warning also in `abs_time_to_prev_next_interval` by @dachengx in https://github.com/AxFoundation/strax/pull/738
