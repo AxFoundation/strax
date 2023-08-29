@@ -4,6 +4,7 @@ import glob
 import strax
 from strax.testutils import Records
 import os
+import json
 import tempfile
 import numpy as np
 import typing as ty
@@ -167,6 +168,28 @@ class TestStorageType(TestCase):
                 self.assertEqual(len_from_compare, len_from_main_st)
             # else:
             #     self.assertNotEqual(len_from_compare, len_from_main_st)
+
+    def test_check_chunk_n(self):
+        """
+        Check that check_chunk_n can detect when metadata is lying
+        """
+        st, frontend_setup = self.get_st_and_fill_frontends()
+
+        sf = st.storage[0]
+        st_new = st.new_context()
+        st_new.storage = [sf]
+        key = st_new.key_for(self.run_id, self.target)
+        backend, backend_key = sf.find(key, **st_new._find_options)
+        prefix = strax.storage.files.dirname_to_prefix(backend_key)
+        md = st_new.get_metadata(self.run_id, self.target)
+        md['chunks'][0]['n'] += 1
+        md_path = os.path.join(backend_key,  f'{prefix}-metadata.json')
+        with open(md_path, "w") as file:
+            json.dump(md, file, indent=4)
+
+        with self.assertRaises(strax.DataCorrupted):
+            assert st_new.is_stored(self.run_id, self.target)
+            st_new.get_array(self.run_id, self.target)
 
     def test_float_remoteness_allowed(self):
         """
