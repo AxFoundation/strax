@@ -442,7 +442,7 @@ def check_chunk_n(f):
         chunk_info = kwargs['chunk_info']
         chunk = f(self, *args, **kwargs)
         if len(chunk) != chunk_info['n']:
-            raise ValueError(
+            raise strax.DataCorrupted(
                 f"Chunk {chunk_info['filename']} of {chunk_info['run_id']} has {len(chunk)} items, "
                 f"but chunk_info {chunk_info} says {chunk_info['n']}")
         return chunk
