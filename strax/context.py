@@ -1702,7 +1702,7 @@ class Context:
         else:
             raise ValueError(f"Expected old_metadata as `str` or `dict` got {type(old_metadata)}")
 
-        strax.util.compare_meta(old_metadata, new_metadata)
+        strax.util.compare_dict(old_metadata, new_metadata)
 
     def run_metadata(self, run_id, projection=None) -> dict:
         """
