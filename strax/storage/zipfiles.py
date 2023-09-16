@@ -104,8 +104,6 @@ class ZipDirectory(strax.StorageFrontend):
 
 @export
 class ZipFileBackend(strax.StorageBackend):
-
-    @strax.check_chunk_n
     def _read_chunk(self, zipn_and_dirn, chunk_info, dtype, compressor):
         zipn, dirn = zipn_and_dirn
         with zipfile.ZipFile(zipn) as zp:

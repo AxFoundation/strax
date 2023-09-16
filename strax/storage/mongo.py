@@ -45,7 +45,6 @@ class MongoBackend(StorageBackend):
         self._buff_mb = DEFAULT_MONGO_BACKEND_BUFFER_MB
         self._buff_nruns = DEFAULT_MONGO_BACKEND_BUFFER_NRUNS
 
-    @strax.check_chunk_n
     def _read_chunk(self, backend_key, chunk_info, dtype, compressor):
         """See strax.Backend"""
         chunk_i = chunk_info["chunk_i"]
