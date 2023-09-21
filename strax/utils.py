@@ -6,7 +6,6 @@ import contextlib
 from functools import wraps
 import json
 import re
-
 import sys
 import traceback
 import typing as ty
@@ -19,6 +18,9 @@ import numpy as np
 import pandas as pd
 from collections.abc import Mapping
 from warnings import warn
+import os
+import click
+import deepdiff
 
 
 # Change numba's caching backend from pickle to dill
@@ -38,9 +40,10 @@ else:
     from tqdm import tqdm
 
 # Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor == 6:
-    warn('Using strax in python 3.6 is deprecated since 2021/08 consider '
-         'upgrading to python 3.8.')
+if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
+    warn('Using strax in python 3.6-3.7 is deprecated since 2022/01 consider '
+         'upgrading to python 3.8, 3.9 or 3.10. This will result in an error'
+         ' in strax 1.2', DeprecationWarning)
 
 
 def exporter(export_self=False):
@@ -311,6 +314,47 @@ def deterministic_hash(thing, length=10):
 
 
 @export
+def compare_dict(old: dict, new: dict):
+    """Compare two dictionaries and print the differences"""
+    differences = deepdiff.DeepDiff(old, new)
+    color_values = lambda oldval, newval: (
+        click.style(oldval, fg='red', bold=True), click.style(newval, fg='green', bold=True))
+    underline = lambda text, bold=True: click.style(text, bold=bold, underline=True)
+    for key, value in differences.items():
+        if key in ['values_changed', 'iterable_item_added', 'iterable_item_removed']:
+            print(underline(f"\n> {key}"))
+            for kk, vv in value.items():
+                if key == "values_changed":
+                    old_values = vv['old_value']
+                    new_values = vv['new_value']
+                elif key == "iterable_item_added":
+                    old_values = "-"
+                    new_values = vv
+                else:  # if key == "iterable_item_removed":
+                    old_values = vv
+                    new_values = "-"
+                old, new = color_values(old_values, new_values)
+                click.secho(f"\t in {kk[4:]}", bold=False)
+                print(f"\t\t{old} -> {new}")
+        elif key in ['dictionary_item_added', 'dictionary_item_removed']:
+            color = "red" if "removed" in key else "green"
+            print(underline(f"\n> {key:25s}"), end="->")
+            click.secho(f"\t{', '.join(value)}", fg=color)
+        elif key in ['type_changes']:
+            print(underline(f"\n> {key}"))
+            for kk, vv in value.items():
+                click.secho(f"\t{kk}")
+                oldtype = vv['old_type']
+                newtype = vv['new_type']
+                keyold, keynew = color_values('old_type', 'new_type')
+                valueold, valuenew = color_values(vv['old_value'], vv['new_value'])
+                print(f"\t\t{keyold:10s} : {oldtype} ({valueold})")
+                print(f"\t\t{keynew:10s} : {newtype} ({valuenew})")
+        else:
+            raise KeyError(f"Unkown key in comparison {key}")
+
+
+@export
 def formatted_exception():
     """Return human-readable multiline string with info
     about the exception that is currently being handled.
@@ -443,6 +487,7 @@ def multi_run(exec_function, run_ids, *args,
               max_workers=None,
               throw_away_result=False,
               multi_run_progress_bar=True,
+              ignore_errors=False,
               log=None,
               **kwargs):
     """Execute exec_function(run_id, *args, **kwargs) over multiple runs,
@@ -454,7 +499,10 @@ def multi_run(exec_function, run_ids, *args,
         If set to None, defaults to 1.
     :param throw_away_result: instead of collecting result, return None.
     :param multi_run_progress_bar: show a tqdm progressbar for multiple runs.
+    :param ignore_errors: Return the data for the runs that
+        successfully loaded, even if some runs failed executing.
     :param log: logger to be used.
+
 
     Other (kw)args will be passed to the exec_function.
     """
@@ -509,7 +557,7 @@ def multi_run(exec_function, run_ids, *args,
                 desc="Loading %d runs" % len(run_ids),
                 disable=not multi_run_progress_bar,
                 )
-
+    failures = []
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
         log.debug('Starting ThreadPoolExecutor for multi-run.')
         # Submit first bunch of futures, add additional futures later
@@ -522,17 +570,23 @@ def multi_run(exec_function, run_ids, *args,
         final_result = []
         while futures:
             futures_done, _ = wait(futures, return_when=FIRST_COMPLETED)
-
             for f in futures_done:
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(f'Done with run_id: {_run_id} ' 
                           f'and {len(run_id_numpy)-tasks_done} are left.')
                 pbar.update(1)
+                if f.exception() is not None:
+                    if ignore_errors:
+                        log.warning(f'Ran into {f.exception()}, ignoring that for now!')
+                        failures.append(_run_id)
+                        continue
+                    raise f.exception()
+
                 if throw_away_result:
                     continue
-
                 result = f.result()
+
                 # Append the run id column
                 if add_run_id_field:
                     ids = np.array([_run_id] * len(result),
@@ -558,6 +612,8 @@ def multi_run(exec_function, run_ids, *args,
             start_of_runs = [np.min(res['time']) for res in final_result]
             final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
         pbar.close()
+        if ignore_errors and len(failures):
+            log.warning(f'Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}')
         return final_result
 
 
@@ -598,6 +654,7 @@ def iter_chunk_meta(md):
 
 @export
 def apply_selection(x,
+                    selection=None,
                     selection_str=None,
                     keep_columns=None,
                     drop_columns=None,
@@ -606,7 +663,8 @@ def apply_selection(x,
     """Return x after applying selections
 
     :param x: Numpy structured array
-    :param selection_str: Query string or sequence of strings to apply.
+    :param selection: Query string, sequence of strings, or simple function to apply.
+    :param selection_str: Same as selection (deprecated)
     :param time_range: (start, stop) range to load, in ns since the epoch
     :param keep_columns: Field names of the columns to keep.
     :param drop_columns: Field names of the columns to drop.
@@ -636,12 +694,21 @@ def apply_selection(x,
         raise ValueError(f"Unknown time_selection {time_selection}")
 
     if selection_str:
-        if isinstance(selection_str, (list, tuple)):
-            selection_str = ' & '.join(f'({x})' for x in selection_str)
-
-        mask = numexpr.evaluate(selection_str, local_dict={
-            fn: x[fn]
-            for fn in x.dtype.names})
+        warn('The option "selection_str" is depricated and will be removed in a future release. '
+             'Please use "selection" instead.')
+        selection = selection_str
+        
+    if selection:
+        if hasattr(selection, '__call__'):
+            mask = selection(x)
+        else:
+            if isinstance(selection, (list, tuple)):
+                selection = ' & '.join(f'({x})' for x in selection)
+    
+            mask = numexpr.evaluate(selection, local_dict={
+                fn: x[fn]
+                for fn in x.dtype.names})
+             
         x = x[mask]
 
     if keep_columns:
@@ -684,3 +751,22 @@ def apply_selection(x,
         del x2
 
     return x
+
+
+def dir_size_mb(start_path ='.'):
+    """
+    Calculate the total size of all files in start_path
+    Thanks https://stackoverflow.com/a/1392549/18280620
+    """
+    if not os.path.exists(start_path):
+        return 0
+
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+
+    return total_size / 1e6

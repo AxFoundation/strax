@@ -19,6 +19,8 @@ import strax
 def sorted_bounds(disjoint=False,
                   max_value=50,
                   max_len=10,
+                  min_size=0,
+                  max_size=20,
                   remove_duplicates=False):
     if disjoint:
         # Since we accumulate later:
@@ -26,7 +28,7 @@ def sorted_bounds(disjoint=False,
 
     s = strategies.lists(strategies.integers(min_value=0,
                                              max_value=max_value),
-                         min_size=0, max_size=20)
+                         min_size=min_size, max_size=max_size)
     if disjoint:
         s = s.map(accumulate).map(list)
 
@@ -34,8 +36,20 @@ def sorted_bounds(disjoint=False,
     s = s.filter(lambda x: len(x) % 2 == 0)
 
     # Convert to list of 2-tuples
-    s = s.map(lambda x: [tuple(q)
-                         for q in iterutils.chunked(sorted(x), size=2)])
+    if disjoint:
+        s = s.map(lambda x: [tuple(q)
+                            for q in iterutils.chunked(sorted(x), size=2)])
+    else:
+        s = s.map(lambda x: [tuple(sorted(q))
+                            for q in iterutils.chunked(x, size=2)])
+
+    s = s.map(sorted)
+
+    if not disjoint:
+        # Remove cases with not sorted endtime
+        s = s.filter(lambda x: all([a[1] < b[1] for a, b in zip(x[:-1], x[1:])]))
+        # Remove cases without overlapping window
+        s = s.filter(lambda x: all([a[1] > b[0] for a, b in zip(x[:-1], x[1:])]))
 
     # Remove cases with zero-length intervals
     s = s.filter(lambda x: all([a[0] != a[1] for a in x]))
@@ -45,7 +59,7 @@ def sorted_bounds(disjoint=False,
         s = s.filter(lambda x: x == list(set(x)))
 
     # Sort intervals and result
-    return s.map(sorted)
+    return s
 
 
 ##
@@ -194,21 +208,57 @@ class Peaks(strax.Plugin):
         return p
 
 
+@strax.takes_config(
+    strax.Option('base_area', type=int, default=0),
+    strax.Option('give_wrong_dtype', type=bool, default=False),
+    strax.Option('bonus_area', type=int, default=0))
+class PeaksWoPerRunDefault(strax.Plugin):
+    """Same as peak plugin but without per run default option
+    to allow for plugin caching.
+    """
+    provides = 'peaks'
+    data_kind = 'peaks'
+    depends_on = ('records',)
+    dtype = strax.peak_dtype()
+    parallel = True
+
+    def compute(self, records):
+        if self.config['give_wrong_dtype']:
+            return np.zeros(5, [('a', np.int64), ('b', np.float64)])
+        p = np.zeros(len(records), self.dtype)
+        p['time'] = records['time']
+        p['length'] = p['dt'] = 1
+        p['area'] = self.config['base_area'] + self.config['bonus_area']
+        return p
+
+
 # Another peak-kind plugin, to test time_range selection
 # with unaligned chunks
 class PeakClassification(strax.Plugin):
-    provides = 'peak_classification'
-    data_kind = 'peaks'
+    provides = ('peak_classification',
+                'lone_hits')
+    data_kind = dict(peak_classification='peaks',
+                     lone_hits='lone_hits')
     depends_on = ('peaks',)
-    dtype = (
-        [('type', np.int8, 'Classification of the peak.')]
-        + strax.time_fields)
     rechunk_on_save = True
+    save_when = immutabledict({k: strax.SaveWhen.ALWAYS for k in provides})
+
+    def infer_dtype(self):
+        peaks_dtype = strax.time_fields + [('type', np.int8, 'Classification of the peak.')]
+        lone_hits = strax.time_fields
+        return {'peak_classification': peaks_dtype,
+                'lone_hits': lone_hits}
 
     def compute(self, peaks):
-        return dict(type=np.zeros(len(peaks)),
-                    time=peaks['time'],
-                    endtime=strax.endtime(peaks))
+        p = np.zeros(len(peaks), self.dtype['peak_classification'])
+        p['time'] = peaks['time']
+        p['endtime'] = strax.endtime(peaks)
+
+        lh = np.zeros(len(peaks), self.dtype['lone_hits'])
+        lh['time'] = peaks['time']
+        lh['endtime'] = strax.endtime(peaks)
+        return dict(peak_classification=p,
+                    lone_hits=lh)
 
 # Used in test_core.py
 run_id = '0'

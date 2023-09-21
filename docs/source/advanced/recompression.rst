@@ -1,8 +1,12 @@
 Recompressing & moving data
 ===========================
+There are two options for recompressing data:
+ - via the context :py:func:`context.copy_to_frontend`
+ - via a dedicated script ``rechunker`` that only works for filesystem backends and works outside the context.
+
 In order to recompress data with another compression algorithm the
 :py:func:`context.copy_to_frontend` function can be used.
-The function works on a per run_id, per datatype basis. In the example
+The function works on a per run_id-, per datatype- basis. In the example
 below, peaks data is copied to a second frontend.
 
 
@@ -135,3 +139,63 @@ As such, for further use, it does not matter if the data is coming from
 either of folders folder_A-folder_C as the metadata will tell strax
 which compressor to use. Different compressors may have different
 performance for loading/writing data.
+
+Rechunker script
+================
+From strax v1.2.2 onwards, a ``rechunker`` script is automatically installed with strax.
+It can be used to re-write data in the ``FileSystem`` backend.
+
+
+For example:
+
+.. code-block:: bash
+
+    rechunker --source 009104-raw_records_aqmon-rfzvpzj4mf --compressor zstd
+
+will output:
+
+
+.. code-block:: rst
+
+    Will write to /tmp/tmpoj0xpr78 and make sub-folder 009104-raw_records_aqmon-rfzvpzj4mf
+    Rechunking 009104-raw_records_aqmon-rfzvpzj4mf to /tmp/tmpoj0xpr78/009104-raw_records_aqmon-rfzvpzj4mf
+    move /tmp/tmpoj0xpr78/009104-raw_records_aqmon-rfzvpzj4mf to 009104-raw_records_aqmon-rfzvpzj4mf
+    Re-compressed 009104-raw_records_aqmon-rfzvpzj4mf
+            backend_key             009104-raw_records_aqmon-rfzvpzj4mf
+            load_time               0.4088103771209717
+            write_time              0.07699322700500488
+            uncompressed_mb         1.178276
+            source_compressor       zstd
+            dest_compressor         zstd
+            source_mb               0.349217
+            dest_mb                 0.349218
+
+Using script to profile write/read rates for compressors
+--------------------------------------------------------
+This script can easily be used to profile different compressors:
+
+.. code-block:: bash
+
+    for COMPRESSOR in zstd bz2 lz4 blosc zstd; \
+        do echo $COMPRESSOR; \
+        rechunker \
+            --source 009104-raw_records-rfzvpzj4mf \
+            --write_stats_to test.csv \
+            --compressor $COMPRESSOR; \
+        done
+
+We can check the output in python using:
+
+.. code-block:: python
+
+  >>> import pandas as pd
+  >>> df = pd.read_csv('test.csv')
+  >>> df['read_mbs'] = df['uncompressed_mb']/df['load_time']
+  >>> df['write_mbs'] = df['uncompressed_mb']/df['write_time']
+  >>> print(df[['source_compressor', 'read_mbs', 'dest_compressor', 'write_mbs']].to_string())
+      source_compressor    read_mbs dest_compressor   write_mbs
+    0              zstd  313.922890            zstd  298.429123
+    1              zstd  284.530054             bz2    8.932259
+    2               bz2   20.289876             lz4  228.932498
+    3               lz4  372.491150           blosc  433.494794
+    4             blosc  725.154966            zstd  215.765177

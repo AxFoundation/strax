@@ -1,3 +1,166 @@
+1.5.4 / 2023-09-19
+---------------------
+* Split compare_metadata into utils.compare_meta by @dachengx in https://github.com/AxFoundation/strax/pull/754
+* Change endtime - time >= 0 to endtime >= time by @JYangQi00 in https://github.com/AxFoundation/strax/pull/756
+* Mandatorily wrap `_read_chunk` in a `check_chunk_n` decorator by @dachengx in https://github.com/AxFoundation/strax/pull/758
+
+New Contributors
+* @JYangQi00 made their first contribution in https://github.com/AxFoundation/strax/pull/756
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.3...v1.5.4
+
+
+1.5.3 / 2023-08-29
+---------------------
+* Add small selection functions by @WenzDaniel in https://github.com/AxFoundation/strax/pull/746
+* Patch plugin cache by @WenzDaniel in https://github.com/AxFoundation/strax/pull/748
+* Update version of urllib3, remove version control of deepdiff by @dachengx in https://github.com/AxFoundation/strax/pull/749
+* Check chunk size right after loading chunk by @dachengx in https://github.com/AxFoundation/strax/pull/752
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.2...v1.5.3
+
+
+1.5.2 / 2023-07-06
+---------------------
+* Use warning also in `abs_time_to_prev_next_interval` by @dachengx in https://github.com/AxFoundation/strax/pull/738
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.1...v1.5.2
+
+
+1.5.1 / 2023-06-22
+---------------------
+* Fix argsort inside numba.jit using kind='mergesort' by @dachengx in https://github.com/AxFoundation/strax/pull/721
+* Fix urllib3 version to 1.26.15 by @dachengx in https://github.com/AxFoundation/strax/pull/723
+* Save other fields in the merged peaks to their default value by @dachengx in https://github.com/AxFoundation/strax/pull/722
+* add a metadata comparison method by @KaraMelih in https://github.com/AxFoundation/strax/pull/706
+* Accelerate select_runs by @shenyangshi in https://github.com/AxFoundation/strax/pull/727
+* Stop assigning dependabot to Joran by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/732
+* Bump urllib3 from 1.26.15 to 2.0.2 in /extra_requirements by @dependabot in https://github.com/AxFoundation/strax/pull/729
+* Add new general fucntion which computes dt to some interval by @WenzDaniel in https://github.com/AxFoundation/strax/pull/726
+* Check whether `things` and `containers` are sorted by @dachengx in https://github.com/AxFoundation/strax/pull/725
+* Set start of further chunk to be the smallest start of dependencies by @dachengx in https://github.com/AxFoundation/strax/pull/715
+* Fix touching window by @dachengx in https://github.com/AxFoundation/strax/pull/736
+
+New Contributors
+* @KaraMelih made their first contribution in https://github.com/AxFoundation/strax/pull/706
+* @shenyangshi made their first contribution in https://github.com/AxFoundation/strax/pull/727
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.0...v1.5.1
+
+
+1.5.0 / 2023-05-02
+---------------------
+* Fix ipython version by @dachengx in https://github.com/AxFoundation/strax/pull/719
+* Do not change channel when sort_by_time by @dachengx in https://github.com/AxFoundation/strax/pull/718
+* Save hits level information(hits time difference) in peaks by @dachengx in https://github.com/AxFoundation/strax/pull/716
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.3...v1.5.0
+
+
+1.4.3 / 2023-04-22
+---------------------
+* Select max gaps from positive gaps by @dachengx in https://github.com/AxFoundation/strax/pull/708
+
+New Contributors
+* @dachengx made their first contribution in https://github.com/AxFoundation/strax/pull/708
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.2...v1.4.3
+
+
+1.4.2 / 2023-03-08
+---------------------
+* Patch md access in the rechunker by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/711
+* Raise compression errors if unable by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/714
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.1...v1.4.2
+
+
+1.4.1 / 2023-02-13
+---------------------
+* Rechunker using Mailbox by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/710
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.4.0...v1.4.1
+
+
+1.4.0 / 2022-10-17
+---------------------
+* Add capability for building summed waveform over channel subset by @DCichon in https://github.com/AxFoundation/strax/pull/565
+* Fixed delta peak timestamp problem by @FaroutYLq in https://github.com/AxFoundation/strax/pull/702
+
+Notes
+ -  Breaking changes in the peak-building chain due to #565
+New Contributors
+ - @DCichon made their first contribution in https://github.com/AxFoundation/strax/pull/565
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.3.0...v1.4.0
+
+
+1.3.0 / 2022-09-09
+---------------------
+* Restructure plugins by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/700
+* Numpy caching of data in online monitor storage by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/698
+* Fix overflow bug in sort_by_time add little test by @WenzDaniel in https://github.com/AxFoundation/strax/pull/695
+* Refactor in preparation for PyMongo 4.0 by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/656
+* Plugin log property by @jmosbacher in https://github.com/AxFoundation/strax/pull/588
+
+
+1.2.3 / 2022-06-07
+---------------------
+* Prevent float/int funkyness in hitlet processing by @JoranAngevaare in https://github.com/AxFoundation/strax/pull/694
+
+
+1.2.2 / 2022-05-11
+---------------------
+- Add option to ignore errors in multirun loading (#653) 
+- Auto version, fix #217 (#689)
+- Add basics documentation - split Config and Plugin docs (#691)
+- Add n_hits comment in code (#692) 
+- Rechunker script (#686)
+
+
+1.2.1 / 2022-04-12
+---------------------
+- run dependabot remotely (#683)
+- Docs fixing (#684)
+- Allow different chunk size (#687)
+
+
+1.2.0 / 2022-03-09
+---------------------
+- Added lone hit area to area per channel (#649) 
+
+1.1.8 / 2022-03-08
+---------------------
+- Fix saving behavior of multioutput plugins with different SaveWhens (#674)
+- Change tempdirs in test (#657)
+- Define extra kwargs based on cut_by (db14f809414fe91c4e16d04bd7f166970891e591)
+- Update run_selection.py (#658)
+- Ignore raises on testing (#669)
+- Documentation tweaks (#670)
+- Test for inline plugin (#673)
+
+
+1.1.7 / 2022-02-16
+---------------------
+- Fix savewhen issues (#648)
+- Fix testing from straxen (#650)
+- Small fix superruns define run (#651)
+
+
+1.1.6 / 2022-02-03
+---------------------
+- Extend search field to also print occurrences (#638)
+- Extend save when (#631)
+- test straxen for coverage and backward compatibility (#635)
+- Failing example for test_conditional_entropy (#544)
+- python 3.10 (#630)
+- deprecate py3.6 py3.7 (#636)
+- remove deprecated function (#632)
+- Numba 0.55 (#634)
+  
+
 1.1.5 / 2022-01-10
 ---------------------
 - StorageFrontend remoteness attribute and test (#617)

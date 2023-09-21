@@ -1,8 +1,10 @@
-from unittest import TestCase, skipIf
+from unittest import TestCase
+
+import glob
 import strax
 from strax.testutils import Records
 import os
-import shutil
+import json
 import tempfile
 import numpy as np
 import typing as ty
@@ -15,15 +17,14 @@ class TestPerRunDefaults(TestCase):
     """
 
     def setUp(self):
-        self.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
         self.st = strax.Context(use_per_run_defaults=True,
                                 register=[Records], )
         self.target = 'records'
 
     def tearDown(self):
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def test_write_data_dir(self):
         self.st.storage = [strax.DataDirectory(self.path)]
@@ -85,13 +86,12 @@ class TestStorageType(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Get a temp directory available of all the tests"""
-        cls.path = os.path.join(tempfile.gettempdir(), 'strax_data')
+        cls.tempdir = tempfile.TemporaryDirectory()
+        cls.path = cls.tempdir.name
 
     def tearDown(self):
         """After each test, delete the temporary directory"""
-        if os.path.exists(self.path):
-            print(f'rm {self.path}')
-            shutil.rmtree(self.path)
+        self.tempdir.cleanup()
 
     def _sub_dir(self, subdir: str) -> str:
         return os.path.join(self.path, subdir)
@@ -169,6 +169,28 @@ class TestStorageType(TestCase):
             # else:
             #     self.assertNotEqual(len_from_compare, len_from_main_st)
 
+    def test_check_chunk_n(self):
+        """
+        Check that check_chunk_n can detect when metadata is lying
+        """
+        st, frontend_setup = self.get_st_and_fill_frontends()
+
+        sf = st.storage[0]
+        st_new = st.new_context()
+        st_new.storage = [sf]
+        key = st_new.key_for(self.run_id, self.target)
+        backend, backend_key = sf.find(key, **st_new._find_options)
+        prefix = strax.storage.files.dirname_to_prefix(backend_key)
+        md = st_new.get_metadata(self.run_id, self.target)
+        md['chunks'][0]['n'] += 1
+        md_path = os.path.join(backend_key,  f'{prefix}-metadata.json')
+        with open(md_path, "w") as file:
+            json.dump(md, file, indent=4)
+
+        with self.assertRaises(strax.DataCorrupted):
+            assert st_new.is_stored(self.run_id, self.target)
+            st_new.get_array(self.run_id, self.target)
+
     def test_float_remoteness_allowed(self):
         """
         It can happen that the pre-defined remoteness identifiers in
@@ -219,3 +241,82 @@ class TestStorageType(TestCase):
             st.storage = [storage_slightly_slow]
             print(st.storage)
             st.is_stored(self.run_id, self.target)
+
+
+class TestRechunking(TestCase):
+    """
+    Test the saving behavior of the context
+    """
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.path = self.tempdir.name
+        self.st = strax.Context(use_per_run_defaults=True,
+                                register=[Records], )
+        self.target = 'records'
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_rechunking(self):
+        for compressor in strax.io.COMPRESSORS.keys():
+            with self.subTest(compressor = compressor):
+                self.setUp()
+                self._rechunking(compressor)
+                self.tearDown()
+
+    def test_rechunk_parallelization(self):
+        for parallel in [True, 'process', False]:
+            with self.subTest(parallel = parallel):
+                self.setUp()
+                self._rechunking(compressor = 'blosc', parallel = parallel)
+                self.tearDown()
+
+    def test_replace(self):
+        self._rechunking(compressor = 'blosc', replace=True)
+
+    def _rechunking(self, compressor, parallel=False, replace=False):
+        """
+        Test that we can use the strax.files.rechunking function to
+        rechunk data outside the context
+        """
+        target_path = tempfile.TemporaryDirectory()
+        source_sf = strax.DataDirectory(self.path)
+        st= self.st
+        st.set_context_config(dict(allow_rechunk=False,
+                                   n_chunks=10))
+        st.storage = [source_sf]
+        run_id = '0'
+        st.make(run_id, self.target)
+        assert st.is_stored(run_id, self.target)
+        assert strax.utils.dir_size_mb(self.path) > 0
+        original_n_files = len(glob.glob(os.path.join(self.path, '*', '*')))
+        assert original_n_files > 3 # At least two files + metadata
+        _, backend_key = source_sf.find(st.key_for(run_id, self.target))
+        strax.rechunker(source_directory=backend_key,
+                        dest_directory=target_path.name if not replace else None,
+                        replace=True,
+                        compressor=compressor,
+                        target_size_mb=strax.default_chunk_size_mb * 2,
+                        parallel=parallel,
+                        max_workers=4,
+                        _timeout=5,
+                        )
+        assert st.is_stored(run_id, self.target)
+        # Should be empty, we just replaced the source
+        assert strax.utils.dir_size_mb(target_path.name) == 0
+        new_n_files = len(glob.glob(os.path.join(self.path, '*', '*',)))
+        assert original_n_files > new_n_files
+        st.set_context_config(dict(forbid_creation_of='*'))
+        st.get_array(run_id, self.target)
+        target_path.cleanup()
+
+
+class TestBlosc(TestCase):
+    """Blosc does not handle 2GB chunks, assert it fails with an useful error"""
+    def test_blosc_fails(self):
+        chunk = np.zeros(int(3e8), np.int64)
+        assert chunk.nbytes > 2e9, "Test only works for >2GB chunks"
+        assert chunk.nbytes < 3e9, "Don't go crazy here"
+        with self.assertRaises(ValueError):
+            strax.io.COMPRESSORS['blosc']['compress'](chunk)

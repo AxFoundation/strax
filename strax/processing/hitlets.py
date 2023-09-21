@@ -14,8 +14,8 @@ NO_FWXM = -42  # Value in case FWXM cannot be found.
 def create_hitlets_from_hits(hits,
                              save_outside_hits,
                              channel_range,
-                             chunk_start=0,
-                             chunk_end=np.inf,):
+                             chunk_start=None,
+                             chunk_end=None,):
     """
     Function which creates hitlets from a bunch of hits.
 
@@ -29,6 +29,14 @@ def create_hitlets_from_hits(hits,
 
     :return: Hitlets with temporary fields (data, max_goodness_of_split...)
     """
+    # There is no such thing as an int('inf'), let's take the min/max
+    # for an 64bit-int. Floats would give funny business in
+    # _concat_overlapping_hits! github.com/AxFoundation/strax/pull/694
+    if chunk_start is None:
+        chunk_start = np.iinfo(np.int64).min
+    if chunk_end is None:
+        chunk_end = np.iinfo(np.int64).max
+
     # Merge concatenate overlapping  within a channel. This is important
     # in case hits were split by record boundaries. In case we
     # accidentally concatenate two PMT signals we split them later again.

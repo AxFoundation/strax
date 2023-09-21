@@ -226,6 +226,36 @@ class TestMongoFrontend(unittest.TestCase):
         self.st.make(self.test_run_id, self.mongo_target)
         assert self.is_stored_in_mongo
 
+    def test_clear_cache(self, make_n_runs=10):
+        """
+        Test that the caches in the mongo backend get cleared appropriately
+        :param make_n_runs: The number of runs to make
+        :return:
+        """
+        # We need to know how large one run is. We'll make sure that we clear the cache if more
+        # data gets stored here than the content of one run
+        one_run = self.st.get_array(self.test_run_id, self.mongo_target)
+        assert self.is_stored_in_mongo
+
+        # Allow the frontend to cache a lof of runs, but only little data
+        mongo_backend = self.mongo_sf.backends[0]
+        mongo_backend._buff_mb = one_run.nbytes/1e6
+        mongo_backend._buff_nruns = make_n_runs
+
+        self.st.make(list(str(i) for i in range(make_n_runs)), self.mongo_target)
+
+        # We should have at most 1 run (assuming all are the same number of bytes)
+        assert len(mongo_backend._buffered_backend_keys) <= 2
+
+        # Allow the frontend to cache a lof of runs, but only little data
+        mongo_backend._buff_mb = 10 * one_run.nbytes / 1e6
+        mongo_backend._buff_nruns = 1
+
+        self.st.make(list(str(i) for i in range(make_n_runs)), self.mongo_target)
+
+        # We should have exactly one run cached
+        assert len(mongo_backend._buffered_backend_keys) == 1
+
     @staticmethod
     def _return_file_info(file: dict,
                           save_properties=('number',

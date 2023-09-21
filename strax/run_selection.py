@@ -16,9 +16,14 @@ export, __all__ = strax.exporter()
 
 
 @strax.Context.add_method
-def list_available(self, target, **kwargs):
+def list_available(self, target,
+                   runs=None,
+                   **kwargs) -> list:
     """Return sorted list of run_id's for which target is available
+    :param target: Data type to check
+    :param runs: Runs to check. If None, check all runs.
     """
+
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)
@@ -26,9 +31,12 @@ def list_available(self, target, **kwargs):
     if self.runs is None:
         self.scan_runs()
 
-    keys = set(self.keys_for_runs(
-        target,
-        self.runs['name'].values))
+    if runs is None:
+        runs = self.runs['name'].values
+    else:
+        runs = strax.to_str_tuple(runs)
+
+    keys = set(self.keys_for_runs(target, runs))
 
     found = set()
     for sf in self.storage:
@@ -69,14 +77,19 @@ def keys_for_runs(self,
 @strax.Context.add_method
 def scan_runs(self: strax.Context,
               check_available=tuple(),
-              store_fields=tuple()):
-    """Update and return self.runs with runs currently available
+              if_check_available='raise',
+              store_fields=tuple(),
+             ) -> pd.DataFrame:
+    """
+    Update and return self.runs with runs currently available
     in all storage frontends.
+
     :param check_available: Check whether these data types are available
-    Availability of xxx is stored as a boolean in the xxx_available
-    column.
+        Availability of xxx is stored as a boolean in the xxx_available
+        column.
+    :param if_check_available: 'raise' (default) or 'skip', whether to do the check
     :param store_fields: Additional fields from run doc to include
-    as rows in the dataframe.
+        as rows in the dataframe.
 
     The context options scan_availability and store_run_fields list
     data types and run fields, respectively, that will always be scanned.
@@ -86,14 +99,21 @@ def scan_runs(self: strax.Context,
         + ['name', 'number', 'tags', 'mode',
            strax.RUN_DEFAULTS_KEY]
         + list(self.context_config['store_run_fields'])))
-    check_available = tuple(set(
-        list(strax.to_str_tuple(check_available))
-        + list(self.context_config['check_available'])))
+    if if_check_available == 'raise':
+        check_available = tuple(set(
+            list(strax.to_str_tuple(check_available))
+            + list(self.context_config['check_available'])))
+    elif if_check_available == 'skip':
+        check_available = tuple()
+    else:
+        raise ValueError(
+            f"Invalid value for if_check_available: {if_check_available}")
 
     for target in check_available:
-        p = self._plugin_class_registry[target]
-        if p.save_when < strax.SaveWhen.ALWAYS:
-            self.log.warning(f'{p.__name__}-plugin is {str(p.save_when)}. '
+        save_when = self.get_save_when(target)
+        if save_when < strax.SaveWhen.ALWAYS:
+            p = self._plugin_class_registry[target]
+            self.log.warning(f'{p.__name__}-plugin is {str(save_when)}. '
                              f'Therefore {target} is most likely not stored!')
 
     docs = None
@@ -134,22 +154,22 @@ def scan_runs(self: strax.Context,
                 doc.setdefault('livetime', doc['end'] - doc['start'])
 
             if _is_superrun:
-                # In contrast to regular run-docs, 
-                # superruns are timezone aware. So strip off timezone 
+                # In contrast to regular run-docs,
+                # superruns are timezone aware. So strip off timezone
                 # again:
                 start = doc.get('start')
                 if start:
                     doc['start'] = start.replace(tzinfo=None)
-                    
+
                 start = doc.get('end')
                 if start:
                     doc['end'] = start.replace(tzinfo=None)
-                    
+
                 if type(doc.get('livetime')) == float:
                     # If we have a superrun livetime is stored as intger seconds
-                    # as timedelta is not json serializable 
+                    # as timedelta is not json serializable
                     doc['livetime'] = datetime.timedelta(seconds=doc['livetime'])
-            
+
             # Put the strax defaults stuff into a different cache
             if strax.RUN_DEFAULTS_KEY in doc:
                 self._run_defaults_cache[doc['name']] = \
@@ -184,8 +204,11 @@ def scan_runs(self: strax.Context,
                             if x != 'name']]
     self.runs = docs
 
+    # Add available data types,
+    # this is kept for the case users directly call list_available
     for d in tqdm(check_available,
-                  desc='Checking data availability'):
+                  desc='Checking data availability scan_runs',
+                  disable=not len(check_available)):
         self.runs[d + '_available'] = np.in1d(
             self.runs.name.values,
             self.list_available(d))
@@ -197,14 +220,16 @@ def scan_runs(self: strax.Context,
 def select_runs(self, run_mode=None, run_id=None,
                 include_tags=None, exclude_tags=None,
                 available=tuple(),
-                pattern_type='fnmatch', ignore_underscore=True):
-    """Return pandas.DataFrame with basic info from runs
-    that match selection criteria.
+                pattern_type='fnmatch', ignore_underscore=True,
+                force_reload=False):
+    """
+    Return pandas.DataFrame with basic info from runs
+        that match selection criteria.
+
     :param run_mode: Pattern to match run modes (reader.ini.name)
     :param run_id: Pattern to match a run_id or run_ids
     :param available: str or tuple of strs of data types for which data
-    must be available according to the runs DB.
-
+        must be available according to the runs DB.
     :param include_tags: String or list of strings of patterns
         for required tags
     :param exclude_tags: String / list of strings of patterns
@@ -217,6 +242,8 @@ def select_runs(self, run_mode=None, run_id=None,
         full python regular expressions.
     :param ignore_underscore: Ignore the underscore at the start of tags
         (indicating some degree of officialness or automation).
+    :param force_reload: Force reloading of runs from storage.
+        Otherwise, runs are cached after the first time they are loaded in self.runs.
 
     Examples:
      - `run_selection(include_tags='blinded')`
@@ -227,23 +254,23 @@ def select_runs(self, run_mode=None, run_id=None,
         ... with blinded OR unblinded, but not blablinded.
      - `run_selection(include_tags='blinded',
                       exclude_tags=['bad', 'messy'])`
-       select blinded dsatasets that aren't bad or messy
+        ... select blinded dsatasets that aren't bad or messy
     """
-    if self.runs is None:
-        self.scan_runs(check_available=strax.to_str_tuple(available))
+    if self.runs is None or force_reload:
+        self.scan_runs(if_check_available='skip')
     dsets = self.runs.copy()
 
     if pattern_type not in ('re', 'fnmatch'):
         raise ValueError("Pattern type must be 're' or 'fnmatch'")
 
-    # Filter datasets by run mode and/or name
+    # Filter datasets by run mode and/or name first
     for field_name, requested_value in (
             ('name', run_id),
             ('mode', run_mode)):
 
         if requested_value is None:
             continue
-            
+
         requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
@@ -251,7 +278,7 @@ def select_runs(self, run_mode=None, run_id=None,
 
         if pattern_type == 'fnmatch':
             for i, x in enumerate(values):
-                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value]) 
+                mask[i] = np.any([fnmatch.fnmatch(x, rv) for rv in requested_value])
         elif pattern_type == 're':
             for i, x in enumerate(values):
                 mask[i] = np.any([re.match(rv, x) for rv in requested_value])
@@ -262,16 +289,30 @@ def select_runs(self, run_mode=None, run_id=None,
                                   ignore_underscore,
                                   )
 
+    # Check data availability only for selected datasets
+    check_available = tuple(set(
+        list(strax.to_str_tuple(available))
+        + list(self.context_config['check_available'])))
+
+    for d in tqdm(check_available,
+                  desc='Checking data availability'):
+        dsets[d + '_available'] = np.in1d(
+            dsets.name.values,
+            self.list_available(target=d, runs=dsets.name.values))
+
+    # This will help users call select_runs multiple times
+    # with same run mode and/or name, but different available
     have_available = strax.to_str_tuple(available)
     for d in have_available:
         if not d + '_available' in dsets.columns:
             # Get extra availability info from the run db
-            d_available = np.in1d(self.runs.name.values,
-                                  self.list_available(d))
+            d_available = np.in1d(dsets.name.values,
+                                  self.list_available(target=d, runs=dsets.name.values))
             # Save both in the context and for this selection using
             # available = ('data_type',)
-            self.runs[d + '_available'] = d_available
             dsets[d + '_available'] = d_available
+
+    # Only return dsets available
     for d in have_available:
         dsets = dsets[dsets[d + '_available']]
 
@@ -302,7 +343,7 @@ def define_run(self: strax.Context,
     if isinstance(data, (pd.DataFrame, np.ndarray)):
         if isinstance(data, np.ndarray):
             data = pd.DataFrame.from_records(data)
-      
+
         # strax.endtime does not work with DataFrames due to numba
         if 'endtime' in data.columns:
             end = data['endtime']
@@ -315,7 +356,7 @@ def define_run(self: strax.Context,
             return self.define_run(
                 name,
                 {from_run: np.transpose([start, end])})
-        elif not 'run_id' in data.columns:
+        elif 'run_id' not in data.columns:
             raise ValueError(
                 "Must provide from_run or data with a run_id column "
                 "to define a superrun")
@@ -399,7 +440,8 @@ def available_for_run(self: strax.Context,
                       pattern_type: str = 'fnmatch') -> pd.DataFrame:
     """
     For a given single run, check all the targets if they are stored.
-        Excludes the target if never stored anyway.
+    Excludes the target if never stored anyway.
+
     :param run_id: requested run
     :param include_targets: targets to include e.g. raw_records,
         raw_records* or *_nv. If multiple targets (e.g. a list) is
@@ -423,7 +465,8 @@ def available_for_run(self: strax.Context,
     is_stored = defaultdict(list)
     for target in self._plugin_class_registry.keys():
         # Skip targets that are not stored
-        if not self._plugin_class_registry[target].save_when > strax.SaveWhen.NEVER:
+        save_when = self.get_save_when(target)
+        if save_when == strax.SaveWhen.NEVER:
             continue
 
         # Should we include this target or exclude it?

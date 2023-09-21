@@ -403,6 +403,13 @@ class StorageBackend:
     these have to be hardcoded (or made part of the key).
     """
 
+    def __new__(cls, *args, **kwargs):
+        """Mandatorily wrap _read_chunk in a check_chunk_n decorator"""
+        if '_read_chunk' in cls.__dict__:
+            method = getattr(cls, '_read_chunk')
+            setattr(cls, '_read_chunk', strax.check_chunk_n(method))
+        return super(StorageBackend, cls).__new__(cls)
+
     def loader(self,
                backend_key,
                time_range=None,

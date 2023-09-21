@@ -2,7 +2,7 @@
 
 You're welcome to contribute to strax! 
 
-Currently many features are still in significant flux, and the documentation is still very basic. Until more people start getting involved in development, we're probably not even following our own advice below...
+Currently, many features are still in significant flux, and the documentation is still very basic. Until more people start getting involved in development, we're probably not even following our own advice below...
 
 ### Please fork
 Please work in a fork, then submit pull requests. 

@@ -1,15 +1,12 @@
 import glob
 import json
-import tempfile
 import os
 import os.path as osp
-
 from bson import json_util
 import shutil
 
 import strax
 from .common import StorageFrontend
-
 export, __all__ = strax.exporter()
 
 RUN_METADATA_PATTERN = '%s-metadata.json'
@@ -214,6 +211,18 @@ class FileSytemBackend(strax.StorageBackend):
     Metadata is stored in a file called metadata.json.
     """
 
+    def __init__(self, *args, set_target_chunk_mb: int = None, **kwargs, ):
+        """
+        Add set_chunk_size_mb to strax.StorageBackend to allow changing
+        the chunk.target_size_mb returned from the loader, any args or kwargs
+        are passed to the strax.StorageBackend
+
+        :param set_target_chunk_mb: Prior to returning the loaders' chunks,
+            return the chunk with an updated target size
+        """
+        super().__init__(*args, **kwargs)
+        self.set_chunk_size_mb = set_target_chunk_mb
+
     def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
         metadata_json = f'{prefix}-metadata.json'
@@ -235,6 +244,12 @@ class FileSytemBackend(strax.StorageBackend):
 
         with open(md_path, mode='r') as f:
             return json.loads(f.read())
+
+    def _read_and_format_chunk(self, *args, **kwargs):
+        chunk = super()._read_and_format_chunk(*args, **kwargs)
+        if self.set_chunk_size_mb:
+            chunk.target_size_mb = self.set_chunk_size_mb
+        return chunk
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = osp.join(dirname, chunk_info['filename'])
