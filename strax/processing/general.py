@@ -448,7 +448,7 @@ def _check_time_is_sorted(time):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _check_objects_non_negative_length(objects):
     """Checks if objects have non-negative length"""
-    mask = np.all(strax.endtime(objects) - objects['time'] >= 0)
+    mask = np.all(strax.endtime(objects) >= objects['time'])
     assert mask
 
 

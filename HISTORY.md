@@ -1,3 +1,26 @@
+1.5.4 / 2023-09-19
+---------------------
+* Split compare_metadata into utils.compare_meta by @dachengx in https://github.com/AxFoundation/strax/pull/754
+* Change endtime - time >= 0 to endtime >= time by @JYangQi00 in https://github.com/AxFoundation/strax/pull/756
+* Mandatorily wrap `_read_chunk` in a `check_chunk_n` decorator by @dachengx in https://github.com/AxFoundation/strax/pull/758
+
+New Contributors
+* @JYangQi00 made their first contribution in https://github.com/AxFoundation/strax/pull/756
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.3...v1.5.4
+
+
+1.5.3 / 2023-08-29
+---------------------
+* Add small selection functions by @WenzDaniel in https://github.com/AxFoundation/strax/pull/746
+* Patch plugin cache by @WenzDaniel in https://github.com/AxFoundation/strax/pull/748
+* Update version of urllib3, remove version control of deepdiff by @dachengx in https://github.com/AxFoundation/strax/pull/749
+* Check chunk size right after loading chunk by @dachengx in https://github.com/AxFoundation/strax/pull/752
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.2...v1.5.3
+
+
 1.5.2 / 2023-07-06
 ---------------------
 * Use warning also in `abs_time_to_prev_next_interval` by @dachengx in https://github.com/AxFoundation/strax/pull/738

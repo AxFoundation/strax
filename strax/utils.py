@@ -19,6 +19,8 @@ import pandas as pd
 from collections.abc import Mapping
 from warnings import warn
 import os
+import click
+import deepdiff
 
 
 # Change numba's caching backend from pickle to dill
@@ -309,6 +311,47 @@ def deterministic_hash(thing, length=10):
     # disable bandit
     digest = sha1(jsonned.encode('ascii')).digest()
     return b32encode(digest)[:length].decode('ascii').lower()
+
+
+@export
+def compare_dict(old: dict, new: dict):
+    """Compare two dictionaries and print the differences"""
+    differences = deepdiff.DeepDiff(old, new)
+    color_values = lambda oldval, newval: (
+        click.style(oldval, fg='red', bold=True), click.style(newval, fg='green', bold=True))
+    underline = lambda text, bold=True: click.style(text, bold=bold, underline=True)
+    for key, value in differences.items():
+        if key in ['values_changed', 'iterable_item_added', 'iterable_item_removed']:
+            print(underline(f"\n> {key}"))
+            for kk, vv in value.items():
+                if key == "values_changed":
+                    old_values = vv['old_value']
+                    new_values = vv['new_value']
+                elif key == "iterable_item_added":
+                    old_values = "-"
+                    new_values = vv
+                else:  # if key == "iterable_item_removed":
+                    old_values = vv
+                    new_values = "-"
+                old, new = color_values(old_values, new_values)
+                click.secho(f"\t in {kk[4:]}", bold=False)
+                print(f"\t\t{old} -> {new}")
+        elif key in ['dictionary_item_added', 'dictionary_item_removed']:
+            color = "red" if "removed" in key else "green"
+            print(underline(f"\n> {key:25s}"), end="->")
+            click.secho(f"\t{', '.join(value)}", fg=color)
+        elif key in ['type_changes']:
+            print(underline(f"\n> {key}"))
+            for kk, vv in value.items():
+                click.secho(f"\t{kk}")
+                oldtype = vv['old_type']
+                newtype = vv['new_type']
+                keyold, keynew = color_values('old_type', 'new_type')
+                valueold, valuenew = color_values(vv['old_value'], vv['new_value'])
+                print(f"\t\t{keyold:10s} : {oldtype} ({valueold})")
+                print(f"\t\t{keynew:10s} : {newtype} ({valuenew})")
+        else:
+            raise KeyError(f"Unkown key in comparison {key}")
 
 
 @export
