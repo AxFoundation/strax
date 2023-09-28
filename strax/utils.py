@@ -770,3 +770,99 @@ def dir_size_mb(start_path ='.'):
                 total_size += os.path.getsize(fp)
 
     return total_size / 1e6
+
+@export
+def version_hash_dict(context):
+    """
+    Returns a dictionary of the form {data_type: [version, hash]} for the
+    plugins within the context
+    """
+    
+    vh_dict = {}
+    for data_type in (context._plugin_class_registry):
+        hash = context.key_for('0', data_type).lineage_hash
+        version = context._plugin_class_registry[data_type].__version__
+        vh_dict[data_type] = [version, hash]
+        
+    return vh_dict
+
+@export
+def updated_plugins(old_vh_dict, new_vh_dict):
+    """
+    Tags the updated plugins between two different versions. old/new_vh_dict
+    refers to the version_hash_dict of the old/new versions. This is typically
+    ran after a PR. This finds the added plugins, deleted plugins, changed plugins
+    (via lineage hash), and the "change originator" plugins. The change originators
+    are plugins that were likely actually changed by a person, while all changed
+    plugins are just those with a changed lineage hash.
+
+    :param old_vh_dict: The version-hash dictionary of the old version
+    :param new_vh_dict: The version-hash dictionary of the new version
+
+    :return change_summary: dictionary summarizing the plugin changes
+    """
+    old_plugins = np.array(list(old_vh_dict.keys()))
+    new_plugins = np.array(list(new_vh_dict.keys()))
+
+    added_plugins = list(new_plugins[~np.isin(new_plugins, old_plugins)])
+    deleted_plugins = list(old_plugins[~np.isin(old_plugins, new_plugins)])
+
+    changed_plugins = []
+    change_originators = []
+    for op in old_plugins:
+        if op in new_plugins:
+            if old_vh_dict[op][1]!=new_vh_dict[op][1]:
+                changed_plugins.append(op)
+                if old_vh_dict[op][0]!=new_vh_dict[op][0]:
+                    change_originators.append(op)
+
+    change_summary =  {'added': added_plugins,
+        'deleted': deleted_plugins,
+        'changed': changed_plugins,
+        'change_origins': change_originators}
+    
+    return change_summary
+
+@export
+def bad_field_info(context, run_id, plugins):
+    """
+    Returns a dictionary of {data_type: {field: fraction of "bad" entries}}
+    Here, a bad entry is a nan for float fields and a 0 or a -1 for integer fields
+
+    :param context: strax context
+    :param run_id: run_id to test
+    :param plugins: plugins to test
+
+    :return bad_field_summary: {data_type: {field: fraction of "bad" entries}}
+    """
+
+    bad_field_summary = {}
+    for p in plugins:
+        data = context.get_array(run_id, p)
+        bad_field_frac = {}
+        for d in data.dtype.names:
+            if np.issubdtype(data[d].dtype, np.floating):
+                bad_field_frac[d] = np.sum(np.isnan(data[d]))/len(data)
+            elif np.issubdtype(data[d].dtype, np.integer):
+                bad_field_frac[d] = np.sum((data[d]==0)|(data[d]==-1))/len(data)
+        bad_field_summary[p] = bad_field_frac
+        
+    return bad_field_summary
+
+@export
+def lowest_level_plugins(context, plugins):
+    """
+    Returns the lowest level plugins within a context. Here, a plugin is 
+    lowest level if there is nothing else within the plugins list that it
+    depends on.
+    """
+
+    if not type(plugins)==np.ndarray:
+        plugins = np.array(plugins)
+
+    low_lev_plugs = []
+    for p in plugins:
+        dependencies = (list(context.key_for('0', p).lineage.keys()))
+        if ~np.any(np.isin(plugins[plugins!=p], dependencies)):
+            low_lev_plugs.append(p)
+    return low_lev_plugs
