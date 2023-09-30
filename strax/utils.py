@@ -826,8 +826,9 @@ def updated_plugins(old_vh_dict, new_vh_dict):
 @export
 def bad_field_info(context, run_id, plugins):
     """
-    Returns a dictionary of {data_type: {field: fraction of "bad" entries}}
-    Here, a bad entry is a nan for float fields and a 0 or a -1 for integer fields
+    Returns a dictionary of {data_type: {field: fraction of "bad" entries}} as well as
+    the mean of each entry (that isn't a nan). Here, a bad entry is a nan for float fields
+    and a 0 or a -1 for integer fields
 
     :param context: strax context
     :param run_id: run_id to test
@@ -845,6 +846,8 @@ def bad_field_info(context, run_id, plugins):
                 bad_field_frac[d] = np.sum(np.isnan(data[d]))/len(data)
             elif np.issubdtype(data[d].dtype, np.integer):
                 bad_field_frac[d] = np.sum((data[d]==0)|(data[d]==-1))/len(data)
+                
+            bad_field_frac[f"mean_{d}"] = np.mean(data[d][~np.isnan(data[d])])
         bad_field_summary[p] = bad_field_frac
         
     return bad_field_summary
