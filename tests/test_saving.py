@@ -6,22 +6,23 @@ import tempfile
 
 
 class TestPerRunDefaults(unittest.TestCase):
-    """Test the saving behavior of the context"""
+    """Test the saving behavior of the context."""
+
     def setUp(self):
-        self.test_run_id = '0'
-        self.target = 'records'
+        self.test_run_id = "0"
+        self.target = "records"
         self.tempdir = tempfile.TemporaryDirectory()
         self.path = self.tempdir.name
-        self.st = strax.Context(use_per_run_defaults=True,
-                                register=[Records],
-                                storage=[strax.DataDirectory(self.path)])
+        self.st = strax.Context(
+            use_per_run_defaults=True, register=[Records], storage=[strax.DataDirectory(self.path)]
+        )
         assert not self.st.is_stored(self.test_run_id, self.target)
 
     def tearDown(self):
         self.tempdir.cleanup()
 
     def test_savewhen_never(self, **kwargs):
-        self.set_save_when('NEVER')
+        self.set_save_when("NEVER")
         self.st.make(self.test_run_id, self.target, **kwargs)
         assert not self.is_stored()
 
@@ -30,22 +31,22 @@ class TestPerRunDefaults(unittest.TestCase):
         self.assertRaises(ValueError, should_fail_with_save, save=self.target)
 
     def test_savewhen_explict_without_save(self):
-        self.set_save_when('EXPLICIT')
+        self.set_save_when("EXPLICIT")
         self.st.make(self.test_run_id, self.target)
         assert not self.is_stored()
 
     def test_savewhen_explict_with_save(self):
-        self.set_save_when('EXPLICIT')
+        self.set_save_when("EXPLICIT")
         self.st.make(self.test_run_id, self.target, save=self.target)
         assert self.is_stored()
 
     def test_savewhen_target(self):
-        self.set_save_when('TARGET')
+        self.set_save_when("TARGET")
         self.st.make(self.test_run_id, self.target)
         assert self.is_stored()
 
     def test_savewhen_always(self):
-        self.set_save_when('ALWAYS')
+        self.set_save_when("ALWAYS")
         self.st.make(self.test_run_id, self.target)
         assert self.is_stored()
 
@@ -54,12 +55,12 @@ class TestPerRunDefaults(unittest.TestCase):
 
     def set_save_when(self, mode: str):
         if not hasattr(strax.SaveWhen, mode.upper()):
-            raise ValueError(f'No such saving mode {mode}')
+            raise ValueError(f"No such saving mode {mode}")
         save_mode = getattr(strax.SaveWhen, mode.upper())
         self.st._plugin_class_registry[self.target].save_when = save_mode
 
     def test_raise_corruption(self):
-        self.set_save_when('ALWAYS')
+        self.set_save_when("ALWAYS")
         self.st.make(self.test_run_id, self.target)
         assert self.is_stored()
         storage = self.st.storage[0]
@@ -71,14 +72,14 @@ class TestPerRunDefaults(unittest.TestCase):
 
         # copied from FileSytemBackend (maybe abstractify the method separately?)
         prefix = strax.dirname_to_prefix(data_path)
-        metadata_json = f'{prefix}-metadata.json'
+        metadata_json = f"{prefix}-metadata.json"
         md_path = os.path.join(data_path, metadata_json)
         assert os.path.exists(md_path)
 
         # Corrupt the metadata (making it non-JSON parsable)
-        md_file = open(md_path, 'a')
+        md_file = open(md_path, "a")
         # Append 'hello' at the end of file
-        md_file.write('Adding a non-JSON line to the file to corrupt the metadata')
+        md_file.write("Adding a non-JSON line to the file to corrupt the metadata")
         # Close the file
         md_file.close()
 
@@ -89,7 +90,7 @@ class TestPerRunDefaults(unittest.TestCase):
         # Also test the error is raised if be build a target that depends on corrupted data
         self.st.register(Peaks)
         with self.assertRaises(strax.DataCorrupted):
-            self.st.get_array(self.test_run_id, 'peaks')
+            self.st.get_array(self.test_run_id, "peaks")
 
         # Cleanup if someone wants to re-use this self.st
-        del self.st._plugin_class_registry['peaks']
+        del self.st._plugin_class_registry["peaks"]
