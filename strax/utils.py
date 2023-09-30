@@ -843,11 +843,11 @@ def bad_field_info(context, run_id, plugins):
         bad_field_frac = {}
         for d in data.dtype.names:
             if np.issubdtype(data[d].dtype, np.floating):
-                bad_field_frac[d] = np.sum(np.isnan(data[d]))/len(data)
+                bad_field_frac[d] = float(np.sum(np.isnan(data[d]))/len(data))
             elif np.issubdtype(data[d].dtype, np.integer):
-                bad_field_frac[d] = np.sum((data[d]==0)|(data[d]==-1))/len(data)
+                bad_field_frac[d] = float(np.sum((data[d]==0)|(data[d]==-1))/len(data))
                 
-            bad_field_frac[f"mean_{d}"] = np.mean(data[d][~np.isnan(data[d])])
+            bad_field_frac[f"mean_{d}"] = float(np.mean(data[d][~np.isnan(data[d])]))
         bad_field_summary[p] = bad_field_frac
         
     return bad_field_summary
@@ -869,3 +869,30 @@ def lowest_level_plugins(context, plugins):
         if ~np.any(np.isin(plugins[plugins!=p], dependencies)):
             low_lev_plugs.append(p)
     return low_lev_plugs
+
+@export
+def directly_depends_on(context, base_plugins, all_plugins):
+    """
+    Returns a list of plugins from within all_plugins which directly depend on
+    (i.e. one step down on the dependency tree) any of the plugins within base_plugins
+
+    :param context: strax context
+    :param base_plugins: plugins to see if others depend on it
+    :param all_plugins: plugins to see if they depend on those in base_plugins
+
+    :return next_layer_plugins: the plugins within all_plugins which are one layer above
+        base_plugins.
+    """
+    
+    next_layer_plugins = []
+    for p in all_plugins:
+        dep_on = context._plugin_class_registry[p].depends_on
+        if type(dep_on)==str:
+            dep_on = [dep_on]
+        elif type(dep_on)==tuple:
+            dep_on = list(dep_on)
+
+        if np.any(np.isin(base_plugins, dep_on)):
+            next_layer_plugins.append(p)
+
+    return np.unique(next_layer_plugins)
