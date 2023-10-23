@@ -625,8 +625,8 @@ class Context:
         return requested_plugins
 
     def _get_plugins(self,
-                     run_id: str,
                      targets: ty.Tuple[str],
+                     run_id: str,
                     ) -> ty.Dict[str, strax.Plugin]:
         """
         Return dictionary of plugin instances necessary to compute targets
