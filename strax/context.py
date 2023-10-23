@@ -643,8 +643,6 @@ class Context:
             if not (k in all_opts or k in self.context_config['free_options']):
                 self.log.warning(f"Option {k} not taken by any registered plugin")
                      
-        # if self._plugins_are_cached(targets):
-        #     cached_plugins = self.__get_plugins_from_cache(run_id)
         plugins = {}
         targets = list(targets)
         while targets:
@@ -680,8 +678,31 @@ class Context:
 
         plugin.deps = {d_depends: self.__get_plugin(run_id, d_depends) for d_depends in plugin.depends_on}
 
-        last_provide = [d_provides for d_provides in plugin.provides][-1]
+        self.__add_lineage_to_plugin(run_id, plugin)
 
+        if not hasattr(plugin, 'data_kind') and not plugin.multi_output:
+            if len(plugin.depends_on):
+                # Assume data kind is the same as the first dependency
+                first_dep = plugin.depends_on[0]
+                plugin.data_kind = plugin.deps[first_dep].data_kind_for(first_dep)
+            else:
+                # No dependencies: assume provided data kind and
+                # data type are synonymous
+                plugin.data_kind = plugin.provides[0]
+
+        plugin.fix_dtype()
+
+        #Add plugin to cache
+        self._plugins_to_cache({data_type: plugin})
+
+        return plugin
+
+    def __add_lineage_to_plugin(self, run_id, plugin):
+        """Adds lineage to plugin in place. Also adds parent infromation
+        in case of a child plugin.
+        """
+        last_provide = [d_provides for d_provides in plugin.provides][-1]
+        
         if plugin.child_plugin:
             # Plugin is a child of another plugin, hence we have to
             # drop the parents config from the lineage
@@ -718,25 +739,10 @@ class Context:
                 {option: setting for option, setting
                  in plugin.config.items()
                  if plugin.takes_config[option].track})}
+        
         for d_depends in plugin.depends_on:
             plugin.lineage.update(plugin.deps[d_depends].lineage)
-
-        if not hasattr(plugin, 'data_kind') and not plugin.multi_output:
-            if len(plugin.depends_on):
-                # Assume data kind is the same as the first dependency
-                first_dep = plugin.depends_on[0]
-                plugin.data_kind = plugin.deps[first_dep].data_kind_for(first_dep)
-            else:
-                # No dependencies: assume provided data kind and
-                # data type are synonymous
-                plugin.data_kind = plugin.provides[0]
-
-        plugin.fix_dtype()
-
-        #Add plugin to cache
-        self._plugins_to_cache({data_type: plugin})
-
-        return plugin
+        
     
     def _per_run_default_allowed_check(self, option_name, option):
         """Check if an option of a registered plugin is allowed"""
