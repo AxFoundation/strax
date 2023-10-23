@@ -657,89 +657,86 @@ class Context:
                 plugins[provides] = target_plugin    
             targets += list(target_plugin.depends_on)
         return plugins
- 
-        self._plugins_to_cache(non_local_plugins)
-        return non_local_plugins
 
-    def __get_plugin(self, run_id, data_type):
-            #Check if plugin for data_type is already cached
-            print(data_type)
-            if self._plugins_are_cached((data_type,)):
-                print('Cached:', data_type)
-                cached_plugins = self.__get_plugins_from_cache(run_id)
-                target_plugin = cached_plugins[data_type]
-                return target_plugin
-            
-            if data_type not in self._plugin_class_registry:
-                raise KeyError(f"No plugin class registered that provides {data_type}")
-    
-            plugin = self._plugin_class_registry[data_type]()
-    
-            plugin.run_id = run_id
-    
-            # The plugin may not get all the required options here
-            # but we don't know if we need the plugin yet
-            self._set_plugin_config(plugin, run_id, tolerant=True)
-    
-            plugin.deps = {d_depends: self.__get_plugin(run_id, d_depends) for d_depends in plugin.depends_on}
-    
-            last_provide = [d_provides for d_provides in plugin.provides][-1]
-    
-            if plugin.child_plugin:
-                # Plugin is a child of another plugin, hence we have to
-                # drop the parents config from the lineage
-                configs = {}
-    
-                # Getting information about the parent:
-                parent_class = plugin.__class__.__bases__[0]
-                # Get all parent options which are overwritten by a child:
-                parent_options = [option.parent_option_name for option in plugin.takes_config.values()
-                                  if option.child_option]
-    
-                for option_name, v in plugin.config.items():
-                    # Looping over all settings, option_name is either the option name of the
-                    # parent or the child.
-                    if option_name in parent_options:
-                        # In case it is the parent we continue
-                        continue
-    
-                    if plugin.takes_config[option_name].track:
-                        # Add all options which should be tracked:
-                        configs[option_name] = v
-    
-                # Also adding name and version of the parent to the lineage:
-                configs[parent_class.__name__] = parent_class.__version__
-    
-                plugin.lineage = {last_provide: (
-                    plugin.__class__.__name__,
-                    plugin.version(run_id),
-                    configs)}
+    def __get_plugin(self, run_id: str, data_type: str):
+        """Get single plugin either from cache or initialize it.
+        """
+        #Check if plugin for data_type is already cached
+        if self._plugins_are_cached((data_type,)):
+            cached_plugins = self.__get_plugins_from_cache(run_id)
+            target_plugin = cached_plugins[data_type]
+            return target_plugin
+        
+        if data_type not in self._plugin_class_registry:
+            raise KeyError(f"No plugin class registered that provides {data_type}")
+
+        plugin = self._plugin_class_registry[data_type]()
+
+        plugin.run_id = run_id
+
+        # The plugin may not get all the required options here
+        # but we don't know if we need the plugin yet
+        self._set_plugin_config(plugin, run_id, tolerant=True)
+
+        plugin.deps = {d_depends: self.__get_plugin(run_id, d_depends) for d_depends in plugin.depends_on}
+
+        last_provide = [d_provides for d_provides in plugin.provides][-1]
+
+        if plugin.child_plugin:
+            # Plugin is a child of another plugin, hence we have to
+            # drop the parents config from the lineage
+            configs = {}
+
+            # Getting information about the parent:
+            parent_class = plugin.__class__.__bases__[0]
+            # Get all parent options which are overwritten by a child:
+            parent_options = [option.parent_option_name for option in plugin.takes_config.values()
+                              if option.child_option]
+
+            for option_name, v in plugin.config.items():
+                # Looping over all settings, option_name is either the option name of the
+                # parent or the child.
+                if option_name in parent_options:
+                    # In case it is the parent we continue
+                    continue
+
+                if plugin.takes_config[option_name].track:
+                    # Add all options which should be tracked:
+                    configs[option_name] = v
+
+            # Also adding name and version of the parent to the lineage:
+            configs[parent_class.__name__] = parent_class.__version__
+
+            plugin.lineage = {last_provide: (
+                plugin.__class__.__name__,
+                plugin.version(run_id),
+                configs)}
+        else:
+            plugin.lineage = {last_provide: (
+                plugin.__class__.__name__,
+                plugin.version(run_id),
+                {option: setting for option, setting
+                 in plugin.config.items()
+                 if plugin.takes_config[option].track})}
+        for d_depends in plugin.depends_on:
+            plugin.lineage.update(plugin.deps[d_depends].lineage)
+
+        if not hasattr(plugin, 'data_kind') and not plugin.multi_output:
+            if len(plugin.depends_on):
+                # Assume data kind is the same as the first dependency
+                first_dep = plugin.depends_on[0]
+                plugin.data_kind = plugin.deps[first_dep].data_kind_for(first_dep)
             else:
-                plugin.lineage = {last_provide: (
-                    plugin.__class__.__name__,
-                    plugin.version(run_id),
-                    {option: setting for option, setting
-                     in plugin.config.items()
-                     if plugin.takes_config[option].track})}
-            for d_depends in plugin.depends_on:
-                plugin.lineage.update(plugin.deps[d_depends].lineage)
-    
-            if not hasattr(plugin, 'data_kind') and not plugin.multi_output:
-                if len(plugin.depends_on):
-                    # Assume data kind is the same as the first dependency
-                    first_dep = plugin.depends_on[0]
-                    plugin.data_kind = plugin.deps[first_dep].data_kind_for(first_dep)
-                else:
-                    # No dependencies: assume provided data kind and
-                    # data type are synonymous
-                    plugin.data_kind = plugin.provides[0]
-    
-            plugin.fix_dtype()
-    
-            #Add plugin to cache
-            self._plugins_to_cache({data_type: plugin})
-    
-            return plugin
+                # No dependencies: assume provided data kind and
+                # data type are synonymous
+                plugin.data_kind = plugin.provides[0]
+
+        plugin.fix_dtype()
+
+        #Add plugin to cache
+        self._plugins_to_cache({data_type: plugin})
+
+        return plugin
     
     def _per_run_default_allowed_check(self, option_name, option):
         """Check if an option of a registered plugin is allowed"""
