@@ -592,8 +592,10 @@ class Context:
             self._fix_dependency(plugin_registry, go_to)
         plugin_registry[end_plugin].fix_dtype()
 
-    def __get_plugins_from_cache(self,
-                                 run_id: str) -> ty.Dict[str, strax.Plugin]:
+    def __get_requested_plugins_from_cache(self,
+                                 run_id: str,
+                                 targets: ty.Tuple[str],
+                                ) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache"""
         requested_plugins = {}
@@ -617,11 +619,14 @@ class Context:
             plugin.deps = {dependency: requested_plugins[dependency]
                            for dependency in plugin.depends_on
                            }
+            
         # Finally, fix the dtype. Since infer_dtype may depend on the
         # entire deps chain, we need to start at the last plugin and go
         # all the way down to the lowest level.
-        for final_plugins in self._get_end_targets(requested_plugins):
-            self._fix_dependency(requested_plugins, final_plugins)
+        for target_plugins in targets:
+            self._fix_dependency(requested_plugins, target_plugins)
+
+        requested_plugins = {i: v for i, v in requested_plugins.items() if i in targets}
         return requested_plugins
 
     def _get_plugins(self,
@@ -645,7 +650,10 @@ class Context:
                      
         plugins = {}
         targets = list(targets)
-        while targets:
+        counter = 0
+        while targets and counter < 100:
+            counter += 1
+            targets = list(set(targets)) # Remove duplicates from list.
             target = targets.pop(0)
             if target in plugins:
                 continue
@@ -661,7 +669,7 @@ class Context:
         """
         #Check if plugin for data_type is already cached
         if self._plugins_are_cached((data_type,)):
-            cached_plugins = self.__get_plugins_from_cache(run_id)
+            cached_plugins = self.__get_requested_plugins_from_cache(run_id, (data_type,))
             target_plugin = cached_plugins[data_type]
             return target_plugin
         
@@ -693,7 +701,7 @@ class Context:
         plugin.fix_dtype()
 
         #Add plugin to cache
-        self._plugins_to_cache({data_type: plugin})
+        self._plugins_to_cache({data_type: plugin for data_type in plugin.provides})
 
         return plugin
 
