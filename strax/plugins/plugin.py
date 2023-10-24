@@ -496,7 +496,7 @@ class Plugin:
                     pending_futures = [f for f in pending_futures if not f.done()]
                     yield new_future
                 else:
-                    yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+                    yield from self._iter_return(chunk_i=chunk_i, **inputs_merged)
 
         except IterDone:
             # Check all sources are exhausted.
@@ -522,6 +522,10 @@ class Plugin:
 
         finally:
             self.cleanup(wait_for=pending_futures)
+
+    def _iter_return(self, chunk_i, **inputs_merged):
+        yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+        
 
     def cleanup(self, wait_for):
         pass
