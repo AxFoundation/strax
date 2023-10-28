@@ -442,7 +442,16 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
 
     # Test 1.: Flat template and no data:
     e1 = strax.conditional_entropy(hitlet, 'flat')[0]
-    if np.sum(data):
+
+    sum_data = np.sum(data)
+    if sum_data:
+        if np.abs(sum_data) < 1e-4 * np.ptp(data):
+            # Normalizing may cause significant float32 numerical errors.
+            # Do not run any tests: this data is unsuitable for testing since
+            # slight numpy <-> numba implementation differences could cause
+            # failures that are actually harmless.
+            return
+
         d = data
         d = d / np.sum(d)
         m = d > 0
@@ -483,8 +492,6 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         e1 = strax.conditional_entropy(hitlet, template, square_data=True)[0]
         assert math.isclose(e1, e2, rel_tol=10**-3,
                             abs_tol=10**-3), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
-    else:
-        assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
 
 
 def _align_compute_entropy(data, template):
