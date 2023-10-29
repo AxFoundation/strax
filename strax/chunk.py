@@ -443,3 +443,44 @@ def check_chunk_n(f):
         return chunk
 
     return wrapper
+
+
+@export
+class Rechunker:
+    """Helper class for rechunking.
+
+    Send in chunks via receive, which returns either None (no chunk to send)
+    or a chunk to send.
+
+    Don't forget a final call to .flush() to get any final data out!
+    """
+
+    def __init__(self, rechunk=False, run_id=None):
+        self.rechunk = rechunk
+        self.is_superrun = run_id and run_id.startswith('_'),
+        self.run_id = run_id
+
+        self.cache = None
+
+    def receive(self, chunk):
+        if self.is_superrun:
+            chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
+        if not self.rechunk:
+            # We aren't rechunking
+            return chunk
+        if self.cache:
+            # We have an old chunk, so we need to concatenate
+            chunk = strax.Chunk.concatenate([self.cache, chunk])
+        if chunk.data.nbytes >= chunk.target_size_mb * 1e6:
+            # Enough data to send a new chunk!
+            self.cache = None
+            return chunk
+        else:
+            # Not enough data yet, so we cache the chunk
+            self.cache = chunk
+            return None
+
+    def flush(self):
+        result = self.cache
+        self.cache = None
+        return result
