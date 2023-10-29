@@ -23,12 +23,7 @@ class BaseProcessor:
 
     def __init__(self,
                  components: ProcessorComponents,
-                 allow_rechunk=True, allow_shm=False,
-                 allow_multiprocess=False,
-                 allow_lazy=True,
-                 max_workers=None,
-                 max_messages=4,
-                 timeout=60):
+                 **kwargs):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
 

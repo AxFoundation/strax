@@ -1,9 +1,7 @@
 from .base import *
-from .threaded_mailbox_processor import *
+from .threaded_mailbox import *
 
 PROCESSORS = {
     "default": ThreadedMailboxProcessor,
-    "threaded_mailbox_processor": ThreadedMailboxProcessor
+    "threaded_mailbox": ThreadedMailboxProcessor,
 }
-
-# FIXME: add entrypoint logic for processor plugins.

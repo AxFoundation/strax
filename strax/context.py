@@ -233,6 +233,25 @@ class Context:
         if register is not None:
             self.register(register)
 
+        if processors is None:
+            processors = strax.PROCESSORS
+
+        if isinstance(processors, str) :
+            processors = [processors]
+
+        if isinstance(processors, (list, tuple)):
+            ps = {}
+            for processor in processors:
+                if isinstance(processor, str) and processor in strax.PROCESSORS:
+                    ps[processor] = strax.PROCESSORS[processor]
+                elif isinstance(processor, strax.BaseProcessor):
+                    ps[processor.__name__] = processor
+                else:
+                    raise ValueError(f"Unknown processor {processor}")
+            processors = ps
+
+        self.processors = processors
+
     def new_context(self,
                     storage=tuple(),
                     config=None,
