@@ -1,4 +1,5 @@
 """Single-threaded message bus / mailbox-system replacement code"""
+import time
 import typing as ty
 
 
@@ -41,41 +42,74 @@ class PostOffice:
         .kill_spies().
     """
 
+    # Time tracking
+
+    #: Currently active topic/code
+    active_topic: str = ""
+    #: Dict of actiactive code -> seconds spent in that code
+    time_spent: ty.Dict[ty.Tuple[str], float]
+
+    # Internal state
+
+    #: Set of topics that have been exhausted (no more messages will come)
+    _exhausted_topics: ty.Set[str]
+
+    #: Set of topics that are multi output
+    #: (i.e. the producer makes topic -> message dicts)
+    _multi_output_topics: ty.Set[str]
+
+    # Dict: topic -> list with (msg_number, msg)
+    _saved_mail: ty.Dict[str, ty.Tuple[int, ty.Any]]
+    # Dict: topic -> list of spies
+    _spies: ty.Dict[str, ty.List[Spy]]
+    # Dict: topic-> iterator that produces messages
+    _producers: ty.Dict[str, ty.Iterable]
+    # Dict: topic -> last message produced
+    _last_msg_produced: ty.Dict[str, int]
+    # Dict: topic -> reader_name -> last message number recieved
+    _last_msg_read: ty.Dict[str, ty.Dict[str, int]]
+    # Dict: topic -> list of readers that are done
+    _readers_done: ty.Dict[str, ty.List[str]]
+
+    # (Factoring the above variables into a Topic class didn't work for me.
+    #  Multi-output producers exist, topic would be != topic_name, etc..)
+
     def __init__(self):
-        # Set of topics that have been exhausted (no more messages will come)
-        self._exhausted_topics: ty.Set[str] = set()
-        # Set of topics that are multi output
-        # (i.e. the producer makes topic -> message dicts)
-        self._multi_output_topics: ty.Set[str] = set()
+        self.time_spent = dict()
+        self._exhausted_topics = set()
+        self._multi_output_topics = set()
 
-        # Per-topic state
-        # (Could refactor everything into a Topic class that PostOffice
-        #  would be a shell for... not sure that is actually nicer.)
-
-        # Dict: topic -> list with (msg_number, msg)
-        self._saved_mail: ty.Dict[str, ty.Tuple[int, ty.Any]] = dict()
-        # Dict: topic -> list of spies
-        self._spies: ty.Dict[str, ty.List[Spy]] = dict()
-        # Dict: topic-> iterator that produces messages
-        self._producers: ty.Dict[str, ty.Iterable] = dict()
-        # Dict: topic -> last message produced
+        self._saved_mail = dict()
+        self._spies = dict()
+        self._producers = dict()
         self._last_msg_produced = dict()
-        # Dict: topic -> reader_name -> last message number recieved
-        self._last_msg_read: ty.Dict[str, ty.Dict[str, int]] = dict()
-        # Dict: topic -> list of readers that are done
-        self._readers_done: ty.Dict[str, ty.List[str]] = dict()
+        self._last_msg_read = dict()
+        self._readers_done = dict()
+
+        self._count_time("")
+
+    @property
+    def topic_names(self):
+        return list(self._saved_mail.keys())
 
     def state(self):
-        """Return state representation as a multi-line string,
+        """Get a multi-line string representing the current state,
         suitable for printing or logging"""
         result = []
-        for topic in self._saved_mail:
+        for topic in self.topic_names:
             result.append(f"Topic {topic}:")
             result.append(f'  Saved mail: {self._saved_mail[topic]}')
             result.append(f'  Last produced: {self._last_msg_produced[topic]}')
             result.append(f'  Readers recieved: {self._last_msg_read[topic]}')
             result.append(f'  Readers done: {self._readers_done[topic]}')
+            result.append(f'  Time spent: {self.time_spent.get(topic, None)}')
             result.append('')
+        result.append(f"Total time spent: {sum(self.time_spent.values())}")
+        also_spent = {
+            k: v
+            for k, v in self.time_spent.items()
+            if k not in self.topic_names}
+        result.append(f"Also spent time on: {also_spent}")
         return "\n".join(result)
 
     def register_producer(
@@ -137,6 +171,15 @@ class PostOffice:
             for spy in spies:
                 spy.kill(reason)
 
+    def _count_time(self, topic):
+        """Start counting time towards topic"""
+        now = time.time()
+        if self.active_topic:
+            self.time_spent.setdefault(self.active_topic, 0)
+            self.time_spent[self.active_topic] += now - self._last_switch_time
+        self.active_topic = topic
+        self._last_switch_time = now
+
     def _read(self, topic, reader):
         """Actual generator producing messages for reader on topic"""
         msg_number = 0
@@ -147,7 +190,7 @@ class PostOffice:
                     break
             else:
                 try:
-                    # Relinquish control to the producer
+                    # We have to produce a new message
                     result = self._fetch_new(topic)
                 except StopIteration:
                     # Message actually won't come, exit the while loop.
@@ -157,8 +200,13 @@ class PostOffice:
             # Note receipt before yielding, so we can clear unnecessary
             # messages from our storage (if possible) before we lose control.
             self._ack_reader_recieved(reader, topic, msg_number)
+            # Return control to the reader, and start counting time on their
+            # budget
+            self._count_time(reader)
             yield result
+            # Reader wants more -- back to working on the topic.
             # Look for the next message
+            self._count_time(topic)
             msg_number += 1
         # We get here if the topic is exhausted & we have read all messages
         # For debugging purposes, note that the reader is done before
