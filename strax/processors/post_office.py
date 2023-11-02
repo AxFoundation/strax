@@ -97,19 +97,20 @@ class PostOffice:
         suitable for printing or logging"""
         result = []
         for topic in self.topic_names:
-            result.append(f"Topic {topic}:")
-            result.append(f'  Saved mail: {self._saved_mail[topic]}')
-            result.append(f'  Last produced: {self._last_msg_produced[topic]}')
-            result.append(f'  Readers recieved: {self._last_msg_read[topic]}')
-            result.append(f'  Readers done: {self._readers_done[topic]}')
-            result.append(f'  Time spent: {self.time_spent.get(topic, None)}')
-            result.append('')
-        result.append(f"Total time spent: {sum(self.time_spent.values())}")
+            result.append(
+                f"Topic {topic}\n"
+                f"    Saved mail: {self._saved_mail[topic]}\n"
+                f"    Last produced: {self._last_msg_produced[topic]}\n"
+                f"    Readers recieved: {self._last_msg_read[topic]}\n"
+                f"    Readers done: {self._readers_done[topic]}\n"
+                f"    Time spent: {self.time_spent.get(topic, None)}\n"
+                )
         also_spent = {
             k: v
             for k, v in self.time_spent.items()
             if k not in self.topic_names}
         result.append(f"Also spent time on: {also_spent}")
+        result.append(f"Total time spent: {sum(self.time_spent.values())}")
         return "\n".join(result)
 
     def register_producer(
@@ -208,16 +209,20 @@ class PostOffice:
             # Look for the next message
             self._count_time(topic)
             msg_number += 1
-        # We get here if the topic is exhausted & we have read all messages
-        # For debugging purposes, note that the reader is done before
-        # returning / raising StopIteration in the caller.
+
+        # We get here if the topic is exhausted & we have read all messages;
+        # just do a final check for debugging purposes.
         self._readers_done[topic].append(reader)
+        if len(self._readers_done[topic]) == len(self._last_msg_read[topic]):
+            # All readers are done. Just to be sure, check that we have
+            # no more messages in the cache.
+            assert not self._saved_mail[topic]
 
     def _message_may_come(self, topic, msg_number):
         """Return True if topic is guaranteed to never produce msg_number"""
         return not (
-            'topic' in self._exhausted_topics
-            and msg_number > self._last_msg_read[topic])
+            topic in self._exhausted_topics
+            and msg_number > self._last_msg_produced[topic])
 
     def _fetch_new(self, topic):
         """Fetch a new message from the producer of topic.
@@ -274,7 +279,7 @@ class PostOffice:
         everyone_got = max(self._last_msg_read[topic].values())
         self._saved_mail[topic] = [
             (msg_number, msg) for msg_number, msg in self._saved_mail[topic]
-            if msg_number >= everyone_got]
+            if msg_number > everyone_got]
 
     def _ack_topic_exhausted(self, topic):
         """Take note that topic is exhausted, no new messages will come"""
