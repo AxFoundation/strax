@@ -493,6 +493,9 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
         assert math.isclose(e1, e2, rel_tol=10**-3,
                             abs_tol=10**-3), f"Test 3.: Entropy function: {e1}, entropy test: {e2}"
 
+    else:
+        assert np.isnan(e1), f'Hitlet entropy is {e1}, but expected np.nan'
+
 
 def _align_compute_entropy(data, template):
     ind_max_data = np.argmax(data)
