@@ -6,6 +6,7 @@ Streaming analysis for xenon experiments
 [![Coverage Status](https://coveralls.io/repos/github/AxFoundation/strax/badge.svg?branch=master)](https://coveralls.io/github/AxFoundation/strax?branch=master)
 [![tests](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml/badge.svg?branch=master)](https://github.com/AxFoundation/strax/actions/workflows/pytest.yml)
 [![CodeFactor](https://www.codefactor.io/repository/github/axfoundation/strax/badge)](https://www.codefactor.io/repository/github/axfoundation/strax)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/AxFoundation/strax/master.svg)](https://results.pre-commit.ci/latest/github/AxFoundation/strax/master)
 
 [![PyPI version shields.io](https://img.shields.io/pypi/v/strax.svg)](https://pypi.python.org/pypi/strax/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/strax.svg)](https://pypi.python.org/pypi/strax)
@@ -16,4 +17,3 @@ Streaming analysis for xenon experiments
 Strax is an analysis framework for pulse-only digitization data, specialized for live data reduction at speeds of 50-100 MB(raw) / core / sec. For more information, please see the [strax documentation](https://strax.readthedocs.io).
 
 Strax' primary aim is to support noble liquid TPC dark matter searches, such as XENONnT. The XENON-specific algorithms live in the separate package [straxen](https://github.com/XENONnT/straxen). If you want to try out strax, you probably want to start there. This package only contains the core framework and basic algorithms any TPCs would want to use.
-

@@ -113,10 +113,10 @@ New Contributors
 
 1.2.2 / 2022-05-11
 ---------------------
-- Add option to ignore errors in multirun loading (#653) 
+- Add option to ignore errors in multirun loading (#653)
 - Auto version, fix #217 (#689)
 - Add basics documentation - split Config and Plugin docs (#691)
-- Add n_hits comment in code (#692) 
+- Add n_hits comment in code (#692)
 - Rechunker script (#686)
 
 
@@ -129,7 +129,7 @@ New Contributors
 
 1.2.0 / 2022-03-09
 ---------------------
-- Added lone hit area to area per channel (#649) 
+- Added lone hit area to area per channel (#649)
 
 1.1.8 / 2022-03-08
 ---------------------
@@ -159,7 +159,7 @@ New Contributors
 - deprecate py3.6 py3.7 (#636)
 - remove deprecated function (#632)
 - Numba 0.55 (#634)
-  
+
 
 1.1.5 / 2022-01-10
 ---------------------
@@ -172,17 +172,17 @@ New Contributors
 1.1.4 / 2021-12-16
 ---------------------
 - Make truly HDR (#613)
-- Remove tight coincidence channel from data_type (#614) 
+- Remove tight coincidence channel from data_type (#614)
 
 
 1.1.3 / 2021-12-13
 ---------------------
--  Add mode and tags to superrun. (#593) 
--  cache deps (#595) 
--  Fix online monitor bug for only md stored (#596) 
+-  Add mode and tags to superrun. (#593)
+-  cache deps (#595)
+-  Fix online monitor bug for only md stored (#596)
 -  speedup get_source with lookupdict (#599)
 -  remove config warning and infer_dtype=False (#600)
--  Require pymongo 3.* (#611) 
+-  Require pymongo 3.* (#611)
 
 
 1.1.2 / 2021-11-19
@@ -198,7 +198,7 @@ New Contributors
 
 Notes:
  - PRs #569, #586, #587 may cause a lot of warnings for options
- 
+
 
 1.1.1 / 2021-10-27
 ---------------------
@@ -213,7 +213,7 @@ Notes:
 major / minor:
 
 - Fix hitlet splitting (#549)
-- Add tight channel (#551) 
+- Add tight channel (#551)
 
 patch:
 
@@ -221,15 +221,15 @@ patch:
 - Add drop column option (#530)
 - Remove context.apply_selection (#531)
 - Add option to support superruns for storage frontends. Adds test (#532)
-- Fix issue #536 (#537) 
+- Fix issue #536 (#537)
 - Two pbar patches (#538)
-- Add get_zarr method to context (#540) 
+- Add get_zarr method to context (#540)
 - Broken metadata error propagation (#541)
 - few tests for MongoStorage frontend (#542)
-- Fix caching (#545) 
+- Fix caching (#545)
 - dds information about failing chunk (#548)
-- remove rucio (#552) 
-- Allow loading SaveWhen.EXPLICIT time range selection (#553) 
+- remove rucio (#552)
+- Allow loading SaveWhen.EXPLICIT time range selection (#553)
 - Changes to savewhen behavior (#554)
 
 
@@ -275,7 +275,7 @@ patch:
 - Remove outdated files/configs (#462)
 - Remove overwrite from options (#467)
 
- 
+
 0.15.3 / 2021-06-03
 ---------------------
 - Match cached buffer chunk start times OverlapWindowPlugin (#450)
@@ -297,7 +297,7 @@ patch:
 ---------------------
 - Refactor hitlets (#430, #436)
 - Update classifiers for pipy #437
-- Allow Py39 in travis tests (#427) 
+- Allow Py39 in travis tests (#427)
 
 0.15.0 / 2021-04-16
 ---------------------
@@ -310,7 +310,7 @@ patch:
 
 0.14.0 / 2021-04-09
 ---------------------
-- Check data availability for single run (#416) 
+- Check data availability for single run (#416)
 
 0.13.11 / 2021-04-02
 ---------------------
@@ -346,7 +346,7 @@ patch:
 
 0.13.4 / 2021-01-22
 ---------------------
-- Nveto changes + highest density regions (#384) 
+- Nveto changes + highest density regions (#384)
 - Parse requirements for testing (#383)
 - Added keep_columns into docstring (#382)
 - remove slow operators from mongo storage (#382)
@@ -522,7 +522,7 @@ patch:
 ------------------
 - Small bugfixes:
   - Fixes for multi-output plugins
-  - Use frozendict for Plugin.takes_config 
+  - Use frozendict for Plugin.takes_config
 
 0.8.6 / 2020-01-17
 -------------------
