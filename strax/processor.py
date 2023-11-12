@@ -9,12 +9,14 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 import strax
+
 export, __all__ = strax.exporter()
 
 try:
     import npshmex
+
     SHMExecutor = npshmex.ProcessPoolExecutor
-    npshmex.register_array_wrapper(strax.Chunk, 'data')
+    npshmex.register_array_wrapper(strax.Chunk, "data")
 except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
@@ -22,11 +24,12 @@ except ImportError:
 
 @export
 class ProcessorComponents(ty.NamedTuple):
-    """Specification to assemble a processor"""
+    """Specification to assemble a processor."""
+
     plugins: ty.Dict[str, strax.Plugin]
-    loaders: ty.Dict[str, callable]
+    loaders: ty.Dict[str, ty.Callable]
     loader_plugins: ty.Dict[str, strax.Plugin]  # Required for inline ParallelSource plugin.
-    savers:  ty.Dict[str, ty.List[strax.Saver]]
+    savers: ty.Dict[str, ty.List[strax.Saver]]
     targets: ty.Tuple[str]
 
 
@@ -36,8 +39,7 @@ class MailboxDict(dict):
         self.lazy = lazy
 
     def __missing__(self, key):
-        res = self[key] = strax.Mailbox(name=key + '_mailbox',
-                                        lazy=self.lazy)
+        res = self[key] = strax.Mailbox(name=key + "_mailbox", lazy=self.lazy)
         return res
 
 
@@ -45,23 +47,25 @@ class MailboxDict(dict):
 class ThreadedMailboxProcessor:
     mailboxes: ty.Dict[str, strax.Mailbox]
 
-    def __init__(self,
-                 components: ProcessorComponents,
-                 allow_rechunk=True, allow_shm=False,
-                 allow_multiprocess=False,
-                 allow_lazy=True,
-                 max_workers=None,
-                 max_messages=4,
-                 timeout=60,
-                 is_superrun=False,):
+    def __init__(
+        self,
+        components: ProcessorComponents,
+        allow_rechunk=True,
+        allow_shm=False,
+        allow_multiprocess=False,
+        allow_lazy=True,
+        max_workers=None,
+        max_messages=4,
+        timeout=60,
+        is_superrun=False,
+    ):
         self.log = logging.getLogger(self.__class__.__name__)
         self.components = components
 
         self.log.debug("Processor components are: " + str(components))
 
-        if allow_multiprocess and os.name == 'nt':
-            print("You're on Windows! "
-                  "Multiprocessing disabled, here be dragons.")
+        if allow_multiprocess and os.name == "nt":
+            print("You're on Windows! Multiprocessing disabled, here be dragons.")
             allow_multiprocess = False
 
         if max_workers in [None, 1]:
@@ -72,33 +76,31 @@ class ThreadedMailboxProcessor:
         else:
             lazy = False
             # Use executors for parallelization of computations.
-            self.thread_executor = futures.ThreadPoolExecutor(
-                max_workers=max_workers)
+            self.thread_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
 
-            mp_plugins = {d: p for d, p in components.plugins.items()
-                          if p.parallel == 'process'}
+            mp_plugins = {d: p for d, p in components.plugins.items() if p.parallel == "process"}
             if allow_multiprocess and len(mp_plugins):
                 _proc_ex = ProcessPoolExecutor
                 if allow_shm:
                     if SHMExecutor is None:
                         raise RuntimeError(
-                            "You must install npshmex to enable shm"
-                            " transfer of numpy arrays.")
+                            "You must install npshmex to enable shm transfer of numpy arrays."
+                        )
                     _proc_ex = SHMExecutor
                 self.process_executor = _proc_ex(max_workers=max_workers)
 
                 # Combine as many plugins /savers as possible in one process
                 # TODO: more intelligent start determination, multiple starts
                 start_from = list(mp_plugins.keys())[
-                    int(np.argmin([len(p.depends_on)
-                                   for p in mp_plugins.values()]))]
+                    int(np.argmin([len(p.depends_on) for p in mp_plugins.values()]))
+                ]
                 components = strax.ParallelSourcePlugin.inline_plugins(
-                    components, start_from, log=self.log)
+                    components, start_from, log=self.log
+                )
                 self.components = components
-                self.log.debug("Altered components for multiprocessing: "
-                               + str(components))
+                self.log.debug("Altered components for multiprocessing: " + str(components))
             else:
-                self.process_executor = self.thread_executor
+                self.process_executor = self.thread_executor  # type: ignore
 
         # Figure which outputs
         #  - we should exclude from the flow control in lazy mode,
@@ -108,19 +110,20 @@ class ThreadedMailboxProcessor:
         required = set(components.targets)
         # Do not just take keys from savers, perhaps some keys
         # have no savers are under them (see #444)
-        saved = set([k for k, v in components.savers.items()
-                     if v])
+        saved = set([k for k, v in components.savers.items() if v])
 
         for p in components.plugins.values():
             produced.update(p.provides)
             required.update(p.depends_on)
         to_flow_freely = produced - required
         to_discard = to_flow_freely - saved
-        self.log.debug(f'to_flow_freely {to_flow_freely}'
-                       f'to_discard {to_discard}'
-                       f'produced {produced}'
-                       f'required {required}'
-                       f'saved {saved}')
+        self.log.debug(
+            f"to_flow_freely {to_flow_freely}"
+            f"to_discard {to_discard}"
+            f"produced {produced}"
+            f"required {required}"
+            f"saved {saved}"
+        )
 
         self.mailboxes = MailboxDict(lazy=lazy)
 
@@ -129,72 +132,74 @@ class ThreadedMailboxProcessor:
             # If paralellizing, use threads for loading
             # the decompressor releases the gil, and we have a lot
             # of data transfer to do
-            self.mailboxes[d].add_sender(
-                loader(executor=self.thread_executor),
-                name=f'load:{d}')
+            self.mailboxes[d].add_sender(loader(executor=self.thread_executor), name=f"load:{d}")
 
-        multi_output_seen = []
+        multi_output_seen: ty.List[strax.Plugin] = []
         for d, p in components.plugins.items():
             if p in multi_output_seen:
                 continue
-                
+
             if p.__class__ in [mp_seen.__class__ for mp_seen in multi_output_seen]:
-                raise ValueError('A multi-output plugin is registered with different '
-                                 'instances for its provided data_types!')
+                raise ValueError(
+                    "A multi-output plugin is registered with different "
+                    "instances for its provided data_types!"
+                )
 
             executor = None
-            if p.parallel == 'process':
+            if p.parallel == "process":
                 executor = self.process_executor
             elif p.parallel:
-                executor = self.thread_executor
+                executor = self.thread_executor  # type: ignore
 
             if p.multi_output:
                 multi_output_seen.append(p)
 
                 # Create temp mailbox that receives multi-output dicts
                 # and sends them forth to other mailboxes
-                mname = p.__class__.__name__ + '_divide_outputs'
+                mname = p.__class__.__name__ + "_divide_outputs"
                 self.mailboxes[mname].add_sender(
                     p.iter(
-                        iters={dep: self.mailboxes[dep].subscribe()
-                               for dep in p.depends_on},
-                        executor=executor),
-                    name=f'divide_outputs:{d}')
+                        iters={dep: self.mailboxes[dep].subscribe() for dep in p.depends_on},
+                        executor=executor,
+                    ),
+                    name=f"divide_outputs:{d}",
+                )
 
                 # If we have a plugin with double dependency both outputs
                 # of a multioutput-plugin are required. Hence flow-freely
                 # is empty an needs to be updated here:
                 provided_data_types = set(p.provides)
                 reader_data_types = set(strax.to_str_tuple(d))
-                double_dependency = (provided_data_types - reader_data_types)
+                double_dependency = provided_data_types - reader_data_types
                 to_flow_freely |= double_dependency
-                self.log.debug(f'Updating flow freely for {mname} to be {to_flow_freely}')
+                self.log.debug(f"Updating flow freely for {mname} to be {to_flow_freely}")
 
                 self.mailboxes[mname].add_reader(
-                    partial(strax.divide_outputs,
-                            lazy=lazy,
-                            # make sure to subscribe the outputs of the mp_plugins
-                            mailboxes={k: self.mailboxes[k] for k in p.provides},
-                            flow_freely=to_flow_freely,
-                            outputs=p.provides))
+                    partial(
+                        strax.divide_outputs,
+                        lazy=lazy,
+                        # make sure to subscribe the outputs of the mp_plugins
+                        mailboxes={k: self.mailboxes[k] for k in p.provides},
+                        flow_freely=to_flow_freely,
+                        outputs=p.provides,
+                    )
+                )
 
             else:
                 self.mailboxes[d].add_sender(
                     p.iter(
-                        iters={dep: self.mailboxes[dep].subscribe()
-                               for dep in p.depends_on},
-                        executor=executor),
-                    name=f'build:{d}')
+                        iters={dep: self.mailboxes[dep].subscribe() for dep in p.depends_on},
+                        executor=executor,
+                    ),
+                    name=f"build:{d}",
+                )
 
-        dtypes_built = {d: p
-                        for p in components.plugins.values()
-                        for d in p.provides}
+        dtypes_built = {d: p for p in components.plugins.values() for d in p.provides}
         for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
                 if d in dtypes_built:
                     can_drive = not lazy
-                    rechunk = (dtypes_built[d].can_rechunk(d)
-                               and allow_rechunk)
+                    rechunk = dtypes_built[d].can_rechunk(d) and allow_rechunk
                 else:
                     # This is storage conversion mode
                     # TODO: Don't know how to get this info, for now,
@@ -203,14 +208,17 @@ class ThreadedMailboxProcessor:
                     rechunk = is_superrun and allow_rechunk
 
                 self.mailboxes[d].add_reader(
-                    partial(saver.save_from,
-                            rechunk=rechunk,
-                            # If paralellizing, use threads for saving
-                            # the compressor releases the gil,
-                            # and we have a lot of data transfer to do
-                            executor=self.thread_executor),
+                    partial(
+                        saver.save_from,
+                        rechunk=rechunk,
+                        # If paralellizing, use threads for saving
+                        # the compressor releases the gil,
+                        # and we have a lot of data transfer to do
+                        executor=self.thread_executor,
+                    ),
                     can_drive=can_drive,
-                    name=f'save_{s_i}:{d}')
+                    name=f"save_{s_i}:{d}",
+                )
 
         # For multi-output plugins, an output may be neither saved nor
         # required, and thus has to be discarded.
@@ -219,9 +227,9 @@ class ThreadedMailboxProcessor:
         def discarder(source):
             for _ in source:
                 pass
+
         for d in to_discard:
-            self.mailboxes[d].add_reader(
-                discarder, name=f'discard_{d}')
+            self.mailboxes[d].add_reader(discarder, name=f"discard_{d}")
 
         # Set to preferred number of maximum messages
         # TODO: may not work if plugins are inlined??
@@ -236,8 +244,10 @@ class ThreadedMailboxProcessor:
         # Remove defaultdict-like behaviour; all mailboxes should
         # have been made by now. See #444
         self.mailboxes = dict(self.mailboxes)
-        self.log.debug(f'Created the following mailboxes: {self.mailboxes} with the '
-                      f'following threads: {[(d, m._threads) for d,m in self.mailboxes.items()]}')
+        self.log.debug(
+            f"Created the following mailboxes: {self.mailboxes} with the "
+            f"following threads: {[(d, m._threads) for d,m in self.mailboxes.items()]}"
+        )
 
     def iter(self):
         target = self.components.targets[0]
@@ -245,7 +255,7 @@ class ThreadedMailboxProcessor:
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():
-            self.log.debug(f'start {m}')
+            self.log.debug(f"start {m}")
             m.start()
 
         self.log.debug(f"Yielding {target}")
@@ -257,8 +267,7 @@ class ThreadedMailboxProcessor:
         # GeneratorExit results from exception in caller
         # (on garbage collection, .close() is called, see PEP342)
         except (Exception, GeneratorExit) as e:
-            self.log.fatal(f"Target Mailbox ({target}) killed, "
-                           f"exception {type(e)}, message {e}")
+            self.log.fatal(f"Target Mailbox ({target}) killed, exception {type(e)}, message {e}")
             if isinstance(e, strax.MailboxKilled):
                 _, exc, traceback = reason = e.args[0]
             else:
@@ -273,7 +282,8 @@ class ThreadedMailboxProcessor:
                 print("Main generator exited irregularly?!")
                 reason[2] = (
                     "Hm, interesting. Most likely an exception was thrown "
-                    "outside strax, but we did not handle it properly.")
+                    "outside strax, but we did not handle it properly."
+                )
 
             # Kill the mailboxes
             for m in self.mailboxes.values():
