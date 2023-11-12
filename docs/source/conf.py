@@ -230,8 +230,7 @@ latex_elements: Dict[str, str] = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'strax.tex', 'strax Documentation',
-     'strax developers', 'manual'),
+    (master_doc, "strax.tex", "strax Documentation", "strax developers", "manual"),
     (master_doc, "strax.tex", "strax Documentation", "strax developers", "manual"),
 ]
 
