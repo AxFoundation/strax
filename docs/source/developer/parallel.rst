@@ -17,7 +17,7 @@ Loaders use multithreading by default, since their work is eminently paralleliza
 Multiprocessing
 ----------------
 
-Strax can also use multiprocessing for parallelization. This is useful to free pure-python computations from the shackles of the GIL. Low-level plugins deal with a massive data flow, so parallelizing theircomputations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the GIL becomes binding due to pure-python overhead. 
+Strax can also use multiprocessing for parallelization. This is useful to free pure-python computations from the shackles of the GIL. Low-level plugins deal with a massive data flow, so parallelizing theircomputations in separate processes is very inefficient due to data transfer overhead. Thread parallelization works fine (since the algorithms are implemented in numba) until you reach ~10 cores, when the GIL becomes binding due to pure-python overhead.
 
 You can set the ``parallel`` attribute to ``process``, to suggest strax should use a process pool instead of a thread pool. This is often not a good idea: multiprocessing incurs overhead from (1) forking the strax process and (2) pickling and unpickling the results in the child and parent processes. Strax will still not use multiprocessing at all unless you:
   - Set the allow_multiprocess context option to True,
@@ -25,7 +25,7 @@ You can set the ``parallel`` attribute to ``process``, to suggest strax should u
 
 During multiprocessing, computations of chunks from ``parallel='process'`` plugins will be outsourced to a process pool. Additionally, to avoid data transfer overhead, strax attempts to gather as many savers, dependencies, and savers of dependencies of a ``parallel='process'`` plugin to "inline" them: their computations are set to happen immedately after the main plugin's computation in the same process. This is achieved behind the scenes by replacing the plugin with a container-like plugin called ParallelSourcePlugin. Only parallelizable plugins and savers that do not rechunk will be inlined.
 
-Since savers can become inlined, they should work even if they are forked. That implies they cannot keep state, and must store metadata for each chunk in their backend as it arrives. For example, the FileStore backend produces a json file with metadata for each chunk. When the saver is closed, all the json files are read in and concatenated. A saver that can't do this should set `allow_fork = False`. 
+Since savers can become inlined, they should work even if they are forked. That implies they cannot keep state, and must store metadata for each chunk in their backend as it arrives. For example, the FileStore backend produces a json file with metadata for each chunk. When the saver is closed, all the json files are read in and concatenated. A saver that can't do this should set `allow_fork = False`.
 
 
 Multi-run parallelization: a different problem
