@@ -58,8 +58,8 @@ master_doc = "index"
 
 # General information about the project.
 project = "strax"
-copyright = "2018, Jelle Aalbers"
-author = "Jelle Aalbers"
+copyright = "2018-2023, strax developers"
+author = "strax developers"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -230,7 +230,8 @@ latex_elements: Dict[str, str] = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, "strax.tex", "strax Documentation", "Jelle Aalbers", "manual"),
+    (master_doc, "strax.tex", "strax Documentation", "strax developers", "manual"),
+    (master_doc, "strax.tex", "strax Documentation", "strax developers", "manual"),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

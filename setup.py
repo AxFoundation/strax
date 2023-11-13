@@ -22,7 +22,7 @@ setuptools.setup(
     name="strax",
     version="1.5.4",
     description="Streaming analysis for xenon TPCs",
-    author="Jelle Aalbers",
+    author="strax developers",
     url="https://github.com/AxFoundation/strax",
     setup_requires=["pytest-runner"],
     install_requires=requires,
