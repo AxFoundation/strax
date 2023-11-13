@@ -282,9 +282,7 @@ def test_raw_to_records(r):
 
 
 @hypothesis.given(
-    hyp_numpy.arrays(
-        np.int64, 10**2, elements=hypothesis.strategies.integers(10**9, 5 * 10**9)
-    ),
+    hyp_numpy.arrays(np.int64, 10**2, elements=hypothesis.strategies.integers(10**9, 5 * 10**9)),
     hyp_numpy.arrays(np.int16, 10**2, elements=hypothesis.strategies.integers(-10, 10**3)),
 )
 @hypothesis.settings(deadline=None)

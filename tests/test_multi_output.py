@@ -160,13 +160,11 @@ class TestMultiOutputs(unittest.TestCase):
     def test_save_when_per_provide(self):
         """Tests if save when works properly in case of different save when per provided
         data_type."""
-        _save_when = immutabledict(
-            {
-                "even_recs": strax.SaveWhen.NEVER,
-                "odd_recs": strax.SaveWhen.TARGET,
-                "rec_count": strax.SaveWhen.ALWAYS,
-            }
-        )
+        _save_when = immutabledict({
+            "even_recs": strax.SaveWhen.NEVER,
+            "odd_recs": strax.SaveWhen.TARGET,
+            "rec_count": strax.SaveWhen.ALWAYS,
+        })
         p = self.mystrax._plugin_class_registry["rec_count"]
         p.save_when = _save_when
 
@@ -207,13 +205,11 @@ class TestMultiOutputs(unittest.TestCase):
 
     def test_save_per_provide_inlined(self):
         """Checks whether the plugin inlining works for different combinations."""
-        _save_when = immutabledict(
-            {
-                "even_recs": strax.SaveWhen.NEVER,
-                "odd_recs": strax.SaveWhen.TARGET,
-                "rec_count": strax.SaveWhen.ALWAYS,
-            }
-        )
+        _save_when = immutabledict({
+            "even_recs": strax.SaveWhen.NEVER,
+            "odd_recs": strax.SaveWhen.TARGET,
+            "rec_count": strax.SaveWhen.ALWAYS,
+        })
         p = self.mystrax._plugin_class_registry["rec_count"]
         p.save_when = _save_when
 
@@ -255,17 +251,17 @@ class TestMultiOutputs(unittest.TestCase):
     def test_double_dependency_multiprocess(self):
         """Tests if double dependency of a plugin on another plugin leads to dead lock in
         processing."""
-        self.mystrax.set_context_config(
-            {"timeout": 120, "allow_lazy": False, "allow_multiprocess": True}
-        )
+        self.mystrax.set_context_config({
+            "timeout": 120, "allow_lazy": False, "allow_multiprocess": True
+        })
         self._test_double_dependency(max_workers=2)
 
     def test_double_dependency_inline_plugins(self):
         """Tests if double dependency of a plugin on another plugin leads to dead lock in
         processing."""
-        self.mystrax.set_context_config(
-            {"timeout": 120, "allow_lazy": False, "allow_multiprocess": True}
-        )
+        self.mystrax.set_context_config({
+            "timeout": 120, "allow_lazy": False, "allow_multiprocess": True
+        })
         self._test_double_dependency(max_workers=2, make_data_type="zipped_records_classified")
         self.mystrax.is_stored(run_id, "even_recs_classified")
 

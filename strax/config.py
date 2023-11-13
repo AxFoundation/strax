@@ -122,13 +122,11 @@ class Option:
         #                   DeprecationWarning)
 
         if (
-            sum(
-                [
-                    self.default is not OMITTED,
-                    self.default_factory is not OMITTED,
-                    self.default_by_run is not OMITTED,
-                ]
-            )
+            sum([
+                self.default is not OMITTED,
+                self.default_factory is not OMITTED,
+                self.default_by_run is not OMITTED,
+            ])
             > 1
         ):
             raise RuntimeError(f"Tried to specify more than one default for option {self.name}.")

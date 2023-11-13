@@ -1,4 +1,5 @@
 """Context methods dealing with run scanning and selection."""
+
 import fnmatch
 import re
 import typing as ty
@@ -142,9 +143,9 @@ def scan_runs(
             if isinstance(doc["source"], list):
                 doc["source"] = ",".join(doc["source"])
 
-            doc["tags"] = ",".join(
-                [t["name"] if isinstance(t, dict) else t for t in doc.get("tags", [])]
-            )
+            doc["tags"] = ",".join([
+                t["name"] if isinstance(t, dict) else t for t in doc.get("tags", [])
+            ])
 
             # Set a default livetime if we have start and stop
             if (
@@ -524,17 +525,13 @@ def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
         patterns = [patterns]
 
     for i, tags in enumerate(dsets.tags):
-        result[i] = any(
-            [
-                any(
-                    [
-                        _tag_match(tag, pattern, pattern_type, ignore_underscore)
-                        for tag in tags.split(",")
-                        for pattern in patterns
-                    ]
-                )
-            ]
-        )
+        result[i] = any([
+            any([
+                _tag_match(tag, pattern, pattern_type, ignore_underscore)
+                for tag in tags.split(",")
+                for pattern in patterns
+            ])
+        ])
 
     return result
 
