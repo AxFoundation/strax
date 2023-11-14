@@ -463,7 +463,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     hitlet["length"][0] = len_data
 
     # Test 1.: Flat template and no data:
-    e1 = strax.conditional_entropy(hitlet, 'flat')[0]
+    e1 = strax.conditional_entropy(hitlet, "flat")[0]
 
     sum_data = np.sum(data)
     if sum_data:
