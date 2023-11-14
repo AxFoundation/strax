@@ -108,7 +108,7 @@ If you wish to make/store a superrun you have to specify the context option:
     st.set_context_config({'write_superruns': True})
 
 
-Superruns follow the same saving rules (SaveWhen.TARGET, SaveWhen.EXPLICIT or SaveWhen.ALWAYS) as regular runs. 
+Superruns follow the same saving rules (SaveWhen.TARGET, SaveWhen.EXPLICIT or SaveWhen.ALWAYS) as regular runs.
 
 How superruns work
 --------------------

@@ -1,6 +1,7 @@
 import os
 import warnings
-warnings.simplefilter('always', UserWarning)
+
+warnings.simplefilter("always", UserWarning)
 # for these fundamental functions, we throw warnings each time they are called
 
 import strax
@@ -13,44 +14,46 @@ export, __all__ = strax.exporter()
 
 @export
 def sort_by_time(x):
-    """Sorts things. Either by time or by time, then channel if both
-    fields are in the given array.
+    """Sorts things.
+
+    Either by time or by time, then channel if both fields are in the given array.
+
     """
     if len(x) == 0:
         return x
 
-    if 'channel' in x.dtype.names:
-        min_channel = x['channel'].min()
-        channel = x['channel'].copy()
+    if "channel" in x.dtype.names:
+        min_channel = x["channel"].min()
+        channel = x["channel"].copy()
         if min_channel < 0:
             channel -= min_channel
     else:
         channel = np.ones(len(x))
 
-    max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max()+1)
+    max_time_difference = (np.iinfo(np.int64).max - 10) / (channel.max() + 1)
     # Subtract 10 to have some extra margin, just in case.
     # Use absolute to account for peaks which are channel -1.
-    _time_range_too_large = (x['time'].max() - x['time'].min()) > max_time_difference
+    _time_range_too_large = (x["time"].max() - x["time"].min()) > max_time_difference
     if not _time_range_too_large:
         # Faster sorting:
-        x = _sort_by_time_and_channel(x, channel, channel.max()+1)
-    elif 'channel' in x.dtype.names:
-        x = np.sort(x, order=('time', 'channel'))
+        x = _sort_by_time_and_channel(x, channel, channel.max() + 1)
+    elif "channel" in x.dtype.names:
+        x = np.sort(x, order=("time", "channel"))
     else:
-        x = np.sort(x, order=('time',))
+        x = np.sort(x, order=("time",))
     return x
 
+
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind='mergesort'):
-    """
-    Assumes you have no more than 10k channels, and records don't span
-    more than 11 days.
+def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind="mergesort"):
+    """Assumes you have no more than 10k channels, and records don't span more than 11 days.
 
     (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
+
     """
     # I couldn't get fast argsort on multiple keys to work in numba
     # So, let's make a single key...
-    sort_key = (x['time'] - x['time'].min()) * max_channel_plus_one + channel
+    sort_key = (x["time"] - x["time"].min()) * max_channel_plus_one + channel
     sort_i = np.argsort(sort_key, kind=sort_kind)
     return x[sort_i]
 
@@ -59,30 +62,32 @@ def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind='merge
 # keep working with NUMBA_DISABLE_JIT, which we use for coverage tests.
 # See https://github.com/numba/numba/issues/4759
 if os.environ.get("NUMBA_DISABLE_JIT"):
+
     @export
     def endtime(x):
-        """Return endtime of intervals x"""
-        if 'endtime' in x.dtype.fields:
-            return x['endtime']
+        """Return endtime of intervals x."""
+        if "endtime" in x.dtype.fields:
+            return x["endtime"]
         else:
-            return x['time'] + x['length'] * x['dt']
+            return x["time"] + x["length"] * x["dt"]
+
 else:
+
     @export
     @numba.generated_jit(nopython=True, nogil=True)
     def endtime(x):
-        """Return endtime of intervals x"""
-        if 'endtime' in x.dtype.fields:
-            return lambda x: x['endtime']
+        """Return endtime of intervals x."""
+        if "endtime" in x.dtype.fields:
+            return lambda x: x["endtime"]
         else:
-            return lambda x: x['time'] + x['length'] * x['dt']
+            return lambda x: x["time"] + x["length"] * x["dt"]
 
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def from_break(x, safe_break, not_before=0, left=True, tolerant=False):
-    """Return records on side of a break at least safe_break long
-    If there is no such break, return the best break found.
-    """
+    """Return records on side of a break at least safe_break long If there is no such break, return
+    the best break found."""
     if tolerant:
         raise NotImplementedError
     if not len(x):
@@ -91,7 +96,7 @@ def from_break(x, safe_break, not_before=0, left=True, tolerant=False):
         raise NoBreakFound()
 
     break_i = _find_break_i(x, safe_break=safe_break, not_before=not_before)
-    break_time = x[break_i]['time']
+    break_time = x[break_i]["time"]
 
     if left:
         return x[:break_i], break_time
@@ -107,61 +112,57 @@ class NoBreakFound(Exception):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _find_break_i(data, safe_break, not_before):
-    """Return first index of element right of the first gap
-    larger than safe_break in data.
+    """Return first index of element right of the first gap larger than safe_break in data. Assumes
+    all x have the same length and are sorted!
 
-    Assumes all x have the same length and are sorted!
+    :param tolerant: if no break found, yield an as good as possible break anyway.
 
-    :param tolerant: if no break found, yield an as good as possible break
-    anyway.
     """
     assert len(data) >= 2
     latest_end_seen = max(not_before, strax.endtime(data[0]))
     for i, d in enumerate(data):
         if i == 0:
             continue
-        if d['time'] >= latest_end_seen + safe_break:
+        if d["time"] >= latest_end_seen + safe_break:
             return i
-        latest_end_seen = max(latest_end_seen,
-                              strax.endtime(d))
+        latest_end_seen = max(latest_end_seen, strax.endtime(d))
     raise NoBreakFound
 
 
 def _fully_contained_in_sanity(things, containers):
-    """
-    Since both fully_contained_in and split_by_containment use the same
-    core function _fully_contained_in, we check the sanity of the inputs here.
-    """
+    """Since both fully_contained_in and split_by_containment use the same core function
+    _fully_contained_in, we check the sanity of the inputs here."""
     try:
-        _check_time_is_sorted(things['time'])
+        _check_time_is_sorted(things["time"])
     except Exception:
-        raise ValueError('time of things should be sorted!')
+        raise ValueError("time of things should be sorted!")
     try:
-        _check_time_is_sorted(containers['time'])
+        _check_time_is_sorted(containers["time"])
     except Exception:
-        raise ValueError('time of containers should be sorted!')
+        raise ValueError("time of containers should be sorted!")
     try:
         _check_objects_are_not_overlapping(containers)
     except Exception:
         warnings.warn(
-            'Overlapping of containers detected! '
-            'fully_contained_in function will only return '
-            'the first container of the thing.')
-    for objects, names in zip([things, containers], ['things', 'containers']):
+            "Overlapping of containers detected! "
+            "fully_contained_in function will only return "
+            "the first container of the thing."
+        )
+    for objects, names in zip([things, containers], ["things", "containers"]):
         try:
             _check_objects_non_negative_length(objects)
         except Exception:
-            raise ValueError(f'{names} should have non-negative length!')
+            raise ValueError(f"{names} should have non-negative length!")
 
 
 @export
 def fully_contained_in(things, containers):
-    """
-    Return array of len(things) with index of interval in containers
-    for which things are fully contained in a container, or -1 if no such
-    exists.
-    We assume all things and containers are sorted by time.
-    If containers are overlapping, the first container of the thing is chosen.
+    """Return array of len(things) with index of interval in containers for which things are fully
+    contained in a container, or -1 if no such exists.
+
+    We assume all things and containers are sorted by time. If containers are overlapping, the first
+    container of the thing is chosen.
+
     """
     _fully_contained_in_sanity(things, containers)
 
@@ -170,10 +171,10 @@ def fully_contained_in(things, containers):
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _fully_contained_in(things, containers):
-    """Core function of fully_contained_in"""
+    """Core function of fully_contained_in."""
     result = np.ones(len(things), dtype=np.int32) * -1
-    a_starts = things['time']
-    b_starts = containers['time']
+    a_starts = things["time"]
+    b_starts = containers["time"]
     a_ends = strax.endtime(things)
     b_ends = strax.endtime(containers)
     _fc_in(a_starts, b_starts, a_ends, b_ends, result)
@@ -199,11 +200,11 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
 
 @export
 def split_by_containment(things, containers):
-    """
-    Return list of thing-arrays contained in each container. Result is
-    returned as a numba.typed.List or list if containers are empty.
+    """Return list of thing-arrays contained in each container. Result is returned as a
+    numba.typed.List or list if containers are empty.
 
     Assumes everything is sorted, and containers are non-overlapping.
+
     """
     _fully_contained_in_sanity(things, containers)
 
@@ -240,8 +241,7 @@ def _split_by_containment(things, containers):
     things_split = _split(things, split_indices)
 
     # Insert empty arrays for empty containers
-    empty_containers = _get_empty_container_ids(len(containers),
-                                                np.unique(which_container))
+    empty_containers = _get_empty_container_ids(len(containers), np.unique(which_container))
     for c_i in empty_containers:
         things_split.insert(c_i, things[:0])
 
@@ -250,9 +250,10 @@ def _split_by_containment(things, containers):
 
 @numba.njit(cache=True, nogil=True)
 def _split(things, split_indices):
-    """
-    Helper to replace np.split, required since numba numpy.split does
-    not return a typed.List. Hence outputs cannot be unified.
+    """Helper to replace np.split, required since numba numpy.split does not return a typed.List.
+
+    Hence outputs cannot be unified.
+
     """
     things_split = List()
     if len(split_indices):
@@ -274,9 +275,7 @@ def _split(things, split_indices):
 
 @numba.njit(cache=True, nogil=True)
 def _get_empty_container_ids(n_containers, full_container_ids):
-    """
-    Helper to replace np.setdiff1d for numbafied split_by_containment.
-    """
+    """Helper to replace np.setdiff1d for numbafied split_by_containment."""
     res = np.zeros(n_containers, dtype=np.int64)
 
     n_empty = 0
@@ -285,14 +284,14 @@ def _get_empty_container_ids(n_containers, full_container_ids):
         # Loop over all container ids with input, ids in between
         # must be empty:
         n = fid - prev_fid
-        res[n_empty:n_empty + n] = np.arange(prev_fid, fid, dtype=np.int64)
+        res[n_empty : n_empty + n] = np.arange(prev_fid, fid, dtype=np.int64)
         prev_fid = fid + 1
         n_empty += n
 
     if prev_fid < n_containers:
         # Do the rest if there is any:
         n = n_containers - prev_fid
-        res[n_empty:n_empty + n] = np.arange(prev_fid, n_containers, dtype=np.int64)
+        res[n_empty : n_empty + n] = np.arange(prev_fid, n_containers, dtype=np.int64)
         n_empty += n
     return res[:n_empty]
 
@@ -300,9 +299,8 @@ def _get_empty_container_ids(n_containers, full_container_ids):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def overlap_indices(a1, n_a, b1, n_b):
-    """Given interval [a1, a1 + n_a), and [b1, b1 + n_b) of integers,
-    return indices [a_start, a_end), [b_start, b_end) of overlapping region.
-    """
+    """Given interval [a1, a1 + n_a), and [b1, b1 + n_b) of integers, return indices [a_start,
+    a_end), [b_start, b_end) of overlapping region."""
     if n_a < 0 or n_b < 0:
         raise ValueError("Negative interval length passed to overlap test")
 
@@ -332,17 +330,19 @@ def overlap_indices(a1, n_a, b1, n_b):
 
 @export
 def split_touching_windows(things, containers, window=0):
-    """
-    Split things by their containers and return a list of length containers
+    """Split things by their containers and return a list of length containers.
+
     :param things: Sorted array of interval-like data
     :param containers: Sorted array of interval-like data
-    :param window: threshold distance for touching check
+    :param window: threshold distance for touching check.
+
     For example:
-       - window = 0: things must overlap one sample
-       - window = -1: things can start right after container ends
-         (i.e. container endtime equals the thing starttime, since strax
-          endtimes are exclusive)
+        - window = 0: things must overlap one sample
+        - window = -1: things can start right after container ends
+            (i.e. container endtime equals the thing starttime, since strax
+            endtimes are exclusive)
     :return:
+
     """
     windows = touching_windows(things, containers, window)
     return _split_by_window(things, windows)
@@ -352,63 +352,69 @@ def split_touching_windows(things, containers, window=0):
 def _split_by_window(r, windows):
     result = []
     for w in windows:
-        result.append(r[w[0]:w[1]])
+        result.append(r[w[0] : w[1]])
     return result
 
 
 @export
 def touching_windows(things, containers, window=0):
-    """Return array of (start, exclusive end) indices into things which extend
-    to within window of the container, for each container in containers.
+    """Return array of (start, exclusive end) indices into things which extend to within window of
+    the container, for each container in containers.
 
-    :param things: Sorted array of interval-like data. 
+    :param things: Sorted array of interval-like data.
         We assume all things and containers are sorted by time.
         When endtime are not sorted, it will return indices
         of the first and last things which are touching the container.
     :param containers: Sorted array of interval-like data. Containers are
         allowed to overlap.
     :param window: threshold distance for touching check.
+
     For example:
-       - window = 0: things must overlap one sample
-       - window = -1: things can start right after container ends
-         (i.e. container endtime equals the thing starttime, since strax
-          endtimes are exclusive)
+        - window = 0: things must overlap one sample
+        - window = -1: things can start right after container ends
+            (i.e. container endtime equals the thing starttime, since strax
+            endtimes are exclusive)
+
     """
     try:
-        _check_time_is_sorted(things['time'])
+        _check_time_is_sorted(things["time"])
     except Exception:
-        raise ValueError('time of things should be sorted!')
+        raise ValueError("time of things should be sorted!")
     try:
         _check_time_is_sorted(strax.endtime(things))
     except Exception:
         warnings.warn(
-            'endtime of things is not sorted! '
-            'touching_windows will return the indices of the '
-            'first and last things which are touching the container.')
+            "endtime of things is not sorted! "
+            "touching_windows will return the indices of the "
+            "first and last things which are touching the container."
+        )
     try:
-        _check_time_is_sorted(containers['time'])
+        _check_time_is_sorted(containers["time"])
     except Exception:
-        raise ValueError('time of containers should be sorted!')
-    for objects, names in zip([things, containers], ['things', 'containers']):
+        raise ValueError("time of containers should be sorted!")
+    for objects, names in zip([things, containers], ["things", "containers"]):
         try:
             _check_objects_non_negative_length(objects)
         except Exception:
-            raise ValueError(f'{names} should have non-negative length!')
+            raise ValueError(f"{names} should have non-negative length!")
 
     # return zeros if either things or containers are empty
     if len(things) == 0 or len(containers) == 0:
         return np.zeros((len(containers), 2), dtype=np.int32)
 
     return _touching_windows(
-        things['time'], strax.endtime(things),
-        containers['time'], strax.endtime(containers),
-        window=window)
+        things["time"],
+        strax.endtime(things),
+        containers["time"],
+        strax.endtime(containers),
+        window=window,
+    )
 
 
 @numba.njit(nogil=True, cache=True)
-def _touching_windows(thing_start, thing_end,
-                      container_start, container_end,
-                      window=0, endtime_sort_kind='mergesort'):
+def _touching_windows(
+    thing_start, thing_end, container_start, container_end, window=0, endtime_sort_kind="mergesort"
+):
     n = len(thing_start)
     container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
 
@@ -440,57 +446,56 @@ def _touching_windows(thing_start, thing_end,
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _check_time_is_sorted(time):
-    """Check if times are sorted"""
+    """Check if times are sorted."""
     mask = np.all((time[1:] - time[:-1]) >= 0)
     assert mask
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _check_objects_non_negative_length(objects):
-    """Checks if objects have non-negative length"""
-    mask = np.all(strax.endtime(objects) >= objects['time'])
+    """Checks if objects have non-negative length."""
+    mask = np.all(strax.endtime(objects) >= objects["time"])
     assert mask
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _check_objects_are_not_overlapping(objects):
-    """Checks if objects overlap in time"""
-    mask = np.all(objects['time'][1:] - strax.endtime(objects)[:-1] >= 0)
+    """Checks if objects overlap in time."""
+    mask = np.all(objects["time"][1:] - strax.endtime(objects)[:-1] >= 0)
     assert mask
 
 
 @export
 def abs_time_to_prev_next_interval(things, intervals):
-    """Function which determines the time difference of things to
-    previous and next interval, e.g., events to veto intervals. Assumes
-    that things do not overlap.
-    
+    """Function which determines the time difference of things to previous and next interval, e.g.,
+    events to veto intervals. Assumes that things do not overlap.
+
     :param things: Numpy structured array containing strax time fields
     :param intervals: Numpy structured array containing time fields
-    :returns: Two integer arrays with the time difference to the 
-        previous and next intervals. 
+    :return: Two integer arrays with the time difference to the previous and next intervals.
+
     """
     try:
-        _check_time_is_sorted(things['time'])
+        _check_time_is_sorted(things["time"])
     except Exception:
-        raise ValueError('time of things should be sorted!')
+        raise ValueError("time of things should be sorted!")
     try:
         _check_time_is_sorted(strax.endtime(things))
     except Exception:
         warnings.warn(
-            'endtime of things is not sorted! '
-            'times_to_next returned by abs_time_to_prev_next_interval '
-            'might be larger than expected.')
+            "endtime of things is not sorted! "
+            "times_to_next returned by abs_time_to_prev_next_interval "
+            "might be larger than expected."
+        )
     try:
-        _check_time_is_sorted(intervals['time'])
+        _check_time_is_sorted(intervals["time"])
     except Exception:
-        raise ValueError('time of intervals should be sorted!')
+        raise ValueError("time of intervals should be sorted!")
 
     times_to_prev = np.ones(len(things), dtype=np.int64) * -1
     times_to_next = np.ones(len(things), dtype=np.int64) * -1
 
-    _empty_events_or_intervals = ((len(things) == 0) 
-                                  or (len(intervals) == 0))
+    _empty_events_or_intervals = (len(things) == 0) or (len(intervals) == 0)
     if _empty_events_or_intervals:
         return times_to_prev, times_to_next
 
@@ -503,20 +508,20 @@ def abs_time_to_prev_next_interval(things, intervals):
 def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
     veto_intervals_seen = 0
     for thing_ind, thing_i in enumerate(things):
-        current_event_time = thing_i['time']
+        current_event_time = thing_i["time"]
         current_event_endtime = strax.endtime(thing_i)
 
         # Exploit the fact that events cannot overlap...
         # Loop over veto intervals until:
-        #   - current veto interval endtime starts overlapping with 
-        #    current event. This is the interval from which we need to 
+        #   - current veto interval endtime starts overlapping with
+        #    current event. This is the interval from which we need to
         #    start looping for the next event.
-        #   - current veto_interval time starts to be larger than current 
-        #    event time. Only then we can be sure we have computed the 
+        #   - current veto_interval time starts to be larger than current
+        #    event time. Only then we can be sure we have computed the
         #    shortest time delay as endtime is not sorted...
         for veto_interval in intervals[veto_intervals_seen:]:
-            _interval_start_after_thing = veto_interval['time'] >= current_event_time
-            if _interval_start_after_thing:             
+            _interval_start_after_thing = veto_interval["time"] >= current_event_time
+            if _interval_start_after_thing:
                 break
 
             # Always update endtime until it becomes negative:
@@ -528,12 +533,12 @@ def _abs_time_to_prev_next(things, intervals, times_to_prev, times_to_next):
 
         # Now check if current veto is still within event or already after it:
         for veto_interval in intervals[veto_intervals_seen:]:
-            _current_interval_before_thing_ends = veto_interval['time'] < current_event_endtime
+            _current_interval_before_thing_ends = veto_interval["time"] < current_event_endtime
             if _current_interval_before_thing_ends:
                 continue
 
             # Now current veto is after event so store time:
-            times_to_next[thing_ind] = veto_interval['time'] - current_event_endtime
+            times_to_next[thing_ind] = veto_interval["time"] - current_event_endtime
             break
 
-        veto_intervals_seen = max(0, veto_intervals_seen-1)
+        veto_intervals_seen = max(0, veto_intervals_seen - 1)

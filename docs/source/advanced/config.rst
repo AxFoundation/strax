@@ -326,4 +326,3 @@ URL style configuration (used in `straxen <https://github.com/XENONnT/straxen>`_
                     kwargs[k] = v
 
             return self.dispatch(url, **kwargs)
-
