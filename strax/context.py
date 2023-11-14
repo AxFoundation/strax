@@ -613,13 +613,11 @@ class Context:
         """
         base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update(
-            {
-                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
-                for data_type, plugin in self._plugin_class_registry.items()
-                if not data_type.startswith("_temp_")
-            }
-        )
+        base_hash_on_config.update({
+            data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+            for data_type, plugin in self._plugin_class_registry.items()
+            if not data_type.startswith("_temp_")
+        })
         return strax.deterministic_hash(base_hash_on_config)
 
     def _plugins_are_cached(
@@ -717,9 +715,9 @@ class Context:
         """
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
-        all_opts = set().union(
-            *[pc.takes_config.keys() for pc in self._plugin_class_registry.values()]
-        )
+        all_opts = set().union(*[
+            pc.takes_config.keys() for pc in self._plugin_class_registry.values()
+        ])
         for k in self.config:
             if not (k in all_opts or k in self.context_config["free_options"]):
                 self.log.warning(f"Option {k} not taken by any registered plugin")
@@ -2233,18 +2231,16 @@ class Context:
             version
 
         """
-        hashes = set(
-            [
-                (
-                    data_type,
-                    self.key_for(runid, data_type).lineage_hash,
-                    self.get_save_when(data_type),
-                    plugin.__version__,
-                )
-                for plugin in self._plugin_class_registry.values()
-                for data_type in plugin.provides
-            ]
-        )
+        hashes = set([
+            (
+                data_type,
+                self.key_for(runid, data_type).lineage_hash,
+                self.get_save_when(data_type),
+                plugin.__version__,
+            )
+            for plugin in self._plugin_class_registry.values()
+            for data_type in plugin.provides
+        ])
 
         return {
             data_type: dict(hash=_hash, save_when=save_when.name, version=version)

@@ -1,4 +1,5 @@
 """Read/write numpy arrays to/from compressed files or file-like objects."""
+
 import os
 import bz2
 

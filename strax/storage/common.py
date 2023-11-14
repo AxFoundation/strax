@@ -3,6 +3,7 @@
 Please see the developer documentation for more details on strax' storage hierarchy.
 
 """
+
 from ast import literal_eval
 from concurrent.futures import wait
 import logging

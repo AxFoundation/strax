@@ -1,4 +1,5 @@
 """Functions to perform in-place pulse-level data reduction."""
+
 import numpy as np
 import numba
 from enum import IntEnum
