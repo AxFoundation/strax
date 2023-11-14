@@ -1,5 +1,6 @@
 """Functions that perform processing on pulses (other than data reduction functions, which are in
 data_reduction.py)"""
+
 import typing as ty
 
 import numpy as np

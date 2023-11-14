@@ -36,14 +36,12 @@ class TestCMT(unittest.TestCase):
     def make_dummy_df():
         """Make a dummy pandas.dataframe()"""
         dates = [datetime(2017, 1, 1), datetime(2021, 1, 1), datetime(2021, 9, 23)]
-        df = pd.DataFrame(
-            {
-                "ONLINE": [10.0, 10.0, 8.0],
-                "v1": [12.0, 12.0, 14.0],
-                "v2": [13.0, 14.0, np.nan],
-                "time": dates,
-            }
-        )
+        df = pd.DataFrame({
+            "ONLINE": [10.0, 10.0, 8.0],
+            "v1": [12.0, 12.0, 14.0],
+            "v2": [13.0, 14.0, np.nan],
+            "time": dates,
+        })
 
         df["time"] = pd.to_datetime(df["time"], utc=True)
         df = df.set_index("time")

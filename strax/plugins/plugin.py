@@ -3,6 +3,7 @@
 A 'plugin' is something that outputs an array and gets arrays from one or more other plugins.
 
 """
+
 from enum import IntEnum
 import inspect
 import itertools
@@ -466,9 +467,9 @@ class Plugin:
                             inputs[d], back_to_buffer = inputs[d].split(
                                 t=this_chunk_end, allow_early_split=True
                             )
-                            self.input_buffer[d] = strax.Chunk.concatenate(
-                                [back_to_buffer, self.input_buffer[d]]
-                            )
+                            self.input_buffer[d] = strax.Chunk.concatenate([
+                                back_to_buffer, self.input_buffer[d]
+                            ])
                         max_passes_left -= 1
                     else:
                         raise RuntimeError(
