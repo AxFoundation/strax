@@ -226,31 +226,26 @@ class TestContext(unittest.TestCase):
         ), f"_get_plugins returns different plugins if cached!"
 
     def test_multioutput_deregistration(self):
-        """Test that a multi-output plugin is deregistered once
-        one of its outputs is provided by another plugin"""
+        """Test that a multi-output plugin is deregistered once one of its outputs is provided by
+        another plugin."""
 
         class RecordsPlus(strax.Plugin):
             depends_on = tuple()
-            data_kind = dict(
-                records='records',
-                plus='plus'
-            )
-            dtype = dict(
-                records=strax.record_dtype(),
-                plus=strax.record_dtype())
-            provides = ('records', 'plus')
+            data_kind = dict(records="records", plus="plus")
+            dtype = dict(records=strax.record_dtype(), plus=strax.record_dtype())
+            provides = ("records", "plus")
 
         st = self.get_context(False)
         st.register(RecordsPlus)
         st.register(Records)
 
         # Records will make the records, not RecordsPlus
-        plugins = st._get_plugins(('records',), run_id)
-        assert isinstance(plugins['records'], Records)
+        plugins = st._get_plugins(("records",), run_id)
+        assert isinstance(plugins["records"], Records)
 
         # Plus is no longer available.
         with pytest.raises(KeyError):
-            plugins = st.key_for('plus', run_id)
+            plugins = st.key_for("plus", run_id)
 
     def test_register_no_defaults(self, runs_default_allowed=False):
         """Test if we only register a plugin with no run-defaults."""
