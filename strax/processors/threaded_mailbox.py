@@ -23,14 +23,16 @@ class MailboxDict(dict):
         res = self[key] = strax.Mailbox(name=key + "_mailbox", lazy=self.lazy)
         return res
 
+
 try:
     import npshmex
+
     SHMExecutor = npshmex.ProcessPoolExecutor
-    npshmex.register_array_wrapper(strax.Chunk, 'data')
+    npshmex.register_array_wrapper(strax.Chunk, "data")
 except ImportError:
     # This is allowed to fail, it only crashes if allow_shm = True
     SHMExecutor = None
-__all__.append('SHMExecutor')
+__all__.append("SHMExecutor")
 
 
 @export

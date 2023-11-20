@@ -632,8 +632,7 @@ class Saver:
         chunk_i = 0
 
         rechunker = strax.Rechunker(
-            rechunk=rechunk and self.allow_rechunk,
-            run_id=self.md['run_id']
+            rechunk=rechunk and self.allow_rechunk, run_id=self.md["run_id"]
         )
 
         try:

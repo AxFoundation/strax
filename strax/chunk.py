@@ -449,15 +449,15 @@ def check_chunk_n(f):
 class Rechunker:
     """Helper class for rechunking.
 
-    Send in chunks via receive, which returns either None (no chunk to send)
-    or a chunk to send.
+    Send in chunks via receive, which returns either None (no chunk to send) or a chunk to send.
 
     Don't forget a final call to .flush() to get any final data out!
+
     """
 
     def __init__(self, rechunk=False, run_id=None):
         self.rechunk = rechunk
-        self.is_superrun = run_id and run_id.startswith('_'),
+        self.is_superrun = (run_id and run_id.startswith("_"),)
         self.run_id = run_id
 
         self.cache = None
