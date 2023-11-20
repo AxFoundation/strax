@@ -340,10 +340,13 @@ class Context:
         # If we booted a plugin from a datatype, we must boot it from other
         # datatypes it makes too, to preserve a one-to-one mapping between
         # datatypes and registered plugins.
-        for old_plugin in deregistered:
+        for old_plugin in set(deregistered):
             for d in old_plugin.provides:
                 currently_registered = self._plugin_class_registry.get(d)
                 if old_plugin == currently_registered:
+                    # Must be equal here, because we are only looking for the remanants which were 
+                    # not overwritten above.
+                    warnings.warn(f'Provides of multi-output plugins overlap dregister plugin {old_plugin}.')
                     del self._plugin_class_registry[d]
 
         already_seen = []
