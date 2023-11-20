@@ -1,22 +1,25 @@
-"""Single-threaded message bus / mailbox-system replacement code"""
+"""Single-threaded message bus / mailbox-system replacement code."""
+
+import logging
 import time
 import typing as ty
+
+log = logging.getLogger("strax.post_office")
 
 
 class Spy:
     """Template for spies; a spy that does nothing."""
 
     def receive(self, msg):
-        """Called when a new message is produced"""
+        """Called when a new message is produced."""
         pass
 
     def close(self):
-        """Called when the topic is exhausted"""
+        """Called when the topic is exhausted."""
         pass
 
     def kill(self, reason):
-        """Called when closing the spy prematurely, e.g. during
-        exception handling."""
+        """Called when closing the spy prematurely, e.g. during exception handling."""
         self.close()
 
 
@@ -40,6 +43,7 @@ class PostOffice:
       * We only call .close() on a spy when the topic is exhausted. To close
         all spies prematurely (e.g. to handle an exception), call
         .kill_spies().
+
     """
 
     # Time tracking
@@ -59,7 +63,7 @@ class PostOffice:
     _multi_output_topics: ty.Set[str]
 
     # Dict: topic -> list with (msg_number, msg)
-    _saved_mail: ty.Dict[str, ty.Tuple[int, ty.Any]]
+    _saved_mail: ty.Dict[str, ty.List[ty.Tuple[int, ty.Any]]]
     # Dict: topic -> list of spies
     _spies: ty.Dict[str, ty.List[Spy]]
     # Dict: topic-> iterator that produces messages
@@ -93,8 +97,8 @@ class PostOffice:
         return list(self._saved_mail.keys())
 
     def state(self):
-        """Get a multi-line string representing the current state,
-        suitable for printing or logging"""
+        """Get a multi-line string representing the current state, suitable for printing or
+        logging."""
         result = []
         for topic in self.topic_names:
             result.append(
@@ -104,33 +108,30 @@ class PostOffice:
                 f"    Readers recieved: {self._last_msg_read[topic]}\n"
                 f"    Readers done: {self._readers_done[topic]}\n"
                 f"    Time spent: {self.time_spent.get(topic, None)}\n"
-                )
-        also_spent = {
-            k: v
-            for k, v in self.time_spent.items()
-            if k not in self.topic_names}
+            )
+        also_spent = {k: v for k, v in self.time_spent.items() if k not in self.topic_names}
         result.append(f"Also spent time on: {also_spent}")
         result.append(f"Total time spent: {sum(self.time_spent.values())}")
         return "\n".join(result)
 
-    def register_producer(
-            self,
-            iterator: ty.Iterator[ty.Any],
-            topic: ty.Union[str, ty.Tuple[str]]):
+    def register_producer(self, iterator: ty.Iterator[ty.Any], topic: ty.Union[str, ty.Tuple[str]]):
         """Register iterator as the source of messages for topic.
 
-        If topic is a tuple of strings, the iterator should produce
-        (topic -> message) dicts, with every registered topic in the dict."""
+        If topic is a tuple of strings, the iterator should produce (topic -> message) dicts, with
+        every registered topic in the dict.
+
+        """
         if isinstance(topic, tuple):
             if len(topic) == 1:
+                # Syntax sugar, just a single-output producer
                 topic = topic[0]
             else:
-                self._multi_output_topics.add(topic)
+                # Multi-output producer, recurse
                 for sub_topic in topic:
-                    assert isinstance(sub_topic, str)
-                    self.register_producer(sub_topic, iterator)
-                    return
-
+                    self._multi_output_topics.add(sub_topic)
+                    self.register_producer(iterator, sub_topic)
+                return
+        assert isinstance(topic, str)
         if topic in self._producers:
             raise RuntimeError(f"{topic} already has a producer")
         self._register_topic(topic)
@@ -148,16 +149,17 @@ class PostOffice:
 
     def register_spy(self, spy: Spy, topic: str):
         """Register spy to recieve all messages on topic.
-        spy.recieve(msg) will be called for each message, and
-        spy.close() when the topic is exhausted.
+
+        spy.recieve(msg) will be called for each message, and spy.close() when the topic is
+        exhausted.
+
         """
         self._register_topic(topic)
         self._spies[topic].append(spy)
 
     def get_iter(self, topic: str, reader: str):
-        """Return iterator over messages with topic, for a named reader
-        (usually readers are named after the messages they produce)
-        """
+        """Return iterator over messages with topic, for a named reader (usually readers are named
+        after the messages they produce)"""
         self._register_topic(topic)
         # Register subscriber
         self._last_msg_read[topic][reader] = -1
@@ -166,14 +168,16 @@ class PostOffice:
 
     def kill_spies(self, reason=None):
         """Close all spies immediately, e.g. during exception handling.
+
         Reason is passed to spy.kill.
+
         """
         for spies in self._spies.values():
             for spy in spies:
                 spy.kill(reason)
 
     def _count_time(self, topic):
-        """Start counting time towards topic"""
+        """Start counting time towards topic."""
         now = time.time()
         if self.active_topic:
             self.time_spent.setdefault(self.active_topic, 0)
@@ -182,7 +186,7 @@ class PostOffice:
         self._last_switch_time = now
 
     def _read(self, topic, reader):
-        """Actual generator producing messages for reader on topic"""
+        """Actual generator producing messages for reader on topic."""
         msg_number = 0
         while self._message_may_come(topic, msg_number):
             # Try to get this message from the cache
@@ -198,13 +202,17 @@ class PostOffice:
                     # (The while condition wasn't triggered because
                     #  the producer only just realized the topic is exhausted)
                     break
+            log.debug(f"{reader} receiving message {result}, number {msg_number} of {topic}")
             # Note receipt before yielding, so we can clear unnecessary
             # messages from our storage (if possible) before we lose control.
             self._ack_reader_recieved(reader, topic, msg_number)
+            # Yield via popping a container to avoid retaining a reference to
+            # the result https://stackoverflow.com/questions/7133179
+            result = [result]
             # Return control to the reader, and start counting time on their
             # budget
             self._count_time(reader)
-            yield result
+            yield result.pop()
             # Reader wants more -- back to working on the topic.
             # Look for the next message
             self._count_time(topic)
@@ -219,19 +227,17 @@ class PostOffice:
             assert not self._saved_mail[topic]
 
     def _message_may_come(self, topic, msg_number):
-        """Return True if topic is guaranteed to never produce msg_number"""
-        return not (
-            topic in self._exhausted_topics
-            and msg_number > self._last_msg_produced[topic])
+        """Return True if topic is guaranteed to never produce msg_number."""
+        return not (topic in self._exhausted_topics and msg_number > self._last_msg_produced[topic])
 
     def _fetch_new(self, topic):
         """Fetch a new message from the producer of topic.
 
-        Raises StopIteration if the topic is exhausted so a new message
-        will never come.
+        Raises StopIteration if the topic is exhausted so a new message will never come.
+
         """
         if topic not in self._producers:
-            raise RuntimeError(f'No producer registered for {topic}')
+            raise RuntimeError(f"No producer registered for {topic}")
         try:
             msg = next(self._producers[topic])
         except StopIteration:
@@ -240,6 +246,7 @@ class PostOffice:
             raise StopIteration
 
         if topic not in self._multi_output_topics:
+            log.debug(f"Got simple message {msg} for topic {topic}")
             # Simple message, just ack and return to caller
             self._ack_msg_produced(msg, topic)
             return msg
@@ -250,11 +257,12 @@ class PostOffice:
             if sub_msg_topic == topic:
                 # This is what our caller wants
                 desired_sub_msg = sub_msg
+            log.debug(f"Got submessage {sub_msg} for sub topic {sub_msg_topic}")
             self._ack_msg_produced(sub_msg, sub_msg_topic)
         return desired_sub_msg
 
     def _ack_msg_produced(self, msg, topic):
-        """Note that msg of topic has been produced"""
+        """Note that msg of topic has been produced."""
         assert topic not in self._exhausted_topics
 
         self._last_msg_produced[topic] += 1
@@ -263,26 +271,28 @@ class PostOffice:
             # Someone is interested in this topic, so save the message.
             # (If there is only one reader, _ack_reader_recieved will clean
             # up this message before we yield control to that reader.)
-            self._saved_mail[topic].append(
-                (self._last_msg_produced[topic], msg))
+            self._saved_mail[topic].append((self._last_msg_produced[topic], msg))
 
         # Deliver the message to the spies (savers/monitors)
         for spy in self._spies[topic]:
             spy.receive(msg)
 
     def _ack_reader_recieved(self, reader, topic, msg_number):
-        """Acknowledge reader got msg_number of topic"""
+        """Acknowledge reader got msg_number of topic."""
         # Record receipt
         assert self._last_msg_read[topic][reader] == msg_number - 1
         self._last_msg_read[topic][reader] = msg_number
         # Keep only messages someone has not yet recieved
-        everyone_got = max(self._last_msg_read[topic].values())
+        everyone_got = min(self._last_msg_read[topic].values())
+        log.debug(f"Cleaning out {topic} up to {everyone_got}")
         self._saved_mail[topic] = [
-            (msg_number, msg) for msg_number, msg in self._saved_mail[topic]
-            if msg_number > everyone_got]
+            (msg_number, msg)
+            for msg_number, msg in self._saved_mail[topic]
+            if msg_number > everyone_got
+        ]
 
     def _ack_topic_exhausted(self, topic):
-        """Take note that topic is exhausted, no new messages will come"""
+        """Take note that topic is exhausted, no new messages will come."""
         for spy in self._spies[topic]:
             spy.close()
         self._exhausted_topics.add(topic)

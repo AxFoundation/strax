@@ -1,4 +1,3 @@
-import sys
 import typing as ty
 
 from .base import BaseProcessor, ProcessorComponents
@@ -6,22 +5,16 @@ from .post_office import PostOffice, Spy
 
 
 import strax
+
 export, __all__ = strax.exporter()
 
 
 @export
 class SingleThreadProcessor(BaseProcessor):
-
-    def __init__(self,
-                 components: ProcessorComponents,
-                 allow_rechunk=True,
-                 is_superrun=False,
-                 **kwargs):
-        super().__init__(
-            components,
-            allow_rechunk=allow_rechunk,
-            is_superrun=is_superrun,
-            **kwargs)
+    def __init__(
+        self, components: ProcessorComponents, allow_rechunk=True, is_superrun=False, **kwargs
+    ):
+        super().__init__(components, allow_rechunk=allow_rechunk, is_superrun=is_superrun, **kwargs)
 
         self.log.debug("Processor components are: " + str(components))
 
@@ -32,35 +25,34 @@ class SingleThreadProcessor(BaseProcessor):
 
         for d, loader in components.loaders.items():
             assert d not in components.plugins
-            self.post_office.register_producer(
-                loader(executor=self.thread_executor),
-                topic=d)
+            self.post_office.register_producer(loader(executor=self.thread_executor), topic=d)
 
+        plugins_seen: ty.List[strax.Plugin] = []
         for d, p in components.plugins.items():
-            self.post_office.register_producer(
-                p.iter(
-                    iters={dep: self.post_office.get_iter(dep, d)
-                            for dep in p.depends_on}),
-                topic=p.provides)
+            # Multi-output plugins are listed multiple times in components.plugins;
+            # ensure we only process each plugin once.
+            if p in plugins_seen:
+                continue
+            plugins_seen.append(p)
 
-        dtypes_built = {d: p
-                        for p in components.plugins.values()
-                        for d in p.provides}
+            self.post_office.register_producer(
+                p.iter(iters={dep: self.post_office.get_iter(dep, d) for dep in p.depends_on}),
+                topic=p.provides,
+            )
+
+        dtypes_built = {d: p for p in components.plugins.values() for d in p.provides}
         for d, savers in components.savers.items():
             for s_i, saver in enumerate(savers):
                 if d in dtypes_built:
-                    rechunk = (dtypes_built[d].can_rechunk(d)
-                               and allow_rechunk)
+                    rechunk = dtypes_built[d].can_rechunk(d) and allow_rechunk
                 else:
                     rechunk = is_superrun and allow_rechunk
 
-                self.post_office.register_spy(
-                    SaverSpy(saver, rechunk=rechunk),
-                    topic=d)
+                self.post_office.register_spy(SaverSpy(saver, rechunk=rechunk), topic=d)
 
     def iter(self):
         target = self.components.targets[0]
-        final_generator = self.post_office.get_iter(topic=target, reader='FINAL')
+        final_generator = self.post_office.get_iter(topic=target, reader="FINAL")
 
         self.log.debug(f"Yielding {target}")
 
@@ -70,8 +62,7 @@ class SingleThreadProcessor(BaseProcessor):
         except Exception:
             # Exception in one of the producers. Close savers (they will record
             # the exception from sys.exc_info()) then reraise.
-            self.log.fatal(
-                f"Exception during processing, closing savers and reraising")
+            self.log.fatal(f"Exception during processing, closing savers and reraising")
             self.post_office.kill_spies()
             raise
 
@@ -79,12 +70,12 @@ class SingleThreadProcessor(BaseProcessor):
             self.log.fatal(
                 "Exception in code that called the processor: detected "
                 "GeneratorExit from python shutting down. "
-                "Closing savers and exiting.")
+                "Closing savers and exiting."
+            )
             # Strax savers look at sys.exc_info(). Having only "GeneratorExit"
             # there is unhelpful.. this should set it to something better:
             try:
-                raise RuntimeError(
-                    "Exception in caller, see log for details")
+                raise RuntimeError("Exception in caller, see log for details")
             except RuntimeError:
                 self.post_office.kill_spies()
 
@@ -96,7 +87,7 @@ class SaverSpy(Spy):
 
     def __init__(self, saver, rechunk=False):
         self.saver = saver
-        self.rechunker = strax.Rechunker(rechunk, self.saver.md['run_id'])
+        self.rechunker = strax.Rechunker(rechunk, self.saver.md["run_id"])
         self.chunk_number = 0
 
     def receive(self, chunk):
