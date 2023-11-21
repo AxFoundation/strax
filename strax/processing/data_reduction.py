@@ -1,17 +1,19 @@
-"""Functions to perform in-place pulse-level data reduction"""
+"""Functions to perform in-place pulse-level data reduction."""
+
 import numpy as np
 import numba
 from enum import IntEnum
 
 import strax
 from strax.processing.pulse_processing import NO_RECORD_LINK, record_links
+
 export, __all__ = strax.exporter()
 
 
 @export
 class ReductionLevel(IntEnum):
-    """Identifies what type of data reduction has been used on a record
-    """
+    """Identifies what type of data reduction has been used on a record."""
+
     # Record not modified
     NO_REDUCTION = 0
     # Samples near pulse start/end were removed
@@ -27,12 +29,11 @@ class ReductionLevel(IntEnum):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def cut_baseline(records, n_before=48, n_after=30):
-    """"Replace first n_before and last n_after samples of pulses by 0
-    """
+    """Replace first n_before and last n_after samples of pulses by 0."""
     # records.data.shape[1] gives a numba error (file issue?)
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
+    samples_per_record = len(records[0]["data"])
 
     for d_i, d in enumerate(records):
         if d.record_i == 0:
@@ -43,18 +44,17 @@ def cut_baseline(records, n_before=48, n_after=30):
         clear_from = max(0, clear_from)
         if clear_from < samples_per_record:
             d.data[clear_from:] = 0
-        d['reduction_level'] = ReductionLevel.BASELINE_CUT
+        d["reduction_level"] = ReductionLevel.BASELINE_CUT
 
 
 @export
 def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
-    """Return records with waveforms zeroed if not within
-    left_extension or right_extension of hits.
+    """Return records with waveforms zeroed if not within left_extension or right_extension of hits.
     These extensions properly account for breaking of pulses into records.
 
-    If you pass an incomplete (e.g. cut) set of records, we will not save
-    data around hits found in the removed records, even if this stretches
-    into records that you did pass.
+    If you pass an incomplete (e.g. cut) set of records, we will not save data around hits found in
+    the removed records, even if this stretches into records that you did pass.
+
     """
     if not len(records):
         return records
@@ -68,40 +68,36 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     # is quite slow.
     # Replacing the last = with *= gives a factor 2 speed boost.
     # But ~40% faster still is this:
-    meta_fields = [x for x in records.dtype.names
-                   if x not in ['data', 'reduction_level']]
+    meta_fields = [x for x in records.dtype.names if x not in ["data", "reduction_level"]]
 
     new_recs = np.zeros(len(records), dtype=records.dtype)
     new_recs[meta_fields] = records[meta_fields]
-    new_recs['reduction_level'] = ReductionLevel.HITS_ONLY
+    new_recs["reduction_level"] = ReductionLevel.HITS_ONLY
 
-    _cut_outside_hits(records, hits, new_recs,
-                      left_extension, right_extension)
+    _cut_outside_hits(records, hits, new_recs, left_extension, right_extension)
 
     return new_recs
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _cut_outside_hits(records, hits, new_recs,
-                      left_extension=2, right_extension=15):
+def _cut_outside_hits(records, hits, new_recs, left_extension=2, right_extension=15):
     if not len(records):
         return
-    samples_per_record = len(records[0]['data'])
+    samples_per_record = len(records[0]["data"])
 
     previous_record, next_record = record_links(records)
 
     for hit_i, h in enumerate(hits):
-        rec_i = h['record_i']
+        rec_i = h["record_i"]
         r = records[rec_i]
 
         # Indices to keep, with 0 at the start of this record
-        start_keep = h['left'] - left_extension
-        end_keep = h['right'] + right_extension
+        start_keep = h["left"] - left_extension
+        end_keep = h["right"] + right_extension
 
         # Indices of samples to keep in this record
-        (a, b), _ = strax.overlap_indices(0, r['length'],
-                                          start_keep, end_keep - start_keep)
-        new_recs[rec_i]['data'][a:b] = records[rec_i]['data'][a:b]
+        (a, b), _ = strax.overlap_indices(0, r["length"], start_keep, end_keep - start_keep)
+        new_recs[rec_i]["data"][a:b] = records[rec_i]["data"][a:b]
 
         # Keep samples in previous record, if there was one
         if start_keep < 0:
@@ -110,13 +106,11 @@ def _cut_outside_hits(records, hits, new_recs,
                 # Note start_keep is negative, so this keeps the
                 # last few samples of the previous record
                 a_prev = start_keep
-                new_recs[prev_ri]['data'][a_prev:] = \
-                    records[prev_ri]['data'][a_prev:]
+                new_recs[prev_ri]["data"][a_prev:] = records[prev_ri]["data"][a_prev:]
 
         # Same for the next record, if there is one
         if end_keep > samples_per_record:
             next_ri = next_record[rec_i]
             if next_ri != NO_RECORD_LINK:
                 b_next = end_keep - samples_per_record
-                new_recs[next_ri]['data'][:b_next] = \
-                    records[next_ri]['data'][:b_next]
+                new_recs[next_ri]["data"][:b_next] = records[next_ri]["data"][:b_next]
