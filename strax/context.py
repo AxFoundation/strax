@@ -724,9 +724,9 @@ class Context:
 
         plugins = {}
         targets = list(targets)
-        counter = 0
-        while targets and counter < 100:
-            counter += 1
+        safety_counter = 0
+        while targets and safety_counter < 10_000:
+            safety_counter += 1
             targets = list(set(targets))  # Remove duplicates from list.
             target = targets.pop(0)
             if target in plugins:
@@ -736,6 +736,15 @@ class Context:
             for provides in target_plugin.provides:
                 plugins[provides] = target_plugin
             targets += list(target_plugin.depends_on)
+
+        _not_all_plugins_initalized = (
+            (safety_counter == 10_000)
+            & len(targets)
+        )
+        if _not_all_plugins_initalized:
+            raise ValueError('Could not initalize all plugins to compute target from scratch. '
+                             f'The reamining targets missing are: {targets}')
+        
         return plugins
 
     def __get_plugin(self, run_id: str, data_type: str):
