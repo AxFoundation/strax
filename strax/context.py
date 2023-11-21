@@ -328,8 +328,23 @@ class Context:
         if isinstance(plugin_class.provides, str):
             plugin_class.provides = tuple([plugin_class.provides])
 
+        # Register the plugin for all datatypes it provides,
+        # tracking which plugins we booted out.
+        deregistered = []
         for p in plugin_class.provides:
+            old_plugin_class = self._plugin_class_registry.get(p, None)
+            if old_plugin_class and old_plugin_class != plugin_class:
+                deregistered.append(old_plugin_class)
             self._plugin_class_registry[p] = plugin_class
+
+        # If we booted a plugin from a datatype, we must boot it from other
+        # datatypes it makes too, to preserve a one-to-one mapping between
+        # datatypes and registered plugins.
+        for old_plugin in deregistered:
+            for d in old_plugin.provides:
+                currently_registered = self._plugin_class_registry.get(d)
+                if old_plugin == currently_registered:
+                    del self._plugin_class_registry[d]
 
         already_seen = []
         for plugin in self._plugin_class_registry.values():
