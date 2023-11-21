@@ -752,14 +752,13 @@ class Context:
                 plugins[provides] = target_plugin
             targets += list(target_plugin.depends_on)
 
-        _not_all_plugins_initalized = (
-            (safety_counter == 10_000)
-            & len(targets)
-        )
+        _not_all_plugins_initalized = (safety_counter == 10_000) & len(targets)
         if _not_all_plugins_initalized:
-            raise ValueError('Could not initalize all plugins to compute target from scratch. '
-                             f'The reamining targets missing are: {targets}')
-        
+            raise ValueError(
+                "Could not initalize all plugins to compute target from scratch. "
+                f"The reamining targets missing are: {targets}"
+            )
+
         return plugins
 
     def __get_plugin(self, run_id: str, data_type: str):
