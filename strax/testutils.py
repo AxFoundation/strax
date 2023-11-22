@@ -254,23 +254,8 @@ class PeakClassification(strax.Plugin):
 
 # Plugins with time structure within chunks,
 # used to test down chunking within plugin compute.
-@strax.takes_config(
-    strax.Option("n_chunks", type=int, default=10, track=False),
-    strax.Option("recs_per_chunk", type=int, default=10, track=False),
-)
-class RecordsWithTimeStructure(strax.Plugin):
-    provides = "records"
-    parallel = "process"
-    depends_on = tuple()
-    dtype = strax.record_dtype()
-
-    rechunk_on_save = False
-
-    def source_finished(self):
-        return True
-
-    def is_ready(self, chunk_i):
-        return chunk_i < self.config["n_chunks"]
+class RecordsWithTimeStructure(Records):
+    """Same as Records but with some structure in "time" for testing."""
 
     def setup(self):
         self.last_end = 0
@@ -299,7 +284,6 @@ class DownSampleRecords(strax.DownChunkingPlugin):
     depends_on = "records"
     dtype = strax.record_dtype()
     rechunk_on_save = False
-    parallel = "process"
 
     def compute(self, records, start, end):
         offset = 0
