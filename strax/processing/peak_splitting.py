@@ -6,10 +6,18 @@ export, __all__ = strax.exporter()
 
 
 @export
-def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
-                data_type='peaks', n_top_channels=0, **kwargs):
-    """Return peaks split according to algorithm, with waveforms summed
-    and widths computed.
+def split_peaks(
+    peaks,
+    hits,
+    records,
+    rlinks,
+    to_pe,
+    algorithm="local_minimum",
+    data_type="peaks",
+    n_top_channels=0,
+    **kwargs,
+):
+    """Return peaks split according to algorithm, with waveforms summed and widths computed.
 
     Note:
         Can also be used for hitlets splitting with local_minimum
@@ -31,15 +39,18 @@ def split_peaks(peaks, hits, records, rlinks, to_pe, algorithm='local_minimum',
     :param result_dtype: dtype of the result.
 
     Any other options are passed to the algorithm.
-    """
-    splitter = dict(local_minimum=LocalMinimumSplitter,
-                    natural_breaks=NaturalBreaksSplitter)[algorithm]()
 
-    data_type_is_not_supported = data_type not in ('hitlets', 'peaks')
+    """
+    splitter = dict(local_minimum=LocalMinimumSplitter, natural_breaks=NaturalBreaksSplitter)[
+        algorithm
+    ]()
+
+    data_type_is_not_supported = data_type not in ("hitlets", "peaks")
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
-    return splitter(peaks, hits, records, rlinks, to_pe, data_type,
-                    n_top_channels=n_top_channels, **kwargs)
+    return splitter(
+        peaks, hits, records, rlinks, to_pe, data_type, n_top_channels=n_top_channels, **kwargs
+    )
 
 
 NO_MORE_SPLITS = -9999999
@@ -47,28 +58,38 @@ NO_MORE_SPLITS = -9999999
 
 class PeakSplitter:
     """Split peaks into more peaks based on arbitrary algorithm.
-    :param peaks: Original peaks. Sum waveform must have been built
-    and properties must have been computed (if you use them).
+
+    :param peaks: Original peaks. Sum waveform must have been built and properties must have been
+        computed (if you use them).
     :param records: Records from which peaks were built.
     :param rlinks: strax.record_links for given records.
     :param to_pe: ADC to PE conversion factor array (of n_channels).
-    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use
-        sum_waveform or get_hitlets_data to compute the waveform of the
-        new split peaks/hitlets.
+    :param data_type: 'peaks' or 'hitlets'. Specifies whether to use sum_waveform or
+        get_hitlets_data to compute the waveform of the new split peaks/hitlets.
     :param do_iterations: maximum number of times peaks are recursively split.
     :param min_area: Minimum area to do split. Smaller peaks are not split.
-    :param n_top_channels: Number of top array channels.
+    :param n_top_channels: Number of top array channels. The function find_split_points(),
+        implemented in each subclass defines the algorithm, which takes in a peak's waveform and
+        returns the index to split the peak at, if a split point is found. Otherwise NO_MORE_SPLITS
+        is returned and the peak is left as is.
 
-    The function find_split_points(), implemented in each subclass
-    defines the algorithm, which takes in a peak's waveform and
-    returns the index to split the peak at, if a split point is
-    found. Otherwise NO_MORE_SPLITS is returned and the peak is
-    left as is.
     """
+
     find_split_args_defaults: tuple
 
-    def __call__(self, peaks, hits, records, rlinks, to_pe, data_type,
-                 do_iterations=1, min_area=0, n_top_channels=0, **kwargs):
+    def __call__(
+        self,
+        peaks,
+        hits,
+        records,
+        rlinks,
+        to_pe,
+        data_type,
+        do_iterations=1,
+        min_area=0,
+        n_top_channels=0,
+        **kwargs,
+    ):
         if not len(records) or not len(peaks) or not do_iterations:
             return peaks
 
@@ -78,7 +99,7 @@ class PeakSplitter:
         for i, (k, value) in enumerate(self.find_split_args_defaults):
             if k in kwargs:
                 value = kwargs[k]
-            if k == 'threshold':
+            if k == "threshold":
                 # The 'threshold' option is a user-specified function
                 value = value(peaks)
             args_options.append(value)
@@ -97,73 +118,88 @@ class PeakSplitter:
             split_finder=self.find_split_points,
             peaks=peaks,
             is_split=is_split,
-            orig_dt=records[0]['dt'],
+            orig_dt=records[0]["dt"],
             min_area=min_area,
             args_options=tuple(args_options),
-            result_dtype=peaks.dtype)
+            result_dtype=peaks.dtype,
+        )
 
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
-            if data_type == 'peaks':
+            if data_type == "peaks":
                 strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels)
                 strax.compute_widths(new_peaks)
-            elif data_type == 'hitlets':
+            elif data_type == "hitlets":
                 # Add record fields here
-                new_peaks = strax.sort_by_time(new_peaks)  # Hitlets are not necessarily sorted after splitting
-                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)           
+                new_peaks = strax.sort_by_time(
+                    new_peaks
+                )  # Hitlets are not necessarily sorted after splitting
+                new_peaks = strax.get_hitlets_data(new_peaks, records, to_pe)
             # ... and recurse (if needed)
-            new_peaks = self(new_peaks, hits, records, rlinks, to_pe, data_type,
-                             do_iterations=do_iterations - 1,
-                             min_area=min_area,
-                             n_top_channels=n_top_channels, **kwargs)
-            if np.any(new_peaks['length'] == 0):
-                raise ValueError('Want to add a new zero-length peak after splitting!')
+            new_peaks = self(
+                new_peaks,
+                hits,
+                records,
+                rlinks,
+                to_pe,
+                data_type,
+                do_iterations=do_iterations - 1,
+                min_area=min_area,
+                n_top_channels=n_top_channels,
+                **kwargs,
+            )
+            if np.any(new_peaks["length"] == 0):
+                raise ValueError("Want to add a new zero-length peak after splitting!")
 
-            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split],
-                                                       new_peaks]))
+            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split], new_peaks]))
 
         return peaks
 
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
     @numba.jit(nopython=True, nogil=True)
-    def _split_peaks(split_finder, peaks, orig_dt, is_split, min_area,
-                     args_options,
-                     _result_buffer=None, result_dtype=None):
-        """Loop over peaks, pass waveforms to algorithm, construct
-        new peaks if and where a split occurs.
-        """
+    def _split_peaks(
+        split_finder,
+        peaks,
+        orig_dt,
+        is_split,
+        min_area,
+        args_options,
+        _result_buffer=None,
+        result_dtype=None,
+    ):
+        """Loop over peaks, pass waveforms to algorithm, construct new peaks if and where a split
+        occurs."""
         new_peaks = _result_buffer
         offset = 0
 
         for p_i, p in enumerate(peaks):
-            if p['area'] < min_area:
+            if p["area"] < min_area:
                 continue
 
             prev_split_i = 0
-            w = p['data'][:p['length']]
-            for split_i, bonus_output in split_finder(
-                    w, p['dt'], p_i, *args_options):
+            w = p["data"][: p["length"]]
+            for split_i, bonus_output in split_finder(w, p["dt"], p_i, *args_options):
                 if split_i == NO_MORE_SPLITS:
-                    p['max_goodness_of_split'] = bonus_output
+                    p["max_goodness_of_split"] = bonus_output
                     # although the iteration will end anyway afterwards:
                     continue
 
                 is_split[p_i] = True
                 r = new_peaks[offset]
-                r['time'] = p['time'] + prev_split_i * p['dt']
-                r['channel'] = p['channel']
+                r["time"] = p["time"] + prev_split_i * p["dt"]
+                r["channel"] = p["channel"]
                 # Set the dt to the original (lowest) dt first;
                 # this may change when the sum waveform of the new peak
                 # is computed
-                r['dt'] = orig_dt
-                r['length'] = (split_i - prev_split_i) * p['dt'] / orig_dt
+                r["dt"] = orig_dt
+                r["length"] = (split_i - prev_split_i) * p["dt"] / orig_dt
                 # Too lazy to compute these
-                r['max_gap'] = -1
-                r['max_diff'] = -1
-                r['min_diff'] = -1
-                if r['length'] <= 0:
-                    print(p['data'])
+                r["max_gap"] = -1
+                r["max_diff"] = -1
+                r["min_diff"] = -1
+                if r["length"] <= 0:
+                    print(p["data"])
                     print(prev_split_i, split_i)
                     raise ValueError("Attempt to create invalid peak!")
 
@@ -178,8 +214,8 @@ class PeakSplitter:
 
     @staticmethod
     def find_split_points(w, dt, peak_i, *args_options):
-        """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter
-        bare PeakSplitter class is not implemented"""
+        """This function is overwritten by LocalMinimumSplitter or LocalMinimumSplitter bare
+        PeakSplitter class is not implemented."""
         raise NotImplementedError
 
 
@@ -191,17 +227,16 @@ class LocalMinimumSplitter(PeakSplitter):
      - larger than minimum * min_ratio
     This is related to topographical prominence for mountains.
     NB: Min_height is in pe/ns, NOT pe/bin!
+
     """
-    find_split_args_defaults = (
-        ('min_height', 0),
-        ('min_ratio', 0))
+
+    find_split_args_defaults = (("min_height", 0), ("min_ratio", 0))
 
     @staticmethod
     @numba.jit(nopython=True, nogil=True)
     def find_split_points(w, dt, peak_i, min_height, min_ratio):
-        """"Yields indices of prominent local minima in w
-        If there was at least one index, yields len(w)-1 at the end
-        """
+        """Yields indices of prominent local minima in w If there was at least one index, yields
+        len(w)-1 at the end."""
         found_one = False
         last_max = -99999999999999.9
         min_since_max = 99999999999999.9
@@ -213,11 +248,10 @@ class LocalMinimumSplitter(PeakSplitter):
                 min_since_max = x
                 min_since_max_i = i
 
-            if min(last_max, x) > max(min_since_max + min_height,
-                                      min_since_max * min_ratio):
+            if min(last_max, x) > max(min_since_max + min_height, min_since_max * min_ratio):
                 # Significant local minimum: tell caller,
                 # reset both max and min finder
-                yield min_since_max_i, 0.
+                yield min_since_max_i, 0.0
                 found_one = True
                 last_max = x
                 min_since_max = 99999999999999.9
@@ -232,13 +266,13 @@ class LocalMinimumSplitter(PeakSplitter):
                 min_since_max_i = i
 
         if found_one:
-            yield len(w), 0.
-        yield NO_MORE_SPLITS, 0.
+            yield len(w), 0.0
+        yield NO_MORE_SPLITS, 0.0
 
 
 class NaturalBreaksSplitter(PeakSplitter):
-    """Split peaks according to (variations of) the natural breaks algorithm,
-    i.e. such that the sum squared difference from the mean is minimized.
+    """Split peaks according to (variations of) the natural breaks algorithm, i.e. such that the sum
+    squared difference from the mean is minimized.
 
     Options:
      - threshold: threshold to accept a split in the goodness of split value:
@@ -252,37 +286,34 @@ class NaturalBreaksSplitter(PeakSplitter):
        on the waveform before the split_low computation.
        The window will include the sample itself, plus filter_wing_width (or as
        close as we can get to it given the peaks sampling) on either side.
+
     """
+
     find_split_args_defaults = (
-        ('threshold', None),  # will be a numpy array of len(peaks)
-        ('normalize', False),
-        ('split_low', False),
-        ('filter_wing_width', 0))
+        ("threshold", None),  # will be a numpy array of len(peaks)
+        ("normalize", False),
+        ("split_low", False),
+        ("filter_wing_width", 0),
+    )
 
     @staticmethod
     @numba.njit(nogil=True)
-    def find_split_points(w, dt, peak_i,
-                          threshold, normalize,
-                          split_low, filter_wing_width):
-        gofs = natural_breaks_gof(w, dt,
-                                  normalize=normalize,
-                                  split_low=split_low,
-                                  filter_wing_width=filter_wing_width)
+    def find_split_points(w, dt, peak_i, threshold, normalize, split_low, filter_wing_width):
+        gofs = natural_breaks_gof(
+            w, dt, normalize=normalize, split_low=split_low, filter_wing_width=filter_wing_width
+        )
         max_i = np.argmax(gofs)
         if gofs[max_i] > threshold[peak_i]:
-            yield max_i, 0.
-            yield len(w) - 1, 0.
+            yield max_i, 0.0
+            yield len(w) - 1, 0.0
         yield NO_MORE_SPLITS, gofs[max_i]
 
 
 @export
 @numba.njit(nogil=True, cache=True)
-def natural_breaks_gof(w, dt,
-                       normalize=False, split_low=False,
-                       filter_wing_width=0):
-    """Return natural breaks goodness of split/fit for the waveform w
-    a sharp peak gives ~0, two widely separate peaks ~1.
-    """
+def natural_breaks_gof(w, dt, normalize=False, split_low=False, filter_wing_width=0):
+    """Return natural breaks goodness of split/fit for the waveform w a sharp peak gives ~0, two
+    widely separate peaks ~1."""
     left = sum_squared_deviations(w, normalize=normalize)
     right = sum_squared_deviations(w[::-1], normalize=normalize)[::-1]
     gof = 1 - (left + right) / left[-1]
@@ -300,11 +331,11 @@ def natural_breaks_gof(w, dt,
 @export
 @numba.njit(nogil=True, cache=True)
 def symmetric_moving_average(a, wing_width):
-    """Return the moving average of a, over windows
-    of length [2 * wing_width + 1] centered on each sample.
+    """Return the moving average of a, over windows of length [2 * wing_width + 1] centered on each
+    sample.
 
-    (i.e. the window covers each sample itself, plus a 'wing' of width
-     wing_width on either side)
+    (i.e. the window covers each sample itself, plus a 'wing' of width  wing_width on either side)
+
     """
     if wing_width == 0:
         return a
@@ -333,11 +364,11 @@ def symmetric_moving_average(a, wing_width):
 
 @numba.njit(nogil=True, cache=True)
 def sum_squared_deviations(waveform, normalize=False):
-    """Return left-to-right result of an online
-    sum-intra-class variance computation on the waveform.
+    """Return left-to-right result of an online sum-intra-class variance computation on the
+    waveform.
 
-    :param normalize: If True, divide by the total area,
-    i.e. produce ordinary variance.
+    :param normalize: If True, divide by the total area, i.e. produce ordinary variance.
+
     """
     mean = sum_weights = s = 0
     result = np.zeros(len(waveform))
