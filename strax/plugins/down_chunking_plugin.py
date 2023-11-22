@@ -1,6 +1,4 @@
 import strax
-import types
-import inspect
 from .plugin import Plugin
 
 export, __all__ = strax.exporter()
@@ -17,22 +15,30 @@ export, __all__ = strax.exporter()
 class DownChunkingPlugin(Plugin):
     """Plugin that merges data from its dependencies."""
 
-    def iter(self, iters, executor=None):
-        _plugin_uses_multi_threading = (
-            self.parallel and executor is not None and (inspect.isgeneratorfunction(self.compute))
-        )
-        if _plugin_uses_multi_threading:
-            raise NotImplementedError(
-                f'Plugin "{self.__class__.__name__}" uses an iterator as compute method. '
-                "This is not supported in multi-threading/processing."
-            )
-        return super().iter(iters, executor=None)
+    parallel = False
 
-    def _iter_return(self, chunk_i, **inputs_merged):
+    def __init__(self):
+        super().__init__()
+
+        if self.parallel:
+            raise NotImplementedError(
+                f'Plugin "{self.__class__.__name__}" is a DownChunkingPlugin which '
+                "currently does not support parallel processing."
+            )
+
+        if self.multi_output:
+            raise NotImplementedError(
+                f'Plugin "{self.__class__.__name__}" is a DownChunkingPlugin which '
+                "currently does not support multiple outputs. Please only provide "
+                "a single data-type."
+            )
+
+    def iter(self, iters, executor=None):
+        return super().iter(iters, executor)
+
+    def _iter_compute(self, chunk_i, **inputs_merged):
         return self.do_compute(chunk_i=chunk_i, **inputs_merged)
 
     def _fix_output(self, result, start, end, _dtype=None):
         """Wrapper around _fix_output to support the return of iterators."""
-        if isinstance(result, types.GeneratorType):
-            return result
-        return super()._fix_output(result, start, end)
+        return result
