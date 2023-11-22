@@ -626,14 +626,14 @@ class Context:
         If any item changes in the config, so does this hash.
 
         """
-        base_hash_on_config = self.config.copy()
+        self._base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update({
+        self._base_hash_on_config.update({
             data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
             for data_type, plugin in self._plugin_class_registry.items()
             if not data_type.startswith("_temp_")
         })
-        return strax.deterministic_hash(base_hash_on_config)
+        return strax.deterministic_hash(self._base_hash_on_config)
 
     def _plugins_are_cached(
         self,
@@ -685,9 +685,8 @@ class Context:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache."""
         requested_plugins = {}
-        for target, plugin in self._fixed_plugin_cache[
-            self._context_hash()
-        ].items():  # type: ignore
+        cached_plugins = self._fixed_plugin_cache[self._context_hash()]
+        for target, plugin in cached_plugins.items():  # type: ignore
             if target in requested_plugins:
                 # If e.g. target is already seen because the plugin is
                 # multi output
@@ -699,20 +698,6 @@ class Context:
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
                 requested_plugins[provides] = requested_p
-
-        # At this stage, all the plugins should be in requested_plugins
-        # To prevent infinite copying, we are only now linking the
-        # dependencies of each plugin to another where needed.
-        for target, plugin in requested_plugins.items():
-            plugin.deps = {
-                dependency: requested_plugins[dependency] for dependency in plugin.depends_on
-            }
-
-        # Finally, fix the dtype. Since infer_dtype may depend on the
-        # entire deps chain, we need to start at the last plugin and go
-        # all the way down to the lowest level.
-        for target_plugins in targets:
-            self._fix_dependency(requested_plugins, target_plugins)
 
         requested_plugins = {i: v for i, v in requested_plugins.items() if i in targets}
         return requested_plugins

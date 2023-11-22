@@ -150,7 +150,15 @@ class Plugin:
         # As explained in PR #485 only copy attributes whereof we know
         # don't depend on the run_id (for use_per_run_defaults == False).
         # Otherwise we might copy run-dependent things like to_pe.
-        for attribute in ["dtype", "lineage", "takes_config", "__version__", "config", "data_kind"]:
+        for attribute in [
+            "dtype",
+            "lineage",
+            "takes_config",
+            "__version__",
+            "config",
+            "data_kind",
+            "deps",
+        ]:
             source_value = getattr(self, attribute)
             if _deep_copy:
                 plugin_copy.__setattr__(attribute, deepcopy(source_value))
