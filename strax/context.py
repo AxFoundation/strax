@@ -667,16 +667,6 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
-    def _fix_dependency(self, plugin_registry: dict, end_plugin: str):
-        """Starting from end-plugin, fix the dtype until there is nothing left to fix.
-
-        Keep in mind that dtypes can be chained.
-
-        """
-        for go_to in plugin_registry[end_plugin].depends_on:
-            self._fix_dependency(plugin_registry, go_to)
-        plugin_registry[end_plugin].fix_dtype()
-
     def __get_requested_plugins_from_cache(
         self,
         run_id: str,
@@ -685,8 +675,8 @@ class Context:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache."""
         requested_plugins = {}
-        cached_plugins = self._fixed_plugin_cache[self._context_hash()]
-        for target, plugin in cached_plugins.items():  # type: ignore
+        cached_plugins = self._fixed_plugin_cache[self._context_hash()]  # type: ignore
+        for target, plugin in cached_plugins.items():
             if target in requested_plugins:
                 # If e.g. target is already seen because the plugin is
                 # multi output
