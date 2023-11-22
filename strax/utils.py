@@ -789,13 +789,13 @@ def dir_size_mb(start_path="."):
 
 
 @export
-def version_hash_dict(context):
+def version_hash_dict(context, run_id="000000"):
     """Returns a dictionary of the form {data_type: [version, hash]} for the plugins within the
     context."""
 
     vh_dict = {}
     for data_type in context._plugin_class_registry:
-        hash = context.key_for("0", data_type).lineage_hash
+        hash = context.key_for(run_id, data_type).lineage_hash
         version = context._plugin_class_registry[data_type].__version__
         vh_dict[data_type] = [version, hash]
 
@@ -878,7 +878,7 @@ def lowest_level_plugins(context, plugins):
 
     """
 
-    if not type(plugins) == np.ndarray:
+    if not isinstance(plugins, np.ndarray):
         plugins = np.array(plugins)
 
     low_lev_plugs = []
@@ -905,9 +905,9 @@ def directly_depends_on(context, base_plugins, all_plugins):
     next_layer_plugins = []
     for p in all_plugins:
         dep_on = context._plugin_class_registry[p].depends_on
-        if type(dep_on) == str:
+        if isinstance(dep_on, str):
             dep_on = [dep_on]
-        elif type(dep_on) == tuple:
+        elif isinstance(dep_on, tuple):
             dep_on = list(dep_on)
 
         if np.any(np.isin(base_plugins, dep_on)):
