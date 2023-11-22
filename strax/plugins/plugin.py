@@ -519,7 +519,6 @@ class Plugin:
 
     def _iter_return(self, chunk_i, **inputs_merged):
         yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
-        
 
     def cleanup(self, wait_for):
         pass
