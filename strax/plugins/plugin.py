@@ -133,7 +133,8 @@ class Plugin:
             # not have to updated save_when
             self.save_when = immutabledict.fromkeys(self.provides, self.save_when)
 
-        self.provides = strax.to_str_tuple(self.provides)
+        if getattr(self, "provides", None):
+            self.provides = strax.to_str_tuple(self.provides)
         self.compute_pars = compute_pars
         self.input_buffer = dict()
 
