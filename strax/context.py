@@ -689,6 +689,10 @@ class Context:
             for provides in strax.to_str_tuple(requested_p.provides):
                 requested_plugins[provides] = requested_p
 
+        # Finally, fix the dtype.
+        for plugin in requested_plugins.values():
+            plugin.fix_dtype()
+
         requested_plugins = {i: v for i, v in requested_plugins.items() if i in targets}
         return requested_plugins
 
