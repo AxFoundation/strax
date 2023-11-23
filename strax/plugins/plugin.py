@@ -133,6 +133,8 @@ class Plugin:
             # not have to updated save_when
             self.save_when = immutabledict.fromkeys(self.provides, self.save_when)
 
+        if getattr(self, "provides", None):
+            self.provides = strax.to_str_tuple(self.provides)
         self.compute_pars = compute_pars
         self.input_buffer = dict()
 
@@ -492,7 +494,7 @@ class Plugin:
                     pending_futures = [f for f in pending_futures if not f.done()]
                     yield new_future
                 else:
-                    yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
+                    yield from self._iter_compute(chunk_i=chunk_i, **inputs_merged)
 
         except IterDone:
             # Check all sources are exhausted.
@@ -516,6 +518,10 @@ class Plugin:
 
         finally:
             self.cleanup(wait_for=pending_futures)
+
+    def _iter_compute(self, chunk_i, **inputs_merged):
+        """Either yields or returns strax chunks from the input."""
+        yield self.do_compute(chunk_i=chunk_i, **inputs_merged)
 
     def cleanup(self, wait_for):
         pass
