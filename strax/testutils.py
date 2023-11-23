@@ -252,6 +252,58 @@ class PeakClassification(strax.Plugin):
         return dict(peak_classification=p, lone_hits=lh)
 
 
+# Plugins with time structure within chunks,
+# used to test down chunking within plugin compute.
+class RecordsWithTimeStructure(Records):
+    """Same as Records but with some structure in "time" for testing."""
+
+    def setup(self):
+        self.last_end = 0
+
+    def compute(self, chunk_i):
+        r = np.zeros(self.config["recs_per_chunk"], self.dtype)
+        r["time"] = self.last_end + np.arange(self.config["recs_per_chunk"]) + 5
+        r["length"] = r["dt"] = 1
+        r["channel"] = np.arange(len(r))
+
+        end = self.last_end + self.config["recs_per_chunk"] + 10
+        chunk = self.chunk(start=self.last_end, end=end, data=r)
+        self.last_end = end
+
+        return chunk
+
+
+class DownSampleRecords(strax.DownChunkingPlugin):
+    """PLugin to test the downsampling of Chunks during compute.
+
+    Needed for simulations.
+
+    """
+
+    provides = "records_down_chunked"
+    depends_on = "records"
+    dtype = strax.record_dtype()
+    rechunk_on_save = False
+
+    def compute(self, records, start, end):
+        offset = 0
+        last_start = start
+
+        count = 0
+        for count, r in enumerate(records):
+            if count == 5:
+                res = records[offset:count]
+                chunk_end = np.max(strax.endtime(res))
+                offset = count
+                chunk = self.chunk(start=last_start, end=chunk_end, data=res)
+                last_start = chunk_end
+                yield chunk
+
+        res = records[offset : count + 1]
+        chunk = self.chunk(start=last_start, end=end, data=res)
+        yield chunk
+
+
 # Used in test_core.py
 run_id = "0"
 
