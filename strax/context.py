@@ -1862,7 +1862,7 @@ class Context:
             elif isinstance(data, str):
                 run_id, target = None, None
                 metafile = data
-            elif isinstace(data, dict):
+            elif isinstance(data, dict):
                 run_id, target = None, None
                 metafile = data
             else:
