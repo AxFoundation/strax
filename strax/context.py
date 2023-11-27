@@ -1667,65 +1667,77 @@ class Context:
 
     get_metadata = get_meta
 
-    def compare_metadata(self, run_id, target, old_metadata):
+    def compare_metadata(self, data1, data2, return_results=False):
+        """ Compare the metadata between two strax data
+
+            :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to compare,
+                or a dictionary of the metadata
+            :param return_results: bool, if True, returns a dictionary with metadata and lineages that are found for the inputs
+
+            Returns: prints the comparison results or returns in a dictionary
         """
-        Compare the metadata between two strax data
 
-        :param run_id: run id to get
-        :param target: data type to get
-        :param old_metadata: path to metadata to compare, or a dictionary, or a tuple with
-            another run_id, target to compare against the metadata of the first id-target pair
-        """
-        color_values = lambda oldval, newval: (
-            click.style(oldval, fg='red', bold=True), click.style(newval, fg='green', bold=True))
-        underline = lambda text, bold=True: click.style(text, bold=bold, underline=True)
-
-        # new metadata for the given runid + target; fetch from context
-        new_metadata = self.get_metadata(run_id, target)
-        # old metadata to compare
-        if isinstance(old_metadata, str):
-            with open(old_metadata) as json_file:
-                old_metadata = json.load(json_file)
-        elif isinstance(old_metadata, dict):
-            old_metadata = old_metadata
-        elif isinstance(old_metadata, (tuple, list)):
-            old_metadata = self.get_metadata(old_metadata[0], old_metadata[1])
-        else:
-            raise ValueError(f"Expected old_metadata as `str` or `dict` got {type(old_metadata)}")
-
-        differences = deepdiff.DeepDiff(old_metadata, new_metadata)
-        for key, value in differences.items():
-            if key in ['values_changed', 'iterable_item_added', 'iterable_item_removed']:
-                print(underline(f"\n> {key}"))
-                for kk, vv in value.items():
-                    if key == "values_changed":
-                        old_values = vv['old_value']
-                        new_values = vv['new_value']
-                    elif key == "iterable_item_added":
-                        old_values = "-"
-                        new_values = vv
-                    else:  # if key == "iterable_item_removed":
-                        old_values = vv
-                        new_values = "-"
-                    old, new = color_values(old_values, new_values)
-                    click.secho(f"\t in {kk[4:]}", bold=False)
-                    print(f"\t\t{old} -> {new}")
-            elif key in ['dictionary_item_added', 'dictionary_item_removed']:
-                color = "red" if "removed" in key else "green"
-                print(underline(f"\n> {key:25s}"), end="->")
-                click.secho(f"\t{', '.join(value)}", fg=color)
-            elif key in ['type_changes']:
-                print(underline(f"\n> {key}"))
-                for kk, vv in value.items():
-                    click.secho(f"\t{kk}")
-                    oldtype = vv['old_type']
-                    newtype = vv['new_type']
-                    keyold, keynew = color_values('old_type', 'new_type')
-                    valueold, valuenew = color_values(vv['old_value'], vv['new_value'])
-                    print(f"\t\t{keyold:10s} : {oldtype} ({valueold})")
-                    print(f"\t\t{keynew:10s} : {newtype} ({valuenew})")
+        def _extract_input(data):
+            """ identify and extract the given input.
+                User can either pass a `runid + target` pair or `metadatafilelocation`
+            """
+            if isinstance(data, tuple) or isinstance(data, list):
+                run_id, target = data
+                metafile = None
+            elif isinstance(data, str):
+                run_id, target = None, None
+                metafile = data
+            elif isinstace(data, dict):
+                run_id, target = None, None
+                metafile = data
             else:
-                raise KeyError(f"Unkown key in comparison {key}")
+                raise ValueError(
+                    "data can either be a tuple(list) with runid+target or the path of the metadata json file")
+            return run_id, target, metafile
+
+        def _extract_metadata_and_lineage(self, run_id, target, metafile):
+            """ Extract the actual metadata and lineage based on given inputs
+                and whether the data is available
+            """
+            # if the runid+target pair is given, check if stored
+            if metafile == None:
+                _is_stored = self.is_stored(run_id, target)
+                metadata = self.get_metadata(run_id, target) if _is_stored else None
+                lineage = metadata['lineage'] if _is_stored else self.key_for(run_id, target).lineage
+                _lineage_hash = str(self.key_for(run_id, target))
+                print(_lineage_hash)
+            elif isinstance(metafile, dict):
+                metadata = metafile
+                lineage = metadata['lineage']
+            else:
+                # metafile is given instead of run id + target pair
+                with open(metafile) as json_file:
+                    metadata = json.load(json_file)
+                    lineage = metadata['lineage']
+            # streamline all lineages
+            lineage = convert_tuple_to_list(lineage)
+            return metadata, lineage
+
+        run_id1, target1, metafile1 = _extract_input(data1)
+        run_id2, target2, metafile2 = _extract_input(data2)
+
+        metadata1, lineage1 = _extract_metadata_and_lineage(self, run_id1, target1, metafile1)
+        metadata2, lineage2 = _extract_metadata_and_lineage(self, run_id2, target2, metafile2)
+
+        if return_results:
+            results_dict = {"metadata1": metadata1, "lineage1": lineage1,
+                            "metadata2": metadata2, "lineage2": lineage2}
+            print(f"Returning the collected data, dictionaries can be compared by `strax.utils.compare_dict(d1,d2)`")
+            return results_dict
+
+        # if both metadata exists, simple comparison
+        # do a full metadata comparison if the whole metadata exists
+        if metadata1 is not None and metadata2 is not None:
+            print("Both metadata exists!")
+            strax.utils.compare_dict(metadata1, metadata2)
+        else:
+            print(f"Both metadata are not available together. Comparing lineages!")
+            strax.utils.compare_dict(lineage1, lineage2)
 
     def run_metadata(self, run_id, projection=None) -> dict:
         """
