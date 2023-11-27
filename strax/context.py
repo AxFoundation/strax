@@ -1845,16 +1845,20 @@ class Context:
     get_metadata = get_meta
 
     def compare_metadata(self, data1, data2, return_results=False):
-        """ Compare the metadata between two strax data
+        """Compare the metadata between two strax data.
 
-            :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to compare,
-                or a dictionary of the metadata
-            :param return_results: bool, if True, returns a dictionary with metadata and lineages that are found for the inputs
+        :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to
+        compare,     or a dictionary of the metadata
+        :param return_results: bool, if True, returns a dictionary with metadata and lineages that
+            are found for the inputs
+
         """
 
         def _extract_input(data):
-            """ identify and extract the given input.
-                User can either pass a `runid + target` pair or `metadatafilelocation`
+            """Identify and extract the given input.
+
+            User can either pass a `runid + target` pair or `metadatafilelocation`
+
             """
             if isinstance(data, tuple) or isinstance(data, list):
                 run_id, target = data
@@ -1867,28 +1871,31 @@ class Context:
                 metafile = data
             else:
                 raise ValueError(
-                    "data can either be a tuple(list) with runid+target or the path of the metadata json file")
+                    "data can either be a tuple(list) with runid+target or the path of the metadata"
+                    " json file"
+                )
             return run_id, target, metafile
 
         def _extract_metadata_and_lineage(self, run_id, target, metafile):
-            """ Extract the actual metadata and lineage based on given inputs
-                and whether the data is available
-            """
+            """Extract the actual metadata and lineage based on given inputs and whether the data is
+            available."""
             # if the runid+target pair is given, check if stored
             if metafile == None:
                 _is_stored = self.is_stored(run_id, target)
                 metadata = self.get_metadata(run_id, target) if _is_stored else None
-                lineage = metadata['lineage'] if _is_stored else self.key_for(run_id, target).lineage
+                lineage = (
+                    metadata["lineage"] if _is_stored else self.key_for(run_id, target).lineage
+                )
                 _lineage_hash = str(self.key_for(run_id, target))
                 print(_lineage_hash)
             elif isinstance(metafile, dict):
                 metadata = metafile
-                lineage = metadata['lineage']
+                lineage = metadata["lineage"]
             else:
                 # metafile is given instead of run id + target pair
                 with open(metafile) as json_file:
                     metadata = json.load(json_file)
-                    lineage = metadata['lineage']
+                    lineage = metadata["lineage"]
             # streamline all lineages
             lineage = convert_tuple_to_list(lineage)
             return metadata, lineage
@@ -1900,9 +1907,16 @@ class Context:
         metadata2, lineage2 = _extract_metadata_and_lineage(self, run_id2, target2, metafile2)
 
         if return_results:
-            results_dict = {"metadata1": metadata1, "lineage1": lineage1,
-                            "metadata2": metadata2, "lineage2": lineage2}
-            print(f"Returning the collected data, dictionaries can be compared by `strax.utils.compare_dict(d1,d2)`")
+            results_dict = {
+                "metadata1": metadata1,
+                "lineage1": lineage1,
+                "metadata2": metadata2,
+                "lineage2": lineage2,
+            }
+            print(
+                f"Returning the collected data, dictionaries can be compared by"
+                f" `strax.utils.compare_dict(d1,d2)`"
+            )
             return results_dict
 
         # if both metadata exists, simple comparison

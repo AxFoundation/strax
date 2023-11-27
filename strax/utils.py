@@ -788,10 +788,10 @@ def dir_size_mb(start_path="."):
 
     return total_size / 1e6
 
+
 @export
 def convert_tuple_to_list(init_func_input):
-    """ Convert the tuples into list in an arbitrarily nested dictionary
-    """
+    """Convert the tuples into list in an arbitrarily nested dictionary."""
     func_input = copy.deepcopy(init_func_input)
     # if it is a tuple convert it and reiterate
     if isinstance(func_input, tuple):

@@ -485,6 +485,8 @@ class TestContext(unittest.TestCase):
         st.register(Records)
         st.make(run_id, "records")
         old_metadata = st.get_metadata(run_id, "records")
-        comparison_dict = st.compare_metadata((run_id, "records"), old_metadata, return_results=True)
+        comparison_dict = st.compare_metadata(
+            (run_id, "records"), old_metadata, return_results=True
+        )
         comparison_dict["metadata2"].pop("strax_version")
         assert comparison_dict["metadata2"] == old_metadata, "metadata comparison failed"
