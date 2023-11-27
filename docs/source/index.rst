@@ -68,4 +68,3 @@ The above pages describe how strax's processing framework works under the hood, 
 
 * :ref:`genindex`
 * :ref:`modindex`
-

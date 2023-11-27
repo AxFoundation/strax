@@ -6,13 +6,13 @@ export, __all__ = strax.exporter()
 
 @export
 class ParallelSourcePlugin(Plugin):
-    """An plugin that inlines the computations of other plugins
-    and the saving of their results.
+    """An plugin that inlines the computations of other plugins and the saving of their results.
 
-    This evades data transfer (pickling and/or memory copy) penalties
-    while multiprocessing.
+    This evades data transfer (pickling and/or memory copy) penalties while multiprocessing.
+
     """
-    parallel = 'process'
+
+    parallel = "process"
     # should we set this here?
     input_timeout = 300
 
@@ -20,7 +20,7 @@ class ParallelSourcePlugin(Plugin):
     def inline_plugins(cls, components, start_from, log):
         plugins = components.plugins.copy()
         loader_plugins = components.loader_plugins.copy()
-        log.debug(f'Try to inline plugins starting from {start_from}')
+        log.debug(f"Try to inline plugins starting from {start_from}")
 
         sub_plugins = {start_from: plugins[start_from]}
         del plugins[start_from]
@@ -31,8 +31,7 @@ class ParallelSourcePlugin(Plugin):
         while True:
             # Scan for plugins we can inline
             for p in plugins.values():
-                if (p.parallel
-                        and all([d in sub_plugins for d in p.depends_on])):
+                if p.parallel and all([d in sub_plugins for d in p.depends_on]):
                     for d in p.provides:
                         sub_plugins[d] = p
                         if d in plugins:
@@ -42,7 +41,7 @@ class ParallelSourcePlugin(Plugin):
             else:
                 # No more plugins we can inline
                 break
-        log.debug(f'Trying to inline the following sub-plugins: {sub_plugins}')
+        log.debug(f"Trying to inline the following sub-plugins: {sub_plugins}")
         if len(set(list(sub_plugins.values()))) == 1:
             # Just one plugin to inline: no use
             log.debug("Just one plugin to inline: skipping")
@@ -53,8 +52,7 @@ class ParallelSourcePlugin(Plugin):
 
         # Case 1. Requested as a final target
         for p in sub_plugins.values():
-            outputs_to_send.update(set(components.targets)
-                                   .intersection(set(p.provides)))
+            outputs_to_send.update(set(components.targets).intersection(set(p.provides)))
         # Case 2. Requested by a plugin we did not inline
         for d, p in plugins.items():
             outputs_to_send.update(set(p.depends_on))
@@ -100,12 +98,12 @@ class ParallelSourcePlugin(Plugin):
                 if d in p.sub_plugins:
                     p.dtype[d] = p.sub_plugins[d].dtype_for(d)
                 else:
-                    log.debug(f'Finding plugin that provides {d}')
+                    log.debug(f"Finding plugin that provides {d}")
                     # Need to do some more work to get the plugin that
                     # provides this data-type.
                     for sp in p.sub_plugins.values():
                         if d in sp.provides:
-                            log.debug(f'{sp} provides {d}')
+                            log.debug(f"{sp} provides {d}")
                             p.dtype[d] = sp.dtype_for(d)
                             break
         else:
@@ -114,15 +112,17 @@ class ParallelSourcePlugin(Plugin):
         for d in p.provides:
             plugins[d] = p
 
-        log.debug(f'Trying to find plugins for dependencies: {p.depends_on}')
+        log.debug(f"Trying to find plugins for dependencies: {p.depends_on}")
 
-        p.deps = {d: plugins[d] if plugins.get(d, None) else loader_plugins[d] for d in p.depends_on}
+        p.deps = {
+            d: plugins[d] if plugins.get(d, None) else loader_plugins[d] for d in p.depends_on
+        }
 
-        log.debug(f"Inlined plugins: {p.sub_plugins}."
-                  f"Inlined savers: {p.sub_savers}")
+        log.debug(f"Inlined plugins: {p.sub_plugins}.Inlined savers: {p.sub_savers}")
 
         return strax.ProcessorComponents(
-            plugins, components.loaders, components.loader_plugins, savers, components.targets)
+            plugins, components.loaders, components.loader_plugins, savers, components.targets
+        )
 
     def __init__(self, depends_on):
         self.depends_on = depends_on
@@ -147,8 +147,7 @@ class ParallelSourcePlugin(Plugin):
                 compute_kwargs = dict(chunk_i=chunk_i)
 
                 for kind, d_of_kind in p.dependencies_by_kind().items():
-                    compute_kwargs[kind] = strax.Chunk.merge(
-                        [results[d] for d in d_of_kind])
+                    compute_kwargs[kind] = strax.Chunk.merge([results[d] for d in d_of_kind])
 
                 # Store compute result(s)
                 r = p.do_compute(**compute_kwargs)
@@ -189,8 +188,7 @@ class ParallelSourcePlugin(Plugin):
         return self._fix_output(results, start=r0.start, end=r0.end)
 
     def cleanup(self, wait_for):
-        print(f"{self.__class__.__name__} terminated. "
-              f"Waiting for {len(wait_for)} pending futures.")
+        print(f"{self.__class__.__name__} terminated. Waiting for {len(wait_for)} pending futures.")
         for savers in self.sub_savers.values():
             for s in savers:
                 s.close(wait_for=wait_for)
