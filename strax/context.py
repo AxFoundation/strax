@@ -1857,10 +1857,10 @@ class Context:
         def _extract_input(data):
             """Identify and extract the given input.
 
-            User can either pass a `runid + target` pair or `metadatafilelocation`
+            User can either pass a `runid + target` pair or path to metadata json file or a dict
 
             """
-            if isinstance(data, tuple) or isinstance(data, list):
+            if isinstance(data, (tuple, list)):
                 run_id, target = data
                 metafile = None
             elif isinstance(data, str):
@@ -1880,7 +1880,7 @@ class Context:
             """Extract the actual metadata and lineage based on given inputs and whether the data is
             available."""
             # if the runid+target pair is given, check if stored
-            if metafile == None:
+            if metafile is None:
                 _is_stored = self.is_stored(run_id, target)
                 metadata = self.get_metadata(run_id, target) if _is_stored else None
                 lineage = (
