@@ -1897,7 +1897,7 @@ class Context:
                     metadata = json.load(json_file)
                     lineage = metadata["lineage"]
             # streamline all lineages
-            lineage = convert_tuple_to_list(lineage)
+            lineage = strax.utils.convert_tuple_to_list(lineage)
             return metadata, lineage
 
         run_id1, target1, metafile1 = _extract_input(data1)
