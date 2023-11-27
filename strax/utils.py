@@ -21,6 +21,7 @@ from warnings import warn
 import os
 import click
 import deepdiff
+import copy
 
 
 # Change numba's caching backend from pickle to dill
@@ -786,3 +787,31 @@ def dir_size_mb(start_path="."):
                 total_size += os.path.getsize(fp)
 
     return total_size / 1e6
+
+@export
+def convert_tuple_to_list(init_func_input):
+    """ Convert the tuples into list in an arbitrarily nested dictionary
+    """
+    func_input = copy.deepcopy(init_func_input)
+    # if it is a tuple convert it and reiterate
+    if isinstance(func_input, tuple):
+        _func_input = list(func_input)
+        return convert_tuple_to_list(_func_input)
+
+    # if it is a list, go over all the elements until all tuples are lists
+    elif isinstance(func_input, list):
+        new_func_inp = []
+        # check each element
+        for i in func_input:
+            new_func_inp.append(convert_tuple_to_list(i))
+            # iterates until everything is all depths are exhausted
+        return new_func_inp
+
+    # if it is a dict iterate
+    elif isinstance(func_input, dict):
+        for k, v in func_input.items():
+            func_input[k] = convert_tuple_to_list(v)
+        return func_input
+    else:
+        # if not a container, return. i.e. int, float, bytes, str etc.
+        return func_input
