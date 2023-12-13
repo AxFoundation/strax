@@ -273,6 +273,7 @@ def _create_copy_function(res_dtype, field_names, func_name):
     """Write out a numba-njitted function to copy data."""
     # Cannot cache = True since we are creating the function dynamically
     code_dtype_cache = f"{func_name + '_dtype_cache'} = {field_names}"
+    # pylint: disable=exec-use
     exec(code_dtype_cache, globals())
 
     code = f"""
