@@ -1,4 +1,3 @@
-import os
 import warnings
 
 warnings.simplefilter("always", UserWarning)
@@ -58,29 +57,25 @@ def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind="merge
     return x[sort_i]
 
 
-# Getting endtime jitted is a bit awkward, especially since it has to
-# keep working with NUMBA_DISABLE_JIT, which we use for coverage tests.
-# See https://github.com/numba/numba/issues/4759
-if os.environ.get("NUMBA_DISABLE_JIT"):
+@export
+def endtime(x):
+    """Return endtime of intervals x."""
+    if "endtime" in x.dtype.fields:
+        return x["endtime"]
+    else:
+        return x["time"] + x["length"] * x["dt"]
 
-    @export
-    def endtime(x):
-        """Return endtime of intervals x."""
-        if "endtime" in x.dtype.fields:
-            return x["endtime"]
-        else:
-            return x["time"] + x["length"] * x["dt"]
 
-else:
-
-    @export
-    @numba.generated_jit(nopython=True, nogil=True)
-    def endtime(x):
-        """Return endtime of intervals x."""
-        if "endtime" in x.dtype.fields:
-            return lambda x: x["endtime"]
-        else:
-            return lambda x: x["time"] + x["length"] * x["dt"]
+# Jitting endtime needs special attention, since inspecting the dtype
+# has to happen in the python layer.
+# (Used to work through numba.generated_jit, now numba.extending.overload)
+@numba.extending.overload(endtime)
+def _overload_endtime(x):
+    """Return endtime of intervals x."""
+    if "endtime" in x.dtype.fields:
+        return lambda x: x["endtime"]
+    else:
+        return lambda x: x["time"] + x["length"] * x["dt"]
 
 
 @export
