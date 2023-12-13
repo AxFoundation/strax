@@ -7,7 +7,6 @@ TODO: file numba issue.
 """
 
 from typing import Optional, Tuple
-import string
 
 import numpy as np
 import numba  # noqa: F401
@@ -263,19 +262,19 @@ def copy_to_buffer(
     try:
         globals()[func_name](source, buffer)
     except numba.TypingError:
-        rnd_string = _get_random_lower_case_string()
-        copy_to_buffer(source, buffer, func_name + rnd_string, field_names)
-
-
-def _get_random_lower_case_string(n: int = 8):
-    """Returns string with n lower case ascii letters."""
-    letter = string.ascii_lowercase
-    return "".join([letter[i] for i in np.random.randint(0, len(letter), n)])
+        dtype_cache = globals()[func_name + "_dtype_cache"]
+        extra_fields = [name for name in dtype_cache if name not in field_names]
+        extra_fields = "_".join(extra_fields)
+        func_name += "_wo_" + extra_fields
+        copy_to_buffer(source, buffer, func_name, field_names)
 
 
 def _create_copy_function(res_dtype, field_names, func_name):
     """Write out a numba-njitted function to copy data."""
     # Cannot cache = True since we are creating the function dynamically
+    code_dtype_cache = f"{func_name + '_dtype_cache'} = {field_names}"
+    exec(code_dtype_cache, globals())
+
     code = f"""
 @numba.njit(nogil=True)
 def {func_name}(source, result):
