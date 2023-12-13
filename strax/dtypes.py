@@ -7,6 +7,7 @@ TODO: file numba issue.
 """
 
 from typing import Optional, Tuple
+import string
 
 import numpy as np
 import numba  # noqa: F401
@@ -259,8 +260,17 @@ def copy_to_buffer(
     if func_name not in globals():
         # Create a numba function for us
         _create_copy_function(buffer.dtype, field_names, func_name)
+    try:
+        globals()[func_name](source, buffer)
+    except numba.TypingError:
+        rnd_string = _get_random_lower_case_string()
+        globals()[func_name + rnd_string](source, buffer)
 
-    globals()[func_name](source, buffer)
+
+def _get_random_lower_case_string(n: int = 8):
+    """Returns string with n lower case ascii letters."""
+    letter = string.ascii_lowercase
+    return "".join([letter[i] for i in np.random.randint(0, len(letter), n)])
 
 
 def _create_copy_function(res_dtype, field_names, func_name):
