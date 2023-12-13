@@ -264,7 +264,7 @@ def copy_to_buffer(
         globals()[func_name](source, buffer)
     except numba.TypingError:
         rnd_string = _get_random_lower_case_string()
-        globals()[func_name + rnd_string](source, buffer)
+        copy_to_buffer(source, buffer, func_name + rnd_string, field_names)
 
 
 def _get_random_lower_case_string(n: int = 8):
