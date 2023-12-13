@@ -256,26 +256,20 @@ def copy_to_buffer(
     if not func_name.startswith("_"):
         raise ValueError('Start function with "_"')
 
+    # Add first two letters of all dtype fields to the function name as a
+    # sort of hash-key.
+    field_names_hash = "".join([name[:2] for name in field_names])
+    func_name += field_names_hash
     if func_name not in globals():
         # Create a numba function for us
         _create_copy_function(buffer.dtype, field_names, func_name)
-    try:
-        globals()[func_name](source, buffer)
-    except numba.TypingError:
-        dtype_cache = globals()[func_name + "_dtype_cache"]
-        extra_fields = [name for name in dtype_cache if name not in field_names]
-        extra_fields = "_".join(extra_fields)
-        func_name += "_wo_" + extra_fields
-        copy_to_buffer(source, buffer, func_name, field_names)
+
+    globals()[func_name](source, buffer)
 
 
 def _create_copy_function(res_dtype, field_names, func_name):
     """Write out a numba-njitted function to copy data."""
     # Cannot cache = True since we are creating the function dynamically
-    code_dtype_cache = f"{func_name + '_dtype_cache'} = {field_names}"
-    # pylint: disable=exec-used
-    exec(code_dtype_cache, globals())
-
     code = f"""
 @numba.njit(nogil=True)
 def {func_name}(source, result):
@@ -291,4 +285,5 @@ def {func_name}(source, result):
             code += f'\n        r["{d}"][:] = s["{d}"][:]'
         else:
             code += f'\n        r["{d}"] = s["{d}"]'
+    # pylint: disable=exec-used
     exec(code, globals())
