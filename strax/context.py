@@ -344,9 +344,12 @@ class Context:
             for d in old_plugin.provides:
                 currently_registered = self._plugin_class_registry.get(d)
                 if old_plugin == currently_registered:
-                    # Must be equal here, because we are only looking for the remanants which were 
+                    # Must be equal here, because we are only looking for the remanants which were
                     # not overwritten above.
-                    warnings.warn(f'Provides of multi-output plugins overlap dregister plugin {old_plugin}.')
+                    warnings.warn(
+                        "Provides of multi-output plugins overlap, deregister old plugins"
+                        f" {old_plugin}."
+                    )
                     del self._plugin_class_registry[d]
 
         already_seen = []
