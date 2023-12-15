@@ -258,7 +258,7 @@ def copy_to_buffer(
 
     # Add first two letters of all dtype fields to the function name as a
     # sort of hash-key.
-    field_names_hash = "".join([name[:2] for name in field_names])
+    field_names_hash = strax.deterministic_hash(repr(buffer.dtype))
     func_name += field_names_hash
     if func_name not in globals():
         # Create a numba function for us
