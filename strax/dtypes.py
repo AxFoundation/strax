@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import numba  # noqa: F401
+import strax
 
 
 __all__ = (
@@ -256,6 +257,10 @@ def copy_to_buffer(
     if not func_name.startswith("_"):
         raise ValueError('Start function with "_"')
 
+    # Make hash from buffer dtype to have differnt copy functions
+    # if dtype changes.
+    field_names_hash = strax.deterministic_hash(repr(buffer.dtype))
+    func_name += field_names_hash
     if func_name not in globals():
         # Create a numba function for us
         _create_copy_function(buffer.dtype, field_names, func_name)
