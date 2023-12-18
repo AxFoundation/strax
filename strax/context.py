@@ -709,9 +709,9 @@ class Context:
         """
         # Check all config options are taken by some registered plugin class
         # (helps spot typos)
-        all_opts = set().union(*[
-            pc.takes_config.keys() for pc in self._plugin_class_registry.values()
-        ])
+        all_opts = set().union(
+            *[pc.takes_config.keys() for pc in self._plugin_class_registry.values()]
+        )
         for k in self.config:
             if not (k in all_opts or k in self.context_config["free_options"]):
                 self.log.warning(f"Option {k} not taken by any registered plugin")
