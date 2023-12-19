@@ -1834,9 +1834,13 @@ class Context:
         example usage:
             context.compare_metadata( ("053877", "peak_basics"),  "./my_path_to/JSONfile.json")
             first_metadata = context.get_metadata(run_id, "events")
-            context.compare_metadata( ("053877", "peak_basics"), first_metadata)
-            context.compare_metadata( ("053877", "records"), ("053899", "records") )
-            results_dict = context.compare_metadata( ("053877", "peak_basics"), ("053877", "events_info"), return_results=True)
+            context.compare_metadata(
+                 ("053877", "peak_basics"), first_metadata)
+            context.compare_metadata( 
+                ("053877", "records"), ("053899", "records") )
+            results_dict = context.compare_metadata( 
+                ("053877", "peak_basics"), ("053877", "events_info"),
+                 return_results=True)
 
         """
 
