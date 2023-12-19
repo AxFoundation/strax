@@ -1850,7 +1850,14 @@ class Context:
         :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to
         compare,     or a dictionary of the metadata
         :param return_results: bool, if True, returns a dictionary with metadata and lineages that
-            are found for the inputs
+            are found for the inputs does not do the comparison
+
+        example usage:
+            context.compare_metadata( ("053877", "peak_basics"),  "./my_path_to/JSONfile.json")
+            first_metadata = context.get_metadata(run_id, "events")
+            context.compare_metadata( ("053877", "peak_basics"), first_metadata)
+            context.compare_metadata( ("053877", "records"), ("053899", "records") )
+            results_dict = context.compare_metadata( ("053877", "peak_basics"), ("053877", "events_info"), return_results=True)
 
         """
 
