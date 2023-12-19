@@ -632,14 +632,14 @@ class Context:
         If any item changes in the config, so does this hash.
 
         """
-        base_hash_on_config = self.config.copy()
+        self._base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        base_hash_on_config.update({
+        self._base_hash_on_config.update({
             data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
             for data_type, plugin in self._plugin_class_registry.items()
             if not data_type.startswith("_temp_")
         })
-        return strax.deterministic_hash(base_hash_on_config)
+        return strax.deterministic_hash(self._base_hash_on_config)
 
     def _plugins_are_cached(
         self,
@@ -673,16 +673,6 @@ class Context:
         for target, plugin in plugins.items():
             self._fixed_plugin_cache[context_hash][target] = plugin
 
-    def _fix_dependency(self, plugin_registry: dict, end_plugin: str):
-        """Starting from end-plugin, fix the dtype until there is nothing left to fix.
-
-        Keep in mind that dtypes can be chained.
-
-        """
-        for go_to in plugin_registry[end_plugin].depends_on:
-            self._fix_dependency(plugin_registry, go_to)
-        plugin_registry[end_plugin].fix_dtype()
-
     def __get_requested_plugins_from_cache(
         self,
         run_id: str,
@@ -691,9 +681,8 @@ class Context:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache."""
         requested_plugins = {}
-        for target, plugin in self._fixed_plugin_cache[
-            self._context_hash()
-        ].items():  # type: ignore
+        cached_plugins = self._fixed_plugin_cache[self._context_hash()]  # type: ignore
+        for target, plugin in cached_plugins.items():
             if target in requested_plugins:
                 # If e.g. target is already seen because the plugin is
                 # multi output
@@ -706,19 +695,9 @@ class Context:
             for provides in strax.to_str_tuple(requested_p.provides):
                 requested_plugins[provides] = requested_p
 
-        # At this stage, all the plugins should be in requested_plugins
-        # To prevent infinite copying, we are only now linking the
-        # dependencies of each plugin to another where needed.
-        for target, plugin in requested_plugins.items():
-            plugin.deps = {
-                dependency: requested_plugins[dependency] for dependency in plugin.depends_on
-            }
-
-        # Finally, fix the dtype. Since infer_dtype may depend on the
-        # entire deps chain, we need to start at the last plugin and go
-        # all the way down to the lowest level.
-        for target_plugins in targets:
-            self._fix_dependency(requested_plugins, target_plugins)
+        # Finally, fix the dtype.
+        for plugin in requested_plugins.values():
+            plugin.fix_dtype()
 
         requested_plugins = {i: v for i, v in requested_plugins.items() if i in targets}
         return requested_plugins
@@ -1850,30 +1829,100 @@ class Context:
 
     get_metadata = get_meta
 
-    def compare_metadata(self, run_id, target, old_metadata):
+    def compare_metadata(self, data1, data2, return_results=False):
         """Compare the metadata between two strax data.
 
-        :param run_id: run id to get
-        :param target: data type to get
-        :param old_metadata: path to metadata to compare, or a dictionary, or a tuple with another
-            run_id, target to compare against the metadata of the first id-target pair
+        :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to
+        compare,     or a dictionary of the metadata
+        :param return_results: bool, if True, returns a dictionary with metadata and lineages that
+            are found for the inputs does not do the comparison
+
+        example usage:
+            context.compare_metadata( ("053877", "peak_basics"),  "./my_path_to/JSONfile.json")
+            first_metadata = context.get_metadata(run_id, "events")
+            context.compare_metadata(
+                 ("053877", "peak_basics"), first_metadata)
+            context.compare_metadata(
+                ("053877", "records"), ("053899", "records") )
+            results_dict = context.compare_metadata(
+                ("053877", "peak_basics"), ("053877", "events_info"),
+                 return_results=True)
 
         """
 
-        # new metadata for the given runid + target; fetch from context
-        new_metadata = self.get_metadata(run_id, target)
-        # old metadata to compare
-        if isinstance(old_metadata, str):
-            with open(old_metadata) as json_file:
-                old_metadata = json.load(json_file)
-        elif isinstance(old_metadata, dict):
-            old_metadata = old_metadata
-        elif isinstance(old_metadata, (tuple, list)):
-            old_metadata = self.get_metadata(old_metadata[0], old_metadata[1])
-        else:
-            raise ValueError(f"Expected old_metadata as `str` or `dict` got {type(old_metadata)}")
+        def _extract_input(data):
+            """Identify and extract the given input.
 
-        strax.utils.compare_dict(old_metadata, new_metadata)
+            User can either pass a `runid + target` pair or path to metadata json file or a dict
+
+            """
+            if isinstance(data, (tuple, list)):
+                run_id, target = data
+                metafile = None
+            elif isinstance(data, str):
+                run_id, target = None, None
+                metafile = data
+            elif isinstance(data, dict):
+                run_id, target = None, None
+                metafile = data
+            else:
+                raise ValueError(
+                    "data can either be a tuple(list) with runid+target or the path of the metadata"
+                    " json file"
+                )
+            return run_id, target, metafile
+
+        def _extract_metadata_and_lineage(self, run_id, target, metafile):
+            """Extract the actual metadata and lineage based on given inputs and whether the data is
+            available."""
+            # if the runid+target pair is given, check if stored
+            if metafile is None:
+                _is_stored = self.is_stored(run_id, target)
+                metadata = self.get_metadata(run_id, target) if _is_stored else None
+                lineage = (
+                    metadata["lineage"] if _is_stored else self.key_for(run_id, target).lineage
+                )
+                _lineage_hash = str(self.key_for(run_id, target))
+                print(_lineage_hash)
+            elif isinstance(metafile, dict):
+                metadata = metafile
+                lineage = metadata["lineage"]
+            else:
+                # metafile is given instead of run id + target pair
+                with open(metafile) as json_file:
+                    metadata = json.load(json_file)
+                    lineage = metadata["lineage"]
+            # streamline all lineages
+            lineage = strax.utils.convert_tuple_to_list(lineage)
+            return metadata, lineage
+
+        run_id1, target1, metafile1 = _extract_input(data1)
+        run_id2, target2, metafile2 = _extract_input(data2)
+
+        metadata1, lineage1 = _extract_metadata_and_lineage(self, run_id1, target1, metafile1)
+        metadata2, lineage2 = _extract_metadata_and_lineage(self, run_id2, target2, metafile2)
+
+        if return_results:
+            results_dict = {
+                "metadata1": metadata1,
+                "lineage1": lineage1,
+                "metadata2": metadata2,
+                "lineage2": lineage2,
+            }
+            print(
+                f"Returning the collected data, dictionaries can be compared by"
+                f" `strax.utils.compare_dict(d1,d2)`"
+            )
+            return results_dict
+
+        # if both metadata exists, simple comparison
+        # do a full metadata comparison if the whole metadata exists
+        if metadata1 is not None and metadata2 is not None:
+            print("Both metadata exists!")
+            strax.utils.compare_dict(metadata1, metadata2)
+        else:
+            print(f"Both metadata are not available together. Comparing lineages!")
+            strax.utils.compare_dict(lineage1, lineage2)
 
     def run_metadata(self, run_id, projection=None) -> dict:
         """Return run-level metadata for run_id, or raise DataNotAvailable if this is not available.
