@@ -251,17 +251,17 @@ class TestMultiOutputs(unittest.TestCase):
     def test_double_dependency_multiprocess(self):
         """Tests if double dependency of a plugin on another plugin leads to dead lock in
         processing."""
-        self.mystrax.set_context_config({
-            "timeout": 120, "allow_lazy": False, "allow_multiprocess": True
-        })
+        self.mystrax.set_context_config(
+            {"timeout": 120, "allow_lazy": False, "allow_multiprocess": True}
+        )
         self._test_double_dependency(max_workers=2)
 
     def test_double_dependency_inline_plugins(self):
         """Tests if double dependency of a plugin on another plugin leads to dead lock in
         processing."""
-        self.mystrax.set_context_config({
-            "timeout": 120, "allow_lazy": False, "allow_multiprocess": True
-        })
+        self.mystrax.set_context_config(
+            {"timeout": 120, "allow_lazy": False, "allow_multiprocess": True}
+        )
         self._test_double_dependency(max_workers=2, make_data_type="zipped_records_classified")
         self.mystrax.is_stored(run_id, "even_recs_classified")
 

@@ -237,9 +237,9 @@ class Mailbox:
 
         # If someone is still waiting for a message we already have
         # (so they just haven't woken up yet), don't fetch a new message.
-        if len(self._mailbox) and any([
-            x is not None and x <= self._lowest_msg_number for x in self._subscriber_waiting_for
-        ]):
+        if len(self._mailbox) and any(
+            [x is not None and x <= self._lowest_msg_number for x in self._subscriber_waiting_for]
+        ):
             return False
 
         # Everyone is waiting for the new chunk or not at all.

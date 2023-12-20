@@ -143,9 +143,9 @@ def scan_runs(
             if isinstance(doc["source"], list):
                 doc["source"] = ",".join(doc["source"])
 
-            doc["tags"] = ",".join([
-                t["name"] if isinstance(t, dict) else t for t in doc.get("tags", [])
-            ])
+            doc["tags"] = ",".join(
+                [t["name"] if isinstance(t, dict) else t for t in doc.get("tags", [])]
+            )
 
             # Set a default livetime if we have start and stop
             if (
