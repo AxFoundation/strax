@@ -1,3 +1,21 @@
+1.5.5 / 2023-12-21
+---------------------
+* Update readthedocs configuration by @dachengx in https://github.com/AxFoundation/strax/pull/763
+* Proposal to use pre-commit for continuous integration by @dachengx in https://github.com/AxFoundation/strax/pull/762
+* Update authorship and copyright info by @JelleAalbers in https://github.com/AxFoundation/strax/pull/771
+* Guard hitlet entropy test from numerical errors by @JelleAalbers in https://github.com/AxFoundation/strax/pull/772
+* Deregister partially replaced multi-output plugins by @JelleAalbers in https://github.com/AxFoundation/strax/pull/775
+* Fix caching issue by @WenzDaniel in https://github.com/AxFoundation/strax/pull/768
+* Add chunk yielding plugin and tests by @WenzDaniel in https://github.com/AxFoundation/strax/pull/769
+* Avoid deprecated generated_jit by @JelleAalbers in https://github.com/AxFoundation/strax/pull/784
+* Also copy dps and remove redundant checks. by @WenzDaniel in https://github.com/AxFoundation/strax/pull/777
+* Add hot fix for copy_to_buffer by @WenzDaniel in https://github.com/AxFoundation/strax/pull/785
+* Upgrade compare-metadata function by @KaraMelih in https://github.com/AxFoundation/strax/pull/778
+* Add warning by @WenzDaniel in https://github.com/AxFoundation/strax/pull/776
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.4...v1.5.5
+
+
 1.5.4 / 2023-09-19
 ---------------------
 * Split compare_metadata into utils.compare_meta by @dachengx in https://github.com/AxFoundation/strax/pull/754
