@@ -462,7 +462,7 @@ def to_numpy_dtype(field_spec):
             dtype.append(x)
         elif len(x) == 1:
             # Omitted type: assume float
-            dtype.append((x, np.float))
+            dtype.append((x, float))
         else:
             raise ValueError(f"Invalid field specification {x}")
     return np.dtype(dtype)
