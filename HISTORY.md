@@ -1,3 +1,12 @@
+1.5.6 / 2024-01-15
+---------------------
+* `np.float` is deprecated by @dachengx in https://github.com/AxFoundation/strax/pull/789
+* Update pymongo and solve the error of pytest by @dachengx in https://github.com/AxFoundation/strax/pull/791
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.5.6
+
+
 1.5.5 / 2023-12-21
 ---------------------
 * Update readthedocs configuration by @dachengx in https://github.com/AxFoundation/strax/pull/763
