@@ -31,6 +31,10 @@ def test_growing_result():
     assert got.dtype == should_get.dtype
 
 
+def test_to_numpy_dtype():
+    strax.to_numpy_dtype(["a", "b"])
+
+
 @hst.composite
 def get_dummy_data(draw, data_length=(0, 10), dt=(1, 10), max_time=(1, 20)):
     """Create some dummy array for testing apply selection. Data may be overlapping.

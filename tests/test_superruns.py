@@ -76,7 +76,7 @@ class TestSuperRuns(unittest.TestCase):
 
         prev_start = datetime.datetime.min.replace(tzinfo=pytz.utc)
         for subrun_id in superrun_meta["sub_run_spec"]:
-            start = self.context.run_metadata(subrun_id)["start"]
+            start = self.context.run_metadata(subrun_id)["start"].replace(tzinfo=pytz.utc)
             assert start > prev_start, "Subruns should be sorted by run starts"
             prev_start = start
 
