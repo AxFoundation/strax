@@ -20,7 +20,7 @@ with open("HISTORY.md") as file:
 
 setuptools.setup(
     name="strax",
-    version="1.5.5",
+    version="1.5.6",
     description="Streaming analysis for xenon TPCs",
     author="strax developers",
     url="https://github.com/AxFoundation/strax",
