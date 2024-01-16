@@ -1,4 +1,4 @@
-1.5.6 / 2024-01-15
+1.6.0 / 2024-01-15
 ---------------------
 * `np.float` is deprecated by @dachengx in https://github.com/AxFoundation/strax/pull/789
 * Update pymongo and solve the error of pytest by @dachengx in https://github.com/AxFoundation/strax/pull/791
