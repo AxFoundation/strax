@@ -26,13 +26,6 @@ class DownChunkingPlugin(Plugin):
                 "currently does not support parallel processing."
             )
 
-        if self.multi_output:
-            raise NotImplementedError(
-                f'Plugin "{self.__class__.__name__}" is a DownChunkingPlugin which '
-                "currently does not support multiple outputs. Please only provide "
-                "a single data-type."
-            )
-
     def iter(self, iters, executor=None):
         return super().iter(iters, executor)
 
