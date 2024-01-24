@@ -430,7 +430,7 @@ class Plugin:
                     if time.time() > last_input_received + self.input_timeout:
                         raise InputTimeoutExceeded(
                             f"{self.__class__.__name__}:{id(self)} waited for "
-                            f"more  than {self.input_timeout} sec for arrival of "
+                            f"more than {self.input_timeout} sec for arrival of "
                             f"input chunk {chunk_i}, and has given up."
                         )
 
