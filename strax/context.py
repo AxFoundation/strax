@@ -1988,6 +1988,22 @@ class Context:
             if self._is_stored_in_sf(run_id, target, sf):
                 return True
         # None of the frontends has the data
+
+        # Before returning False, check if the data can be made trivially
+        plugin = self._plugin_class_registry[target]
+        save_when = plugin.save_when
+
+        # Mutli-target plugins provide a save_when per target
+        if isinstance(save_when, immutabledict):
+            save_when = save_when[target]
+
+        if save_when < 3: # 3 is SaveWhen.ALWAYS
+            warnings.warn(
+            f"The plugin for target '{target}' is not set to always save data. " 
+            f"This is probably because the data can be trivially made from other data. "
+            f"The plugin depends on {plugin.depends_on}. Check if these are stored."
+            )
+
         return False
 
     def _check_forbidden(self):
