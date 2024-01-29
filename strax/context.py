@@ -1999,9 +1999,9 @@ class Context:
 
         if save_when < strax.SaveWhen.ALWAYS:
             warnings.warn(
-            f"The plugin for target '{target}' is not set to always save data. " 
-            f"This is probably because the data can be trivially made from other data. "
-            f"The plugin depends on {plugin.depends_on}. Check if these are stored."
+                f"The plugin for target '{target}' is not set to always save data. "
+                "This is probably because the data can be trivially made from other data. "
+                f"The plugin depends on {plugin.depends_on}. Check if these are stored."
             )
 
         return False
