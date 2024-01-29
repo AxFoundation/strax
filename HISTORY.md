@@ -4,7 +4,7 @@
 * Update pymongo and solve the error of pytest by @dachengx in https://github.com/AxFoundation/strax/pull/791
 
 
-**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.5.6
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.6.0
 
 
 1.5.5 / 2023-12-21

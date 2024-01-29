@@ -26,9 +26,6 @@ class DownChunkingPlugin(Plugin):
                 "currently does not support parallel processing."
             )
 
-    def iter(self, iters, executor=None):
-        return super().iter(iters, executor)
-
     def _iter_compute(self, chunk_i, **inputs_merged):
         return self.do_compute(chunk_i=chunk_i, **inputs_merged)
 

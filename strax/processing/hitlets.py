@@ -39,7 +39,7 @@ def create_hitlets_from_hits(
     if chunk_end is None:
         chunk_end = np.iinfo(np.int64).max
 
-    # Merge concatenate overlapping  within a channel. This is important
+    # Merge concatenate overlapping within a channel. This is important
     # in case hits were split by record boundaries. In case we
     # accidentally concatenate two PMT signals we split them later again.
     hits = strax.concat_overlapping_hits(
