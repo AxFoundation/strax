@@ -2355,7 +2355,8 @@ select_docs = """
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
-get_docs = """
+get_docs = (
+    """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
 :param save: extra data types you would like to save
@@ -2373,7 +2374,9 @@ get_docs = """
 :param run_id_as_bytes: Boolean if true uses byte string instead of an
     unicode string added to a multi-run array. This can save a lot of
     memory when loading many runs.
-""" + select_docs
+"""
+    + select_docs
+)
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)

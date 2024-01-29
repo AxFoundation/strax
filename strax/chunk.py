@@ -107,8 +107,7 @@ class Chunk:
         return (
             f"[{self.run_id}.{self.data_type}: "
             f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items, "
-            + "{0:.1f} MB/s]".format(self._mbs())
+            f"{len(self)} items, " + "{0:.1f} MB/s]".format(self._mbs())
         )
 
     @property
