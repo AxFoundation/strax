@@ -1997,7 +1997,7 @@ class Context:
         if isinstance(save_when, immutabledict):
             save_when = save_when[target]
 
-        if save_when < 3: # 3 is SaveWhen.ALWAYS
+        if save_when < strax.SaveWhen.ALWAYS:
             warnings.warn(
             f"The plugin for target '{target}' is not set to always save data. " 
             f"This is probably because the data can be trivially made from other data. "
