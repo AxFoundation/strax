@@ -20,6 +20,7 @@ from .plugins import *
 
 from .mailbox import *
 from .processor import *
+from .processors import *
 from .context import *
 from .run_selection import *
 from .corrections import *
