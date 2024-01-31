@@ -392,8 +392,9 @@ def define_run(
     tags = set()
     modes = set()
     sources = set()
+    comments = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source"])
+        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source", "comments"])
         doc.setdefault(
             "tags",
             [
@@ -402,8 +403,15 @@ def define_run(
         )
         doc.setdefault("mode", "")
         doc.setdefault("source", "")
+        doc.setdefault(
+            "comments",
+            [
+                {"comment": ""},
+            ],
+        )
 
         tags |= set([tag["name"] for tag in doc["tags"]])
+        comments |= set([comment["comment"] for comment in doc["comments"]])
 
         modes |= set(strax.to_str_tuple(doc["mode"]))
         sources |= set(strax.to_str_tuple(doc["source"]))
@@ -421,9 +429,10 @@ def define_run(
         keys.append(_subrunid)
         starts.append(run_doc_start)
 
-    run_md["tags"] = tuple(tags)
     run_md["mode"] = tuple(modes)
     run_md["source"] = tuple(sources)
+    run_md["tags"] = [{"name": tag} for tag in tags]
+    run_md["comments"] = [{"comment": comment} for comment in comments]
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
