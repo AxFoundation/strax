@@ -393,10 +393,13 @@ class Context:
         all_opts = set().union(
             *[pc.takes_config.keys() for pc in self._plugin_class_registry.values()]
         )
+        waiting_for = []
         for k in self.config:
             if not (k in all_opts or k in self.context_config["free_options"]):
                 self.log.warning(f"Option {k} purged from context config as it is not used.")
-                del self.config[k]
+                waiting_for.append(k)
+        for k in waiting_for:
+            del self.config[k]
 
     def deregister_plugins_with_missing_dependencies(self):
         """Deregister plugins in case a data_type the plugin depends on is not provided by any other
