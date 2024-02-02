@@ -307,6 +307,13 @@ class TestContext(unittest.TestCase):
         st.deregister_plugins_with_missing_dependencies()
         assert st._plugin_class_registry.pop("peaks", None) is None
 
+    def test_purge_configs(self):
+        """Tests if config purging is working:"""
+        st = self.get_context(True)
+        st.set_config({"you_will_not_use_this_config": 42})
+        st.purge_unused_configs()
+        assert st.config.get("you_will_not_use_this_config", None) is None
+
     def get_context(self, use_defaults, **kwargs):
         """Get simple context where we have one mock run in the only storage frontend."""
         assert isinstance(use_defaults, bool)
