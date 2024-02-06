@@ -1990,6 +1990,26 @@ class Context:
         # None of the frontends has the data
         return False
 
+    def find_stored_frontend(self, run_id, target):
+        """Return the frontends that has the data for run_id and targets.
+
+        If target is a tuple or list, return the frontends that has all the data types in the
+        target.
+
+        """
+
+        if isinstance(target, (tuple, list)):
+            if len(target) == 0:
+                raise ValueError("Cannot find stored frontend for empty target!")
+            frontends_list = [self.find_stored_frontend(run_id, t) for t in target]
+            return list(set.intersection(*map(set, frontends_list)))
+
+        frontends = []
+        for sf in self._sorted_storage:
+            if self._is_stored_in_sf(run_id, target, sf):
+                frontends.append(sf)
+        return frontends
+
     def _check_forbidden(self):
         """Check that the forbid_creation_of config is of tuple type.
 
