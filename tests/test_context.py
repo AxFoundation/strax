@@ -178,6 +178,8 @@ def test_copy_to_frontend():
 
             # Add the second frontend
             context.storage += [strax.DataDirectory(temp_dir_2)]
+            # Test get_source_sf
+            context.get_source_sf(run_id, ["records", "records"])
             context.copy_to_frontend(run_id, "records", target_compressor="lz4")
 
             # Make sure both frontends have the same data.
