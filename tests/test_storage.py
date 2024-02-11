@@ -165,7 +165,7 @@ class TestStorageType(TestCase):
             #     self.assertNotEqual(len_from_compare, len_from_main_st)
 
     def test_check_chunk_n(self):
-        """Check that check_chunk_n can detect when metadata is lying."""
+        """Check that StorageBackend detects when metadata is lying."""
         st, frontend_setup = self.get_st_and_fill_frontends()
 
         sf = st.storage[0]
