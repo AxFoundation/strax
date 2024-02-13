@@ -525,13 +525,17 @@ def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
         patterns = [patterns]
 
     for i, tags in enumerate(dsets.tags):
-        result[i] = any([
-            any([
-                _tag_match(tag, pattern, pattern_type, ignore_underscore)
-                for tag in tags.split(",")
-                for pattern in patterns
-            ])
-        ])
+        result[i] = any(
+            [
+                any(
+                    [
+                        _tag_match(tag, pattern, pattern_type, ignore_underscore)
+                        for tag in tags.split(",")
+                        for pattern in patterns
+                    ]
+                )
+            ]
+        )
 
     return result
 

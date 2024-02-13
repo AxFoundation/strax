@@ -634,11 +634,13 @@ class Context:
         """
         self._base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        self._base_hash_on_config.update({
-            data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
-            for data_type, plugin in self._plugin_class_registry.items()
-            if not data_type.startswith("_temp_")
-        })
+        self._base_hash_on_config.update(
+            {
+                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+                for data_type, plugin in self._plugin_class_registry.items()
+                if not data_type.startswith("_temp_")
+            }
+        )
         return strax.deterministic_hash(self._base_hash_on_config)
 
     def _plugins_are_cached(
@@ -2324,16 +2326,18 @@ class Context:
             version
 
         """
-        hashes = set([
-            (
-                data_type,
-                self.key_for(runid, data_type).lineage_hash,
-                self.get_save_when(data_type),
-                plugin.__version__,
-            )
-            for plugin in self._plugin_class_registry.values()
-            for data_type in plugin.provides
-        ])
+        hashes = set(
+            [
+                (
+                    data_type,
+                    self.key_for(runid, data_type).lineage_hash,
+                    self.get_save_when(data_type),
+                    plugin.__version__,
+                )
+                for plugin in self._plugin_class_registry.values()
+                for data_type in plugin.provides
+            ]
+        )
 
         return {
             data_type: dict(hash=_hash, save_when=save_when.name, version=version)

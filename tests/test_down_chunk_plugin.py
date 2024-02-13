@@ -36,10 +36,12 @@ class TestContext(unittest.TestCase):
         _chunks_are_downsampled = len(chunks_records) * 2 == len(chunks_records_down_chunked)
         assert _chunks_are_downsampled
 
-        _chunks_are_continues = np.all([
-            chunks_records_down_chunked[i]["end"] == chunks_records_down_chunked[i + 1]["start"]
-            for i in range(len(chunks_records_down_chunked) - 1)
-        ])
+        _chunks_are_continues = np.all(
+            [
+                chunks_records_down_chunked[i]["end"] == chunks_records_down_chunked[i + 1]["start"]
+                for i in range(len(chunks_records_down_chunked) - 1)
+            ]
+        )
         assert _chunks_are_continues
 
     def test_down_chunking_multi_processing(self):
