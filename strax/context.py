@@ -2085,7 +2085,7 @@ class Context:
             target_sf = [self.storage[target_frontend_id]]
 
         # Figure out which of the frontends has the data. Raise error when none
-        source_sf = self._get_source_sf(run_id, target, should_exist=True)
+        source_sf = self.get_source_sf(run_id, target, should_exist=True)[0]
 
         # Keep frontends that:
         #  1. don't already have the data; and
@@ -2275,22 +2275,37 @@ class Context:
         except strax.DataNotAvailable:
             return False
 
-    def _get_source_sf(self, run_id, target, should_exist=False):
-        """Get the source storage frontend for a given run_id and target.
+    def get_source_sf(self, run_id, target, should_exist=False):
+        """Get the source storage frontends for a given run_id and target.
 
         :param run_id, target: run_id, target
         :param should_exist: Raise a ValueError if we cannot find one (e.g. we already checked the
             data is stored)
-        :return: strax.StorageFrontend or None (when raise_error is False)
+        :return: list of strax.StorageFrontend (when should_exist is False)
 
         """
+        if isinstance(target, (tuple, list)):
+            if len(target) == 0:
+                raise ValueError("Cannot find stored frontend for empty target!")
+            frontends_list = [
+                self.get_source_sf(
+                    run_id,
+                    t,
+                    should_exist=should_exist,
+                )
+                for t in target
+            ]
+            return list(set.intersection(*map(set, frontends_list)))
+
+        frontends = []
         for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
-                return sf
-        if should_exist:
+                frontends.append(sf)
+        if should_exist and not frontends:
             raise ValueError(
                 "This cannot happen, we just checked that this run should be stored?!?"
             )
+        return frontends
 
     def get_save_when(self, target: str) -> ty.Union[strax.SaveWhen, int]:
         """For a given plugin, get the save when attribute either being a dict or a number."""
@@ -2355,7 +2370,8 @@ select_docs = """
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
-get_docs = """
+get_docs = (
+    """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
 :param save: extra data types you would like to save
@@ -2373,7 +2389,9 @@ get_docs = """
 :param run_id_as_bytes: Boolean if true uses byte string instead of an
     unicode string added to a multi-run array. This can save a lot of
     memory when loading many runs.
-""" + select_docs
+"""
+    + select_docs
+)
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)
