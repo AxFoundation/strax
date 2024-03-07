@@ -166,10 +166,13 @@ class StorageFrontend:
         # List the relevant attributes ('path' is actually for the
         # strax.DataDirectory but it makes more sense to put it here).
         attributes = ("readonly", "path", "exclude", "take_only")
-        representation = f"{self.__class__.__module__}.{self.__class__.__name__}"
+        representation = ""
         for attr in attributes:
             if hasattr(self, attr) and getattr(self, attr):
                 representation += f", {attr}: {getattr(self, attr)}"
+        if representation:
+            representation = " (" + representation[2:] + ")"
+        representation = f"{self.__class__.__module__}.{self.__class__.__name__}" + representation
         return representation
 
     def loader(
