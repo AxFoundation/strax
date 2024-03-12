@@ -66,7 +66,7 @@ def keys_for_runs(
         return [self.key_for(r, target) for r in run_ids]
     elif len(run_ids):
         # Get the lineage once, for the context specifies that the
-        # defaults  may not change!
+        # defaults may not change!
         p = self._get_plugins((target,), run_ids[0])[target]
         return [strax.DataKey(r, target, p.lineage) for r in run_ids]
     else:
@@ -525,13 +525,17 @@ def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
         patterns = [patterns]
 
     for i, tags in enumerate(dsets.tags):
-        result[i] = any([
-            any([
-                _tag_match(tag, pattern, pattern_type, ignore_underscore)
-                for tag in tags.split(",")
-                for pattern in patterns
-            ])
-        ])
+        result[i] = any(
+            [
+                any(
+                    [
+                        _tag_match(tag, pattern, pattern_type, ignore_underscore)
+                        for tag in tags.split(",")
+                        for pattern in patterns
+                    ]
+                )
+            ]
+        )
 
     return result
 

@@ -1,10 +1,22 @@
+1.6.1 / 2024-02-17
+---------------------
+* Remove a redundant function and fix some style by @dachengx in https://github.com/AxFoundation/strax/pull/795
+* Find the frontends which stored the targets by @dachengx in https://github.com/AxFoundation/strax/pull/802
+* Simpler chunk length check, avoid recursion limit crash by @JelleAalbers in https://github.com/AxFoundation/strax/pull/803
+* Deprecate the usage of `XENONnT/ax_env` by @dachengx in https://github.com/AxFoundation/strax/pull/804
+* Add a function to directly load file from strax folder by @dachengx in https://github.com/AxFoundation/strax/pull/801
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.0...v1.6.1
+
+
 1.6.0 / 2024-01-15
 ---------------------
 * `np.float` is deprecated by @dachengx in https://github.com/AxFoundation/strax/pull/789
 * Update pymongo and solve the error of pytest by @dachengx in https://github.com/AxFoundation/strax/pull/791
 
 
-**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.5.6
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.6.0
 
 
 1.5.5 / 2023-12-21

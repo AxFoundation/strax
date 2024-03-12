@@ -274,7 +274,7 @@ class RecordsWithTimeStructure(Records):
 
 
 class DownSampleRecords(strax.DownChunkingPlugin):
-    """PLugin to test the downsampling of Chunks during compute.
+    """Plugin to test the downsampling of Chunks during compute.
 
     Needed for simulations.
 

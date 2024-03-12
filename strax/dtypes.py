@@ -234,7 +234,7 @@ def copy_to_buffer(
     source: np.ndarray, buffer: np.ndarray, func_name: str, field_names: Optional[Tuple[str]] = None
 ):
     """Copy the data from the source to the destination e.g. raw_records to records. To this end, we
-    dynamically create the  njitted function with the name 'func_name' (should start with "_").
+    dynamically create the njitted function with the name 'func_name' (should start with "_").
 
     :param source: array of input
     :param buffer: array of buffer to fill with values from input

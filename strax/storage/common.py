@@ -166,10 +166,13 @@ class StorageFrontend:
         # List the relevant attributes ('path' is actually for the
         # strax.DataDirectory but it makes more sense to put it here).
         attributes = ("readonly", "path", "exclude", "take_only")
-        representation = f"{self.__class__.__module__}.{self.__class__.__name__}"
+        representation = ""
         for attr in attributes:
             if hasattr(self, attr) and getattr(self, attr):
                 representation += f", {attr}: {getattr(self, attr)}"
+        if representation:
+            representation = " (" + representation[2:] + ")"
+        representation = f"{self.__class__.__module__}.{self.__class__.__name__}" + representation
         return representation
 
     def loader(
@@ -429,13 +432,6 @@ class StorageBackend:
 
     """
 
-    def __new__(cls, *args, **kwargs):
-        """Mandatorily wrap _read_chunk in a check_chunk_n decorator."""
-        if "_read_chunk" in cls.__dict__:
-            method = getattr(cls, "_read_chunk")
-            setattr(cls, "_read_chunk", strax.check_chunk_n(method))
-        return super(StorageBackend, cls).__new__(cls)
-
     def loader(self, backend_key, time_range=None, chunk_number=None, executor=None):
         """Iterates over strax data in backend_key.
 
@@ -531,6 +527,12 @@ class StorageBackend:
         else:
             data = self._read_chunk(
                 backend_key, chunk_info=chunk_info, dtype=dtype, compressor=metadata["compressor"]
+            )
+
+        if len(data) != chunk_info["n"]:
+            raise strax.DataCorrupted(
+                f"Chunk {chunk_info['filename']} of {chunk_info['run_id']} has {len(data)} items, "
+                f"but chunk_info {chunk_info} says {chunk_info['n']}"
             )
 
         _is_superrun = chunk_info["run_id"].startswith("_")
