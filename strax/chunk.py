@@ -1,5 +1,4 @@
 import typing as ty
-from functools import wraps
 
 import numpy as np
 import numba
@@ -107,8 +106,7 @@ class Chunk:
         return (
             f"[{self.run_id}.{self.data_type}: "
             f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items, "
-            + "{0:.1f} MB/s]".format(self._mbs())
+            f"{len(self)} items, " + "{0:.1f} MB/s]".format(self._mbs())
         )
 
     @property
@@ -420,26 +418,3 @@ def _update_subruns_in_chunk(chunks):
             else:
                 subruns[subrun_id] = subrun_start_end
     return subruns
-
-
-@export
-def check_chunk_n(f):
-    @wraps(f)
-    def wrapper(self, *args, **kwargs):
-        # assume chunk_info is the second argument
-        if "chunk_info" not in kwargs:
-            raise ValueError(
-                "chunk_info not passed to function, check_chunk_n ",
-                "can only be used with functions that take chunk_info as an argument, ",
-                "usually it is the strax.StorageBackend._read_chunk method.",
-            )
-        chunk_info = kwargs["chunk_info"]
-        chunk = f(self, *args, **kwargs)
-        if len(chunk) != chunk_info["n"]:
-            raise strax.DataCorrupted(
-                f"Chunk {chunk_info['filename']} of {chunk_info['run_id']} has {len(chunk)} items, "
-                f"but chunk_info {chunk_info} says {chunk_info['n']}"
-            )
-        return chunk
-
-    return wrapper

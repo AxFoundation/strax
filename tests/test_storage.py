@@ -131,6 +131,17 @@ class TestStorageType(TestCase):
 
         return (strax.Context(storage=frontends, **self.context_kwargs), frontend_setup)
 
+    def test_dry_load_files(self):
+        """Test that dry_load_files can load the data."""
+        st, frontend_setup = self.get_st_and_fill_frontends()
+        for sf in st.storage:
+            key = st.key_for(self.run_id, self.target)
+            dirname = os.path.join(sf.path, str(key))
+            strax.io.dry_load_files(dirname)
+            strax.io.dry_load_files(dirname, 0)
+            with self.assertRaises(ValueError):
+                strax.io.dry_load_files(dirname, 99)
+
     def test_close_goes_first_md(self):
         """Let's see that if we get the meta-data, it's from the one with the lowest remoteness.
 
@@ -165,7 +176,7 @@ class TestStorageType(TestCase):
             #     self.assertNotEqual(len_from_compare, len_from_main_st)
 
     def test_check_chunk_n(self):
-        """Check that check_chunk_n can detect when metadata is lying."""
+        """Check that StorageBackend detects when metadata is lying."""
         st, frontend_setup = self.get_st_and_fill_frontends()
 
         sf = st.storage[0]

@@ -2,11 +2,13 @@
 
 import os
 import bz2
+import json
 
 import numpy as np
 import blosc
 import zstd
 import lz4.frame as lz4
+from ast import literal_eval
 
 import strax
 
@@ -95,3 +97,38 @@ def _compress_blosc(data):
 
 
 COMPRESSORS["blosc"]["compress"] = _compress_blosc
+
+
+@export
+def dry_load_files(dirname, chunk_number=None):
+    prefix = strax.storage.files.dirname_to_prefix(dirname)
+    metadata_json = f"{prefix}-metadata.json"
+    md_path = os.path.join(dirname, metadata_json)
+
+    with open(md_path, mode="r") as f:
+        metadata = json.loads(f.read())
+
+    dtype = literal_eval(metadata["dtype"])
+
+    results = []
+    if chunk_number is None:
+        for chunk_info in metadata["chunks"]:
+            if chunk_info["n"] != 0:
+                results.append(
+                    load_file(
+                        os.path.join(dirname, f"{prefix}-{chunk_info['chunk_i']:06d}"),
+                        metadata["compressor"],
+                        dtype,
+                    )
+                )
+        results = np.hstack(results)
+    else:
+        if chunk_number >= len(metadata["chunks"]):
+            raise ValueError(f"Chunk {chunk_number:06d} does not exist in {dirname}.")
+        if metadata["chunks"][chunk_number]["n"] != 0:
+            results = load_file(
+                os.path.join(dirname, f"{prefix}-{chunk_number:06d}"),
+                metadata["compressor"],
+                dtype,
+            )
+    return results if len(results) else np.empty(0, dtype)
