@@ -1981,7 +1981,7 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, **kwargs):
+    def is_stored(self, run_id, target, detailed=True, **kwargs):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -2003,6 +2003,31 @@ class Context:
             if self._is_stored_in_sf(run_id, target, sf):
                 return True
         # None of the frontends has the data
+
+        # Before returning False, check if the data can be made trivially
+        plugin = self._plugin_class_registry[target]
+        save_when = plugin.save_when
+
+        # Mutli-target plugins provide a save_when per target
+        if isinstance(save_when, immutabledict):
+            save_when = save_when[target]
+
+        if save_when < strax.SaveWhen.ALWAYS and detailed:
+            msg = (
+                f"{target} is not set to always be saved. "
+                "This is probably because it can be trivially made from other data. "
+            )
+
+            try:
+                components = self.get_components(run_id, target)
+                targets_plugin_made_from = tuple(components.loaders.keys())
+                msg += f"{target} can be made from: {targets_plugin_made_from}."
+            except strax.DataNotAvailable as e:
+                # Warn that data cannot be made
+                msg += str(e)
+
+            warnings.warn(msg)
+
         return False
 
     def _check_forbidden(self):
