@@ -2013,11 +2013,20 @@ class Context:
             save_when = save_when[target]
 
         if save_when < strax.SaveWhen.ALWAYS:
-            warnings.warn(
-                f"The plugin for target '{target}' is not set to always save data. "
-                "This is probably because the data can be trivially made from other data. "
-                f"The plugin depends on {plugin.depends_on}. Check if these are stored."
+            msg = (
+                f"{target} is not set to always be saved. "
+                "This is probably because it can be trivially made from other data. "
             )
+
+            try:
+                components = self.get_components(run_id, target)
+                targets_plugin_made_from = tuple(components.loaders.keys())
+                msg += f"{target} can be made from: {targets_plugin_made_from}."
+            except strax.DataNotAvailable as e:
+                # Warn that data cannot be made
+                msg += str(e)
+
+            warnings.warn(msg)
 
         return False
 
