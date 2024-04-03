@@ -7,3 +7,4 @@ graphviz
 m2r
 mistune==0.8.4
 urllib3==2.2.0
+lxml_html_clean
