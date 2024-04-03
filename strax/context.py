@@ -1981,7 +1981,7 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, **kwargs):
+    def is_stored(self, run_id, target, detailed=True, **kwargs):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -2012,7 +2012,7 @@ class Context:
         if isinstance(save_when, immutabledict):
             save_when = save_when[target]
 
-        if save_when < strax.SaveWhen.ALWAYS:
+        if save_when < strax.SaveWhen.ALWAYS and detailed:
             msg = (
                 f"{target} is not set to always be saved. "
                 "This is probably because it can be trivially made from other data. "
