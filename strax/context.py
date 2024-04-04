@@ -1981,7 +1981,7 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, detailed=True, **kwargs):
+    def is_stored(self, run_id, target, detailed=False, **kwargs):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -2013,20 +2013,11 @@ class Context:
             save_when = save_when[target]
 
         if save_when < strax.SaveWhen.ALWAYS and detailed:
-            msg = (
+            warnings.warn(
                 f"{target} is not set to always be saved. "
                 "This is probably because it can be trivially made from other data. "
+                f"{target} depends on {plugin.depends_on}. Check if these are stored."
             )
-
-            try:
-                components = self.get_components(run_id, target)
-                targets_plugin_made_from = tuple(components.loaders.keys())
-                msg += f"{target} can be made from: {targets_plugin_made_from}."
-            except strax.DataNotAvailable as e:
-                # Warn that data cannot be made
-                msg += str(e)
-
-            warnings.warn(msg)
 
         return False
 
