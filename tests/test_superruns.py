@@ -251,17 +251,17 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_superruns_and_save_when(self):
         """Tests if only the highest level for save_when.EXPLICIT plugins is stored."""
-        assert not self.context.is_stored(self.superrun_name, "peaks", detailed=False)
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks", detailed=False)
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks_extension", detailed=False)
-        assert not self.context.is_stored(self.superrun_name, "peaks_extension", detailed=False)
+        assert not self.context.is_stored(self.superrun_name, "peaks")
+        assert not self.context.is_stored(self.subrun_ids[0], "peaks")
+        assert not self.context.is_stored(self.subrun_ids[0], "peaks_extension")
+        assert not self.context.is_stored(self.superrun_name, "peaks_extension")
         self.context._plugin_class_registry["peaks"].save_when = strax.SaveWhen.EXPLICIT
 
         self.context.make(self.superrun_name, "peaks_extension", save=("peaks_extension",))
-        assert not self.context.is_stored(self.superrun_name, "peaks", detailed=False)
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks", detailed=False)
-        assert self.context.is_stored(self.superrun_name, "peaks_extension", detailed=False)
-        assert self.context.is_stored(self.subrun_ids[0], "peaks_extension", detailed=False)
+        assert not self.context.is_stored(self.superrun_name, "peaks")
+        assert not self.context.is_stored(self.subrun_ids[0], "peaks")
+        assert self.context.is_stored(self.superrun_name, "peaks_extension")
+        assert self.context.is_stored(self.subrun_ids[0], "peaks_extension")
 
     def test_storing_with_second_sf(self):
         """Tests if only superrun is written to new sf if subruns already exist in different sf."""
