@@ -1547,10 +1547,14 @@ class Context:
         else:
             pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
         # infs are ignored when calculating the mean rate
-        mbs = np.mean(np.array(pbar.mbs)[np.isfinite(pbar.mbs)]) if np.any(np.isfinite(pbar.mbs)) else np.inf
+        mbs = (
+            np.mean(np.array(pbar.mbs)[np.isfinite(pbar.mbs)])
+            if np.any(np.isfinite(pbar.mbs))
+            else np.inf
+        )
         if np.isinf(mbs):
             # if the rate is inf, don't add rate to the postfix
-            rate = ''
+            rate = ""
         elif mbs < 1:
             rate = f"{mbs*1000:.1f} kB/s"
         else:
