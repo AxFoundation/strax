@@ -1447,7 +1447,7 @@ class Context:
                 run_id, targets=targets, progress_bar=progress_bar
             )
             with _p as pbar:
-                pbar.last_print_t = time.perf_counter()
+                pbar.last_print_t = time.time()
                 pbar.mbs = []
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
@@ -1540,10 +1540,18 @@ class Context:
             # have data yet e.g. allow_incomplete == True.
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
-        seconds_per_chunk = time.perf_counter() - pbar.last_print_t
-        pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
-        mbs = np.mean(pbar.mbs)
-        if mbs < 1:
+        seconds_per_chunk = time.time() - pbar.last_print_t
+        # If seconds_per_chunk is 0, appending inf to the list of rates
+        if seconds_per_chunk == 0:
+            pbar.mbs.append(np.inf)
+        else:
+            pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
+        # infs are ignored when calculating the mean rate
+        mbs = np.mean(np.array(pbar.mbs)[np.isfinite(pbar.mbs)]) if np.any(np.isfinite(pbar.mbs)) else np.inf
+        if np.isinf(mbs):
+            # if the rate is inf, don't add rate to the postfix
+            rate = ''
+        elif mbs < 1:
             rate = f"{mbs*1000:.1f} kB/s"
         else:
             rate = f"{mbs:.1f} MB/s"
