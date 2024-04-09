@@ -1447,7 +1447,7 @@ class Context:
                 run_id, targets=targets, progress_bar=progress_bar
             )
             with _p as pbar:
-                pbar.last_print_t = time.time()
+                pbar.strax_print_time = time.perf_counter()
                 pbar.mbs = []
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
@@ -1470,6 +1470,7 @@ class Context:
                     self._update_progress_bar(
                         pbar, t_start, t_end, n_chunks, result.end, result.nbytes
                     )
+                    pbar.strax_print_time = time.perf_counter()
                     yield result
             _p.close()
 
@@ -1540,7 +1541,7 @@ class Context:
             # have data yet e.g. allow_incomplete == True.
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
-        seconds_per_chunk = time.time() - pbar.last_print_t
+        seconds_per_chunk = time.perf_counter() - pbar.strax_print_time
         pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
         mbs = np.mean(pbar.mbs)
         if mbs < 1:
