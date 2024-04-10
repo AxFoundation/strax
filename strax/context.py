@@ -413,7 +413,7 @@ class Context:
                 all_provides |= set(p.provides)
 
             for p_key, p in self._plugin_class_registry.items():
-                requires = set(strax.to_str_tuple(p.depends_on))
+                requires = set(strax.to_str_tuple(p().depends_on))
                 if not requires.issubset(all_provides):
                     plugins_to_deregister.append(p_key)
 
