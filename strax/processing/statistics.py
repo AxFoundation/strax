@@ -2,16 +2,15 @@ import numpy as np
 import numba
 
 import strax
+
 export, __all__ = strax.exporter()
 
 
 @export
 @numba.njit(cache=True)
 def highest_density_region(data, fractions_desired, only_upper_part=False, _buffer_size=10):
-    """
-    Computes for a given sampled distribution the highest density region
-    of the desired fractions.
-    Does not assume anything on the normalisation of the data.
+    """Computes for a given sampled distribution the highest density region of the desired
+    fractions. Does not assume anything on the normalisation of the data.
 
     :param data: Sampled distribution
     :param fractions_desired: numpy.array Area/probability for which
@@ -27,6 +26,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
         Also goes by the name highest posterior density. Please note,
         that the right edge corresponds to the right side of the sample.
         Hence the corresponding index is -= 1.
+
     """
     fi = 0  # number of fractions seen
     # Buffer for the result if we find more then _buffer_size edges the function fails.
@@ -36,11 +36,13 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
 
     area_tot = np.sum(data)
     if area_tot <= 0:
-        raise ValueError('Highest density regions are not defined for distributions '
-                         'with a total probability of less-equal 0.')
+        raise ValueError(
+            "Highest density regions are not defined for distributions "
+            "with a total probability of less-equal 0."
+        )
 
     # Need an index which sorted by amplitude
-    max_to_min = np.argsort(data, kind='mergesort')[::-1]
+    max_to_min = np.argsort(data, kind="mergesort")[::-1]
 
     lowest_sample_seen = np.inf
     for j in range(1, len(data)):
@@ -61,7 +63,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
             # If we do not exceed go to the next sample.
             continue
 
-        for fraction_desired in fractions_desired[fi:fi + np.sum(m)]:
+        for fraction_desired in fractions_desired[fi : fi + np.sum(m)]:
             # Since we loop always to the height of the next highest sample
             # it might happen that we overshoot the desired fraction. Similar
             # to the area deciles algorithm we have now to figure out at which
@@ -112,7 +114,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
             # Found all fractions so we are done
             return res, res_amp
 
-    # If we end up here this might be due to an offset 
+    # If we end up here this might be due to an offset
     # of the distribution with respect to zero. In that case it can
     # happen that we do not find all desired fractions.
     # Hence we have to enforce to compute the last step from the last
@@ -120,9 +122,9 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
     # Left and right edge is by definition 0 and len(data):
     res[fi:, 0, 0] = 0
     res[fi:, 1, 0] = len(data)
-    # Now we have to compute the heights for the fractions we have not 
+    # Now we have to compute the heights for the fractions we have not
     # seen yet, since lowest_sample_seen == 0 and j == len(data)
     # the formula above reduces to:
     for ind, fraction_desired in enumerate(fractions_desired[fi:]):
-        res_amp[fi+ind] = (1-fraction_desired) * np.sum(data)/len(data)
+        res_amp[fi + ind] = (1 - fraction_desired) * np.sum(data) / len(data)
     return res, res_amp

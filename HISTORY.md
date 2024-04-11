@@ -1,3 +1,80 @@
+1.6.2 / 2024-04-04
+---------------------
+* Use parentheses to separate the class name and attributes in the representation of StorageFrontend by @dachengx in https://github.com/AxFoundation/strax/pull/809
+* Specifically install `lxml_html_clean` by @dachengx in https://github.com/AxFoundation/strax/pull/812
+* Add a function to purge unused configs by @dachengx in https://github.com/AxFoundation/strax/pull/800
+* Warn if user checks is_stored for plugin not always saved by @cfuselli in https://github.com/AxFoundation/strax/pull/796
+* Bump urllib3 from 2.2.0 to 2.2.1 in /extra_requirements by @dependabot in https://github.com/AxFoundation/strax/pull/808
+* Do not call `get_components` in `is_stored` by @dachengx in https://github.com/AxFoundation/strax/pull/813
+
+New Contributors
+* @cfuselli made their first contribution in https://github.com/AxFoundation/strax/pull/796
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.1...v1.6.2
+
+
+1.6.1 / 2024-02-17
+---------------------
+* Remove a redundant function and fix some style by @dachengx in https://github.com/AxFoundation/strax/pull/795
+* Find the frontends which stored the targets by @dachengx in https://github.com/AxFoundation/strax/pull/802
+* Simpler chunk length check, avoid recursion limit crash by @JelleAalbers in https://github.com/AxFoundation/strax/pull/803
+* Deprecate the usage of `XENONnT/ax_env` by @dachengx in https://github.com/AxFoundation/strax/pull/804
+* Add a function to directly load file from strax folder by @dachengx in https://github.com/AxFoundation/strax/pull/801
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.0...v1.6.1
+
+
+1.6.0 / 2024-01-15
+---------------------
+* `np.float` is deprecated by @dachengx in https://github.com/AxFoundation/strax/pull/789
+* Update pymongo and solve the error of pytest by @dachengx in https://github.com/AxFoundation/strax/pull/791
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.5...v1.6.0
+
+
+1.5.5 / 2023-12-21
+---------------------
+* Update readthedocs configuration by @dachengx in https://github.com/AxFoundation/strax/pull/763
+* Proposal to use pre-commit for continuous integration by @dachengx in https://github.com/AxFoundation/strax/pull/762
+* Update authorship and copyright info by @JelleAalbers in https://github.com/AxFoundation/strax/pull/771
+* Guard hitlet entropy test from numerical errors by @JelleAalbers in https://github.com/AxFoundation/strax/pull/772
+* Deregister partially replaced multi-output plugins by @JelleAalbers in https://github.com/AxFoundation/strax/pull/775
+* Fix caching issue by @WenzDaniel in https://github.com/AxFoundation/strax/pull/768
+* Add chunk yielding plugin and tests by @WenzDaniel in https://github.com/AxFoundation/strax/pull/769
+* Avoid deprecated generated_jit by @JelleAalbers in https://github.com/AxFoundation/strax/pull/784
+* Also copy dps and remove redundant checks. by @WenzDaniel in https://github.com/AxFoundation/strax/pull/777
+* Add hot fix for copy_to_buffer by @WenzDaniel in https://github.com/AxFoundation/strax/pull/785
+* Upgrade compare-metadata function by @KaraMelih in https://github.com/AxFoundation/strax/pull/778
+* Add warning by @WenzDaniel in https://github.com/AxFoundation/strax/pull/776
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.4...v1.5.5
+
+
+1.5.4 / 2023-09-19
+---------------------
+* Split compare_metadata into utils.compare_meta by @dachengx in https://github.com/AxFoundation/strax/pull/754
+* Change endtime - time >= 0 to endtime >= time by @JYangQi00 in https://github.com/AxFoundation/strax/pull/756
+* Mandatorily wrap `_read_chunk` in a `check_chunk_n` decorator by @dachengx in https://github.com/AxFoundation/strax/pull/758
+
+New Contributors
+* @JYangQi00 made their first contribution in https://github.com/AxFoundation/strax/pull/756
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.3...v1.5.4
+
+
+1.5.3 / 2023-08-29
+---------------------
+* Add small selection functions by @WenzDaniel in https://github.com/AxFoundation/strax/pull/746
+* Patch plugin cache by @WenzDaniel in https://github.com/AxFoundation/strax/pull/748
+* Update version of urllib3, remove version control of deepdiff by @dachengx in https://github.com/AxFoundation/strax/pull/749
+* Check chunk size right after loading chunk by @dachengx in https://github.com/AxFoundation/strax/pull/752
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.5.2...v1.5.3
+
+
 1.5.2 / 2023-07-06
 ---------------------
 * Use warning also in `abs_time_to_prev_next_interval` by @dachengx in https://github.com/AxFoundation/strax/pull/738
@@ -90,10 +167,10 @@ New Contributors
 
 1.2.2 / 2022-05-11
 ---------------------
-- Add option to ignore errors in multirun loading (#653) 
+- Add option to ignore errors in multirun loading (#653)
 - Auto version, fix #217 (#689)
 - Add basics documentation - split Config and Plugin docs (#691)
-- Add n_hits comment in code (#692) 
+- Add n_hits comment in code (#692)
 - Rechunker script (#686)
 
 
@@ -106,7 +183,7 @@ New Contributors
 
 1.2.0 / 2022-03-09
 ---------------------
-- Added lone hit area to area per channel (#649) 
+- Added lone hit area to area per channel (#649)
 
 1.1.8 / 2022-03-08
 ---------------------
@@ -136,7 +213,7 @@ New Contributors
 - deprecate py3.6 py3.7 (#636)
 - remove deprecated function (#632)
 - Numba 0.55 (#634)
-  
+
 
 1.1.5 / 2022-01-10
 ---------------------
@@ -149,17 +226,17 @@ New Contributors
 1.1.4 / 2021-12-16
 ---------------------
 - Make truly HDR (#613)
-- Remove tight coincidence channel from data_type (#614) 
+- Remove tight coincidence channel from data_type (#614)
 
 
 1.1.3 / 2021-12-13
 ---------------------
--  Add mode and tags to superrun. (#593) 
--  cache deps (#595) 
--  Fix online monitor bug for only md stored (#596) 
+-  Add mode and tags to superrun. (#593)
+-  cache deps (#595)
+-  Fix online monitor bug for only md stored (#596)
 -  speedup get_source with lookupdict (#599)
 -  remove config warning and infer_dtype=False (#600)
--  Require pymongo 3.* (#611) 
+-  Require pymongo 3.* (#611)
 
 
 1.1.2 / 2021-11-19
@@ -175,7 +252,7 @@ New Contributors
 
 Notes:
  - PRs #569, #586, #587 may cause a lot of warnings for options
- 
+
 
 1.1.1 / 2021-10-27
 ---------------------
@@ -190,7 +267,7 @@ Notes:
 major / minor:
 
 - Fix hitlet splitting (#549)
-- Add tight channel (#551) 
+- Add tight channel (#551)
 
 patch:
 
@@ -198,15 +275,15 @@ patch:
 - Add drop column option (#530)
 - Remove context.apply_selection (#531)
 - Add option to support superruns for storage frontends. Adds test (#532)
-- Fix issue #536 (#537) 
+- Fix issue #536 (#537)
 - Two pbar patches (#538)
-- Add get_zarr method to context (#540) 
+- Add get_zarr method to context (#540)
 - Broken metadata error propagation (#541)
 - few tests for MongoStorage frontend (#542)
-- Fix caching (#545) 
+- Fix caching (#545)
 - dds information about failing chunk (#548)
-- remove rucio (#552) 
-- Allow loading SaveWhen.EXPLICIT time range selection (#553) 
+- remove rucio (#552)
+- Allow loading SaveWhen.EXPLICIT time range selection (#553)
 - Changes to savewhen behavior (#554)
 
 
@@ -252,7 +329,7 @@ patch:
 - Remove outdated files/configs (#462)
 - Remove overwrite from options (#467)
 
- 
+
 0.15.3 / 2021-06-03
 ---------------------
 - Match cached buffer chunk start times OverlapWindowPlugin (#450)
@@ -274,7 +351,7 @@ patch:
 ---------------------
 - Refactor hitlets (#430, #436)
 - Update classifiers for pipy #437
-- Allow Py39 in travis tests (#427) 
+- Allow Py39 in travis tests (#427)
 
 0.15.0 / 2021-04-16
 ---------------------
@@ -287,7 +364,7 @@ patch:
 
 0.14.0 / 2021-04-09
 ---------------------
-- Check data availability for single run (#416) 
+- Check data availability for single run (#416)
 
 0.13.11 / 2021-04-02
 ---------------------
@@ -323,7 +400,7 @@ patch:
 
 0.13.4 / 2021-01-22
 ---------------------
-- Nveto changes + highest density regions (#384) 
+- Nveto changes + highest density regions (#384)
 - Parse requirements for testing (#383)
 - Added keep_columns into docstring (#382)
 - remove slow operators from mongo storage (#382)
@@ -499,7 +576,7 @@ patch:
 ------------------
 - Small bugfixes:
   - Fixes for multi-output plugins
-  - Use frozendict for Plugin.takes_config 
+  - Use frozendict for Plugin.takes_config
 
 0.8.6 / 2020-01-17
 -------------------
