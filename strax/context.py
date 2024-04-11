@@ -413,7 +413,7 @@ class Context:
                 all_provides |= set(p.provides)
 
             for p_key, p in self._plugin_class_registry.items():
-                requires = set(strax.to_str_tuple(p.depends_on))
+                requires = set(strax.to_str_tuple(p().depends_on))
                 if not requires.issubset(all_provides):
                     plugins_to_deregister.append(p_key)
 
@@ -2408,6 +2408,8 @@ get_docs = (
     """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
+:param ignore_errors: Return the data for the runs that successfully loaded, even if some runs
+        failed executing.
 :param save: extra data types you would like to save
     to cache, if they occur in intermediate computations.
     Many plugins save automatically anyway.
