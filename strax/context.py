@@ -2408,6 +2408,8 @@ get_docs = (
     """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
+:param ignore_errors: Return the data for the runs that successfully loaded, even if some runs
+        failed executing.
 :param save: extra data types you would like to save
     to cache, if they occur in intermediate computations.
     Many plugins save automatically anyway.
