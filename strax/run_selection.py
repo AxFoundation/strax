@@ -205,7 +205,7 @@ def scan_runs(
     # this is kept for the case users directly call list_available
     for d in tqdm(
         check_available,
-        desc="Checking data availability scan_runs",
+        desc="Checking data availability",
         disable=not len(check_available),
     ):
         self.runs[d + "_available"] = np.in1d(self.runs.name.values, self.list_available(d))
@@ -297,7 +297,11 @@ def select_runs(
         set(list(strax.to_str_tuple(available)) + list(self.context_config["check_available"]))
     )
 
-    for d in tqdm(check_available, desc="Checking data availability"):
+    for d in tqdm(
+        check_available,
+        desc="Checking data availability",
+        disable=not len(check_available),
+    ):
         dsets[d + "_available"] = np.in1d(
             dsets.name.values, self.list_available(target=d, runs=dsets.name.values)
         )
