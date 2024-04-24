@@ -246,7 +246,7 @@ class ThreadedMailboxProcessor:
         self.mailboxes = dict(self.mailboxes)
         self.log.debug(
             f"Created the following mailboxes: {self.mailboxes} with the "
-            f"following threads: {[(d, m._threads) for d,m in self.mailboxes.items()]}"
+            f"following threads: {[(d, m._threads) for d, m in self.mailboxes.items()]}"
         )
 
     def iter(self):

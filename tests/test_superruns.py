@@ -232,7 +232,7 @@ class TestSuperRuns(unittest.TestCase):
         chunks = [chunk for chunk in self.context.get_iter("_superrun_test_rechunking", "records")]
         assert len(chunks) > 1, (
             "Number of chunks should be larger 1. "
-            f"{chunks[0].target_size_mb, chunks[0].nbytes/10**6}"
+            f"{chunks[0].target_size_mb, chunks[0].nbytes / 10**6}"
         )
         assert np.all(rr_superrun["time"] == rr_subruns["time"])
 

@@ -590,7 +590,7 @@ def multi_run(
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(
-                    f"Done with run_id: {_run_id} and {len(run_id_numpy)-tasks_done} are left."
+                    f"Done with run_id: {_run_id} and {len(run_id_numpy) - tasks_done} are left."
                 )
                 pbar.update(1)
                 if f.exception() is not None:
@@ -630,7 +630,7 @@ def multi_run(
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(
-                f"Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}"
+                f"Failures for {len(failures) / len(run_ids):.0%} of runs. Failed for: {failures}"
             )
         return final_result
 

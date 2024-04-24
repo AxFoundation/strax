@@ -86,7 +86,8 @@ class OverlapWindowPlugin(Plugin):
             chunk_starts_are_equal = len(unique_starts) == 1
             if chunk_starts_are_equal:
                 self.log.debug(
-                    f"Success after {try_counter}. Extra time = {cache_inputs_beyond-prev_split} ns"
+                    f"Success after {try_counter}. "
+                    f"Extra time = {cache_inputs_beyond - prev_split} ns"
                 )
                 break
             else:
