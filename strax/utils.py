@@ -671,6 +671,24 @@ def iter_chunk_meta(md):
 
 
 @export
+def parse_selection(x, selection):
+    """Parse a selection string into a mask that can be used to filter data.
+
+    :param selection: Query string, sequence of strings, or simple function to apply.
+    :return: Boolean indicating the selected items.
+
+    """
+    if hasattr(selection, "__call__"):
+        mask = selection(x)
+    else:
+        if isinstance(selection, (list, tuple)):
+            selection = " & ".join(f"({x})" for x in selection)
+
+        mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
+    return mask
+
+
+@export
 def apply_selection(
     x,
     selection=None,
@@ -722,15 +740,7 @@ def apply_selection(
         selection = selection_str
 
     if selection:
-        if hasattr(selection, "__call__"):
-            mask = selection(x)
-        else:
-            if isinstance(selection, (list, tuple)):
-                selection = " & ".join(f"({x})" for x in selection)
-
-            mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
-
-        x = x[mask]
+        x = x[parse_selection(x, selection)]
 
     if keep_columns:
         keep_columns = strax.to_str_tuple(keep_columns)
