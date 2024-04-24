@@ -590,7 +590,7 @@ def multi_run(
                 tasks_done += 1
                 _run_id = futures.pop(f)
                 log.debug(
-                    f"Done with run_id: {_run_id} and {len(run_id_numpy)-tasks_done} are left."
+                    f"Done with run_id: {_run_id} and {len(run_id_numpy) - tasks_done} are left."
                 )
                 pbar.update(1)
                 if f.exception() is not None:
@@ -630,7 +630,7 @@ def multi_run(
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(
-                f"Failures for {len(failures)/len(run_ids):.0%} of runs. Failed for: {failures}"
+                f"Failures for {len(failures) / len(run_ids):.0%} of runs. Failed for: {failures}"
             )
         return final_result
 
@@ -668,6 +668,24 @@ def iter_chunk_meta(md):
         c["n_from"] = _n_from
         c["n_to"] = _n_to
         yield c
+
+
+@export
+def parse_selection(x, selection):
+    """Parse a selection string into a mask that can be used to filter data.
+
+    :param selection: Query string, sequence of strings, or simple function to apply.
+    :return: Boolean indicating the selected items.
+
+    """
+    if hasattr(selection, "__call__"):
+        mask = selection(x)
+    else:
+        if isinstance(selection, (list, tuple)):
+            selection = " & ".join(f"({x})" for x in selection)
+
+        mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
+    return mask
 
 
 @export
@@ -722,15 +740,7 @@ def apply_selection(
         selection = selection_str
 
     if selection:
-        if hasattr(selection, "__call__"):
-            mask = selection(x)
-        else:
-            if isinstance(selection, (list, tuple)):
-                selection = " & ".join(f"({x})" for x in selection)
-
-            mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
-
-        x = x[mask]
+        x = x[parse_selection(x, selection)]
 
     if keep_columns:
         keep_columns = strax.to_str_tuple(keep_columns)

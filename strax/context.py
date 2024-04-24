@@ -1545,7 +1545,7 @@ class Context:
         pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
         mbs = np.mean(pbar.mbs)
         if mbs < 1:
-            rate = f"{mbs*1000:.1f} kB/s"
+            rate = f"{mbs * 1000:.1f} kB/s"
         else:
             rate = f"{mbs:.1f} MB/s"
         postfix = f"#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}"
