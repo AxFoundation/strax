@@ -334,7 +334,7 @@ def symmetric_moving_average(a, wing_width):
     """Return the moving average of a, over windows of length [2 * wing_width + 1] centered on each
     sample.
 
-    (i.e. the window covers each sample itself, plus a 'wing' of width  wing_width on either side)
+    (i.e. the window covers each sample itself, plus a 'wing' of width wing_width on either side)
 
     """
     if wing_width == 0:

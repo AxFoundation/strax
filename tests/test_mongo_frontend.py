@@ -138,10 +138,12 @@ class TestMongoFrontend(unittest.TestCase):
     def test_allow_incomplete(self):
         """Test loading incomplete data."""
         st_incomplete_allowed = self.st.new_context()
-        st_incomplete_allowed.set_context_config({
-            "allow_incomplete": True,
-            "forbid_creation_of": "*",
-        })
+        st_incomplete_allowed.set_context_config(
+            {
+                "allow_incomplete": True,
+                "forbid_creation_of": "*",
+            }
+        )
         assert not self.is_stored_in_mongo
         self.st.config["n_chunks"] = 3
 
@@ -191,10 +193,12 @@ class TestMongoFrontend(unittest.TestCase):
 
         """
         st_incomplete_allowed = self.st.new_context()
-        st_incomplete_allowed.set_context_config({
-            "allow_incomplete": True,
-            "forbid_creation_of": "*",
-        })
+        st_incomplete_allowed.set_context_config(
+            {
+                "allow_incomplete": True,
+                "forbid_creation_of": "*",
+            }
+        )
         assert not self.is_stored_in_mongo
         self.st.config["n_chunks"] = 3
 

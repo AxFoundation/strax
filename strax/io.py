@@ -2,11 +2,13 @@
 
 import os
 import bz2
+import json
 
 import numpy as np
 import blosc
 import zstd
 import lz4.frame as lz4
+from ast import literal_eval
 
 import strax
 
@@ -95,3 +97,46 @@ def _compress_blosc(data):
 
 
 COMPRESSORS["blosc"]["compress"] = _compress_blosc
+
+
+@export
+def dry_load_files(dirname, chunk_number=None):
+    prefix = strax.storage.files.dirname_to_prefix(dirname)
+    metadata_json = f"{prefix}-metadata.json"
+    md_path = os.path.join(dirname, metadata_json)
+
+    with open(md_path, mode="r") as f:
+        metadata = json.loads(f.read())
+
+    dtype = literal_eval(metadata["dtype"])
+
+    def load_chunk(chunk_info):
+        if chunk_info["n"] != 0:
+            data = load_file(
+                os.path.join(dirname, f"{prefix}-{chunk_info['chunk_i']:06d}"),
+                metadata["compressor"],
+                dtype,
+            )
+            if len(data) != chunk_info["n"]:
+                raise ValueError(
+                    f"Chunk {chunk_info['chunk_i']:06d} has {len(data)} "
+                    f"items, but metadata says {chunk_info['n']}."
+                )
+        return data if len(data) else np.empty(0, dtype)
+
+    # Load all chunks if chunk_number is None, otherwise load the specified chunk
+    if chunk_number is None:
+        chunk_numbers = list(range(len(metadata["chunks"])))
+    else:
+        if not isinstance(chunk_number, int):
+            raise ValueError(f"Chunk number must be an integer, not {chunk_number}.")
+        if chunk_number >= len(metadata["chunks"]):
+            raise ValueError(f"Chunk {chunk_number:06d} does not exist in {dirname}.")
+        chunk_numbers = [chunk_number]
+
+    results = []
+    for c in chunk_numbers:
+        chunk_info = metadata["chunks"][c]
+        results.append(load_chunk(chunk_info))
+    results = np.hstack(results)
+    return results if len(results) else np.empty(0, dtype)

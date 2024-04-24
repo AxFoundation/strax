@@ -388,6 +388,19 @@ class Context:
 
         return plugin_class
 
+    def purge_unused_configs(self):
+        """Purge unused configs from the context."""
+        all_opts = set().union(
+            *[pc.takes_config.keys() for pc in self._plugin_class_registry.values()]
+        )
+        waiting_for = []
+        for k in self.config:
+            if not (k in all_opts or k in self.context_config["free_options"]):
+                self.log.warning(f"Option {k} purged from context config as it is not used.")
+                waiting_for.append(k)
+        for k in waiting_for:
+            del self.config[k]
+
     def deregister_plugins_with_missing_dependencies(self):
         """Deregister plugins in case a data_type the plugin depends on is not provided by any other
         plugin."""
@@ -400,7 +413,7 @@ class Context:
                 all_provides |= set(p.provides)
 
             for p_key, p in self._plugin_class_registry.items():
-                requires = set(strax.to_str_tuple(p.depends_on))
+                requires = set(strax.to_str_tuple(p().depends_on))
                 if not requires.issubset(all_provides):
                     plugins_to_deregister.append(p_key)
 
@@ -634,11 +647,13 @@ class Context:
         """
         self._base_hash_on_config = self.config.copy()
         # Also take into account the versions of the plugins registered
-        self._base_hash_on_config.update({
-            data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
-            for data_type, plugin in self._plugin_class_registry.items()
-            if not data_type.startswith("_temp_")
-        })
+        self._base_hash_on_config.update(
+            {
+                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+                for data_type, plugin in self._plugin_class_registry.items()
+                if not data_type.startswith("_temp_")
+            }
+        )
         return strax.deterministic_hash(self._base_hash_on_config)
 
     def _plugins_are_cached(
@@ -1432,7 +1447,7 @@ class Context:
                 run_id, targets=targets, progress_bar=progress_bar
             )
             with _p as pbar:
-                pbar.last_print_t = time.time()
+                pbar.strax_print_time = time.perf_counter()
                 pbar.mbs = []
                 for n_chunks, result in enumerate(strax.continuity_check(generator), 1):
                     seen_a_chunk = True
@@ -1455,6 +1470,7 @@ class Context:
                     self._update_progress_bar(
                         pbar, t_start, t_end, n_chunks, result.end, result.nbytes
                     )
+                    pbar.strax_print_time = time.perf_counter()
                     yield result
             _p.close()
 
@@ -1525,11 +1541,11 @@ class Context:
             # have data yet e.g. allow_incomplete == True.
             pbar.n = 0
         # Let's add the postfix which is the info behind the tqdm marker
-        seconds_per_chunk = time.time() - pbar.last_print_t
+        seconds_per_chunk = time.perf_counter() - pbar.strax_print_time
         pbar.mbs.append((nbytes / 1e6) / seconds_per_chunk)
         mbs = np.mean(pbar.mbs)
         if mbs < 1:
-            rate = f"{mbs*1000:.1f} kB/s"
+            rate = f"{mbs * 1000:.1f} kB/s"
         else:
             rate = f"{mbs:.1f} MB/s"
         postfix = f"#{n_chunks} ({seconds_per_chunk:.2f} s). {rate}"
@@ -1966,7 +1982,7 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, **kwargs):
+    def is_stored(self, run_id, target, detailed=False, **kwargs):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -1988,6 +2004,22 @@ class Context:
             if self._is_stored_in_sf(run_id, target, sf):
                 return True
         # None of the frontends has the data
+
+        # Before returning False, check if the data can be made trivially
+        plugin = self._plugin_class_registry[target]
+        save_when = plugin.save_when
+
+        # Mutli-target plugins provide a save_when per target
+        if isinstance(save_when, immutabledict):
+            save_when = save_when[target]
+
+        if save_when < strax.SaveWhen.ALWAYS and detailed:
+            warnings.warn(
+                f"{target} is not set to always be saved. "
+                "This is probably because it can be trivially made from other data. "
+                f"{target} depends on {plugin.depends_on}. Check if these are stored."
+            )
+
         return False
 
     def _check_forbidden(self):
@@ -2085,7 +2117,7 @@ class Context:
             target_sf = [self.storage[target_frontend_id]]
 
         # Figure out which of the frontends has the data. Raise error when none
-        source_sf = self._get_source_sf(run_id, target, should_exist=True)
+        source_sf = self.get_source_sf(run_id, target, should_exist=True)[0]
 
         # Keep frontends that:
         #  1. don't already have the data; and
@@ -2275,22 +2307,37 @@ class Context:
         except strax.DataNotAvailable:
             return False
 
-    def _get_source_sf(self, run_id, target, should_exist=False):
-        """Get the source storage frontend for a given run_id and target.
+    def get_source_sf(self, run_id, target, should_exist=False):
+        """Get the source storage frontends for a given run_id and target.
 
         :param run_id, target: run_id, target
         :param should_exist: Raise a ValueError if we cannot find one (e.g. we already checked the
             data is stored)
-        :return: strax.StorageFrontend or None (when raise_error is False)
+        :return: list of strax.StorageFrontend (when should_exist is False)
 
         """
+        if isinstance(target, (tuple, list)):
+            if len(target) == 0:
+                raise ValueError("Cannot find stored frontend for empty target!")
+            frontends_list = [
+                self.get_source_sf(
+                    run_id,
+                    t,
+                    should_exist=should_exist,
+                )
+                for t in target
+            ]
+            return list(set.intersection(*map(set, frontends_list)))
+
+        frontends = []
         for sf in self._sorted_storage:
             if self._is_stored_in_sf(run_id, target, sf):
-                return sf
-        if should_exist:
+                frontends.append(sf)
+        if should_exist and not frontends:
             raise ValueError(
                 "This cannot happen, we just checked that this run should be stored?!?"
             )
+        return frontends
 
     def get_save_when(self, target: str) -> ty.Union[strax.SaveWhen, int]:
         """For a given plugin, get the save when attribute either being a dict or a number."""
@@ -2309,16 +2356,18 @@ class Context:
             version
 
         """
-        hashes = set([
-            (
-                data_type,
-                self.key_for(runid, data_type).lineage_hash,
-                self.get_save_when(data_type),
-                plugin.__version__,
-            )
-            for plugin in self._plugin_class_registry.values()
-            for data_type in plugin.provides
-        ])
+        hashes = set(
+            [
+                (
+                    data_type,
+                    self.key_for(runid, data_type).lineage_hash,
+                    self.get_save_when(data_type),
+                    plugin.__version__,
+                )
+                for plugin in self._plugin_class_registry.values()
+                for data_type in plugin.provides
+            ]
+        )
 
         return {
             data_type: dict(hash=_hash, save_when=save_when.name, version=version)
@@ -2355,9 +2404,12 @@ select_docs = """
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
-get_docs = """
+get_docs = (
+    """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
+:param ignore_errors: Return the data for the runs that successfully loaded, even if some runs
+        failed executing.
 :param save: extra data types you would like to save
     to cache, if they occur in intermediate computations.
     Many plugins save automatically anyway.
@@ -2373,7 +2425,9 @@ get_docs = """
 :param run_id_as_bytes: Boolean if true uses byte string instead of an
     unicode string added to a multi-run array. This can save a lot of
     memory when loading many runs.
-""" + select_docs
+"""
+    + select_docs
+)
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)
