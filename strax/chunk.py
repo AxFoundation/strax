@@ -71,6 +71,8 @@ class Chunk:
             raise ValueError(
                 f"Attempt to create chunk {self} with data of {dtype}, should be {expected_dtype}"
             )
+        if self.start < 0:
+            raise ValueError(f"Attempt to create chunk {self} with negative start time")
         if self.start > self.end:
             raise ValueError(f"Attempt to create chunk {self} with negative length")
 
