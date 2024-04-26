@@ -15,6 +15,8 @@ from collections import defaultdict
 from immutabledict import immutabledict
 from enum import IntEnum
 
+from strax import CutList
+
 
 export, __all__ = strax.exporter()
 __all__.extend(["RUN_DEFAULTS_KEY"])
@@ -574,6 +576,28 @@ class Context:
                 continue
             if issubclass(x, strax.Plugin):
                 self.register(x)
+
+    def register_cut_list(self, cut_list):
+        """Register cut lists to strax context.
+
+        :param cut_list: cut lists to be registered. can be cutlist object or list/tuple of cutlist
+            objects
+
+        """
+        assert not isinstance(
+            cut_list, str
+        ), "Please don't put string... use cutlist object or list/tuple of cutlist objects"
+        if hasattr(cut_list, "__len__"):
+            for _cut_list in cut_list:
+                self.register_cut_list(_cut_list)
+        else:
+            for cut in cut_list.cuts:
+                # maybe cutlist within cutlist?
+                if CutList in cut.__bases__:
+                    self.register_cut_list(cut)
+                else:
+                    self.register(cut)
+            self.register(cut_list)
 
     def data_info(self, data_name: str) -> pd.DataFrame:
         """Return pandas DataFrame describing fields in data_name."""
