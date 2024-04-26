@@ -132,29 +132,3 @@ def get_accumulated_bool(array):
     for field in fields:
         res &= array[field]
     return res
-
-
-@export
-@strax.Context.add_method
-def register_cut_list(st, cut_list):
-    """Register cut lists to strax context.
-
-    :param st: strax context to use for listing registered cuts and lineage
-    :param cut_list: cut lists to be registered. can be cutlist object or list/tuple of cutlist
-        objects
-
-    """
-    assert not isinstance(
-        cut_list, str
-    ), "Please don't put string... use cutlist object or list/tuple of cutlist objects"
-    if hasattr(cut_list, "__len__"):
-        for _cut_list in cut_list:
-            st.register_cut_list(_cut_list)
-    else:
-        for cut in cut_list.cuts:
-            # maybe cutlist within cutlist?
-            if CutList in cut.__bases__:
-                st.register_cut_list(cut)
-            else:
-                st.register(cut)
-        st.register(cut_list)
