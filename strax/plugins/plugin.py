@@ -594,10 +594,10 @@ class Plugin:
                     message = (
                         "New feature, we are ignoring inconsistent the "
                         "possible ValueError in time ranges for "
-                        f"{self.__class__.__name__} of inputs: {tranges}"
+                        f"{self.__class__.__name__} of inputs: {tranges} "
                         "because this occurred in a save_when.NEVER "
                         "plugin. Report any findings in "
-                        "github.com/AxFoundation/strax/issues/247"
+                        "https://github.com/AxFoundation/strax/issues/247"
                     )
                     warn(message, UserWarning)
                 # This block will be deleted </end>
