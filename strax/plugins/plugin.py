@@ -204,8 +204,7 @@ class Plugin:
             ):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs and "
-                    "must declare its data kind as a dict: "
-                    "{dtypename: data kind}."
+                    "must declare its data kind as a dict."
                 )
             if not isinstance(self.dtype, dict):
                 raise ValueError(
@@ -625,7 +624,7 @@ class Plugin:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
-                    "provide a dict output {dtypename: result}"
+                    "provide a dict output."
                 )
             return {d: self._fix_output(result[d], start, end, _dtype=d) for d in self.provides}
 
