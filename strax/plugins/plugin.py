@@ -209,7 +209,7 @@ class Plugin:
             if not isinstance(self.dtype, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs, so its "
-                    "dtype must be specified as a dict: {output: dtype}."
+                    "dtype must be specified as a dict."
                 )
             self.dtype = {k: strax.to_numpy_dtype(dt) for k, dt in self.dtype.items()}
         else:
