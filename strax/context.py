@@ -321,6 +321,9 @@ class Context:
                 self.register(x)
             return
 
+        if not issubclass(plugin_class, strax.Plugin):
+            raise ValueError(f"Can only register subclasses of strax.Plugin, not {plugin_class}!")
+
         if not hasattr(plugin_class, "provides"):
             # No output name specified: construct one from the class name
             snake_name = strax.camel_to_snake(plugin_class.__name__)
@@ -840,8 +843,6 @@ class Context:
             # drop the parents config from the lineage
             configs = {}
 
-            # Getting information about the parent:
-            parent_class = plugin.__class__.__bases__[0]
             # Get all parent options which are overwritten by a child:
             parent_options = [
                 option.parent_option_name
@@ -861,7 +862,8 @@ class Context:
                     configs[option_name] = v
 
             # Also adding name and version of the parent to the lineage:
-            configs[parent_class.__name__] = parent_class.__version__
+            for parent_class in plugin.__class__.__bases__:
+                configs[parent_class.__name__] = parent_class.__version__
 
             plugin.lineage = {
                 last_provide: (plugin.__class__.__name__, plugin.version(run_id), configs)
