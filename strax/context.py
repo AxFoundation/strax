@@ -506,7 +506,7 @@ class Context:
                                 # 'type'
                                 # >>> A().__class__.__name__
                                 # 'A'
-                                plug = plug()
+                                plug = plug()  # type: ignore
                             result += [f"{plug.__class__.__name__}.{attribute_name}"]
                             # Likely to be used several other times
                             break
