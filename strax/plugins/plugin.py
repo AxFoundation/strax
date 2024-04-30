@@ -57,8 +57,8 @@ class Plugin:
     data_kind: typing.Union[str, immutabledict, dict]
     dtype: typing.Union[tuple, np.dtype, immutabledict, dict]
 
-    depends_on: tuple
-    provides: tuple
+    depends_on: typing.Union[str, tuple, list]
+    provides: typing.Union[str, tuple, list]
     input_buffer: typing.Dict[str, strax.Chunk]
 
     # Needed for plugins which are inherited from an already existing plugins,
