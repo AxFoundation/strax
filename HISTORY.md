@@ -4,9 +4,7 @@
 * Increase the timing precision of progress bar by @dachengx in https://github.com/AxFoundation/strax/pull/819
 * Initialize plugin because `depends_on` can be property by @dachengx in https://github.com/AxFoundation/strax/pull/820
 * Update context.py by @WenzDaniel in https://github.com/AxFoundation/strax/pull/821
-* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/815
 * Disable tqdm progress bar when `check_available` is empty by @dachengx in https://github.com/AxFoundation/strax/pull/822
-* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/823
 * Check the consistency of number of items in metadata and data in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/824
 * Remove `strax.plugin` by @dachengx in https://github.com/AxFoundation/strax/pull/825
 * Pick out selection applying function by @dachengx in https://github.com/AxFoundation/strax/pull/826
@@ -17,7 +15,6 @@
 * Add `register_cut_list` by @dachengx in https://github.com/AxFoundation/strax/pull/831
 * Record all base classes when multiple inheritance by @dachengx in https://github.com/AxFoundation/strax/pull/832
 * Multiple output `DownChunkingPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/833
-* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/834
 * Add `ExhaustPlugin` that exhausts all chunks when fetching data by @dachengx in https://github.com/AxFoundation/strax/pull/835
 
 **Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.2...v1.6.3
