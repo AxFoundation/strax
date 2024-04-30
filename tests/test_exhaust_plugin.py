@@ -1,27 +1,27 @@
 from typing import Tuple
 import numpy as np
 import strax
-import straxen
 from strax import Plugin, ExhaustPlugin
 
 
+@strax.takes_config(
+    strax.Option(name="n_chunks", default=10),
+    strax.Option(name="n_items", default=10),
+)
 class ToExhaust(Plugin):
     depends_on: Tuple = tuple()
     provides: str = "to_exhaust"
 
     dtype = strax.time_fields
 
-    n_chunks = straxen.URLConfig(default=10)
-    n_items = straxen.URLConfig(default=10)
-
     source_done = False
 
     def compute(self, chunk_i):
-        data = np.empty(self.n_items, dtype=self.dtype)
-        data["time"] = np.arange(self.n_items) + chunk_i * self.n_items
+        data = np.empty(self.config["n_items"], dtype=self.dtype)
+        data["time"] = np.arange(self.config["n_items"]) + chunk_i * self.config["n_items"]
         data["endtime"] = data["time"]
 
-        if chunk_i == self.n_chunks - 1:
+        if chunk_i == self.config["n_chunks"] - 1:
             self.source_done = True
 
         return self.chunk(
@@ -40,14 +40,15 @@ class ToExhaust(Plugin):
         return self.ready
 
 
+@strax.takes_config(
+    strax.Option(name="n_chunks", default=10),
+    strax.Option(name="n_items", default=10),
+)
 class Exhausted(ExhaustPlugin):
     depends_on: str = "to_exhaust"
     provides: str = "exhausted"
 
     dtype = strax.time_fields
-
-    n_chunks = straxen.URLConfig(default=10)
-    n_items = straxen.URLConfig(default=10)
 
     def compute(self, to_exhaust):
         return to_exhaust
@@ -55,7 +56,7 @@ class Exhausted(ExhaustPlugin):
     def _fetch_chunk(self, d, iters, check_end_not_before=None):
         flag = self.input_buffer[d] is None  # only check if we have not read anything yet
         super()._fetch_chunk(d, iters, check_end_not_before=check_end_not_before)
-        if flag and (len(self.input_buffer[d]) != self.n_chunks * self.n_items):
+        if flag and (len(self.input_buffer[d]) != self.config["n_chunks"] * self.config["n_items"]):
             raise RuntimeError("Exhausted plugin did not read all chunks!")
         return False
 
