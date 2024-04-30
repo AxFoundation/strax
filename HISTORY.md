@@ -1,3 +1,28 @@
+1.6.3 / 2024-04-30
+---------------------
+* Install `graphviz` for the pytests by @dachengx in https://github.com/AxFoundation/strax/pull/817
+* Increase the timing precision of progress bar by @dachengx in https://github.com/AxFoundation/strax/pull/819
+* Initialize plugin because `depends_on` can be property by @dachengx in https://github.com/AxFoundation/strax/pull/820
+* Update context.py by @WenzDaniel in https://github.com/AxFoundation/strax/pull/821
+* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/815
+* Disable tqdm progress bar when `check_available` is empty by @dachengx in https://github.com/AxFoundation/strax/pull/822
+* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/823
+* Check the consistency of number of items in metadata and data in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/824
+* Remove `strax.plugin` by @dachengx in https://github.com/AxFoundation/strax/pull/825
+* Pick out selection applying function by @dachengx in https://github.com/AxFoundation/strax/pull/826
+* Add `CutList` by @dachengx in https://github.com/AxFoundation/strax/pull/827
+* Update tags handling, added comment field. Allows to define superuns … by @WenzDaniel in https://github.com/AxFoundation/strax/pull/798
+* Prevent start being negative by @dachengx in https://github.com/AxFoundation/strax/pull/828
+* Tiny change on the trailing space by @dachengx in https://github.com/AxFoundation/strax/pull/830
+* Add `register_cut_list` by @dachengx in https://github.com/AxFoundation/strax/pull/831
+* Record all base classes when multiple inheritance by @dachengx in https://github.com/AxFoundation/strax/pull/832
+* Multiple output `DownChunkingPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/833
+* [pre-commit.ci] pre-commit autoupdate by @pre-commit-ci in https://github.com/AxFoundation/strax/pull/834
+* Add `ExhaustPlugin` that exhausts all chunks when fetching data by @dachengx in https://github.com/AxFoundation/strax/pull/835
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.2...v1.6.3
+
+
 1.6.2 / 2024-04-04
 ---------------------
 * Use parentheses to separate the class name and attributes in the representation of StorageFrontend by @dachengx in https://github.com/AxFoundation/strax/pull/809
