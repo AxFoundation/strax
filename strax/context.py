@@ -615,25 +615,38 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get_single_plugin(self, run_id, data_name):
+    def get_single_plugin(self, run_id, data_name, _force_subrun=False):
         """Return a single fully initialized plugin that produces data_name for run_id.
 
         For use in custom processing.
 
         """
-        plugin = self._get_plugins((data_name,), run_id)[data_name]
-        self._set_plugin_config(plugin, run_id, tolerant=False)
+        plugin = self._get_plugins((data_name,), run_id, _force_subrun=_force_subrun)[data_name]
+        self._set_plugin_config(plugin, run_id, tolerant=False, _force_subrun=_force_subrun)
         plugin.setup()
         return plugin
 
-    def _set_plugin_config(self, p, run_id, tolerant=True):
+    def parse_run_id(self, run_id, _force_subrun):
+        _is_superrun = run_id.startswith("_")
+        if _is_superrun and _force_subrun:
+            meta = self.run_metadata(run_id)
+            livetimes = dict(
+                zip(meta["sub_run_spec"].keys(), [c["comment"] for c in meta["comments"]])
+            )
+            _run_id = sorted(livetimes.items(), key=lambda item: item[1])[-1][0]
+        else:
+            _run_id = run_id
+        return _run_id
+
+    def _set_plugin_config(self, p, run_id, tolerant=True, _force_subrun=False):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
+        _run_id = self.parse_run_id(run_id, _force_subrun)
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config, run_id=run_id, run_defaults=self.run_defaults(run_id))
+                opt.validate(config, run_id=_run_id, run_defaults=self.run_defaults(_run_id))
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -719,6 +732,7 @@ class Context:
         self,
         run_id: str,
         targets: ty.Tuple[str],
+        _force_subrun=False,
     ) -> ty.Dict[str, strax.Plugin]:
         # Doubly underscored since we don't do any key-checks etc here
         """Load requested plugins from the plugin_cache."""
@@ -731,7 +745,8 @@ class Context:
                 continue
 
             requested_p = plugin.__copy__()
-            requested_p.run_id = run_id
+            requested_p._run_id = run_id
+            requested_p.run_id = self.parse_run_id(run_id, _force_subrun)
 
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
@@ -748,6 +763,7 @@ class Context:
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
         run_id: str,
+        _force_subrun=False,
     ) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugin instances necessary to compute targets from scratch.
 
@@ -774,7 +790,7 @@ class Context:
             if target in plugins:
                 continue
 
-            target_plugin = self.__get_plugin(run_id, target)
+            target_plugin = self.__get_plugin(run_id, target, _force_subrun=_force_subrun)
             for provides in target_plugin.provides:
                 plugins[provides] = target_plugin
             targets += list(target_plugin.depends_on)
@@ -788,11 +804,13 @@ class Context:
 
         return plugins
 
-    def __get_plugin(self, run_id: str, data_type: str):
+    def __get_plugin(self, run_id: str, data_type: str, _force_subrun=False):
         """Get single plugin either from cache or initialize it."""
         # Check if plugin for data_type is already cached
         if self._plugins_are_cached((data_type,)):
-            cached_plugins = self.__get_requested_plugins_from_cache(run_id, (data_type,))
+            cached_plugins = self.__get_requested_plugins_from_cache(
+                run_id, (data_type,), _force_subrun=_force_subrun
+            )
             target_plugin = cached_plugins[data_type]
             return target_plugin
 
@@ -801,14 +819,16 @@ class Context:
 
         plugin = self._plugin_class_registry[data_type]()
 
-        plugin.run_id = run_id
+        plugin._run_id = run_id
+        plugin.run_id = self.parse_run_id(run_id, _force_subrun)
 
         # The plugin may not get all the required options here
         # but we don't know if we need the plugin yet
-        self._set_plugin_config(plugin, run_id, tolerant=True)
+        self._set_plugin_config(plugin, run_id, tolerant=True, _force_subrun=_force_subrun)
 
         plugin.deps = {
-            d_depends: self.__get_plugin(run_id, d_depends) for d_depends in plugin.depends_on
+            d_depends: self.__get_plugin(run_id, d_depends, _force_subrun=_force_subrun)
+            for d_depends in plugin.depends_on
         }
 
         self.__add_lineage_to_plugin(run_id, plugin)
@@ -967,6 +987,7 @@ class Context:
         save=tuple(),
         time_range=None,
         chunk_number=None,
+        _force_subrun=False,
     ) -> strax.ProcessorComponents:
         """Return components for setting up a processor.
 
@@ -980,7 +1001,7 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        plugins = self._get_plugins(targets, run_id)
+        plugins = self._get_plugins(targets, run_id, _force_subrun=_force_subrun)
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1007,9 +1028,9 @@ class Context:
                 key, chunk_number=chunk_number, time_range=time_range
             )
 
-            _is_superrun = run_id.startswith("_") and not target_plugin.provides[0].startswith(
-                "_temp"
-            )
+            _is_superrun = run_id.startswith("_")
+            _is_superrun &= not target_plugin.provides[0].startswith("_temp")
+            _is_superrun &= not _force_subrun
             if not loader and _is_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
@@ -1115,7 +1136,7 @@ class Context:
                 and not self.context_config["storage_converter"]
             ):
                 if len(target_plugin.provides) > 1:
-                    # In case the plugin has more then a single provides we also have to check
+                    # In case the plugin has more than a single provides we also have to check
                     # whether any of the other data_types should be stored. Hence only remove
                     # the current traget from the list of plugins_to_savers.
                     current_plugin_to_savers = []
@@ -1190,7 +1211,7 @@ class Context:
         # check all required options are available or set defaults.
         # Also run any user-defined setup
         for d in plugins.values():
-            self._set_plugin_config(d, run_id, tolerant=False)
+            self._set_plugin_config(d, run_id, tolerant=False, _force_subrun=_force_subrun)
             d.setup()
         return strax.ProcessorComponents(
             plugins=plugins,
@@ -1220,7 +1241,7 @@ class Context:
         :return: Updated savers dictionary.
 
         """
-        key = strax.DataKey(target_plugin.run_id, d_to_save, target_plugin.lineage)
+        key = strax.DataKey(target_plugin._run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -1244,7 +1265,7 @@ class Context:
             try:
                 saver = sf.saver(
                     key,
-                    metadata=target_plugin.metadata(target_plugin.run_id, d_to_save),
+                    metadata=target_plugin.metadata(target_plugin._run_id, d_to_save),
                     saver_timeout=self.context_config["saver_timeout"],
                 )
                 # Now that we are surely saving, make an entry in savers
@@ -1285,7 +1306,7 @@ class Context:
             return False
         return True
 
-    def estimate_run_start_and_end(self, run_id, targets=None):
+    def estimate_run_start_and_end(self, run_id, targets=None, _force_subrun=False):
         """Return run start and end time in ns since epoch.
 
         This fetches from run metadata, and if this fails, it estimates it using data metadata from
@@ -1312,6 +1333,7 @@ class Context:
             for t in self._get_plugins(
                 strax.to_str_tuple(targets),
                 run_id,
+                _force_subrun=_force_subrun,
             ).keys():
                 if not self.is_stored(run_id, t):
                     continue
@@ -1338,6 +1360,7 @@ class Context:
         seconds_range=None,
         time_within=None,
         full_range=None,
+        _force_subrun=False,
     ):
         """Return (start, stop) time in ns since unix epoch corresponding to time range.
 
@@ -1363,7 +1386,7 @@ class Context:
                 "Pass no more than one one of time_range, seconds_range, time_within, or full_range"
             )
         if seconds_range is not None:
-            t0, _ = self.estimate_run_start_and_end(run_id, targets)
+            t0, _ = self.estimate_run_start_and_end(run_id, targets, _force_subrun=_force_subrun)
             time_range = (t0 + int(1e9 * seconds_range[0]), t0 + int(1e9 * seconds_range[1]))
         if time_within is not None:
             time_range = (time_within["time"], strax.endtime(time_within))
@@ -1373,7 +1396,9 @@ class Context:
             time_range = tuple([int(x) for x in time_range])
 
         if full_range:
-            time_range = self.estimate_run_start_and_end(run_id, targets)
+            time_range = self.estimate_run_start_and_end(
+                run_id, targets, _force_subrun=_force_subrun
+            )
         return time_range
 
     def get_iter(
@@ -1392,6 +1417,7 @@ class Context:
         drop_columns=None,
         allow_multiple=False,
         progress_bar=True,
+        _force_subrun=False,
         _chunk_number=None,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
@@ -1419,6 +1445,7 @@ class Context:
             time_range=time_range,
             seconds_range=seconds_range,
             time_within=time_within,
+            _force_subrun=_force_subrun,
         )
 
         # Keep a copy of the list of targets for apply_function
@@ -1430,7 +1457,7 @@ class Context:
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            plugins = self._get_plugins(targets=targets, run_id=run_id)
+            plugins = self._get_plugins(targets=targets, run_id=run_id, _force_subrun=_force_subrun)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = "_temp_" + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
@@ -1447,7 +1474,12 @@ class Context:
                 raise RuntimeError(f"Cannot allow_multiple in lazy mode or with long timeouts.")
 
         components = self.get_components(
-            run_id, targets=targets, save=save, time_range=time_range, chunk_number=_chunk_number
+            run_id,
+            targets=targets,
+            save=save,
+            time_range=time_range,
+            chunk_number=_chunk_number,
+            _force_subrun=_force_subrun,
         )
 
         # Cleanup the temp plugins

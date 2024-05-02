@@ -236,7 +236,9 @@ class StorageFrontend:
 
     def _we_take(self, data_type):
         """Return if data_type can be provided by this frontend."""
-        return not (data_type in self.exclude or self.take_only and data_type not in self.take_only)
+        return not (
+            data_type in self.exclude or (self.take_only and data_type not in self.take_only)
+        )
 
     def _support_superruns(self, run_id):
         """Checks if run is a superrun and if superruns are provided by frontend."""
@@ -634,7 +636,7 @@ class Saver:
         chunk_i = 0
 
         run_id = self.md["run_id"]
-        _is_super_run = run_id.startswith("_")
+        _is_superrun = run_id.startswith("_")
         try:
             while not exhausted:
                 chunk = None
@@ -644,7 +646,7 @@ class Saver:
                         while chunk is None or chunk.data.nbytes < chunk.target_size_mb * 1e6:
                             next_chunk = next(source)
 
-                            if _is_super_run:
+                            if _is_superrun:
                                 # If we are creating a superrun, we load data from subruns
                                 # and the loaded subrun chunk becomes a superun chunk:
                                 next_chunk = strax.transform_chunk_to_superrun_chunk(
@@ -653,7 +655,7 @@ class Saver:
                             chunk = strax.Chunk.concatenate([chunk, next_chunk])
                     else:
                         chunk = next(source)
-                        if _is_super_run:
+                        if _is_superrun:
                             # If we are creating a superrun, we load data from subruns
                             # and the loaded subrun chunk becomes a superun chunk:
                             chunk = strax.transform_chunk_to_superrun_chunk(run_id, chunk)
