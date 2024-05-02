@@ -245,7 +245,7 @@ class Chunk:
         )
 
     @classmethod
-    def concatenate(cls, chunks):
+    def concatenate(cls, chunks, allow_hyperrun=False):
         """Create chunk by concatenating chunks of same data type You can pass None's, they will be
         ignored."""
         chunks = [c for c in chunks if c is not None]
@@ -261,7 +261,7 @@ class Chunk:
 
         run_ids = [c.run_id for c in chunks]
 
-        if len(set(run_ids)) != 1:
+        if len(set(run_ids)) != 1 and not allow_hyperrun:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
