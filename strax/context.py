@@ -2432,6 +2432,48 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
+    def check_hyperrun(self):
+        # root data_type
+        root_data_types = set()
+        for k, v in self._plugin_class_registry.items():
+            if not v.depends_on:
+                root_data_types |= set((k,))
+
+        # inverse tree whose key is depends_on and value is provides
+        inverse_tree = dict()
+        for k, v in self._plugin_class_registry.items():
+            for d in v().depends_on:
+                inverse_tree.setdefault(d, [])
+                inverse_tree[d] += v().provides
+
+        # define a recursive function to check if all the dependencies support hyperruns
+        def check_support_hyperrun(data_type, checked=set(), seen_allow=None):
+            if data_type in checked:
+                return checked
+            if self._plugin_class_registry[data_type].allow_hyperrun:
+                seen_allow = data_type
+            if seen_allow and not self._plugin_class_registry[data_type].allow_hyperrun:
+                raise ValueError(
+                    f"Already support hyperruns in {seen_allow}, "
+                    f"but it's dependency {data_type} does not support hyperruns."
+                )
+            checked |= set((data_type,))
+            if data_type not in inverse_tree:
+                return checked
+            for d in inverse_tree[data_type]:
+                checked |= check_support_hyperrun(d, checked, seen_allow)
+            return checked
+
+        # use checked set to record the data_type that has been checked
+        # to shorten the time of checking
+        checked = set()
+        for data_type in root_data_types:
+            if self._plugin_class_registry[data_type].allow_hyperrun:
+                seen_allow = data_type
+            else:
+                seen_allow = None
+            checked |= check_support_hyperrun(data_type, checked, seen_allow)
+
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method."""
