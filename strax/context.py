@@ -1133,7 +1133,12 @@ class Context:
             current_plugin_to_savers = [target_i]
             if (
                 not self._target_should_be_saved(
-                    target_plugin, target_i, targets, save, loader, _is_superrun
+                    target_plugin,
+                    target_i,
+                    targets,
+                    save,
+                    loader,
+                    _is_superrun and not _is_hyperrun,
                 )
                 and not self.context_config["storage_converter"]
             ):
@@ -1174,6 +1179,7 @@ class Context:
             elif not _is_hyperrun or allow_hyperrun:
                 # only save if we are not in a hyperrun or the plugin allows hyperruns
                 # otherwise we will see error at Chunk.concatenate
+                # but anyway the data is should already been made
                 for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save)
                     loader = self._get_partial_loader_for(
@@ -1182,7 +1188,12 @@ class Context:
 
                     if (
                         not self._target_should_be_saved(
-                            target_plugin, d_to_save, targets, save, loader, _is_superrun
+                            target_plugin,
+                            d_to_save,
+                            targets,
+                            save,
+                            loader,
+                            _is_superrun and not _is_hyperrun,
                         )
                         and not self.context_config["storage_converter"]
                     ) or savers.get(d_to_save):
@@ -2432,19 +2443,28 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
-    def check_hyperrun(self):
-        # root data_type
-        root_data_types = set()
+    @property
+    def root_data_types(self):
+        """Root data_type that does not depend on anything."""
+        _root_data_types = set()
         for k, v in self._plugin_class_registry.items():
             if not v.depends_on:
-                root_data_types |= set((k,))
+                _root_data_types |= set((k,))
+        return _root_data_types
 
-        # inverse tree whose key is depends_on and value is provides
-        inverse_tree = dict()
+    @property
+    def inverse_tree(self):
+        """Inverse tree whose key is depends_on and value is provides."""
+        _inverse_tree = dict()
         for k, v in self._plugin_class_registry.items():
             for d in v().depends_on:
-                inverse_tree.setdefault(d, [])
-                inverse_tree[d] += v().provides
+                _inverse_tree.setdefault(d, [])
+                _inverse_tree[d] += v().provides
+        return _inverse_tree
+
+    def check_hyperrun(self):
+        """Raise if non-hyperrun plugins depends on hyperrun plugins."""
+        inverse_tree = self.inverse_tree
 
         # define a recursive function to check if all the dependencies support hyperruns
         def check_support_hyperrun(data_type, checked=set(), seen_allow=None):
@@ -2467,7 +2487,7 @@ class Context:
         # use checked set to record the data_type that has been checked
         # to shorten the time of checking
         checked = set()
-        for data_type in root_data_types:
+        for data_type in self.root_data_types:
             if self._plugin_class_registry[data_type].allow_hyperrun:
                 seen_allow = data_type
             else:

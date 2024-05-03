@@ -277,6 +277,12 @@ class Chunk:
                 )
             prev_end = c.end
 
+        # try:
+        #     np.concatenate([c.data for c in chunks])
+        # except:
+        #     import pdb
+        #     pdb.set_trace()
+
         return cls(
             start=chunks[0].start,
             end=chunks[-1].end,
