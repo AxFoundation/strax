@@ -1653,7 +1653,7 @@ class Context:
                 **kwargs,
             )
 
-        if _skip_if_built and self.is_stored(run_id, targets):
+        if _skip_if_built and self.is_stored(run_ids[0], targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets, save=save, max_workers=max_workers, **kwargs):
