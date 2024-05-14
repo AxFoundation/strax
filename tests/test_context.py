@@ -499,3 +499,10 @@ class TestContext(unittest.TestCase):
         )
         comparison_dict["metadata2"].pop("strax_version")
         assert comparison_dict["metadata2"] == old_metadata, "metadata comparison failed"
+
+    def test_get_data_kinds(self):
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(self.get_dummy_peaks_dependency())
+        st.get_data_kinds()
