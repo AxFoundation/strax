@@ -505,4 +505,17 @@ class TestContext(unittest.TestCase):
         st.register(Records)
         st.register(Peaks)
         st.register(self.get_dummy_peaks_dependency())
-        st.get_data_kinds()
+        data_kind_collection, data_type_collection = st.get_data_kinds()
+        # Assert the expected data kinds and their corresponding data types
+        expected_data_kind_collection = {
+            'records': ['records'],
+            'peaks': ['peaks', 'cut_peaks']
+        }
+        assert data_kind_collection == expected_data_kind_collection
+        # Assert the expected data types and their corresponding data kinds
+        expected_data_type_collection = {
+            'records': 'records',
+            'peaks': 'peaks',
+            'cut_peaks': 'peaks'
+        }
+        assert data_type_collection == expected_data_type_collection
