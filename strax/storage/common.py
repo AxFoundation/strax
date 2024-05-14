@@ -636,7 +636,7 @@ class Saver:
         chunk_i = 0
 
         run_id = self.md["run_id"]
-        _is_superrun = run_id.startswith("_")
+        _is_superrun = run_id.startswith("_") and not run_id.startswith("__")
         try:
             while not exhausted:
                 chunk = None

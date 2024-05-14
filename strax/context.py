@@ -626,14 +626,23 @@ class Context:
         plugin.setup()
         return plugin
 
+    @staticmethod
+    def hyperrun_id(run_id):
+        if run_id.startswith("__"):
+            _run_id = run_id[2:]
+        else:
+            _run_id = run_id
+        return _run_id
+
     def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
+        _run_id = self.hyperrun_id(run_id)
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
             try:
-                opt.validate(config, run_id=run_id, run_defaults=self.run_defaults(run_id))
+                opt.validate(config, run_id=_run_id, run_defaults=self.run_defaults(_run_id))
             except strax.InvalidConfiguration:
                 if not tolerant:
                     raise
@@ -731,7 +740,7 @@ class Context:
                 continue
 
             requested_p = plugin.__copy__()
-            requested_p.run_id = run_id
+            requested_p.run_id = self.hyperrun_id(run_id)
 
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
@@ -801,7 +810,7 @@ class Context:
 
         plugin = self._plugin_class_registry[data_type]()
 
-        plugin.run_id = run_id
+        plugin.run_id = self.hyperrun_id(run_id)
 
         # The plugin may not get all the required options here
         # but we don't know if we need the plugin yet
@@ -967,6 +976,7 @@ class Context:
         save=tuple(),
         time_range=None,
         chunk_number=None,
+        multi_run_progress_bar=False,
     ) -> strax.ProcessorComponents:
         """Return components for setting up a processor.
 
@@ -981,6 +991,10 @@ class Context:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         plugins = self._get_plugins(targets, run_id)
+
+        allow_hyperruns = [plugins[target_i].allow_hyperrun for target_i in targets]
+        if sum(allow_hyperruns) != 0 and sum(allow_hyperruns) != len(targets):
+            raise ValueError("Cannot mix plugins that allow hyperruns with those that do not.")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1007,17 +1021,26 @@ class Context:
                 key, chunk_number=chunk_number, time_range=time_range
             )
 
-            _is_superrun = run_id.startswith("_") and not target_plugin.provides[0].startswith(
-                "_temp"
-            )
-            if not loader and _is_superrun:
+            _is_temp = not target_plugin.provides[0].startswith("_temp")
+            _is_superrun = run_id.startswith("_") and _is_temp
+            _is_hyperrun = run_id.startswith("__") and _is_temp
+            # hyperrun is always superrun
+            allow_hyperrun = plugins[target_i].allow_hyperrun
+            if not loader and (
+                (_is_superrun and not _is_hyperrun) or (_is_hyperrun and not allow_hyperrun)
+            ):
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
 
                 sub_run_spec = self.run_metadata(run_id, "sub_run_spec")["sub_run_spec"]
 
                 # Make subruns if they do not exist.
-                self.make(list(sub_run_spec.keys()), target_i, save=(target_i,))
+                self.make(
+                    list(sub_run_spec.keys()),
+                    target_i,
+                    save=(target_i,),
+                    multi_run_progress_bar=multi_run_progress_bar,
+                )
 
                 ldrs = []
                 for subrun in sub_run_spec:
@@ -1110,12 +1133,17 @@ class Context:
             current_plugin_to_savers = [target_i]
             if (
                 not self._target_should_be_saved(
-                    target_plugin, target_i, targets, save, loader, _is_superrun
+                    target_plugin,
+                    target_i,
+                    targets,
+                    save,
+                    loader,
+                    _is_superrun and not _is_hyperrun,
                 )
                 and not self.context_config["storage_converter"]
             ):
                 if len(target_plugin.provides) > 1:
-                    # In case the plugin has more then a single provides we also have to check
+                    # In case the plugin has more than a single provides we also have to check
                     # whether any of the other data_types should be stored. Hence only remove
                     # the current traget from the list of plugins_to_savers.
                     current_plugin_to_savers = []
@@ -1142,13 +1170,16 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            if _is_superrun:
+            if _is_superrun and not _is_hyperrun:
                 # In case of a superrun we are only interested in the specified targets
                 # and not any other stuff provided by the corresponding plugin.
                 savers = self._add_saver(
-                    savers, target_i, target_plugin, _is_superrun, loading_this_data
+                    savers, target_i, run_id, target_plugin, _is_superrun, loading_this_data
                 )
-            else:
+            elif not _is_hyperrun or allow_hyperrun:
+                # only save if we are not in a hyperrun or the plugin allows hyperruns
+                # otherwise we will see error at Chunk.concatenate
+                # but anyway the data is should already been made
                 for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save)
                     loader = self._get_partial_loader_for(
@@ -1157,7 +1188,12 @@ class Context:
 
                     if (
                         not self._target_should_be_saved(
-                            target_plugin, d_to_save, targets, save, loader, _is_superrun
+                            target_plugin,
+                            d_to_save,
+                            targets,
+                            save,
+                            loader,
+                            _is_superrun and not _is_hyperrun,
                         )
                         and not self.context_config["storage_converter"]
                     ) or savers.get(d_to_save):
@@ -1167,7 +1203,7 @@ class Context:
                         continue
 
                     savers = self._add_saver(
-                        savers, d_to_save, target_plugin, _is_superrun, loading_this_data
+                        savers, d_to_save, run_id, target_plugin, _is_superrun, loading_this_data
                     )
 
         for target_i in targets:
@@ -1204,6 +1240,7 @@ class Context:
         self,
         savers: dict,
         d_to_save: str,
+        run_id,
         target_plugin: strax.Plugin,
         _is_superrun: bool,
         loading_this_data: bool,
@@ -1220,7 +1257,7 @@ class Context:
         :return: Updated savers dictionary.
 
         """
-        key = strax.DataKey(target_plugin.run_id, d_to_save, target_plugin.lineage)
+        key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -1244,7 +1281,7 @@ class Context:
             try:
                 saver = sf.saver(
                     key,
-                    metadata=target_plugin.metadata(target_plugin.run_id, d_to_save),
+                    metadata=target_plugin.metadata(run_id, d_to_save),
                     saver_timeout=self.context_config["saver_timeout"],
                 )
                 # Now that we are surely saving, make an entry in savers
@@ -1392,6 +1429,7 @@ class Context:
         drop_columns=None,
         allow_multiple=False,
         progress_bar=True,
+        multi_run_progress_bar=True,
         _chunk_number=None,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
@@ -1447,7 +1485,12 @@ class Context:
                 raise RuntimeError(f"Cannot allow_multiple in lazy mode or with long timeouts.")
 
         components = self.get_components(
-            run_id, targets=targets, save=save, time_range=time_range, chunk_number=_chunk_number
+            run_id,
+            targets=targets,
+            save=save,
+            time_range=time_range,
+            chunk_number=_chunk_number,
+            multi_run_progress_bar=multi_run_progress_bar,
         )
 
         # Cleanup the temp plugins
@@ -1610,7 +1653,7 @@ class Context:
                 **kwargs,
             )
 
-        if _skip_if_built and self.is_stored(run_id, targets):
+        if _skip_if_built and self.is_stored(run_ids[0], targets):
             return
 
         for _ in self.get_iter(run_ids[0], targets, save=save, max_workers=max_workers, **kwargs):
@@ -2399,6 +2442,57 @@ class Context:
             data_type: dict(hash=_hash, save_when=save_when.name, version=version)
             for data_type, _hash, save_when, version in hashes
         }
+
+    @property
+    def root_data_types(self):
+        """Root data_type that does not depend on anything."""
+        _root_data_types = set()
+        for k, v in self._plugin_class_registry.items():
+            if not v.depends_on:
+                _root_data_types |= set((k,))
+        return _root_data_types
+
+    @property
+    def inverse_tree(self):
+        """Inverse tree whose key is depends_on and value is provides."""
+        _inverse_tree = dict()
+        for k, v in self._plugin_class_registry.items():
+            for d in v().depends_on:
+                _inverse_tree.setdefault(d, [])
+                _inverse_tree[d] += v().provides
+        return _inverse_tree
+
+    def check_hyperrun(self):
+        """Raise if non-hyperrun plugins depends on hyperrun plugins."""
+        inverse_tree = self.inverse_tree
+
+        # define a recursive function to check if all the dependencies support hyperruns
+        def check_support_hyperrun(data_type, checked=set(), seen_allow=None):
+            if data_type in checked:
+                return checked
+            if self._plugin_class_registry[data_type].allow_hyperrun:
+                seen_allow = data_type
+            if seen_allow and not self._plugin_class_registry[data_type].allow_hyperrun:
+                raise ValueError(
+                    f"Already support hyperruns in {seen_allow}, "
+                    f"but it's dependency {data_type} does not support hyperruns."
+                )
+            checked |= set((data_type,))
+            if data_type not in inverse_tree:
+                return checked
+            for d in inverse_tree[data_type]:
+                checked |= check_support_hyperrun(d, checked, seen_allow)
+            return checked
+
+        # use checked set to record the data_type that has been checked
+        # to shorten the time of checking
+        checked = set()
+        for data_type in self.root_data_types:
+            if self._plugin_class_registry[data_type].allow_hyperrun:
+                seen_allow = data_type
+            else:
+                seen_allow = None
+            checked |= check_support_hyperrun(data_type, checked, seen_allow)
 
     @classmethod
     def add_method(cls, f):
