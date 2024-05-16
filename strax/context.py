@@ -429,6 +429,24 @@ class Context:
             if not len(plugins_to_deregister):
                 registry_changed = False
 
+    def get_data_kinds(self) -> ty.Tuple:
+        """Return two dictionaries:
+        1. one with all available data_kind as key and their data_types(list) as values
+        2. one with all available data_type as key and their data_kind(str) as values
+        """
+        data_kind_collection: ty.Dict[str, ty.List] = dict()
+        data_type_collection: ty.Dict[str, str] = dict()
+        for data_type in self._plugin_class_registry.keys():
+            plugin = self.__get_plugin("0", data_type)
+            if isinstance(plugin.data_kind, (dict, immutabledict)):
+                data_kind = plugin.data_kind[data_type]
+            else:
+                data_kind = plugin.data_kind
+            data_kind_collection.setdefault(data_kind, [])
+            data_kind_collection[data_kind].append(data_type)
+            data_type_collection[data_type] = data_kind
+        return data_kind_collection, data_type_collection
+
     def search_field(
         self,
         pattern: str,
