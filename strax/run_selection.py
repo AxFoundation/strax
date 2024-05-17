@@ -524,9 +524,13 @@ def _include_exclude_tags(
     ignore_underscore,
 ):
     if include_tags is not None:
+        if not isinstance(include_tags, (str, list, tuple)):
+            raise ValueError("include_tags must be a str, list or tuple")
         dsets = dsets[_tags_match(dsets, include_tags, pattern_type, ignore_underscore)]
 
     if exclude_tags is not None:
+        if not isinstance(exclude_tags, (str, list, tuple)):
+            raise ValueError("exclude_tags must be a str, list or tuple")
         dsets = dsets[True ^ _tags_match(dsets, exclude_tags, pattern_type, ignore_underscore)]
     return dsets
 
