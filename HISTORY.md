@@ -1,3 +1,13 @@
+1.6.4 / 2024-05-27
+---------------------
+* Minor fix on `_is_superrun` variable  names by @dachengx in https://github.com/AxFoundation/strax/pull/837
+* Implement Hyperrun by @dachengx in https://github.com/AxFoundation/strax/pull/838
+* Add function to collect `data_type` and `data_kind` by @dachengx in https://github.com/AxFoundation/strax/pull/839
+* Check `include_tags` and `exclude_tags` by @dachengx in https://github.com/AxFoundation/strax/pull/841
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.3...v1.6.4
+
+
 1.6.3 / 2024-04-30
 ---------------------
 * Install `graphviz` for the pytests by @dachengx in https://github.com/AxFoundation/strax/pull/817
