@@ -1,3 +1,62 @@
+1.6.4 / 2024-05-27
+---------------------
+* Minor fix on `_is_superrun` variable  names by @dachengx in https://github.com/AxFoundation/strax/pull/837
+* Implement Hyperrun by @dachengx in https://github.com/AxFoundation/strax/pull/838
+* Add function to collect `data_type` and `data_kind` by @dachengx in https://github.com/AxFoundation/strax/pull/839
+* Check `include_tags` and `exclude_tags` by @dachengx in https://github.com/AxFoundation/strax/pull/841
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.3...v1.6.4
+
+
+1.6.3 / 2024-04-30
+---------------------
+* Install `graphviz` for the pytests by @dachengx in https://github.com/AxFoundation/strax/pull/817
+* Increase the timing precision of progress bar by @dachengx in https://github.com/AxFoundation/strax/pull/819
+* Initialize plugin because `depends_on` can be property by @dachengx in https://github.com/AxFoundation/strax/pull/820
+* Update context.py by @WenzDaniel in https://github.com/AxFoundation/strax/pull/821
+* Disable tqdm progress bar when `check_available` is empty by @dachengx in https://github.com/AxFoundation/strax/pull/822
+* Check the consistency of number of items in metadata and data in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/824
+* Remove `strax.plugin` by @dachengx in https://github.com/AxFoundation/strax/pull/825
+* Pick out selection applying function by @dachengx in https://github.com/AxFoundation/strax/pull/826
+* Add `CutList` by @dachengx in https://github.com/AxFoundation/strax/pull/827
+* Update tags handling, added comment field. Allows to define superuns … by @WenzDaniel in https://github.com/AxFoundation/strax/pull/798
+* Prevent start being negative by @dachengx in https://github.com/AxFoundation/strax/pull/828
+* Tiny change on the trailing space by @dachengx in https://github.com/AxFoundation/strax/pull/830
+* Add `register_cut_list` by @dachengx in https://github.com/AxFoundation/strax/pull/831
+* Record all base classes when multiple inheritance by @dachengx in https://github.com/AxFoundation/strax/pull/832
+* Multiple output `DownChunkingPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/833
+* Add `ExhaustPlugin` that exhausts all chunks when fetching data by @dachengx in https://github.com/AxFoundation/strax/pull/835
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.2...v1.6.3
+
+
+1.6.2 / 2024-04-04
+---------------------
+* Use parentheses to separate the class name and attributes in the representation of StorageFrontend by @dachengx in https://github.com/AxFoundation/strax/pull/809
+* Specifically install `lxml_html_clean` by @dachengx in https://github.com/AxFoundation/strax/pull/812
+* Add a function to purge unused configs by @dachengx in https://github.com/AxFoundation/strax/pull/800
+* Warn if user checks is_stored for plugin not always saved by @cfuselli in https://github.com/AxFoundation/strax/pull/796
+* Bump urllib3 from 2.2.0 to 2.2.1 in /extra_requirements by @dependabot in https://github.com/AxFoundation/strax/pull/808
+* Do not call `get_components` in `is_stored` by @dachengx in https://github.com/AxFoundation/strax/pull/813
+
+New Contributors
+* @cfuselli made their first contribution in https://github.com/AxFoundation/strax/pull/796
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.1...v1.6.2
+
+
+1.6.1 / 2024-02-17
+---------------------
+* Remove a redundant function and fix some style by @dachengx in https://github.com/AxFoundation/strax/pull/795
+* Find the frontends which stored the targets by @dachengx in https://github.com/AxFoundation/strax/pull/802
+* Simpler chunk length check, avoid recursion limit crash by @JelleAalbers in https://github.com/AxFoundation/strax/pull/803
+* Deprecate the usage of `XENONnT/ax_env` by @dachengx in https://github.com/AxFoundation/strax/pull/804
+* Add a function to directly load file from strax folder by @dachengx in https://github.com/AxFoundation/strax/pull/801
+
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.0...v1.6.1
+
+
 1.6.0 / 2024-01-15
 ---------------------
 * `np.float` is deprecated by @dachengx in https://github.com/AxFoundation/strax/pull/789

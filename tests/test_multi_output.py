@@ -160,11 +160,13 @@ class TestMultiOutputs(unittest.TestCase):
     def test_save_when_per_provide(self):
         """Tests if save when works properly in case of different save when per provided
         data_type."""
-        _save_when = immutabledict({
-            "even_recs": strax.SaveWhen.NEVER,
-            "odd_recs": strax.SaveWhen.TARGET,
-            "rec_count": strax.SaveWhen.ALWAYS,
-        })
+        _save_when = immutabledict(
+            {
+                "even_recs": strax.SaveWhen.NEVER,
+                "odd_recs": strax.SaveWhen.TARGET,
+                "rec_count": strax.SaveWhen.ALWAYS,
+            }
+        )
         p = self.mystrax._plugin_class_registry["rec_count"]
         p.save_when = _save_when
 
@@ -205,11 +207,13 @@ class TestMultiOutputs(unittest.TestCase):
 
     def test_save_per_provide_inlined(self):
         """Checks whether the plugin inlining works for different combinations."""
-        _save_when = immutabledict({
-            "even_recs": strax.SaveWhen.NEVER,
-            "odd_recs": strax.SaveWhen.TARGET,
-            "rec_count": strax.SaveWhen.ALWAYS,
-        })
+        _save_when = immutabledict(
+            {
+                "even_recs": strax.SaveWhen.NEVER,
+                "odd_recs": strax.SaveWhen.TARGET,
+                "rec_count": strax.SaveWhen.ALWAYS,
+            }
+        )
         p = self.mystrax._plugin_class_registry["rec_count"]
         p.save_when = _save_when
 

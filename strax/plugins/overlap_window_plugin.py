@@ -43,7 +43,9 @@ class OverlapWindowPlugin(Plugin):
         # Add cached inputs to compute arguments
         for data_kind, chunk in kwargs.items():
             if len(self.cached_input):
-                kwargs[data_kind] = strax.Chunk.concatenate([self.cached_input[data_kind], chunk])
+                kwargs[data_kind] = strax.Chunk.concatenate(
+                    [self.cached_input[data_kind], chunk], self.allow_hyperrun
+                )
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -86,7 +88,8 @@ class OverlapWindowPlugin(Plugin):
             chunk_starts_are_equal = len(unique_starts) == 1
             if chunk_starts_are_equal:
                 self.log.debug(
-                    f"Success after {try_counter}. Extra time = {cache_inputs_beyond-prev_split} ns"
+                    f"Success after {try_counter}. "
+                    f"Extra time = {cache_inputs_beyond - prev_split} ns"
                 )
                 break
             else:

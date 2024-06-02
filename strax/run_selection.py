@@ -205,7 +205,7 @@ def scan_runs(
     # this is kept for the case users directly call list_available
     for d in tqdm(
         check_available,
-        desc="Checking data availability scan_runs",
+        desc="Checking data availability",
         disable=not len(check_available),
     ):
         self.runs[d + "_available"] = np.in1d(self.runs.name.values, self.list_available(d))
@@ -297,7 +297,11 @@ def select_runs(
         set(list(strax.to_str_tuple(available)) + list(self.context_config["check_available"]))
     )
 
-    for d in tqdm(check_available, desc="Checking data availability"):
+    for d in tqdm(
+        check_available,
+        desc="Checking data availability",
+        disable=not len(check_available),
+    ):
         dsets[d + "_available"] = np.in1d(
             dsets.name.values, self.list_available(target=d, runs=dsets.name.values)
         )
@@ -392,8 +396,9 @@ def define_run(
     tags = set()
     modes = set()
     sources = set()
+    comments = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source"])
+        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source", "comments"])
         doc.setdefault(
             "tags",
             [
@@ -402,8 +407,15 @@ def define_run(
         )
         doc.setdefault("mode", "")
         doc.setdefault("source", "")
+        doc.setdefault(
+            "comments",
+            [
+                {"comment": ""},
+            ],
+        )
 
         tags |= set([tag["name"] for tag in doc["tags"]])
+        comments |= set([comment["comment"] for comment in doc["comments"]])
 
         modes |= set(strax.to_str_tuple(doc["mode"]))
         sources |= set(strax.to_str_tuple(doc["source"]))
@@ -421,9 +433,10 @@ def define_run(
         keys.append(_subrunid)
         starts.append(run_doc_start)
 
-    run_md["tags"] = tuple(tags)
     run_md["mode"] = tuple(modes)
     run_md["source"] = tuple(sources)
+    run_md["tags"] = [{"name": tag} for tag in tags]
+    run_md["comments"] = [{"comment": comment} for comment in comments]
 
     # Make sure subruns are sorted in time
     sort_index = np.argsort(starts)
@@ -511,9 +524,13 @@ def _include_exclude_tags(
     ignore_underscore,
 ):
     if include_tags is not None:
+        if not isinstance(include_tags, (str, list, tuple)):
+            raise ValueError("include_tags must be a str, list or tuple")
         dsets = dsets[_tags_match(dsets, include_tags, pattern_type, ignore_underscore)]
 
     if exclude_tags is not None:
+        if not isinstance(exclude_tags, (str, list, tuple)):
+            raise ValueError("exclude_tags must be a str, list or tuple")
         dsets = dsets[True ^ _tags_match(dsets, exclude_tags, pattern_type, ignore_underscore)]
     return dsets
 
@@ -525,13 +542,17 @@ def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
         patterns = [patterns]
 
     for i, tags in enumerate(dsets.tags):
-        result[i] = any([
-            any([
-                _tag_match(tag, pattern, pattern_type, ignore_underscore)
-                for tag in tags.split(",")
-                for pattern in patterns
-            ])
-        ])
+        result[i] = any(
+            [
+                any(
+                    [
+                        _tag_match(tag, pattern, pattern_type, ignore_underscore)
+                        for tag in tags.split(",")
+                        for pattern in patterns
+                    ]
+                )
+            ]
+        )
 
     return result
 

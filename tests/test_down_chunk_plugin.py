@@ -1,3 +1,4 @@
+from immutabledict import immutabledict
 from strax.testutils import RecordsWithTimeStructure, DownSampleRecords, run_id
 import strax
 import numpy as np
@@ -36,10 +37,12 @@ class TestContext(unittest.TestCase):
         _chunks_are_downsampled = len(chunks_records) * 2 == len(chunks_records_down_chunked)
         assert _chunks_are_downsampled
 
-        _chunks_are_continues = np.all([
-            chunks_records_down_chunked[i]["end"] == chunks_records_down_chunked[i + 1]["start"]
-            for i in range(len(chunks_records_down_chunked) - 1)
-        ])
+        _chunks_are_continues = np.all(
+            [
+                chunks_records_down_chunked[i]["end"] == chunks_records_down_chunked[i + 1]["start"]
+                for i in range(len(chunks_records_down_chunked) - 1)
+            ]
+        )
         assert _chunks_are_continues
 
     def test_down_chunking_multi_processing(self):
@@ -54,6 +57,28 @@ class TestContext(unittest.TestCase):
 
         st.register(TestMultiProcessing)
         with self.assertRaises(NotImplementedError):
+            st.make(run_id, "records_down_chunked", max_workers=2)
+
+    def test_down_chunking_multi_output(self):
+        st = self.get_context(allow_multiprocess=True)
+        st.register(RecordsWithTimeStructure)
+        st.register(DownSampleRecords)
+
+        st.make(run_id, "records", max_workers=1)
+
+        class TestMultiOutput(DownSampleRecords):
+            provides = ("records_down_chunked", "records_down_chunked_copy")
+            data_kind = immutabledict(zip(provides, provides))
+
+            def infer_dtype(self):
+                return {p: DownSampleRecords.dtype for p in self.provides}
+
+            def compute(self, records, start, end):
+                for r in super().compute(records, start, end):
+                    yield r
+
+        st.register(TestMultiOutput)
+        with self.assertRaises(ValueError):
             st.make(run_id, "records_down_chunked", max_workers=2)
 
     def get_context(self, **kwargs):
