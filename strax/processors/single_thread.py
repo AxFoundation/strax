@@ -37,7 +37,7 @@ class SingleThreadProcessor(BaseProcessor):
 
             self.post_office.register_producer(
                 p.iter(iters={dep: self.post_office.get_iter(dep, d) for dep in p.depends_on}),
-                topic=p.provides,
+                topic=strax.to_str_tuple(p.provides),
             )
 
         dtypes_built = {d: p for p in components.plugins.values() for d in p.provides}

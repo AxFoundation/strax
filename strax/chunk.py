@@ -434,7 +434,7 @@ class Rechunker:
 
     def __init__(self, rechunk=False, run_id=None):
         self.rechunk = rechunk
-        self.is_superrun = (run_id and run_id.startswith("_"),)
+        self.is_superrun = run_id and run_id.startswith("_") and not run_id.startswith("__")
         self.run_id = run_id
 
         self.cache = None
