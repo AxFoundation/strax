@@ -73,7 +73,7 @@ class Mailbox:
     # In strax, these are overriden by context options
     # 'timeout' and 'max_messages'. They are here only to support
     # creating mailboxes directly without strax.
-    DEFAULT_TIMEOUT = -1
+    DEFAULT_TIMEOUT = 300
     DEFAULT_MAX_MESSAGES = 4
 
     def __init__(self, name="mailbox", timeout=None, lazy=False, max_messages=None):
