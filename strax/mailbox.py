@@ -73,7 +73,7 @@ class Mailbox:
     # In strax, these are overriden by context options
     # 'timeout' and 'max_messages'. They are here only to support
     # creating mailboxes directly without strax.
-    DEFAULT_TIMEOUT = 300
+    DEFAULT_TIMEOUT = -1
     DEFAULT_MAX_MESSAGES = 4
 
     def __init__(self, name="mailbox", timeout=None, lazy=False, max_messages=None):
@@ -244,8 +244,11 @@ class Mailbox:
 
         # Everyone is waiting for the new chunk or not at all.
         # Fetch only if a driver is waiting.
-        for _i, waiting_for in enumerate(self._subscriber_waiting_for):
-            if self._subscriber_can_drive[_i] and waiting_for is not None:
+        for can_drive, waiting_for in zip(
+            self._subscriber_can_drive,
+            self._subscriber_waiting_for,
+        ):
+            if can_drive and waiting_for is not None:
                 return True
         return False
 

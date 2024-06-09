@@ -675,7 +675,7 @@ class Saver:
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
             # One traceback on screen is enough
-            self.close(wait_for=pending)
+            self.close(wait_for=pending, successful=False)
 
         except Exception as e:
             # log exception for the final check
@@ -721,7 +721,7 @@ class Saver:
         self._save_chunk_metadata(chunk_info)
         return future
 
-    def close(self, wait_for: typing.Union[list, tuple] = tuple()):
+    def close(self, wait_for: typing.Union[list, tuple] = tuple(), successful=True):
         if self.closed:
             raise RuntimeError(f"{self.md} saver already closed")
 
@@ -745,7 +745,7 @@ class Saver:
 
         self.md["writing_ended"] = time.time()
 
-        self._close()
+        self._close(successful=successful)
 
     ##
     # Abstract methods (to override in child)
@@ -762,5 +762,5 @@ class Saver:
     def _save_chunk_metadata(self, chunk_info):
         raise NotImplementedError
 
-    def _close(self):
+    def _close(self, successful=True):
         raise NotImplementedError

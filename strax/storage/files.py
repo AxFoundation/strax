@@ -363,7 +363,7 @@ class FileSaver(strax.Saver):
             if self._flush_md_for_every_chunk:
                 self._flush_metadata()
 
-    def _close(self):
+    def _close(self, successful=True):
         if not os.path.exists(self.tempdirname):
             raise RuntimeError(
                 f"{self.tempdirname} was already renamed to {self.dirname}. "
@@ -379,7 +379,8 @@ class FileSaver(strax.Saver):
 
         self._flush_metadata()
 
-        os.rename(self.tempdirname, self.dirname)
+        if successful:
+            os.rename(self.tempdirname, self.dirname)
 
 
 @export
