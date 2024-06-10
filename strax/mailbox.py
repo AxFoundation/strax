@@ -244,8 +244,11 @@ class Mailbox:
 
         # Everyone is waiting for the new chunk or not at all.
         # Fetch only if a driver is waiting.
-        for _i, waiting_for in enumerate(self._subscriber_waiting_for):
-            if self._subscriber_can_drive[_i] and waiting_for is not None:
+        for can_drive, waiting_for in zip(
+            self._subscriber_can_drive,
+            self._subscriber_waiting_for,
+        ):
+            if can_drive and waiting_for is not None:
                 return True
         return False
 
