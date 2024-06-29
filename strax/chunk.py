@@ -445,7 +445,7 @@ class Rechunker:
         if not self.rechunk:
             # We aren't rechunking
             return chunk
-        if self.cache:
+        if self.cache is not None:
             # We have an old chunk, so we need to concatenate
             chunk = strax.Chunk.concatenate([self.cache, chunk])
         if chunk.data.nbytes >= chunk.target_size_mb * 1e6:
