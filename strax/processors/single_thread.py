@@ -42,7 +42,7 @@ class SingleThreadProcessor(BaseProcessor):
 
         dtypes_built = {d: p for p in components.plugins.values() for d in p.provides}
         for d, savers in components.savers.items():
-            for s_i, saver in enumerate(savers):
+            for saver in savers:
                 if d in dtypes_built:
                     rechunk = dtypes_built[d].can_rechunk(d) and allow_rechunk
                 else:
