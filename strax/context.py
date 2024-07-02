@@ -985,6 +985,10 @@ class Context:
         """
         return sorted(self.storage, key=lambda x: x.storage_type)
 
+    def writable_storage(self) -> ty.List[strax.StorageFrontend]:
+        """Return list of writable storage frontends."""
+        return [s for s in self.storage if not s.readonly]
+
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """Get partial loaders to allow loading data later.
 
