@@ -60,7 +60,7 @@ class PostOffice:
 
     #: Set of topics that are multi output
     #: (i.e. the producer makes topic -> message dicts)
-    _multi_output_topics: ty.Set[str]
+    _multi_output_topics: ty.Dict[str, ty.Tuple[str]]
 
     # Dict: topic -> list with (msg_number, msg)
     _saved_mail: ty.Dict[str, ty.List[ty.Tuple[int, ty.Any]]]
@@ -81,8 +81,7 @@ class PostOffice:
     def __init__(self):
         self.time_spent = dict()
         self._exhausted_topics = set()
-        self._multi_output_topics = set()
-
+        self._multi_output_topics = dict()
         self._saved_mail = dict()
         self._spies = dict()
         self._producers = dict()
@@ -128,7 +127,7 @@ class PostOffice:
             else:
                 # Multi-output producer, recurse
                 for sub_topic in topic:
-                    self._multi_output_topics.add(sub_topic)
+                    self._multi_output_topics[sub_topic] = topic
                     self.register_producer(iterator, sub_topic)
                 return
         assert isinstance(topic, str)
@@ -241,7 +240,8 @@ class PostOffice:
         try:
             msg = next(self._producers[topic])
         except StopIteration:
-            self._ack_topic_exhausted(topic)
+            for sub_topic in self._multi_output_topics.get(topic, [topic]):
+                self._ack_topic_exhausted(sub_topic)
             # reraise to end the generator in _read
             raise StopIteration
 
