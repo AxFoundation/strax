@@ -1,3 +1,15 @@
+1.6.5 / 2024-07-10
+---------------------
+* Single threaded alternative processor by @JelleAalbers in https://github.com/AxFoundation/strax/pull/773
+* Patch sharedarray version due to numpy updating by @dachengx in https://github.com/AxFoundation/strax/pull/850
+* Fix cache of Rechunker, zero chunk is not None by @dachengx in https://github.com/AxFoundation/strax/pull/849
+* Print writable storage by @dachengx in https://github.com/AxFoundation/strax/pull/851
+* Save multiple output when iteration stops in `PostOffice` by @dachengx in https://github.com/AxFoundation/strax/pull/852
+* Do not cache numba decorated `split_array` by @dachengx in https://github.com/AxFoundation/strax/pull/854
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.4...v1.6.5
+
+
 1.6.4 / 2024-05-27
 ---------------------
 * Minor fix on `_is_superrun` variable  names by @dachengx in https://github.com/AxFoundation/strax/pull/837
