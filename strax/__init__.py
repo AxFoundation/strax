@@ -35,3 +35,5 @@ from strax.processing.peak_splitting import *
 from strax.processing.peak_properties import *
 from strax.processing.hitlets import *
 from strax.processing.statistics import *
+
+from . import testutils
