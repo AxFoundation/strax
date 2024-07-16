@@ -844,12 +844,12 @@ def generate_source_hash(cls, algorithm="md5", digit_size=8):
             inspect.getsource(method)
             for name, method in inspect.getmembers(cls, inspect.isfunction)
         ]
+
     try:
         class_source = inspect.getsource(cls)
         method_sources = get_method_sources(cls)
     except:
         raise ValueError("Failed to get source code for", cls)
-    
 
     full_source = class_source + "".join(method_sources)
 
