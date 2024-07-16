@@ -282,11 +282,15 @@ class TestContext(unittest.TestCase):
     def test_register_all_no_defaults(self, runs_default_allowed=False):
         """Test if we register a plugin with no run-defaults."""
         st = self.get_context(runs_default_allowed)
-        assert any([self._has_per_run_default(Peaks), self._has_per_run_default(Records)])
+        assert any(
+            [self._has_per_run_default(Peaks), self._has_per_run_default(Records)]
+        )
         st.register(Records)
 
         if not runs_default_allowed:
-            self.assertRaises(strax.InvalidConfiguration, st.register_all, strax.testutils)
+            self.assertRaises(
+                strax.InvalidConfiguration, st.register_all, strax.testutils
+            )
         else:
             st.register_all(strax.testutils)
 
@@ -319,13 +323,17 @@ class TestContext(unittest.TestCase):
     def get_context(self, use_defaults, **kwargs):
         """Get simple context where we have one mock run in the only storage frontend."""
         assert isinstance(use_defaults, bool)
-        st = strax.Context(storage=self.get_mock_sf(), check_available=("records",), **kwargs)
+        st = strax.Context(
+            storage=self.get_mock_sf(), check_available=("records",), **kwargs
+        )
         st.set_context_config({"use_per_run_defaults": use_defaults})
         return st
 
     def get_mock_sf(self):
         mock_rundb = [{"name": "0", strax.RUN_DEFAULTS_KEY: dict(base_area=43)}]
-        sf = strax.DataDirectory(path=self.tempdir, deep_scan=True, provide_run_metadata=True)
+        sf = strax.DataDirectory(
+            path=self.tempdir, deep_scan=True, provide_run_metadata=True
+        )
         for d in mock_rundb:
             sf.write_run_metadata(d["name"], d)
         return sf
@@ -385,7 +393,9 @@ class TestContext(unittest.TestCase):
         # since we cannot make peaks!
         assert st.get_source(run_id, "peaks", check_forbidden=True) is None
         assert st.get_source(run_id, "cut_peaks", check_forbidden=True) is None
-        assert st.get_source(run_id, ("peaks", "cut_peaks"), check_forbidden=True) is None
+        assert (
+            st.get_source(run_id, ("peaks", "cut_peaks"), check_forbidden=True) is None
+        )
 
         # We could ignore the error though
         assert st.get_source(run_id, "peaks", check_forbidden=False) == {"records"}
@@ -405,13 +415,18 @@ class TestContext(unittest.TestCase):
         st.register(Peaks)
         field = "time"
         field_matches, code_matches = st.search_field(field, return_matches=True)
-        fields_found_for_dtype = [matched_field[0] for matched_field in field_matches[field]]
+        fields_found_for_dtype = [
+            matched_field[0] for matched_field in field_matches[field]
+        ]
         self.assertTrue(
             all(p in fields_found_for_dtype for p in "records peaks".split()),
             f"{fields_found_for_dtype} is not correct, expected records or peaks",
         )
         self.assertTrue(
-            all(p in code_matches[field] for p in "Records.compute Peaks.compute".split()),
+            all(
+                p in code_matches[field]
+                for p in "Records.compute Peaks.compute".split()
+            ),
             "code_matches[field] is not correct, expected Records.compute or Peaks.compute",
         )
         # Also test printing:
@@ -481,6 +496,93 @@ class TestContext(unittest.TestCase):
         st3 = st.new_context(register=DevelopRecords)
         assert key.lineage != st3.key_for(run_id, "records").lineage
 
+    def test_source_hash_lineage(self):
+        """Test that only the source hash changes in the lineage when the plugin code changes slightly,
+        while keeping the same name and other attributes."""
+        st = self.get_context(True)
+
+        class TestPlugin(strax.Plugin):
+            __version__ = "0.1.0"
+            depends_on = tuple()
+            provides = "test"
+            data_kind = "test"
+            dtype = strax.record_dtype()
+
+            def compute(self, **kwargs):
+                # Original compute method
+                return np.ones(10, self.dtype)
+
+        st.register(TestPlugin)
+
+        key = st.key_for(run_id, "test")
+        initial_lineage = key.lineage["test"]
+
+        # Create a new context with a slightly modified TestPlugin
+        class TestPlugin(strax.Plugin):
+            __version__ = "0.1.0"
+            depends_on = tuple()
+            provides = "test"
+            data_kind = "test"
+            dtype = strax.record_dtype()
+
+            def compute(self, **kwargs):
+                # Slightly modified compute method
+                return np.ones(10, self.dtype) + 1  # Just added "+ 1"
+
+        st2 = st.new_context(register=TestPlugin)
+        key2 = st2.key_for(run_id, "test")
+        new_lineage = key2.lineage["test"]
+
+        # Check that only the source hash is different
+        assert new_lineage[0] == initial_lineage[0], "Class name changed unexpectedly"
+        assert new_lineage[1] == initial_lineage[1], "Version changed unexpectedly"
+        assert new_lineage[2] == initial_lineage[2], "Config changed unexpectedly"
+        assert (
+            new_lineage[3] != initial_lineage[3]
+        ), "Source hash did not change despite code change"
+
+        # Test with a child plugin
+        class ChildTestPlugin(TestPlugin):
+            child_plugin = True
+
+        st3 = st.new_context(register=ChildTestPlugin)
+        key3 = st3.key_for(run_id, "test")
+        child_lineage = key3.lineage["test"]
+
+        # Check changes for child plugin
+        assert (
+            child_lineage[0] != initial_lineage[0]
+        ), "Child plugin name should be different"
+        assert (
+            child_lineage[1] == initial_lineage[1]
+        ), "Child plugin version should be the same"
+        assert isinstance(child_lineage[2], dict), "Config should still be a dictionary"
+        assert (
+            "TestPlugin" in child_lineage[2]
+        ), "Parent plugin info should be in the config"
+        assert (
+            child_lineage[3] != initial_lineage[3]
+        ), "Source hash should be different for child plugin"
+
+        # Ensure only the source hash changes with config changes
+        st4 = st.new_context(register=TestPlugin)
+        st4.set_config({"test_option": "value"})
+        key4 = st4.key_for(run_id, "test")
+        config_change_lineage = key4.lineage["test"]
+
+        assert (
+            config_change_lineage[0] == initial_lineage[0]
+        ), "Class name changed unexpectedly with config change"
+        assert (
+            config_change_lineage[1] == initial_lineage[1]
+        ), "Version changed unexpectedly with config change"
+        assert (
+            config_change_lineage[2] == initial_lineage[2]
+        ), "Config in lineage changed unexpectedly with config change"
+        assert (
+            config_change_lineage[3] != initial_lineage[3]
+        ), "Source hash did not change despite config change"
+
     @staticmethod
     def get_dummy_peaks_dependency():
         class DummyDependsOnPeaks(strax.CutPlugin):
@@ -498,7 +600,9 @@ class TestContext(unittest.TestCase):
             (run_id, "records"), old_metadata, return_results=True
         )
         comparison_dict["metadata2"].pop("strax_version")
-        assert comparison_dict["metadata2"] == old_metadata, "metadata comparison failed"
+        assert (
+            comparison_dict["metadata2"] == old_metadata
+        ), "metadata comparison failed"
 
     def test_get_data_kinds(self):
         st = self.get_context(True)
@@ -507,7 +611,10 @@ class TestContext(unittest.TestCase):
         st.register(self.get_dummy_peaks_dependency())
         data_kind_collection, data_type_collection = st.get_data_kinds()
         # Assert the expected data kinds and their corresponding data types
-        expected_data_kind_collection = {"records": ["records"], "peaks": ["peaks", "cut_peaks"]}
+        expected_data_kind_collection = {
+            "records": ["records"],
+            "peaks": ["peaks", "cut_peaks"],
+        }
         assert data_kind_collection == expected_data_kind_collection
         # Assert the expected data types and their corresponding data kinds
         expected_data_type_collection = {
