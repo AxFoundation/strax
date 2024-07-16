@@ -832,17 +832,24 @@ def convert_tuple_to_list(init_func_input):
 
 
 @export
-def generate_source_hash(cls, algorithm="md5", digest_size=8):
+def generate_source_hash(cls, algorithm="md5", digit_size=8):
     """Generate a hash based on the class's source code, explicitly including method bodies."""
+
+    # for tmp plugin, return a fixed hash with same length
+    if cls.__name__.startswith("_temp_"):
+        return "0" * digit_size
 
     def get_method_sources(cls):
         return [
             inspect.getsource(method)
             for name, method in inspect.getmembers(cls, inspect.isfunction)
         ]
-
-    class_source = inspect.getsource(cls)
-    method_sources = get_method_sources(cls)
+    try:
+        class_source = inspect.getsource(cls)
+        method_sources = get_method_sources(cls)
+    except:
+        raise ValueError("Failed to get source code for", cls)
+    
 
     full_source = class_source + "".join(method_sources)
 
@@ -851,5 +858,7 @@ def generate_source_hash(cls, algorithm="md5", digest_size=8):
 
     hash_object = hashlib.new(algorithm)
     hash_object.update(full_source.encode())
+    truncated_hash = hash_object.hexdigest()[:digit_size]
+    print("Truncated hash", truncated_hash)
 
-    return hash_object.hexdigest()[:digest_size]
+    return truncated_hash
