@@ -891,7 +891,7 @@ class Context:
         """
         last_provide = [d_provides for d_provides in plugin.provides][-1]
         plugin_source_hash = strax.generate_source_hash(plugin.__class__)
-        
+
         if plugin.child_plugin:
             # Plugin is a child of another plugin, hence we have to
             # drop the parents config from the lineage
@@ -920,7 +920,12 @@ class Context:
                 configs[parent_class.__name__] = parent_class.__version__
 
             plugin.lineage = {
-                last_provide: (plugin.__class__.__name__, plugin.version(run_id), configs, plugin_source_hash)
+                last_provide: (
+                    plugin.__class__.__name__,
+                    plugin.version(run_id),
+                    configs,
+                    plugin_source_hash,
+                )
             }
         else:
             plugin.lineage = {
