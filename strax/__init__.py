@@ -26,6 +26,7 @@ from .run_selection import *
 from .corrections import *
 
 from .io import *
+from .testutils import *
 
 from strax.processing.data_reduction import *
 from strax.processing.pulse_processing import *
@@ -36,4 +37,3 @@ from strax.processing.peak_properties import *
 from strax.processing.hitlets import *
 from strax.processing.statistics import *
 
-from . import testutils
