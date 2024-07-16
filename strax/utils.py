@@ -22,6 +22,8 @@ import os
 import click
 import deepdiff
 import copy
+import inspect
+import hashlib
 
 
 # Change numba's caching backend from pickle to dill
@@ -438,7 +440,9 @@ def flatten_dict(d, separator=":", _parent_key="", keep=tuple()):
     for k, v in d.items():
         new_key = _parent_key + separator + k if _parent_key else k
         if isinstance(v, collections.abc.MutableMapping) and k not in keep:
-            items.extend(flatten_dict(v, separator=separator, _parent_key=new_key).items())
+            items.extend(
+                flatten_dict(v, separator=separator, _parent_key=new_key).items()
+            )
         else:
             items.append((new_key, v))
     return dict(items)
@@ -554,7 +558,9 @@ def multi_run(
             'a normal string via b"byte_string".decode("utf-8"). '
         )
     elif _add_run_id_as_byte:
-        run_id_numpy = run_id_numpy.astype("S")  # Use byte string to reduce memory usage.
+        run_id_numpy = run_id_numpy.astype(
+            "S"
+        )  # Use byte string to reduce memory usage.
 
     # List to sort data in the end according to output
     # (order may change due to threads)
@@ -606,16 +612,22 @@ def multi_run(
 
                 # Append the run id column
                 if add_run_id_field:
-                    ids = np.array([_run_id] * len(result), dtype=[("run_id", run_id_numpy.dtype)])
+                    ids = np.array(
+                        [_run_id] * len(result), dtype=[("run_id", run_id_numpy.dtype)]
+                    )
                     result = merge_arrs([ids, result])
                 final_result.append(result)
                 run_id_output.append(_run_id)
 
-            for r in itertools.islice(run_id_numpy, task_index, task_index + len(futures_done)):
+            for r in itertools.islice(
+                run_id_numpy, task_index, task_index + len(futures_done)
+            ):
                 task_index += 1
                 fut = exc.submit(exec_function, r, *args, **kwargs)
                 futures[fut] = r
-                log.debug(f"Submitting additional futures, new futures are: {futures.values()}")
+                log.debug(
+                    f"Submitting additional futures, new futures are: {futures.values()}"
+                )
 
         if throw_away_result:
             pbar.close()
@@ -684,7 +696,9 @@ def parse_selection(x, selection):
         if isinstance(selection, (list, tuple)):
             selection = " & ".join(f"({x})" for x in selection)
 
-        mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
+        mask = numexpr.evaluate(
+            selection, local_dict={fn: x[fn] for fn in x.dtype.names}
+        )
     return mask
 
 
@@ -827,3 +841,29 @@ def convert_tuple_to_list(init_func_input):
     else:
         # if not a container, return. i.e. int, float, bytes, str etc.
         return func_input
+
+
+@export
+def generate_source_hash(cls, algorithm="md5", digest_size=8):
+    """
+    Generate a hash based on the class's source code, explicitly including method bodies.
+    """
+
+    def get_method_sources(cls):
+        return [
+            inspect.getsource(method)
+            for name, method in inspect.getmembers(cls, inspect.isfunction)
+        ]
+
+    class_source = inspect.getsource(cls)
+    method_sources = get_method_sources(cls)
+
+    full_source = class_source + "".join(method_sources)
+
+    if algorithm not in hashlib.algorithms_available:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    hash_object = hashlib.new(algorithm)
+    hash_object.update(full_source.encode())
+
+    return hash_object.hexdigest()[:digest_size]
