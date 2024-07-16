@@ -17,3 +17,4 @@ scipy
 tqdm>=4.46.0
 zarr
 zstd
+boltons
