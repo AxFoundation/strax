@@ -848,7 +848,9 @@ def generate_source_hash(cls, algorithm="md5", digit_size=8):
     try:
         class_source = inspect.getsource(cls)
         method_sources = get_method_sources(cls)
-    except:
+    except BaseException as e:
+        # Handle the exception
+        print(f"An error occurred: {e}")
         raise ValueError("Failed to get source code for", cls)
 
     full_source = class_source + "".join(method_sources)
