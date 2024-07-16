@@ -44,15 +44,11 @@ def test_child_plugin_config():
     # parent and child are correct:
     # ---------------------------------
     # Unchanged values and common values::
-    assert np.all(
-        parent["time"] == child["time"]
-    ), "Time field is different for parent and child"
+    assert np.all(parent["time"] == child["time"]), "Time field is different for parent and child"
     assert np.all(
         parent["length"] == child["length"]
     ), "Length field is different for parent and child"
-    assert np.all(
-        parent["dt"] == child["dt"]
-    ), "dt field is different for parent and child"
+    assert np.all(parent["dt"] == child["dt"]), "dt field is different for parent and child"
 
     m = np.all(parent["max_gap"] == child["max_gap"])
     assert m, "parent_unique_option is not equal in parent and child"
@@ -74,14 +70,11 @@ def test_child_plugin_config():
         "The channel identfication did not work for the parent",
         'This means "more_special_context_option_child" did not work properly',
     )
-    t = np.all(
-        parent["area_per_channel"] == DEFAULT_CONFIG_TEST["area_per_channel_both"]
-    )
+    t = np.all(parent["area_per_channel"] == DEFAULT_CONFIG_TEST["area_per_channel_both"])
     assert t, mes
     mes = 'Parent array does not have the correct shape. This means "context_option" was wrong.'
     assert (
-        parent[0]["area_per_channel"].shape
-        == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
+        parent[0]["area_per_channel"].shape == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
     ), mes
 
     mes = (
@@ -89,16 +82,12 @@ def test_child_plugin_config():
         'This means "more_special_context_option_child" did not work properly',
     )
     sc, ec = DEFAULT_CONFIG_TEST["channel_map_child"]
-    t = np.all(
-        child["area_per_channel"][:, sc:ec]
-        == DEFAULT_CONFIG_TEST["area_per_channel_both"]
-    )
+    t = np.all(child["area_per_channel"][:, sc:ec] == DEFAULT_CONFIG_TEST["area_per_channel_both"])
     t = t & np.all(child["area_per_channel"][:, :sc] == 0)
     assert t, mes
     mes = 'Child array does not have the correct shape. This means "context_option" was wrong.'
     assert (
-        child[0]["area_per_channel"].shape
-        == DEFAULT_CONFIG_TEST["area_per_channel_shape_child"]
+        child[0]["area_per_channel"].shape == DEFAULT_CONFIG_TEST["area_per_channel_shape_child"]
     ), mes
 
     # --------------------------------
@@ -139,17 +128,14 @@ def test_child_plugin_config():
         ),
     )
     assert (
-        parent[0]["area_per_channel"].shape
-        == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
+        parent[0]["area_per_channel"].shape == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
     ), mes
 
     mes = (
         prefix,
         'Child array does not have the correct shape. This means "context_option" was wrong.',
     )
-    assert child[0]["area_per_channel"].shape == (
-        new_test_settings["context_option_child"],
-    ), mes
+    assert child[0]["area_per_channel"].shape == (new_test_settings["context_option_child"],), mes
 
     # Make sure reversed order does not overwrite anything:
     child = mystrax.get_array(run_id=run_id, targets="peaks_child")
@@ -177,17 +163,14 @@ def test_child_plugin_config():
         ),
     )
     assert (
-        parent[0]["area_per_channel"].shape
-        == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
+        parent[0]["area_per_channel"].shape == DEFAULT_CONFIG_TEST["area_per_channel_shape_parent"]
     ), mes
 
     mes = (
         prefix,
         'Child array does not have the correct shape. This means "context_option" was wrong.',
     )
-    assert child[0]["area_per_channel"].shape == (
-        new_test_settings["context_option_child"],
-    ), mes
+    assert child[0]["area_per_channel"].shape == (new_test_settings["context_option_child"],), mes
 
 
 def test_child_plugin_lineage():
