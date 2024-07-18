@@ -498,8 +498,12 @@ class StorageBackend:
 
             # Chunk number constraint
             if chunk_number is not None:
-                if i != chunk_number:
-                    continue
+                if isinstance(chunk_number, (list, tuple)):
+                    if i not in chunk_number:
+                        continue
+                elif isinstance(chunk_number, int):
+                    if i != chunk_number:
+                        continue
 
             # Time constraint
             if time_range:
