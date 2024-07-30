@@ -57,8 +57,8 @@ class Plugin:
     data_kind: typing.Union[str, immutabledict, dict]
     dtype: typing.Union[tuple, np.dtype, immutabledict, dict]
 
-    depends_on: tuple
-    provides: tuple
+    depends_on: typing.Union[str, tuple, list]
+    provides: typing.Union[str, tuple, list]
     input_buffer: typing.Dict[str, strax.Chunk]
 
     # Needed for plugins which are inherited from an already existing plugins,
@@ -102,6 +102,8 @@ class Plugin:
 
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
+
+    allow_hyperrun = False
 
     def __init__(self):
         if not hasattr(self, "depends_on"):
@@ -204,13 +206,12 @@ class Plugin:
             ):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs and "
-                    "must declare its data kind as a dict: "
-                    "{dtypename: data kind}."
+                    "must declare its data kind as a dict."
                 )
             if not isinstance(self.dtype, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} has multiple outputs, so its "
-                    "dtype must be specified as a dict: {output: dtype}."
+                    "dtype must be specified as a dict."
                 )
             self.dtype = {k: strax.to_numpy_dtype(dt) for k, dt in self.dtype.items()}
         else:
@@ -377,7 +378,9 @@ class Plugin:
         """
         try:
             # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
-            self.input_buffer[d] = strax.Chunk.concatenate([self.input_buffer[d], next(iters[d])])
+            self.input_buffer[d] = strax.Chunk.concatenate(
+                [self.input_buffer[d], next(iters[d])], self.allow_hyperrun
+            )
             # print(f"Fetched {d} in {self}, "
             #      f"now have {self.input_buffer[d]}")
             return True
@@ -478,7 +481,8 @@ class Plugin:
                                 t=this_chunk_end, allow_early_split=True
                             )
                             self.input_buffer[d] = strax.Chunk.concatenate(
-                                [back_to_buffer, self.input_buffer[d]]
+                                [back_to_buffer, self.input_buffer[d]],
+                                self.allow_hyperrun,
                             )
                         max_passes_left -= 1
                     else:
@@ -594,10 +598,10 @@ class Plugin:
                     message = (
                         "New feature, we are ignoring inconsistent the "
                         "possible ValueError in time ranges for "
-                        f"{self.__class__.__name__} of inputs: {tranges}"
+                        f"{self.__class__.__name__} of inputs: {tranges} "
                         "because this occurred in a save_when.NEVER "
                         "plugin. Report any findings in "
-                        "github.com/AxFoundation/strax/issues/247"
+                        "https://github.com/AxFoundation/strax/issues/247"
                     )
                     warn(message, UserWarning)
                 # This block will be deleted </end>
@@ -625,7 +629,7 @@ class Plugin:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
-                    "provide a dict output {dtypename: result}"
+                    "provide a dict output."
                 )
             return {d: self._fix_output(result[d], start, end, _dtype=d) for d in self.provides}
 

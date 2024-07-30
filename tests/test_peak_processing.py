@@ -207,7 +207,7 @@ def test_peak_overflow(
     assert strax.endtime(r_buffer[-1]) - r_buffer["time"].min() > magic_overflow_time
     r = r_buffer.copy()
     del r_buffer
-    print(f"Array is {r.nbytes/1e6} MB, good luck")
+    print(f"Array is {r.nbytes / 1e6} MB, good luck")
 
     # Do peak finding!
     print(f"Find hits")

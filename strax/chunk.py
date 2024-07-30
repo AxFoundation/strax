@@ -71,6 +71,8 @@ class Chunk:
             raise ValueError(
                 f"Attempt to create chunk {self} with data of {dtype}, should be {expected_dtype}"
             )
+        if self.start < 0:
+            raise ValueError(f"Attempt to create chunk {self} with negative start time")
         if self.start > self.end:
             raise ValueError(f"Attempt to create chunk {self} with negative length")
 
@@ -243,7 +245,7 @@ class Chunk:
         )
 
     @classmethod
-    def concatenate(cls, chunks):
+    def concatenate(cls, chunks, allow_hyperrun=False):
         """Create chunk by concatenating chunks of same data type You can pass None's, they will be
         ignored."""
         chunks = [c for c in chunks if c is not None]
@@ -259,7 +261,7 @@ class Chunk:
 
         run_ids = [c.run_id for c in chunks]
 
-        if len(set(run_ids)) != 1:
+        if len(set(run_ids)) != 1 and not allow_hyperrun:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
@@ -325,7 +327,7 @@ class CannotSplit(Exception):
 
 
 @export
-@numba.njit(cache=True, nogil=True)
+@numba.njit(cache=False, nogil=True)
 def split_array(data, t, allow_early_split=False):
     """Return (data left of t, data right of t, t), or raise CannotSplit if that would split a data
     element in two.
@@ -418,3 +420,44 @@ def _update_subruns_in_chunk(chunks):
             else:
                 subruns[subrun_id] = subrun_start_end
     return subruns
+
+
+@export
+class Rechunker:
+    """Helper class for rechunking.
+
+    Send in chunks via receive, which returns either None (no chunk to send) or a chunk to send.
+
+    Don't forget a final call to .flush() to get any final data out!
+
+    """
+
+    def __init__(self, rechunk=False, run_id=None):
+        self.rechunk = rechunk
+        self.is_superrun = run_id and run_id.startswith("_") and not run_id.startswith("__")
+        self.run_id = run_id
+
+        self.cache = None
+
+    def receive(self, chunk):
+        if self.is_superrun:
+            chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
+        if not self.rechunk:
+            # We aren't rechunking
+            return chunk
+        if self.cache is not None:
+            # We have an old chunk, so we need to concatenate
+            chunk = strax.Chunk.concatenate([self.cache, chunk])
+        if chunk.data.nbytes >= chunk.target_size_mb * 1e6:
+            # Enough data to send a new chunk!
+            self.cache = None
+            return chunk
+        else:
+            # Not enough data yet, so we cache the chunk
+            self.cache = chunk
+            return None
+
+    def flush(self):
+        result = self.cache
+        self.cache = None
+        return result

@@ -1,3 +1,47 @@
+1.6.5 / 2024-07-10
+---------------------
+* Single threaded alternative processor by @JelleAalbers in https://github.com/AxFoundation/strax/pull/773
+* Patch sharedarray version due to numpy updating by @dachengx in https://github.com/AxFoundation/strax/pull/850
+* Fix cache of Rechunker, zero chunk is not None by @dachengx in https://github.com/AxFoundation/strax/pull/849
+* Print writable storage by @dachengx in https://github.com/AxFoundation/strax/pull/851
+* Save multiple output when iteration stops in `PostOffice` by @dachengx in https://github.com/AxFoundation/strax/pull/852
+* Do not cache numba decorated `split_array` by @dachengx in https://github.com/AxFoundation/strax/pull/854
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.4...v1.6.5
+
+
+1.6.4 / 2024-05-27
+---------------------
+* Minor fix on `_is_superrun` variable  names by @dachengx in https://github.com/AxFoundation/strax/pull/837
+* Implement Hyperrun by @dachengx in https://github.com/AxFoundation/strax/pull/838
+* Add function to collect `data_type` and `data_kind` by @dachengx in https://github.com/AxFoundation/strax/pull/839
+* Check `include_tags` and `exclude_tags` by @dachengx in https://github.com/AxFoundation/strax/pull/841
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.3...v1.6.4
+
+
+1.6.3 / 2024-04-30
+---------------------
+* Install `graphviz` for the pytests by @dachengx in https://github.com/AxFoundation/strax/pull/817
+* Increase the timing precision of progress bar by @dachengx in https://github.com/AxFoundation/strax/pull/819
+* Initialize plugin because `depends_on` can be property by @dachengx in https://github.com/AxFoundation/strax/pull/820
+* Update context.py by @WenzDaniel in https://github.com/AxFoundation/strax/pull/821
+* Disable tqdm progress bar when `check_available` is empty by @dachengx in https://github.com/AxFoundation/strax/pull/822
+* Check the consistency of number of items in metadata and data in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/824
+* Remove `strax.plugin` by @dachengx in https://github.com/AxFoundation/strax/pull/825
+* Pick out selection applying function by @dachengx in https://github.com/AxFoundation/strax/pull/826
+* Add `CutList` by @dachengx in https://github.com/AxFoundation/strax/pull/827
+* Update tags handling, added comment field. Allows to define superuns … by @WenzDaniel in https://github.com/AxFoundation/strax/pull/798
+* Prevent start being negative by @dachengx in https://github.com/AxFoundation/strax/pull/828
+* Tiny change on the trailing space by @dachengx in https://github.com/AxFoundation/strax/pull/830
+* Add `register_cut_list` by @dachengx in https://github.com/AxFoundation/strax/pull/831
+* Record all base classes when multiple inheritance by @dachengx in https://github.com/AxFoundation/strax/pull/832
+* Multiple output `DownChunkingPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/833
+* Add `ExhaustPlugin` that exhausts all chunks when fetching data by @dachengx in https://github.com/AxFoundation/strax/pull/835
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.2...v1.6.3
+
+
 1.6.2 / 2024-04-04
 ---------------------
 * Use parentheses to separate the class name and attributes in the representation of StorageFrontend by @dachengx in https://github.com/AxFoundation/strax/pull/809

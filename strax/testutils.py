@@ -295,12 +295,14 @@ class DownSampleRecords(strax.DownChunkingPlugin):
                 res = records[offset:count]
                 chunk_end = np.max(strax.endtime(res))
                 offset = count
-                chunk = self.chunk(start=last_start, end=chunk_end, data=res)
+                chunk = self.chunk(
+                    start=last_start, end=chunk_end, data=res, data_type=self.provides[0]
+                )
                 last_start = chunk_end
                 yield chunk
 
         res = records[offset : count + 1]
-        chunk = self.chunk(start=last_start, end=end, data=res)
+        chunk = self.chunk(start=last_start, end=end, data=res, data_type=self.provides[0])
         yield chunk
 
 

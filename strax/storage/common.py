@@ -236,7 +236,9 @@ class StorageFrontend:
 
     def _we_take(self, data_type):
         """Return if data_type can be provided by this frontend."""
-        return not (data_type in self.exclude or self.take_only and data_type not in self.take_only)
+        return not (
+            data_type in self.exclude or (self.take_only and data_type not in self.take_only)
+        )
 
     def _support_superruns(self, run_id):
         """Checks if run is a superrun and if superruns are provided by frontend."""
@@ -496,8 +498,12 @@ class StorageBackend:
 
             # Chunk number constraint
             if chunk_number is not None:
-                if i != chunk_number:
-                    continue
+                if isinstance(chunk_number, (list, tuple)):
+                    if i not in chunk_number:
+                        continue
+                elif isinstance(chunk_number, int):
+                    if i != chunk_number:
+                        continue
 
             # Time constraint
             if time_range:
@@ -633,36 +639,22 @@ class Saver:
         exhausted = False
         chunk_i = 0
 
-        run_id = self.md["run_id"]
-        _is_super_run = run_id.startswith("_")
+        rechunker = strax.Rechunker(
+            rechunk=rechunk and self.allow_rechunk, run_id=self.md["run_id"]
+        )
+
         try:
             while not exhausted:
                 chunk = None
 
                 try:
-                    if rechunk and self.allow_rechunk:
-                        while chunk is None or chunk.data.nbytes < chunk.target_size_mb * 1e6:
-                            next_chunk = next(source)
-
-                            if _is_super_run:
-                                # If we are creating a superrun, we load data from subruns
-                                # and the loaded subrun chunk becomes a superun chunk:
-                                next_chunk = strax.transform_chunk_to_superrun_chunk(
-                                    run_id, next_chunk
-                                )
-                            chunk = strax.Chunk.concatenate([chunk, next_chunk])
-                    else:
-                        chunk = next(source)
-                        if _is_super_run:
-                            # If we are creating a superrun, we load data from subruns
-                            # and the loaded subrun chunk becomes a superun chunk:
-                            chunk = strax.transform_chunk_to_superrun_chunk(run_id, chunk)
-
+                    chunk = rechunker.receive(next(source))
                 except StopIteration:
                     exhausted = True
+                    chunk = rechunker.flush()
 
                 if chunk is None:
-                    break
+                    continue
 
                 new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
                 pending = [f for f in pending if not f.done()]

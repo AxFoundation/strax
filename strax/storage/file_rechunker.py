@@ -189,13 +189,12 @@ def _get_meta_data_and_compressor(backend, source_directory, compressor, target_
 
 
 def _get_executor(parallel, max_workers):
-    # nested import - prevent circular imports
-    from strax.processor import SHMExecutor
-
     return {
         True: ThreadPoolExecutor(max_workers),
         "thread": ThreadPoolExecutor(max_workers),
         "process": (
-            ProcessPoolExecutor(max_workers) if SHMExecutor is None else SHMExecutor(max_workers)
+            ProcessPoolExecutor(max_workers)
+            if strax.SHMExecutor is None
+            else strax.SHMExecutor(max_workers)
         ),
     }.get(parallel)
