@@ -26,6 +26,7 @@ from .run_selection import *
 from .corrections import *
 
 from .io import *
+from .testutils import *
 
 from strax.processing.data_reduction import *
 from strax.processing.pulse_processing import *

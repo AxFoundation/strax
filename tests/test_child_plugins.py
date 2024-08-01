@@ -173,7 +173,7 @@ def test_child_plugin_config():
     assert child[0]["area_per_channel"].shape == (new_test_settings["context_option_child"],), mes
 
 
-def test_child_plugin_lienage():
+def test_child_plugin_lineage():
     """Similar test as above, but this time week check the lineage/hash of the child and parent."""
     mystrax = strax.Context(
         storage=[],
@@ -219,7 +219,7 @@ def test_child_plugin_lienage():
         "parent_unique_option": DEFAULT_CONFIG_TEST["max_gap_both"],
     }
 
-    parent_name, parent_version, config = lineage_parent
+    parent_name, parent_version, config, source_hash = lineage_parent
     assert parent_name == "ParentPlugin", "Wrong parent name"
     assert parent_version == "0.0.5", "Wrong parent version"
     for k, v in true_config_parent.items():
@@ -235,7 +235,7 @@ def test_child_plugin_lienage():
         "ParentPlugin": "0.0.5",
     }
 
-    child_name, child_version, config = lineage_child
+    child_name, child_version, config, source_hash = lineage_child
     assert child_name == "ChildPlugin", "Wrong child name"
     assert child_version == "0.0.1", "Wrong child version"
     for k, v in true_config_child.items():

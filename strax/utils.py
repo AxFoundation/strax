@@ -22,6 +22,8 @@ import os
 import click
 import deepdiff
 import copy
+import inspect
+import hashlib
 
 
 # Change numba's caching backend from pickle to dill
@@ -827,3 +829,38 @@ def convert_tuple_to_list(init_func_input):
     else:
         # if not a container, return. i.e. int, float, bytes, str etc.
         return func_input
+
+
+@export
+def generate_source_hash(cls, algorithm="md5", digit_size=8):
+    """Generate a hash based on the class's source code, explicitly including method bodies."""
+
+    # for tmp plugin, return a fixed hash with same length
+    if cls.__name__.startswith("_temp_"):
+        return "0" * digit_size
+
+    def get_method_sources(cls):
+        return [
+            inspect.getsource(method)
+            for name, method in inspect.getmembers(cls, inspect.isfunction)
+        ]
+
+    try:
+        class_source = inspect.getsource(cls)
+        method_sources = get_method_sources(cls)
+    except BaseException as e:
+        # Handle the exception
+        print(f"An error occurred: {e}")
+        raise ValueError("Failed to get source code for", cls)
+
+    full_source = class_source + "".join(method_sources)
+
+    if algorithm not in hashlib.algorithms_available:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    hash_object = hashlib.new(algorithm)
+    hash_object.update(full_source.encode())
+    truncated_hash = hash_object.hexdigest()[:digit_size]
+    print("Truncated hash", truncated_hash)
+
+    return truncated_hash
