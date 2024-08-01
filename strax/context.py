@@ -191,7 +191,11 @@ class Context:
     _run_defaults_cache: dict
     storage: ty.List[strax.StorageFrontend]
 
-    def __init__(self, storage=None, config=None, register=None, register_all=None, **kwargs):
+    processors: ty.Mapping[str, strax.BaseProcessor]
+
+    def __init__(
+        self, storage=None, config=None, register=None, register_all=None, processors=None, **kwargs
+    ):
         """Create a strax context.
 
         :param storage: Storage front-ends to use. Can be:
@@ -202,7 +206,9 @@ class Context:
             applied to plugins
         :param register: plugin class or list of plugin classes to register
         :param register_all: module for which all plugin classes defined in it
-            will be registered.
+           will be registered.
+        :param processors: A mapping of processor names to classes to use for
+            data processing.
         Any additional kwargs are considered Context-specific options; see
         Context.takes_config.
 
@@ -226,12 +232,32 @@ class Context:
         if register is not None:
             self.register(register)
 
+        if processors is None:
+            processors = strax.PROCESSORS
+
+        if isinstance(processors, str):
+            processors = [processors]
+
+        if isinstance(processors, (list, tuple)):
+            ps = {}
+            for processor in processors:
+                if isinstance(processor, str) and processor in strax.PROCESSORS:
+                    ps[processor] = strax.PROCESSORS[processor]
+                elif isinstance(processor, strax.BaseProcessor):
+                    ps[processor.__name__] = processor
+                else:
+                    raise ValueError(f"Unknown processor {processor}")
+            processors = ps
+
+        self.processors = processors
+
     def new_context(
         self,
         storage=tuple(),
         config=None,
         register=None,
         register_all=None,
+        processors=None,
         replace=False,
         **kwargs,
     ):
@@ -255,7 +281,7 @@ class Context:
             config = strax.combine_configs(self.config, config, mode="update")
             kwargs = strax.combine_configs(self.context_config, kwargs, mode="update")
 
-        new_c = Context(storage=storage, config=config, **kwargs)
+        new_c = Context(storage=storage, config=config, processors=processors, **kwargs)
         if not replace:
             new_c._plugin_class_registry = self._plugin_class_registry.copy()
         new_c.register_all(register_all)
@@ -959,6 +985,10 @@ class Context:
         """
         return sorted(self.storage, key=lambda x: x.storage_type)
 
+    def writable_storage(self) -> ty.List[strax.StorageFrontend]:
+        """Return list of writable storage frontends."""
+        return [s for s in self.storage if not s.readonly]
+
     def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
         """Get partial loaders to allow loading data later.
 
@@ -1434,7 +1464,7 @@ class Context:
     def get_iter(
         self,
         run_id: str,
-        targets: ty.Union[ty.Tuple[str], ty.List[str]],
+        targets,
         save=tuple(),
         max_workers=None,
         time_range=None,
@@ -1449,6 +1479,7 @@ class Context:
         progress_bar=True,
         multi_run_progress_bar=True,
         _chunk_number=None,
+        processor=None,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -1486,6 +1517,7 @@ class Context:
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
+            targets = tuple(set(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = "_temp_" + strax.deterministic_hash(targets)
@@ -1516,8 +1548,17 @@ class Context:
             if k.startswith("_temp"):
                 del self._plugin_class_registry[k]
 
+        if processor is None:
+            processor = list(self.processors)[0]
+
+        if isinstance(processor, str):
+            processor = self.processors[processor]
+
+        if not hasattr(processor, "iter"):
+            raise ValueError("Processors must implement a iter methed.")
+
         seen_a_chunk = False
-        generator = strax.ThreadedMailboxProcessor(
+        generator = processor(
             components,
             max_workers=max_workers,
             allow_shm=self.context_config["allow_shm"],
@@ -2542,8 +2583,7 @@ select_docs = """
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
 
-get_docs = (
-    """
+get_docs = """
 :param run_id: run id to get
 :param targets: list/tuple of strings of data type names to get
 :param ignore_errors: Return the data for the runs that successfully loaded, even if some runs
@@ -2563,9 +2603,10 @@ get_docs = (
 :param run_id_as_bytes: Boolean if true uses byte string instead of an
     unicode string added to a multi-run array. This can save a lot of
     memory when loading many runs.
+:param processor: Name of the processor to use. If not specified, the
+    first processor from the context's processor list is used.
 """
-    + select_docs
-)
+get_docs += select_docs
 
 for attr in dir(Context):
     attr_val = getattr(Context, attr)
