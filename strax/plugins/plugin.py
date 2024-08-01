@@ -5,6 +5,7 @@ A 'plugin' is something that outputs an array and gets arrays from one or more o
 """
 
 from enum import IntEnum
+from collections import Counter
 import inspect
 import itertools
 import logging
@@ -110,6 +111,11 @@ class Plugin:
             raise ValueError(f"depends_on not provided for {self.__class__.__name__}")
 
         self.depends_on = strax.to_str_tuple(self.depends_on)
+        # Remove duplicates
+        counter = Counter(self.depends_on)
+        duplicates = {item: count for item, count in counter.items() if count > 1}
+        if duplicates:
+            raise ValueError(f"Duplicate dependencies in {self.__class__.__name__}: {duplicates}")
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
