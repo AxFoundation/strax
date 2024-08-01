@@ -111,7 +111,7 @@ class Plugin:
 
         self.depends_on = strax.to_str_tuple(self.depends_on)
         # Remove duplicates
-        self.depends_on = tuple(dict.fromkeys(self.depends_on))
+        self.depends_on = tuple(self.depends_on)
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
@@ -461,14 +461,23 @@ class Plugin:
                     # Fetch other inputs (when needed)
                     for d in self.depends_on:
                         if d != pacemaker:
+                            print(f"---------------------------Fetching {d}-------------------------------")
                             while (
                                 self.input_buffer[d] is None
                                 or self.input_buffer[d].end < this_chunk_end
                             ):
+                                print(f"Fetching {d} in {self}, hope to see {this_chunk_end}")
                                 self._fetch_chunk(d, iters, check_end_not_before=this_chunk_end)
+                        print("self.input_buffer[d]:",self.input_buffer[d])
+                        print("This chunk end: ", this_chunk_end)
+
+
                         inputs[d], self.input_buffer[d] = self.input_buffer[d].split(
                             t=this_chunk_end, allow_early_split=True
                         )
+
+
+                        print(f"---------------------------Fetched {inputs[d]}-------------------------------")
                     # If any of the inputs were trimmed due to early splits,
                     # trim the others too.
                     # In very hairy cases this can take multiple passes.
