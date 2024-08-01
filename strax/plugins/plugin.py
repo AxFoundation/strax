@@ -5,6 +5,7 @@ A 'plugin' is something that outputs an array and gets arrays from one or more o
 """
 
 from enum import IntEnum
+from collections import Counter
 import inspect
 import itertools
 import logging
@@ -111,7 +112,10 @@ class Plugin:
 
         self.depends_on = strax.to_str_tuple(self.depends_on)
         # Remove duplicates
-        self.depends_on = tuple(set(self.depends_on))
+        counter = Counter(self.depends_on)
+        duplicates = {item: count for item, count in counter.items() if count > 1}
+        if duplicates:
+            raise ValueError(f"Duplicate dependencies in {self.__class__.__name__}: {duplicates}")
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
@@ -461,24 +465,13 @@ class Plugin:
                     # Fetch other inputs (when needed)
                     for d in self.depends_on:
                         if d != pacemaker:
-                            print(
-                                f"------------------------Fetching {d}----------------------------"
-                            )
                             while (
                                 self.input_buffer[d] is None
                                 or self.input_buffer[d].end < this_chunk_end
                             ):
-                                print(f"Fetching {d} in {self}, hope to see {this_chunk_end}")
                                 self._fetch_chunk(d, iters, check_end_not_before=this_chunk_end)
-                        print("self.input_buffer[d]:", self.input_buffer[d])
-                        print("This chunk end: ", this_chunk_end)
-
                         inputs[d], self.input_buffer[d] = self.input_buffer[d].split(
                             t=this_chunk_end, allow_early_split=True
-                        )
-
-                        print(
-                            f"-----------------------Fetched {inputs[d]}---------------------------"
                         )
                     # If any of the inputs were trimmed due to early splits,
                     # trim the others too.
@@ -620,8 +613,7 @@ class Plugin:
                 # This block will be deleted </end>
             elif len(set(tranges.values())) != 1:
                 message = (
-                    f"{self.__class__.__name__} "
-                    "got inconsistent time ranges of inputs: {tranges}"
+                    f"{self.__class__.__name__} got inconsistent time ranges of inputs: {tranges}"
                 )
                 raise ValueError(message)
         else:
