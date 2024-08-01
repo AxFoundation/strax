@@ -35,7 +35,7 @@ class DataKey:
 
     run_id: str
     data_type: str
-    lineage: dict
+    _lineage: dict
 
     # Do NOT use directly, use the lineage_hash method
     _lineage_hash = ""
@@ -43,10 +43,20 @@ class DataKey:
     def __init__(self, run_id, data_type, lineage):
         self.run_id = run_id
         self.data_type = data_type
-        self.lineage = lineage
+        self._lineage = lineage
 
     def __repr__(self):
         return "-".join([self.run_id, self.data_type, self.lineage_hash])
+
+    @property
+    def lineage(self):
+        return self._lineage
+
+    @lineage.setter
+    def lineage(self, value):
+        raise AttributeError(
+            f"Attribute lineage of {self.__class__.__name__} is immutable and cannot be changed."
+        )
 
     @property
     def lineage_hash(self):
