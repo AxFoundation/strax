@@ -36,14 +36,12 @@ class DataKey:
     run_id: str
     data_type: str
     _lineage: dict
-
-    # Do NOT use directly, use the lineage_hash method
-    _lineage_hash = ""
+    _lineage_hash: str
 
     def __init__(self, run_id, data_type, lineage):
         self.run_id = run_id
         self.data_type = data_type
-        self._lineage = lineage
+        self.lineage = lineage
 
     def __repr__(self):
         return "-".join([self.run_id, self.data_type, self.lineage_hash])
@@ -54,17 +52,12 @@ class DataKey:
 
     @lineage.setter
     def lineage(self, value):
-        raise AttributeError(
-            f"Attribute lineage of {self.__class__.__name__} is immutable and cannot be changed."
-        )
+        self._lineage = value
+        self._lineage_hash = strax.deterministic_hash(value)
 
     @property
     def lineage_hash(self):
         """Deterministic hash of the lineage."""
-        # We cache the hash computation to benefit tight loops calling
-        # this property
-        if self._lineage_hash == "":
-            self._lineage_hash = strax.deterministic_hash(self.lineage)
         return self._lineage_hash
 
 
