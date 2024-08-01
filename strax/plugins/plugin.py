@@ -461,23 +461,25 @@ class Plugin:
                     # Fetch other inputs (when needed)
                     for d in self.depends_on:
                         if d != pacemaker:
-                            print(f"---------------------------Fetching {d}-------------------------------")
+                            print(
+                                f"---------------------------Fetching {d}-------------------------------"
+                            )
                             while (
                                 self.input_buffer[d] is None
                                 or self.input_buffer[d].end < this_chunk_end
                             ):
                                 print(f"Fetching {d} in {self}, hope to see {this_chunk_end}")
                                 self._fetch_chunk(d, iters, check_end_not_before=this_chunk_end)
-                        print("self.input_buffer[d]:",self.input_buffer[d])
+                        print("self.input_buffer[d]:", self.input_buffer[d])
                         print("This chunk end: ", this_chunk_end)
-
 
                         inputs[d], self.input_buffer[d] = self.input_buffer[d].split(
                             t=this_chunk_end, allow_early_split=True
                         )
 
-
-                        print(f"---------------------------Fetched {inputs[d]}-------------------------------")
+                        print(
+                            f"---------------------------Fetched {inputs[d]}-------------------------------"
+                        )
                     # If any of the inputs were trimmed due to early splits,
                     # trim the others too.
                     # In very hairy cases this can take multiple passes.
