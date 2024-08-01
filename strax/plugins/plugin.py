@@ -111,7 +111,7 @@ class Plugin:
 
         self.depends_on = strax.to_str_tuple(self.depends_on)
         # Remove duplicates
-        self.depends_on = tuple(self.depends_on)
+        self.depends_on = tuple(set(self.depends_on))
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
