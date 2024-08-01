@@ -120,7 +120,9 @@ class Plugin:
             del compute_pars[compute_pars.index("chunk_i")]
         if "start" in compute_pars:
             if "end" not in compute_pars:
-                raise ValueError(f"Compute of {self} takes start, so it should also take end.")
+                raise ValueError(
+                    f"Compute of {self} takes start, so it should also take end."
+                )
             self.compute_takes_start_end = True
             del compute_pars[compute_pars.index("start")]
             del compute_pars[compute_pars.index("end")]
@@ -177,7 +179,8 @@ class Plugin:
 
     def __getattr__(self, name):
         """Allow access to config parameters as attributes this allows backwards compatibility in
-        cases where a descriptor style config depends on a non descriptor style config."""
+        cases where a descriptor style config depends on a non descriptor style config.
+        """
         if name == "config":
             raise AttributeError("Plugin not configured yet.")
         if hasattr(self, "config") and name in self.config:
@@ -190,7 +193,9 @@ class Plugin:
                 return self.takes_config[name].__get__(self)
             return self.config[name]
 
-        raise AttributeError(f"{self.__class__.__name__} instance has no attribute {name}")
+        raise AttributeError(
+            f"{self.__class__.__name__} instance has no attribute {name}"
+        )
 
     def fix_dtype(self):
         try:
@@ -224,7 +229,8 @@ class Plugin:
         for d in self.provides:
             fieldnames = self.dtype_for(d).names
             ok = "time" in fieldnames and (
-                ("dt" in fieldnames and "length" in fieldnames) or "endtime" in fieldnames
+                ("dt" in fieldnames and "length" in fieldnames)
+                or "endtime" in fieldnames
             )
             if not ok:
                 raise ValueError(f"Missing time and endtime information for {d}")
@@ -388,7 +394,10 @@ class Plugin:
             return True
         except StopIteration:
             # print(f"Got StopIteration while fetching for {d} in {self}")
-            if check_end_not_before is not None and self.input_buffer[d].end < check_end_not_before:
+            if (
+                check_end_not_before is not None
+                and self.input_buffer[d].end < check_end_not_before
+            ):
                 raise RuntimeError(
                     f"Tried to get data until {check_end_not_before}, but {d} "
                     f"ended prematurely at {self.input_buffer[d].end}"
@@ -414,7 +423,9 @@ class Plugin:
         for d in self.depends_on:
             self._fetch_chunk(d, iters)
             if self.input_buffer[d] is None:
-                raise ValueError(f"Cannot work with empty input buffer {self.input_buffer}")
+                raise ValueError(
+                    f"Cannot work with empty input buffer {self.input_buffer}"
+                )
             if self.input_buffer[d].end < _end:
                 pacemaker = d
                 _end = self.input_buffer[d].end
@@ -461,30 +472,38 @@ class Plugin:
                     # Fetch other inputs (when needed)
                     for d in self.depends_on:
                         if d != pacemaker:
-                            print(f"---------------------------Fetching {d}-------------------------------")
+                            print(
+                                f"------------------------Fetching {d}----------------------------"
+                            )
                             while (
                                 self.input_buffer[d] is None
                                 or self.input_buffer[d].end < this_chunk_end
                             ):
-                                print(f"Fetching {d} in {self}, hope to see {this_chunk_end}")
-                                self._fetch_chunk(d, iters, check_end_not_before=this_chunk_end)
-                        print("self.input_buffer[d]:",self.input_buffer[d])
+                                print(
+                                    f"Fetching {d} in {self}, hope to see {this_chunk_end}"
+                                )
+                                self._fetch_chunk(
+                                    d, iters, check_end_not_before=this_chunk_end
+                                )
+                        print("self.input_buffer[d]:", self.input_buffer[d])
                         print("This chunk end: ", this_chunk_end)
-
 
                         inputs[d], self.input_buffer[d] = self.input_buffer[d].split(
                             t=this_chunk_end, allow_early_split=True
                         )
 
-
-                        print(f"---------------------------Fetched {inputs[d]}-------------------------------")
+                        print(
+                            f"-----------------------Fetched {inputs[d]}---------------------------"
+                        )
                     # If any of the inputs were trimmed due to early splits,
                     # trim the others too.
                     # In very hairy cases this can take multiple passes.
                     # can we optimize this, or code it more elegantly?
                     max_passes_left = 10
                     while max_passes_left > 0:
-                        this_chunk_end = min([x.end for x in inputs.values()] + [this_chunk_end])
+                        this_chunk_end = min(
+                            [x.end for x in inputs.values()] + [this_chunk_end]
+                        )
                         if len(set([x.end for x in inputs.values()])) <= 1:
                             break
                         for d in self.depends_on:
@@ -512,7 +531,9 @@ class Plugin:
                 # Submit the computation
                 # print(f"{self} calling with {inputs_merged}")
                 if self.parallel and executor is not None:
-                    new_future = executor.submit(self.do_compute, chunk_i=chunk_i, **inputs_merged)
+                    new_future = executor.submit(
+                        self.do_compute, chunk_i=chunk_i, **inputs_merged
+                    )
                     pending_futures.append(new_future)
                     pending_futures = [f for f in pending_futures if not f.done()]
                     yield new_future
@@ -526,18 +547,24 @@ class Plugin:
             # Stopiteration), as required by lazy-mode processing requires
             for d in iters.keys():
                 if self._fetch_chunk(d, iters):
-                    raise RuntimeError(f"Plugin {d} terminated without fetching last {d}!")
+                    raise RuntimeError(
+                        f"Plugin {d} terminated without fetching last {d}!"
+                    )
 
             # This can happen especially in time range selections
             if hasattr(self.save_when, "values"):
-                save_when = max([int(save_when) for save_when in self.save_when.values()])
+                save_when = max(
+                    [int(save_when) for save_when in self.save_when.values()]
+                )
             else:
                 save_when = self.save_when
             if save_when > strax.SaveWhen.EXPLICIT:
                 for d, buffer in self.input_buffer.items():
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
-                        raise RuntimeError(f"Plugin {d} terminated with leftover {d}: {buffer}")
+                        raise RuntimeError(
+                            f"Plugin {d} terminated with leftover {d}: {buffer}"
+                        )
 
         finally:
             self.cleanup(wait_for=pending_futures)
@@ -598,7 +625,9 @@ class Plugin:
             # Side mark this wont work for a plugin which has a SaveWhen.NEVER and other
             # SaveWhen type.
             if hasattr(self.save_when, "values"):
-                save_when = max([int(save_when) for save_when in self.save_when.values()])
+                save_when = max(
+                    [int(save_when) for save_when in self.save_when.values()]
+                )
             else:
                 save_when = self.save_when
             if save_when <= strax.SaveWhen.EXPLICIT:
@@ -618,7 +647,8 @@ class Plugin:
                 # This block will be deleted </end>
             elif len(set(tranges.values())) != 1:
                 message = (
-                    f"{self.__class__.__name__} got inconsistent time ranges of inputs: {tranges}"
+                    f"{self.__class__.__name__} "
+                    "got inconsistent time ranges of inputs: {tranges}"
                 )
                 raise ValueError(message)
         else:
@@ -642,7 +672,10 @@ class Plugin:
                     f"{self.__class__.__name__} is multi-output and should "
                     "provide a dict output."
                 )
-            return {d: self._fix_output(result[d], start, end, _dtype=d) for d in self.provides}
+            return {
+                d: self._fix_output(result[d], start, end, _dtype=d)
+                for d in self.provides
+            }
 
         if _dtype is None:
             assert not self.multi_output
