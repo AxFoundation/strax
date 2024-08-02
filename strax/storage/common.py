@@ -35,10 +35,8 @@ class DataKey:
 
     run_id: str
     data_type: str
-    lineage: dict
-
-    # Do NOT use directly, use the lineage_hash method
-    _lineage_hash = ""
+    _lineage: dict
+    _lineage_hash: str
 
     def __init__(self, run_id, data_type, lineage):
         self.run_id = run_id
@@ -49,12 +47,17 @@ class DataKey:
         return "-".join([self.run_id, self.data_type, self.lineage_hash])
 
     @property
+    def lineage(self):
+        return self._lineage
+
+    @lineage.setter
+    def lineage(self, value):
+        self._lineage = value
+        self._lineage_hash = strax.deterministic_hash(value)
+
+    @property
     def lineage_hash(self):
         """Deterministic hash of the lineage."""
-        # We cache the hash computation to benefit tight loops calling
-        # this property
-        if self._lineage_hash == "":
-            self._lineage_hash = strax.deterministic_hash(self.lineage)
         return self._lineage_hash
 
 
