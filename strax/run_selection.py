@@ -53,7 +53,7 @@ def keys_for_runs(
     self, target: str, run_ids: ty.Union[np.ndarray, list, tuple, str]
 ) -> ty.List[strax.DataKey]:
     """Get the data-keys for a multitude of runs. If use_per_run_defaults is False which it
-    preferably is (#246), getting many keys should be fast as we only only compute the lineage once.
+    preferably is (#246), getting many keys should be fast as we only compute the lineage once.
 
     :param run_ids: Runs to get datakeys for
     :param target: datatype requested
