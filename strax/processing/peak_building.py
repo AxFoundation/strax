@@ -138,7 +138,7 @@ def find_peaks(
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def store_downsampled_waveform(
-    p, wv_buffer, store_in_data_top=False, wv_buffer_top=np.ones(1, dtype=np.float32)
+    p, wv_buffer, store_in_data_top=False, store_waveform_start=False, wv_buffer_top=np.ones(1, dtype=np.float32)
 ):
     """Downsample the waveform in buffer and store it in p['data'] and in p['data_top'] if indicated
     to do so.
@@ -170,16 +170,23 @@ def store_downsampled_waveform(
             wv_buffer[: p["length"] * downsample_factor].reshape(-1, downsample_factor).sum(axis=1)
         )
         p["dt"] *= downsample_factor
+
+        # If the waveform is downsampled, we can store the first samples of the waveform
+        if store_waveform_start & (downsample_factor <= 6):
+            if p["length"] > len(p["data_start"]):
+                p["data_start"] = wv_buffer[: len(p["data_start"])]
+            else:
+                p["data_start"][: p["length"]] = wv_buffer[: p["length"]]
+
     else:
         if store_in_data_top:
             p["data_top"][: p["length"]] = wv_buffer_top[: p["length"]]
         p["data"][: p["length"]] = wv_buffer[: p["length"]]
 
-
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(
-    peaks, hits, records, record_links, adc_to_pe, n_top_channels=0, select_peaks_indices=None
+    peaks, hits, records, record_links, adc_to_pe, n_top_channels=0, select_peaks_indices=None, save_waveform_start=False
 ):
     """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
     which hits were found. This is required to avoid any bias due to zero-padding and baselining.
@@ -307,10 +314,10 @@ def sum_waveform(
             p["area"] += area_pe
 
         if n_top_channels > 0:
-            store_downsampled_waveform(p, swv_buffer, True, twv_buffer)
+            store_downsampled_waveform(p, swv_buffer, True, save_waveform_start, twv_buffer)
         else:
-            store_downsampled_waveform(p, swv_buffer)
-
+            store_downsampled_waveform(p, swv_buffer, False, save_waveform_start)
+            
         p["n_saturated_channels"] = p["saturated_channel"].sum()
         p["area_per_channel"][:] = area_per_channel
 
