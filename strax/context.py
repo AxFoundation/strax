@@ -745,7 +745,7 @@ class Context:
         if (
             self.context_config["use_per_run_defaults"]
             or self._fixed_plugin_cache is None
-            or chunk_number
+            or chunk_number is not None
         ):
             # There is no point in caching if plugins (lineage) can
             # change per run or the cache is empty.
@@ -762,7 +762,7 @@ class Context:
         plugins: dict,
         chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
     ) -> None:
-        if self.context_config["use_per_run_defaults"] or chunk_number:
+        if self.context_config["use_per_run_defaults"] or chunk_number is not None:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
@@ -952,7 +952,7 @@ class Context:
                 if plugin.takes_config[option].track
             }
 
-        if chunk_number:
+        if chunk_number is not None:
             for d_depends in plugin.depends_on:
                 if d_depends in chunk_number:
                     configs[f"{d_depends}_chunk_number"] = chunk_number[d_depends]
@@ -1093,7 +1093,7 @@ class Context:
             loading_this_data = False
             key = self.key_for(run_id, target_i, chunk_number=chunk_number)
 
-            if chunk_number and target_i in chunk_number:
+            if chunk_number is not None and target_i in chunk_number:
                 _chunk_number = chunk_number[target_i]
             else:
                 _chunk_number = None
@@ -1130,7 +1130,7 @@ class Context:
                         _subrun_time_range = None
                     else:
                         _subrun_time_range = sub_run_spec[subrun]
-                    if chunk_number and target_i in chunk_number:
+                    if chunk_number is not None and target_i in chunk_number:
                         _chunk_number = chunk_number[target_i]
                     else:
                         _chunk_number = None
@@ -1266,7 +1266,7 @@ class Context:
                 # but anyway the data is should already been made
                 for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
-                    if chunk_number and d_to_save in chunk_number:
+                    if chunk_number is not None and d_to_save in chunk_number:
                         _chunk_number = chunk_number[d_to_save]
                     else:
                         _chunk_number = None
