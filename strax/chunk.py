@@ -179,19 +179,22 @@ class Chunk:
             data_type=self.data_type,
             data_kind=self.data_kind,
             target_size_mb=self.target_size_mb,
-            subruns=self.subruns,
         )
+
+        subruns_first_chunk, subruns_second_chunk = _split_subruns_in_chunk(self.subruns, t)
 
         c1 = strax.Chunk(
             start=self.start,
             end=max(self.start, t),  # type: ignore
             data=data1,
+            subruns=subruns_first_chunk,
             **common_kwargs,
         )
         c2 = strax.Chunk(
             start=max(self.start, t),  # type: ignore
             end=max(t, self.end),  # type: ignore
             data=data2,
+            subruns=subruns_second_chunk,
             **common_kwargs,
         )
         return c1, c2
@@ -269,7 +272,7 @@ class Chunk:
             )
 
         run_id = run_ids[0]
-        subruns = _update_subruns_in_chunk(chunks)
+        subruns = _merge_subruns_in_chunk(chunks)
 
         prev_end = 0
         for c in chunks:
@@ -404,8 +407,8 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     )
 
 
-def _update_subruns_in_chunk(chunks):
-    """Updates list of subruns in a superrun chunk during concatenation.
+def _merge_subruns_in_chunk(chunks):
+    """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
 
@@ -425,6 +428,25 @@ def _update_subruns_in_chunk(chunks):
             else:
                 subruns[subrun_id] = subrun_start_end
     return subruns
+
+
+def _split_subruns_in_chunk(subruns, t):
+    """Split list of subruns in a superrun chunk during split.
+
+    Updates also their start/ends too.
+
+    """
+    subruns_first_chunk = {}
+    subruns_second_chunk = {}
+    for subrun_id, subrun_start_end in subruns.items():
+        if t < subrun_start_end["start"]:
+            subruns_second_chunk[subrun_id] = subrun_start_end
+        elif subrun_start_end["start"] <= t < subrun_start_end["end"]:
+            subruns_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": t}
+            subruns_second_chunk[subrun_id] = {"start": t, "end": subrun_start_end["end"]}
+        elif subrun_start_end["end"] <= t:
+            subruns_first_chunk[subrun_id] = subrun_start_end
+    return subruns_first_chunk, subruns_second_chunk
 
 
 @export
@@ -459,18 +481,6 @@ class Rechunker:
             chunk = strax.Chunk.concatenate([self.cache, chunk])
 
         target_size_b = chunk.target_size_mb * 1e6
-
-        # if self.is_superrun:
-        #     # Because strax.Chunk.split will change the subruns,
-        #     # we should not split the chunk if it is a superrun chunk
-        #     if chunk.data.nbytes >= target_size_b:
-        #         # Enough data to send a new chunk!
-        #         self.cache = None
-        #         return [chunk]
-        #     else:
-        #         # Not enough data yet, so we cache the chunk
-        #         self.cache = chunk
-        #         return []
 
         # Get the split indices according to the allowed minimum gaps
         # between data and the target size of chunk
