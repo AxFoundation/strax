@@ -441,6 +441,7 @@ class Rechunker:
         self.cache = None
 
     def receive(self, chunk) -> list:
+        """Receive a chunk, return list of chunks to send out after merging and splitting."""
         if self.is_superrun:
             chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
         if not self.rechunk:
@@ -449,13 +450,18 @@ class Rechunker:
 
         if self.cache is not None:
             # We have an old chunk, so we need to concatenate
+            # We do not expect after concatenation that the chunk will be very large because
+            # the self.cache is already split according to the target size
             self.cache = strax.Chunk.concatenate([self.cache, chunk])
         else:
             self.cache = chunk
 
+        # Get the split indices according to the allowed minimum gaps
+        # between data and the target size of chunk
         split_indices = self.get_splits(
             self.cache.data, self.cache.target_size_mb * 1e6, DEFAULT_CHUNK_SPLIT
         )
+        # Split the cache into chunks and return list of chunks
         chunks = []
         for index in split_indices:
             output, self.cache = self.cache.split(
@@ -466,17 +472,19 @@ class Rechunker:
         return chunks
 
     def flush(self) -> list:
+        """Flush the cache and return the remaining chunk in a list."""
         result = self.cache
         self.cache = None
         return [result]
 
     @staticmethod
     def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT):
+        """Get indices where to split the data into chunks of approximately target_size."""
         assumed_i = int(target_size // data.itemsize)
         gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
         split_indices = [0]
         if len(gap_indices) != 0:
-            while split_indices[-1] + assumed_i <= gap_indices[-1]:
+            while split_indices[-1] + assumed_i < gap_indices[-1]:
                 split_indices.append(
                     gap_indices[np.abs(gap_indices - assumed_i - split_indices[-1]).argmin()]
                 )
