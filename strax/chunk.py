@@ -444,8 +444,8 @@ def _split_subruns_in_chunk(subruns, t):
         if t < subrun_start_end["start"]:
             subruns_second_chunk[subrun_id] = subrun_start_end
         elif subrun_start_end["start"] <= t < subrun_start_end["end"]:
-            subruns_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": t}
-            subruns_second_chunk[subrun_id] = {"start": t, "end": subrun_start_end["end"]}
+            subruns_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": int(t)}
+            subruns_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
         elif subrun_start_end["end"] <= t:
             subruns_first_chunk[subrun_id] = subrun_start_end
     return subruns_first_chunk, subruns_second_chunk
