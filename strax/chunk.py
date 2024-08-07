@@ -464,18 +464,21 @@ class Rechunker:
         # Split the cache into chunks and return list of chunks
         chunks = []
         for index in split_indices:
-            output, self.cache = self.cache.split(
+            _chunk, self.cache = self.cache.split(
                 t=self.cache.data["time"][index] - int(DEFAULT_CHUNK_SPLIT // 2),
                 allow_early_split=False,
             )
-            chunks.append(output)
+            chunks.append(_chunk)
         return chunks
 
     def flush(self) -> list:
         """Flush the cache and return the remaining chunk in a list."""
-        result = self.cache
-        self.cache = None
-        return [result]
+        if self.cache is None:
+            return []
+        else:
+            result = self.cache
+            self.cache = None
+            return [result]
 
     @staticmethod
     def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT):
