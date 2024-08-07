@@ -436,6 +436,8 @@ def _split_subruns_in_chunk(subruns, t):
     Updates also their start/ends too.
 
     """
+    if not subruns:
+        return None, None
     subruns_first_chunk = {}
     subruns_second_chunk = {}
     for subrun_id, subrun_start_end in subruns.items():
