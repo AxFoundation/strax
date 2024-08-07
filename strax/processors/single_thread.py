@@ -93,8 +93,8 @@ class SaverSpy(Spy):
     def receive(self, chunk):
         self._save_chunk(self.rechunker.receive(chunk))
 
-    def _save_chunk(self, chunk):
-        if chunk is not None:
+    def _save_chunk(self, chunks):
+        for chunk in chunks:
             self.saver.save(chunk, self.chunk_number)
             self.chunk_number += 1
 

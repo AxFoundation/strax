@@ -38,7 +38,7 @@ def parse_args():
         '--target_size_mb', '--target-size-mb',
         dest='target_size_mb',
         type=int,
-        default=strax.default_chunk_size_mb,
+        default=strax.DEFAULT_CHUNK_SIZE_MB,
         help="Target size MB (uncompressed) of the rechunked data")
     parser.add_argument(
         '--write_stats_to', '--write-stats-to',

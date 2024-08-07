@@ -6,10 +6,11 @@ import numba
 import strax
 
 export, __all__ = strax.exporter()
-__all__.extend(["default_chunk_size_mb"])
+__all__.extend(["DEFAULT_CHUNK_SIZE_MB", "DEFAULT_CHUNK_SPLIT"])
 
 
-default_chunk_size_mb = 200
+DEFAULT_CHUNK_SIZE_MB = 200
+DEFAULT_CHUNK_SPLIT = 1000
 
 
 @export
@@ -41,7 +42,7 @@ class Chunk:
         end,
         data,
         subruns=None,
-        target_size_mb=default_chunk_size_mb,
+        target_size_mb=DEFAULT_CHUNK_SIZE_MB,
     ):
         self.data_type = data_type
         self.data_kind = data_kind
@@ -439,25 +440,45 @@ class Rechunker:
 
         self.cache = None
 
-    def receive(self, chunk):
+    def receive(self, chunk) -> list:
         if self.is_superrun:
             chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
         if not self.rechunk:
             # We aren't rechunking
             return chunk
+
         if self.cache is not None:
             # We have an old chunk, so we need to concatenate
-            chunk = strax.Chunk.concatenate([self.cache, chunk])
-        if chunk.data.nbytes >= chunk.target_size_mb * 1e6:
-            # Enough data to send a new chunk!
-            self.cache = None
-            return chunk
+            self.cache = strax.Chunk.concatenate([self.cache, chunk])
         else:
-            # Not enough data yet, so we cache the chunk
             self.cache = chunk
-            return None
 
-    def flush(self):
+        split_indices = self.get_splits(
+            self.cache.data, self.cache.target_size_mb * 1e6, DEFAULT_CHUNK_SPLIT
+        )
+        chunks = []
+        for index in split_indices:
+            output, self.cache = self.cache.split(
+                t=self.cache.data["time"][index] - int(DEFAULT_CHUNK_SPLIT // 2),
+                allow_early_split=False,
+            )
+            chunks.append(output)
+        return chunks
+
+    def flush(self) -> list:
         result = self.cache
         self.cache = None
-        return result
+        return [result]
+
+    @staticmethod
+    def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT):
+        assumed_i = int(target_size // data.itemsize)
+        gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
+        split_indices = [0]
+        if len(gap_indices) != 0:
+            while split_indices[-1] + assumed_i <= gap_indices[-1]:
+                split_indices.append(
+                    gap_indices[np.abs(gap_indices - assumed_i - split_indices[-1]).argmin()]
+                )
+        split_indices = np.diff(split_indices)
+        return split_indices
