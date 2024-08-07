@@ -95,6 +95,8 @@ class SaverSpy(Spy):
 
     def _save_chunk(self, chunks):
         for chunk in chunks:
+            if chunk is None:
+                continue
             self.saver.save(chunk, self.chunk_number)
             self.chunk_number += 1
 

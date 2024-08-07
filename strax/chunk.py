@@ -445,7 +445,7 @@ class Rechunker:
             chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
         if not self.rechunk:
             # We aren't rechunking
-            return chunk
+            return [chunk]
 
         if self.cache is not None:
             # We have an old chunk, so we need to concatenate
