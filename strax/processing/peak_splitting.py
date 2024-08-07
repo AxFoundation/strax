@@ -15,6 +15,7 @@ def split_peaks(
     algorithm="local_minimum",
     data_type="peaks",
     n_top_channels=0,
+    save_waveform_start=False,
     **kwargs,
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
@@ -49,7 +50,7 @@ def split_peaks(
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
     return splitter(
-        peaks, hits, records, rlinks, to_pe, data_type, n_top_channels=n_top_channels, **kwargs
+        peaks, hits, records, rlinks, to_pe, data_type, n_top_channels=n_top_channels,save_waveform_start=save_waveform_start, **kwargs
     )
 
 
@@ -88,6 +89,7 @@ class PeakSplitter:
         do_iterations=1,
         min_area=0,
         n_top_channels=0,
+        save_waveform_start=False,
         **kwargs,
     ):
         if not len(records) or not len(peaks) or not do_iterations:
@@ -127,7 +129,7 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == "peaks":
-                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels)
+                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels, save_waveform_start=save_waveform_start)
                 strax.compute_widths(new_peaks)
             elif data_type == "hitlets":
                 # Add record fields here
