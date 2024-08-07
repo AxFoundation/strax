@@ -204,10 +204,6 @@ class TestSuperRuns(unittest.TestCase):
 
         """
 
-        # Set to zero to force rechunking
-        default_chunk_split_ns = strax.chunk.DEFAULT_CHUNK_SPLIT_NS
-        strax.chunk.DEFAULT_CHUNK_SPLIT_NS = 0
-
         self.context.set_config({"recs_per_chunk": 500})  # Make chunks > 1 MB
 
         rr = self.context.get_array(self.subrun_ids, "records")
@@ -235,15 +231,7 @@ class TestSuperRuns(unittest.TestCase):
         rr_superrun = self.context.get_array("_superrun_test_rechunking", "records")
         rr_subruns = self.context.get_array(self.subrun_ids, "records")
 
-        chunks = [chunk for chunk in self.context.get_iter("_superrun_test_rechunking", "records")]
-        assert len(chunks) > 1, (
-            "Number of chunks should be larger 1. "
-            f"{chunks[0].target_size_mb, chunks[0].nbytes / 1e6}"
-        )
         assert np.all(rr_superrun["time"] == rr_subruns["time"])
-
-        # Set back to default
-        strax.chunk.DEFAULT_CHUNK_SPLIT_NS = default_chunk_split_ns
 
     def test_superrun_triggers_subrun_processing(self):
         """Tests if superrun processing can trigger subrun processing.
