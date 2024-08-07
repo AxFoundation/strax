@@ -6,11 +6,11 @@ import numba
 import strax
 
 export, __all__ = strax.exporter()
-__all__.extend(["DEFAULT_CHUNK_SIZE_MB", "DEFAULT_CHUNK_SPLIT"])
+__all__.extend(["DEFAULT_CHUNK_SIZE_MB", "DEFAULT_CHUNK_SPLIT_NS"])
 
 
 DEFAULT_CHUNK_SIZE_MB = 200
-DEFAULT_CHUNK_SPLIT = 1000
+DEFAULT_CHUNK_SPLIT_NS = 1000
 
 
 @export
@@ -179,6 +179,7 @@ class Chunk:
             data_type=self.data_type,
             data_kind=self.data_kind,
             target_size_mb=self.target_size_mb,
+            subruns=self.subruns,
         )
 
         c1 = strax.Chunk(
@@ -404,8 +405,11 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
 
 
 def _update_subruns_in_chunk(chunks):
-    """Updates list of subruns in a superrun chunk during concatenation Updates also their
-    start/ends too."""
+    """Updates list of subruns in a superrun chunk during concatenation.
+
+    Updates also their start/ends too.
+
+    """
     subruns = None
     for c_i, c in enumerate(chunks):
         if not subruns:
@@ -451,24 +455,35 @@ class Rechunker:
         if self.cache is not None:
             # We have an old chunk, so we need to concatenate
             # We do not expect after concatenation that the chunk will be very large because
-            # the self.cache is already split according to the target size
-            self.cache = strax.Chunk.concatenate([self.cache, chunk])
-        else:
-            self.cache = chunk
+            # the self.cache is already after splitting according to the target size
+            chunk = strax.Chunk.concatenate([self.cache, chunk])
+
+        target_size_b = chunk.target_size_mb * 1e6
+
+        # if self.is_superrun:
+        #     # Because strax.Chunk.split will change the subruns,
+        #     # we should not split the chunk if it is a superrun chunk
+        #     if chunk.data.nbytes >= target_size_b:
+        #         # Enough data to send a new chunk!
+        #         self.cache = None
+        #         return [chunk]
+        #     else:
+        #         # Not enough data yet, so we cache the chunk
+        #         self.cache = chunk
+        #         return []
 
         # Get the split indices according to the allowed minimum gaps
         # between data and the target size of chunk
-        split_indices = self.get_splits(
-            self.cache.data, self.cache.target_size_mb * 1e6, DEFAULT_CHUNK_SPLIT
-        )
+        split_indices = self.get_splits(chunk.data, target_size_b, DEFAULT_CHUNK_SPLIT_NS)
         # Split the cache into chunks and return list of chunks
         chunks = []
         for index in split_indices:
-            _chunk, self.cache = self.cache.split(
-                t=self.cache.data["time"][index] - int(DEFAULT_CHUNK_SPLIT // 2),
+            _chunk, chunk = chunk.split(
+                t=chunk.data["time"][index] - int(DEFAULT_CHUNK_SPLIT_NS // 2),
                 allow_early_split=False,
             )
             chunks.append(_chunk)
+        self.cache = chunk
         return chunks
 
     def flush(self) -> list:
@@ -481,7 +496,7 @@ class Rechunker:
             return [result]
 
     @staticmethod
-    def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT):
+    def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT_NS):
         """Get indices where to split the data into chunks of approximately target_size."""
         assumed_i = int(target_size // data.itemsize)
         gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
