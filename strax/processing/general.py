@@ -82,9 +82,12 @@ def _overload_endtime(x):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def diff(data):
     """Return time differences between items in data."""
-    if len(data) == 0:
-        return np.zeros(0, dtype=np.int64)
-    return data["time"][1:] - strax.endtime(data)[:-1]
+    results = np.zeros(len(data) - 1, dtype=data.dtype["time"])
+    max_endtime = strax.endtime(data[0])
+    for i, (time, endtime) in enumerate(zip(data["time"][1:], strax.endtime(data)[:-1])):
+        results[i] = time - max_endtime
+        max_endtime = max(max_endtime, endtime)
+    return results
 
 
 @export
