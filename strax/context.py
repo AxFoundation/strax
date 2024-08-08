@@ -739,7 +739,7 @@ class Context:
     def _plugins_are_cached(
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache."""
         if (
@@ -760,7 +760,7 @@ class Context:
     def _plugins_to_cache(
         self,
         plugins: dict,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ) -> None:
         if self.context_config["use_per_run_defaults"] or chunk_number is not None:
             # There is no point in caching if plugins (lineage) can change per run
@@ -814,7 +814,7 @@ class Context:
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
         run_id: str,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugin instances necessary to compute targets from scratch.
 
@@ -859,7 +859,7 @@ class Context:
         self,
         run_id: str,
         data_type: str,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ):
         """Get single plugin either from cache or initialize it."""
         # Check if plugin for data_type is already cached
@@ -909,7 +909,7 @@ class Context:
         self,
         run_id,
         plugin,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ):
         """Adds lineage to plugin in place.
 
@@ -2365,6 +2365,87 @@ class Context:
                     "do you have two storage frontends writing to the same place?"
                 )
 
+    def merge_per_chunk_storage(
+        self,
+        run_id: str,
+        target: str,
+        per_chunked_dependency: str,
+        rechunk=True,
+        chunk_number_group: ty.Optional[ty.List[ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+    ):
+        """Merge the per-chunked data from the per-chunked dependency into the target storage."""
+
+        if chunk_number_group is not None:
+            combined_chunk_numbers = []
+            for c in chunk_number_group:
+                if isinstance(c, int):
+                    combined_chunk_numbers.append(c)
+                elif isinstance(c, (tuple, list)):
+                    combined_chunk_numbers.extend(c)
+                else:
+                    raise ValueError(f"Invalid chunk number: {c} found in {chunk_number_group}")
+            if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
+                raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
+            _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
+        else:
+            # if no chunk numbers are given, use information from the dependency
+            chunks = self.get_meta(run_id, per_chunked_dependency)["chunks"]
+            chunk_number_group = [c["chunk_i"] for c in chunks]
+            _chunk_number = None
+
+        # Usually we want to save in the same storage frontend
+        # Here we assume that the target is stored chunk by chunk of the dependency
+        target_sf = source_sf = self.get_source_sf(
+            run_id,
+            target,
+            chunk_number={per_chunked_dependency: chunk_number_group[0]},
+            should_exist=True,
+        )[0]
+
+        def wrapped_loader():
+            """Wrapped loader for changing the target_size_mb."""
+            for chunk_number in chunk_number_group:
+                # Mostly copied from self.copy_to_frontend
+                # Get the info from the source backend (s_be) that we need to fill
+                # the target backend (t_be) with
+                assert self.is_stored(
+                    run_id, target, chunk_number={per_chunked_dependency: chunk_number}
+                )
+                data_key = self.key_for(
+                    run_id, target, chunk_number={per_chunked_dependency: chunk_number}
+                )
+                # This should never fail, we just tried
+                s_be_str, s_be_key = source_sf.find(data_key)
+                s_be = source_sf._get_backend(s_be_str)
+                md = s_be.get_metadata(s_be_key)
+
+                loader = s_be.loader(s_be_key)
+                try:
+                    while True:
+                        # pylint: disable=cell-var-from-loop
+                        data = next(loader)
+                        # Update target chunk size for re-chunking
+                        data.target_size_mb = md["chunk_target_size_mb"]
+                        yield data
+                except StopIteration:
+                    continue
+
+        # Fill the target buffer
+        data_key = self.key_for(run_id, target, chunk_number=_chunk_number)
+        t_be_str, t_be_key = target_sf.find(data_key, write=True)
+        target_be = target_sf._get_backend(t_be_str)
+        target_plugin = self.__get_plugin(
+            run_id,
+            target,
+            chunk_number=_chunk_number,  # type: ignore
+        )
+        target_md = target_plugin.metadata(run_id, target)
+        # Copied from StorageBackend.saver
+        if "dtype" in target_md:
+            target_md["dtype"] = target_md["dtype"].descr.__repr__()
+        saver = target_be._saver(t_be_key, target_md)
+        saver.save_from(wrapped_loader(), rechunk=rechunk)
+
     def get_source(
         self,
         run_id: str,
@@ -2474,7 +2555,7 @@ class Context:
         run_id,
         target,
         storage_frontend: strax.StorageFrontend,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[str], ty.List[str]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
     ) -> bool:
         """Check if the storage frontend has the requested datakey for the run_id and target.
 
