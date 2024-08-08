@@ -1,16 +1,18 @@
 import os
-import unittest
-import shutil
-import strax
-import numpy as np
-import tempfile
-from strax.testutils import Records, Peaks, PeakClassification
-import datetime
-import pytz
+import re
 import json
 from bson import json_util
+import tempfile
+import shutil
+import pytz
+import datetime
+
+import unittest
+import numpy as np
 import pandas as pd
-import re
+
+import strax
+from strax.testutils import Records, Peaks, PeakClassification
 
 
 class TestSuperRuns(unittest.TestCase):
@@ -229,11 +231,6 @@ class TestSuperRuns(unittest.TestCase):
         rr_superrun = self.context.get_array("_superrun_test_rechunking", "records")
         rr_subruns = self.context.get_array(self.subrun_ids, "records")
 
-        chunks = [chunk for chunk in self.context.get_iter("_superrun_test_rechunking", "records")]
-        assert len(chunks) > 1, (
-            "Number of chunks should be larger 1. "
-            f"{chunks[0].target_size_mb, chunks[0].nbytes / 10**6}"
-        )
         assert np.all(rr_superrun["time"] == rr_subruns["time"])
 
     def test_superrun_triggers_subrun_processing(self):

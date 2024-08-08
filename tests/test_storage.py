@@ -298,7 +298,7 @@ class TestRechunking(TestCase):
             dest_directory=target_path.name if not replace else None,
             replace=True,
             compressor=compressor,
-            target_size_mb=strax.default_chunk_size_mb * 2,
+            target_size_mb=strax.DEFAULT_CHUNK_SIZE_MB * 2,
             parallel=parallel,
             max_workers=4,
             _timeout=5,
