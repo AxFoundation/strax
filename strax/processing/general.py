@@ -88,8 +88,8 @@ def diff(data):
     results = np.zeros(len(data) - 1, dtype=np.int64)
     max_endtime = strax.endtime(data[0])
     for i, (time, endtime) in enumerate(zip(data["time"][1:], strax.endtime(data)[:-1])):
-        results[i] = time - max_endtime
         max_endtime = max(max_endtime, endtime)
+        results[i] = time - max_endtime
     return results
 
 
