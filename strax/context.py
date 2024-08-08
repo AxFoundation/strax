@@ -1,20 +1,21 @@
-import datetime
+import time
 import logging
 import warnings
 import fnmatch
-from functools import partial
-import typing as ty
-import time
+import itertools
 import json
+from functools import partial
+import types
+import typing as ty
+from enum import IntEnum
+import datetime
+import inspect
+from collections import defaultdict
+
+from immutabledict import immutabledict
 import numpy as np
 import pandas as pd
 import strax
-import inspect
-import types
-from collections import defaultdict
-from immutabledict import immutabledict
-from enum import IntEnum
-
 from strax import CutList
 
 
@@ -739,7 +740,7 @@ class Context:
     def _plugins_are_cached(
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache."""
         if (
@@ -760,7 +761,7 @@ class Context:
     def _plugins_to_cache(
         self,
         plugins: dict,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> None:
         if self.context_config["use_per_run_defaults"] or chunk_number is not None:
             # There is no point in caching if plugins (lineage) can change per run
@@ -814,7 +815,7 @@ class Context:
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
         run_id: str,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugin instances necessary to compute targets from scratch.
 
@@ -859,7 +860,7 @@ class Context:
         self,
         run_id: str,
         data_type: str,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ):
         """Get single plugin either from cache or initialize it."""
         # Check if plugin for data_type is already cached
@@ -909,7 +910,7 @@ class Context:
         self,
         run_id,
         plugin,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ):
         """Adds lineage to plugin in place.
 
@@ -952,10 +953,18 @@ class Context:
                 if plugin.takes_config[option].track
             }
 
+        # Set chunk_number in the lineage
         if chunk_number is not None:
             for d_depends in plugin.depends_on:
                 if d_depends in chunk_number:
-                    configs[f"{d_depends}_chunk_number"] = chunk_number[d_depends]
+                    configs.setdefault("chunk_number", {})
+                    if d_depends in configs["chunk_number"]:
+                        raise ValueError(
+                            f"Chunk number for {d_depends} is already set in the lineage"
+                        )
+                    if not isinstance(chunk_number[d_depends], list):
+                        raise ValueError("chunk_number should be a list of integers")
+                    configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {
             last_provide: (plugin.__class__.__name__, plugin.version(run_id), configs)
@@ -2371,34 +2380,33 @@ class Context:
         target: str,
         per_chunked_dependency: str,
         rechunk=True,
-        chunk_number_group: ty.Optional[ty.List[ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
 
         if chunk_number_group is not None:
-            combined_chunk_numbers = []
-            for c in chunk_number_group:
-                if isinstance(c, int):
-                    combined_chunk_numbers.append(c)
-                elif isinstance(c, (tuple, list)):
-                    combined_chunk_numbers.extend(c)
-                else:
-                    raise ValueError(f"Invalid chunk number: {c} found in {chunk_number_group}")
+            combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
             if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
                 raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
             _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
         else:
             # if no chunk numbers are given, use information from the dependency
             chunks = self.get_meta(run_id, per_chunked_dependency)["chunks"]
-            chunk_number_group = [c["chunk_i"] for c in chunks]
+            chunk_number_group = [[c["chunk_i"]] for c in chunks]
             _chunk_number = None
+
+        # Make sure that all needed runs are stored
+        for chunk_number in chunk_number_group:
+            assert self.is_stored(
+                run_id, target, chunk_number={per_chunked_dependency: chunk_number}
+            )
 
         # Usually we want to save in the same storage frontend
         # Here we assume that the target is stored chunk by chunk of the dependency
         target_sf = source_sf = self.get_source_sf(
             run_id,
             target,
-            chunk_number={per_chunked_dependency: chunk_number_group[0]},
+            chunk_number={per_chunked_dependency: chunk_number},
             should_exist=True,
         )[0]
 
@@ -2408,9 +2416,6 @@ class Context:
                 # Mostly copied from self.copy_to_frontend
                 # Get the info from the source backend (s_be) that we need to fill
                 # the target backend (t_be) with
-                assert self.is_stored(
-                    run_id, target, chunk_number={per_chunked_dependency: chunk_number}
-                )
                 data_key = self.key_for(
                     run_id, target, chunk_number={per_chunked_dependency: chunk_number}
                 )
@@ -2434,11 +2439,7 @@ class Context:
         data_key = self.key_for(run_id, target, chunk_number=_chunk_number)
         t_be_str, t_be_key = target_sf.find(data_key, write=True)
         target_be = target_sf._get_backend(t_be_str)
-        target_plugin = self.__get_plugin(
-            run_id,
-            target,
-            chunk_number=_chunk_number,  # type: ignore
-        )
+        target_plugin = self.__get_plugin(run_id, target, chunk_number=_chunk_number)
         target_md = target_plugin.metadata(run_id, target)
         # Copied from StorageBackend.saver
         if "dtype" in target_md:
@@ -2555,7 +2556,7 @@ class Context:
         run_id,
         target,
         storage_frontend: strax.StorageFrontend,
-        chunk_number: ty.Optional[ty.Dict[str, ty.Union[int, ty.Tuple[int], ty.List[int]]]] = None,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> bool:
         """Check if the storage frontend has the requested datakey for the run_id and target.
 
