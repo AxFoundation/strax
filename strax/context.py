@@ -906,6 +906,22 @@ class Context:
 
         return plugin
 
+    @staticmethod
+    def _check_chunk_number(chunk_number: ty.List[int]):
+        """Check if the chunk_number is a list of consecutive integers."""
+        mask = isinstance(chunk_number, list)
+        mask &= all([isinstance(x, int) for x in chunk_number])
+        if not mask:
+            raise ValueError(f"chunk_number should be a list of integers, but got {chunk_number}")
+
+        # Check if the difference between adjacent elements is exactly one
+        for i in range(len(chunk_number) - 1):
+            if chunk_number[i + 1] - chunk_number[i] != 1:
+                raise ValueError(
+                    "chunk_number should be a list of consecutive integers, "
+                    f"but got {chunk_number}"
+                )
+
     def __add_lineage_to_plugin(
         self,
         run_id,
@@ -962,8 +978,7 @@ class Context:
                         raise ValueError(
                             f"Chunk number for {d_depends} is already set in the lineage"
                         )
-                    if not isinstance(chunk_number[d_depends], list):
-                        raise ValueError("chunk_number should be a list of integers")
+                    self._check_chunk_number(chunk_number[d_depends])
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {
