@@ -166,7 +166,7 @@ class DataDirectory(StorageFrontend):
         # Check exact match
         if _data_type != key.data_type:
             return False
-        if not ignore_name and _run_id != key.run_id:
+        if not ignore_name and _run_id != key._run_id:
             return False
 
         # Check fuzzy match

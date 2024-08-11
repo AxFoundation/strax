@@ -1069,9 +1069,9 @@ class Context:
                 key, chunk_number=chunk_number, time_range=time_range
             )
 
-            _is_temp = not target_plugin.provides[0].startswith("_temp")
-            _is_superrun = run_id.startswith("_") and _is_temp
-            _is_hyperrun = run_id.startswith("__") and _is_temp
+            _is_not_temp = not target_plugin.provides[0].startswith("_temp")
+            _is_superrun = run_id.startswith("_") and _is_not_temp
+            _is_hyperrun = run_id.startswith("__") and _is_not_temp
             # hyperrun is always superrun
             allow_hyperrun = plugins[target_i].allow_hyperrun
             if not loader and (
@@ -1080,7 +1080,7 @@ class Context:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
 
-                sub_run_spec = self.run_metadata(run_id, "sub_run_spec")["sub_run_spec"]
+                sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
 
                 # Make subruns if they do not exist.
                 self.make(
@@ -1284,6 +1284,20 @@ class Context:
             targets=strax.to_str_tuple(final_plugin),
         )
 
+    def get_datakey(self, run_id, target, lineage):
+        """Get datakey for a given run_id, target and lineage.
+
+        If super or hyperrun is detected, the subruns information are added to the key.
+
+        """
+        is_superrun = run_id.startswith("_")
+        is_hyperrun = run_id.startswith("__")
+        if is_superrun or is_hyperrun:
+            sub_run_spec = self.run_metadata(run_id, projection=["sub_run_spec"])["sub_run_spec"]
+        else:
+            sub_run_spec = None
+        return strax.DataKey(run_id, target, lineage, subruns=sub_run_spec)
+
     def _add_saver(
         self,
         savers: dict,
@@ -1305,7 +1319,7 @@ class Context:
         :return: Updated savers dictionary.
 
         """
-        key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
+        key = self.get_datakey(run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -1953,7 +1967,7 @@ class Context:
             plugins = self._get_plugins((target,), run_id)
 
         lineage = plugins[target].lineage
-        return strax.DataKey(run_id, target, lineage)
+        return self.get_datakey(run_id, target, lineage)
 
     def get_meta(self, run_id, target) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable if data is not yet
