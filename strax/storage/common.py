@@ -39,6 +39,8 @@ class DataKey:
     _lineage_hash: str
 
     def __init__(self, run_id, data_type, lineage, subruns=None):
+        if run_id.startswith("_") and subruns is None:
+            raise ValueError(f"You must assign subruns information for superrun {run_id}!")
         self.run_id = run_id
         self.data_type = data_type
         self.lineage = lineage

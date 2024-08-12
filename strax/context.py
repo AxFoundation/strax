@@ -1290,9 +1290,7 @@ class Context:
         If super or hyperrun is detected, the subruns information are added to the key.
 
         """
-        is_superrun = run_id.startswith("_")
-        is_hyperrun = run_id.startswith("__")
-        if is_superrun or is_hyperrun:
+        if run_id.startswith("_"):
             sub_run_spec = self.run_metadata(run_id, projection=["sub_run_spec"])["sub_run_spec"]
         else:
             sub_run_spec = None
