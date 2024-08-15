@@ -50,7 +50,15 @@ def split_peaks(
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
     return splitter(
-        peaks, hits, records, rlinks, to_pe, data_type, n_top_channels=n_top_channels,save_waveform_start=save_waveform_start, **kwargs
+        peaks,
+        hits,
+        records,
+        rlinks,
+        to_pe,
+        data_type,
+        n_top_channels=n_top_channels,
+        save_waveform_start=save_waveform_start,
+        **kwargs,
     )
 
 
@@ -129,7 +137,15 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == "peaks":
-                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels, save_waveform_start=save_waveform_start)
+                strax.sum_waveform(
+                    new_peaks,
+                    hits,
+                    records,
+                    rlinks,
+                    to_pe,
+                    n_top_channels,
+                    save_waveform_start=save_waveform_start,
+                )
                 strax.compute_widths(new_peaks)
             elif data_type == "hitlets":
                 # Add record fields here
