@@ -38,13 +38,16 @@ class DataKey:
     _lineage: dict
     _lineage_hash: str
 
-    def __init__(self, run_id, data_type, lineage):
+    def __init__(self, run_id, data_type, lineage, subruns=None):
+        if run_id.startswith("_") and subruns is None:
+            raise ValueError(f"You must assign subruns information for superrun {run_id}!")
         self.run_id = run_id
         self.data_type = data_type
         self.lineage = lineage
+        self.subruns = subruns
 
     def __repr__(self):
-        return "-".join([self.run_id, self.data_type, self.lineage_hash])
+        return "-".join([self._run_id, self.data_type, self.lineage_hash])
 
     @property
     def lineage(self):
@@ -59,6 +62,14 @@ class DataKey:
     def lineage_hash(self):
         """Deterministic hash of the lineage."""
         return self._lineage_hash
+
+    @property
+    def _run_id(self):
+        if self.subruns is not None:
+            _run_id = self.run_id + "_" + strax.deterministic_hash(self.subruns)
+        else:
+            _run_id = self.run_id
+        return _run_id
 
 
 @export

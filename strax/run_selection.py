@@ -68,7 +68,7 @@ def keys_for_runs(
         # Get the lineage once, for the context specifies that the
         # defaults may not change!
         p = self._get_plugins((target,), run_ids[0])[target]
-        return [strax.DataKey(r, target, p.lineage) for r in run_ids]
+        return [self.get_datakey(r, target, p.lineage) for r in run_ids]
     else:
         return []
 
@@ -398,7 +398,9 @@ def define_run(
     sources = set()
     comments = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source", "comments"])
+        doc = self.run_metadata(
+            _subrunid, projection=["start", "end", "mode", "tags", "source", "comments"]
+        )
         doc.setdefault(
             "tags",
             [

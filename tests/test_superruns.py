@@ -147,6 +147,20 @@ class TestSuperRuns(unittest.TestCase):
         assert chunk["first_time"] == subrun_data["time"].min()
         assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
 
+    def test_superrun_definition(self):
+        """Test if superrun definition works correctly.
+
+        After redefining the superrun, the DataKey of superrun will be different.
+
+        """
+        self.context.get_array(self.superrun_name, "records")
+        assert self.context.is_stored(self.superrun_name, "records")
+        # After redefining the superrun with only different subruns,
+        # the superrun should not be stored
+        self.context.define_run(self.superrun_name, data=self.subrun_ids[:-1])
+        assert not self.context.is_stored(self.superrun_name, "records")
+        self.context.define_run(self.superrun_name, data=self.subrun_ids)
+
     def test_select_runs(self):
         self.context.select_runs()
         self.context.make(
@@ -263,7 +277,7 @@ class TestSuperRuns(unittest.TestCase):
     def test_storing_with_second_sf(self):
         """Tests if only superrun is written to new sf if subruns already exist in different sf."""
         self.context.storage[0].readonly = True
-        self.context.storage.append(strax.DataDirectory(self.tempdir2))
+        self.context.storage.append(strax.DataDirectory(self.tempdir2, provide_run_metadata=True))
         self.context.make(self.superrun_name, "records")
         superrun_sf = self.context.storage.pop(1)
         # Check if first sf contains superrun, it should not:
@@ -272,9 +286,9 @@ class TestSuperRuns(unittest.TestCase):
         # Now check second sf for which only the superrun should be
         # stored:
         self.context.storage = [superrun_sf]
+        self._create_subruns()
+        self.context.define_run(self.superrun_name, data=self.subrun_ids)
         assert self.context.is_stored(self.superrun_name, "records")
-        for subrun in self.subrun_ids:
-            assert not self.context.is_stored(subrun, "records")
 
     def test_run_selection_with_superruns(self):
         df_runs = self.context.select_runs()

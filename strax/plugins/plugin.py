@@ -339,7 +339,7 @@ class Plugin:
             data_type=data_type,
             data_kind=self.data_kind_for(data_type),
             dtype=self.dtype_for(data_type),
-            lineage_hash=strax.DataKey(run_id, data_type, self.lineage).lineage_hash,
+            lineage_hash=strax.deterministic_hash(self.lineage),
             compressor=self.compressor,
             lineage=self.lineage,
             chunk_target_size_mb=self.chunk_target_size_mb,
