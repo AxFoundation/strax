@@ -80,6 +80,21 @@ def _overload_endtime(x):
 
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
+def diff(data):
+    """Return time differences between items in data."""
+    # we are sure that time is np.int64
+    if len(data) == 0:
+        return np.zeros(0, dtype=np.int64)
+    results = np.zeros(len(data) - 1, dtype=np.int64)
+    max_endtime = strax.endtime(data[0])
+    for i, (time, endtime) in enumerate(zip(data["time"][1:], strax.endtime(data)[:-1])):
+        max_endtime = max(max_endtime, endtime)
+        results[i] = time - max_endtime
+    return results
+
+
+@export
+@numba.jit(nopython=True, nogil=True, cache=True)
 def from_break(x, safe_break, not_before=0, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long If there is no such break, return
     the best break found."""

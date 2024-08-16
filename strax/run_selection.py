@@ -53,7 +53,7 @@ def keys_for_runs(
     self, target: str, run_ids: ty.Union[np.ndarray, list, tuple, str]
 ) -> ty.List[strax.DataKey]:
     """Get the data-keys for a multitude of runs. If use_per_run_defaults is False which it
-    preferably is (#246), getting many keys should be fast as we only only compute the lineage once.
+    preferably is (#246), getting many keys should be fast as we only compute the lineage once.
 
     :param run_ids: Runs to get datakeys for
     :param target: datatype requested
@@ -68,7 +68,7 @@ def keys_for_runs(
         # Get the lineage once, for the context specifies that the
         # defaults may not change!
         p = self._get_plugins((target,), run_ids[0])[target]
-        return [strax.DataKey(r, target, p.lineage) for r in run_ids]
+        return [self.get_datakey(r, target, p.lineage) for r in run_ids]
     else:
         return []
 
@@ -398,7 +398,9 @@ def define_run(
     sources = set()
     comments = set()
     for _subrunid in data:
-        doc = self.run_metadata(_subrunid, ["start", "end", "mode", "tags", "source", "comments"])
+        doc = self.run_metadata(
+            _subrunid, projection=["start", "end", "mode", "tags", "source", "comments"]
+        )
         doc.setdefault(
             "tags",
             [

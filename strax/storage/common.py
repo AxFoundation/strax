@@ -38,13 +38,16 @@ class DataKey:
     _lineage: dict
     _lineage_hash: str
 
-    def __init__(self, run_id, data_type, lineage):
+    def __init__(self, run_id, data_type, lineage, subruns=None):
+        if run_id.startswith("_") and subruns is None:
+            raise ValueError(f"You must assign subruns information for superrun {run_id}!")
         self.run_id = run_id
         self.data_type = data_type
         self.lineage = lineage
+        self.subruns = subruns
 
     def __repr__(self):
-        return "-".join([self.run_id, self.data_type, self.lineage_hash])
+        return "-".join([self._run_id, self.data_type, self.lineage_hash])
 
     @property
     def lineage(self):
@@ -59,6 +62,14 @@ class DataKey:
     def lineage_hash(self):
         """Deterministic hash of the lineage."""
         return self._lineage_hash
+
+    @property
+    def _run_id(self):
+        if self.subruns is not None:
+            _run_id = self.run_id + "_" + strax.deterministic_hash(self.subruns)
+        else:
+            _run_id = self.run_id
+        return _run_id
 
 
 @export
@@ -485,7 +496,7 @@ class StorageBackend:
             data_type=metadata["data_type"],
             data_kind=metadata["data_kind"],
             dtype=dtype,
-            target_size_mb=metadata.get("chunk_target_size_mb", strax.default_chunk_size_mb),
+            target_size_mb=metadata.get("chunk_target_size_mb", strax.DEFAULT_CHUNK_SIZE_MB),
         )
 
         required_chunk_metadata_fields = "start end run_id".split()
@@ -571,7 +582,7 @@ class StorageBackend:
 
     def saver(self, key, metadata, **kwargs):
         """Return saver for data described by key."""
-        metadata.setdefault("compressor", "blosc")  # TODO wrong place?
+        metadata.setdefault("compressor", "blosc")  # TODO: wrong place?
         metadata["strax_version"] = strax.__version__
         if "dtype" in metadata:
             metadata["dtype"] = metadata["dtype"].descr.__repr__()
@@ -648,22 +659,18 @@ class Saver:
 
         try:
             while not exhausted:
-                chunk = None
-
                 try:
-                    chunk = rechunker.receive(next(source))
+                    chunks = rechunker.receive(next(source))
                 except StopIteration:
                     exhausted = True
-                    chunk = rechunker.flush()
+                    chunks = rechunker.flush()
 
-                if chunk is None:
-                    continue
-
-                new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
-                pending = [f for f in pending if not f.done()]
-                if new_f is not None:
-                    pending += [new_f]
-                chunk_i += 1
+                for chunk in chunks:
+                    new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
+                    pending = [f for f in pending if not f.done()]
+                    if new_f is not None:
+                        pending += [new_f]
+                    chunk_i += 1
 
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.

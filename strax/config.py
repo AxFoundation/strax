@@ -205,7 +205,7 @@ class Option:
         if self.name in config:
             value = config[self.name]
             if self.type is not OMITTED and not isinstance(value, self.type):
-                # TODO replace back with InvalidConfiguration
+                # TODO: replace back with InvalidConfiguration
                 UserWarning(
                     f"Invalid type for option {self.name}. "
                     f"Excepted a {self.type}, got a {type(value)}"
