@@ -496,7 +496,7 @@ class StorageBackend:
             data_type=metadata["data_type"],
             data_kind=metadata["data_kind"],
             dtype=dtype,
-            target_size_mb=metadata.get("chunk_target_size_mb", strax.default_chunk_size_mb),
+            target_size_mb=metadata.get("chunk_target_size_mb", strax.DEFAULT_CHUNK_SIZE_MB),
         )
 
         required_chunk_metadata_fields = "start end run_id".split()
@@ -582,7 +582,7 @@ class StorageBackend:
 
     def saver(self, key, metadata, **kwargs):
         """Return saver for data described by key."""
-        metadata.setdefault("compressor", "blosc")  # TODO wrong place?
+        metadata.setdefault("compressor", "blosc")  # TODO: wrong place?
         metadata["strax_version"] = strax.__version__
         if "dtype" in metadata:
             metadata["dtype"] = metadata["dtype"].descr.__repr__()
@@ -659,22 +659,18 @@ class Saver:
 
         try:
             while not exhausted:
-                chunk = None
-
                 try:
-                    chunk = rechunker.receive(next(source))
+                    chunks = rechunker.receive(next(source))
                 except StopIteration:
                     exhausted = True
-                    chunk = rechunker.flush()
+                    chunks = rechunker.flush()
 
-                if chunk is None:
-                    continue
-
-                new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
-                pending = [f for f in pending if not f.done()]
-                if new_f is not None:
-                    pending += [new_f]
-                chunk_i += 1
+                for chunk in chunks:
+                    new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
+                    pending = [f for f in pending if not f.done()]
+                    if new_f is not None:
+                        pending += [new_f]
+                    chunk_i += 1
 
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.
