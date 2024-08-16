@@ -479,8 +479,9 @@ class Plugin:
                     # can we optimize this, or code it more elegantly?
                     max_passes_left = 10
                     while max_passes_left > 0:
-                        this_chunk_end = min([x.end for x in inputs.values()] + [this_chunk_end])
-                        if len(set([x.end for x in inputs.values()])) <= 1:
+                        all_ends = [x.end for x in inputs.values()]
+                        this_chunk_end = min(all_ends + [this_chunk_end])
+                        if len(set(all_ends)) <= 1:
                             break
                         for d in self.depends_on:
                             inputs[d], back_to_buffer = inputs[d].split(

@@ -24,6 +24,7 @@ class Chunk:
     # this could change during the run in superruns (in the future)
     run_id: str
     subruns: dict
+    superrun: dict
     start: int
     end: int
 
@@ -41,6 +42,7 @@ class Chunk:
         end,
         data,
         subruns=None,
+        superrun=None,
         target_size_mb=default_chunk_size_mb,
     ):
         self.data_type = data_type
@@ -97,6 +99,13 @@ class Chunk:
         #         raise ValueError(f"Attempt to create chunk {self} "
         #                          "whose data is not sorted by time.")
 
+        if superrun is None:
+            self.superrun = {run_id: {"start": start, "end": end}}
+        else:
+            if not isinstance(superrun, dict):
+                raise ValueError(f"Attempt to create chunk {self} with non-dict superrun")
+            self.superrun = superrun
+
     def __len__(self):
         return len(self.data)
 
@@ -106,9 +115,9 @@ class Chunk:
 
     def __repr__(self):
         return (
-            f"[{self.run_id}.{self.data_type}: "
+            f"({self.run_id}.{self.data_type}: "
             f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items, " + "{0:.1f} MB/s]".format(self._mbs())
+            f"{len(self)} items, " + "{0:.1f} MB/s)".format(self._mbs())
         )
 
     @property
@@ -241,6 +250,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            superrun=_update_superrun_in_chunk(chunks),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
@@ -266,7 +276,12 @@ class Chunk:
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
 
-        run_id = run_ids[0]
+        if len(set(run_ids)) == 1:
+            run_id = run_ids[0]
+            superrun = None
+        else:
+            run_id = None
+            superrun = _update_superrun_in_chunk(chunks)
         subruns = _update_subruns_in_chunk(chunks)
 
         prev_end = 0
@@ -285,6 +300,7 @@ class Chunk:
             data_kind=chunks[0].data_kind,
             run_id=run_id,
             subruns=subruns,
+            superrun=superrun,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -420,6 +436,22 @@ def _update_subruns_in_chunk(chunks):
             else:
                 subruns[subrun_id] = subrun_start_end
     return subruns
+
+
+@export
+def _update_superrun_in_chunk(chunks):
+    """Updates superrun in a superrun chunk during concatenation."""
+    superrun = dict()
+    for c_i, c in enumerate(chunks):
+        for run_id, run_start_end in c.superrun.items():
+            if run_id in superrun:
+                superrun[run_id] = {
+                    "start": min(superrun[run_id]["start"], run_start_end["start"]),
+                    "end": max(superrun[run_id]["end"], run_start_end["end"]),
+                }
+            else:
+                superrun[run_id] = run_start_end
+    return superrun
 
 
 @export
