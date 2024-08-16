@@ -147,9 +147,9 @@ class PostOffice:
         self._readers_done[topic] = []
 
     def register_spy(self, spy: Spy, topic: str):
-        """Register spy to recieve all messages on topic.
+        """Register spy to receive all messages on topic.
 
-        spy.recieve(msg) will be called for each message, and spy.close() when the topic is
+        spy.receive(msg) will be called for each message, and spy.close() when the topic is
         exhausted.
 
         """

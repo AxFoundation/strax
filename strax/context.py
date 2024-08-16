@@ -2284,7 +2284,7 @@ class Context:
                 f"Cannot select {target_frontend_id}-th frontend as "
                 f"we only have {len(self.storage)} frontends!"
             )
-        if rechunk and rechunk_to_mb == strax.default_chunk_size_mb:
+        if rechunk and rechunk_to_mb == strax.DEFAULT_CHUNK_SIZE_MB:
             self.log.warning("No <rechunk_to_mb> specified!")
 
     def copy_to_frontend(
@@ -2294,7 +2294,7 @@ class Context:
         target_frontend_id: ty.Optional[int] = None,
         target_compressor: ty.Optional[str] = None,
         rechunk: bool = False,
-        rechunk_to_mb: int = strax.default_chunk_size_mb,
+        rechunk_to_mb: int = strax.DEFAULT_CHUNK_SIZE_MB,
     ):
         """Copy data from one frontend to another.
 
