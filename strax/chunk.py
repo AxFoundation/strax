@@ -258,7 +258,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
-            superrun=_merge_superrun_in_chunk(chunks, check_continuity=False),
+            superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
@@ -437,16 +437,27 @@ def _merge_runs_in_chunk(runs_of_chunk, merged_runs):
         merged_runs[run_id].append([run_start_end["start"], run_start_end["end"]])
 
 
-def _continuity_check(merged_runs):
+def _continuity_check(merged_runs, merge=False):
     """Check continuity of runs in a superrun chunk."""
     for run_id in merged_runs.keys():
         merged_runs[run_id].sort(key=lambda x: x[0])
-        for i in range(1, len(merged_runs[run_id])):
-            if merged_runs[run_id][i][0] != merged_runs[run_id][i - 1][1]:
-                raise ValueError(
-                    "Chunks are not continuous. "
-                    f"Run {run_id} was split into chunks {merged_runs[run_id]}."
-                )
+        if not merge:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][i - 1][1]
+                if mask:
+                    raise ValueError(
+                        "Chunks are not continuous. "
+                        f"Run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
+        else:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][0][0]
+                mask |= merged_runs[run_id][i][1] != merged_runs[run_id][0][1]
+                if mask:
+                    raise ValueError(
+                        "If merging, all chunks should have the same start/end time. "
+                        f"But run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
         merged_runs[run_id] = {
             "start": merged_runs[run_id][0][0],
             "end": merged_runs[run_id][-1][1],
@@ -469,13 +480,12 @@ def _merge_subruns_in_chunk(chunks):
         return None
 
 
-def _merge_superrun_in_chunk(chunks, check_continuity=True):
+def _merge_superrun_in_chunk(chunks, merge=False):
     """Updates superrun in a superrun chunk during concatenation."""
     superrun = dict()
     for c_i, c in enumerate(chunks):
         _merge_runs_in_chunk(c.superrun, superrun)
-    if check_continuity:
-        _continuity_check(superrun)
+    _continuity_check(superrun, merge)
     return superrun
 
 
