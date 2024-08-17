@@ -190,13 +190,15 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        subruns_first_chunk, subruns_second_chunk = _split_subruns_in_chunk(self.subruns, t)
+        subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
 
         c1 = strax.Chunk(
             start=self.start,
             end=max(self.start, t),  # type: ignore
             data=data1,
             subruns=subruns_first_chunk,
+            superrun=superrun_first_chunk,
             **common_kwargs,
         )
         c2 = strax.Chunk(
@@ -204,6 +206,7 @@ class Chunk:
             end=max(t, self.end),  # type: ignore
             data=data2,
             subruns=subruns_second_chunk,
+            superrun=superrun_second_chunk,
             **common_kwargs,
         )
         return c1, c2
@@ -255,7 +258,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
-            superrun=_update_superrun_in_chunk(chunks),
+            superrun=_merge_superrun_in_chunk(chunks),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
@@ -286,7 +289,7 @@ class Chunk:
             superrun = None
         else:
             run_id = None
-            superrun = _update_superrun_in_chunk(chunks)
+            superrun = _merge_superrun_in_chunk(chunks)
         subruns = _merge_subruns_in_chunk(chunks)
 
         prev_end = 0
@@ -408,6 +411,8 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     """
     if chunk is None:
         return chunk
+    if chunk.subruns is not None:
+        raise ValueError("Chunk {chunk} is already a superrun chunk.")
     subruns = {chunk.run_id: {"start": chunk.start, "end": chunk.end}}
 
     return Chunk(
@@ -423,64 +428,75 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     )
 
 
+def _merge_runs_in_chunk(runs_of_chunk, merged_runs):
+    """Merge subruns information during concatenation or merge."""
+    if runs_of_chunk is None:
+        return
+    for run_id, run_start_end in runs_of_chunk.items():
+        merged_runs.setdefault(run_id, [])
+        merged_runs[run_id].append([run_start_end["start"], run_start_end["end"]])
+
+
+def _continuity_check(merged_runs):
+    """Check continuity of runs in a superrun chunk."""
+    for run_id in merged_runs.keys():
+        merged_runs[run_id].sort(key=lambda x: x[0])
+        for i in range(1, len(merged_runs[run_id])):
+            if merged_runs[run_id][i][0] != merged_runs[run_id][i - 1][1]:
+                raise ValueError(
+                    "Chunks are not continuous. "
+                    f"Run {run_id} was split into chunks {merged_runs[run_id]}."
+                )
+        merged_runs[run_id] = {
+            "start": merged_runs[run_id][0][0],
+            "end": merged_runs[run_id][-1][1],
+        }
+
+
 def _merge_subruns_in_chunk(chunks):
     """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
 
     """
-    subruns = None
+    subruns = dict()
     for c_i, c in enumerate(chunks):
-        if not subruns:
-            subruns = c.subruns
-            continue
-
-        for subrun_id, subrun_start_end in c.subruns.items():
-            if subrun_id in subruns:
-                subruns[subrun_id] = {
-                    "start": min(subruns[subrun_id]["start"], subrun_start_end["start"]),
-                    "end": max(subruns[subrun_id]["end"], subrun_start_end["end"]),
-                }
-            else:
-                subruns[subrun_id] = subrun_start_end
-    return subruns
+        _merge_runs_in_chunk(c.subruns, subruns)
+    _continuity_check(subruns)
+    if subruns:
+        return subruns
+    else:
+        return None
 
 
-def _split_subruns_in_chunk(subruns, t):
-    """Split list of subruns in a superrun chunk during split.
+def _merge_superrun_in_chunk(chunks):
+    """Updates superrun in a superrun chunk during concatenation."""
+    superrun = dict()
+    for c_i, c in enumerate(chunks):
+        _merge_runs_in_chunk(c.superrun, superrun)
+    _continuity_check(superrun)
+    return superrun
+
+
+def _split_runs_in_chunk(runs_of_chunk, t):
+    """Split list of runs in a superrun chunk during split.
 
     Updates also their start/ends too.
 
     """
-    if not subruns:
+    if runs_of_chunk is None:
         return None, None
-    subruns_first_chunk = {}
-    subruns_second_chunk = {}
-    for subrun_id, subrun_start_end in subruns.items():
+    runs_first_chunk = {}
+    runs_second_chunk = {}
+    for subrun_id, subrun_start_end in runs_of_chunk.items():
         if t < subrun_start_end["start"]:
-            subruns_second_chunk[subrun_id] = subrun_start_end
+            runs_second_chunk[subrun_id] = subrun_start_end
         elif subrun_start_end["start"] <= t < subrun_start_end["end"]:
-            subruns_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": int(t)}
-            subruns_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
+            runs_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": int(t)}
+            runs_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
         elif subrun_start_end["end"] <= t:
-            subruns_first_chunk[subrun_id] = subrun_start_end
-    return subruns_first_chunk, subruns_second_chunk
-
-
-@export
-def _update_superrun_in_chunk(chunks):
-    """Updates superrun in a superrun chunk during concatenation."""
-    superrun = dict()
-    for c_i, c in enumerate(chunks):
-        for run_id, run_start_end in c.superrun.items():
-            if run_id in superrun:
-                superrun[run_id] = {
-                    "start": min(superrun[run_id]["start"], run_start_end["start"]),
-                    "end": max(superrun[run_id]["end"], run_start_end["end"]),
-                }
-            else:
-                superrun[run_id] = run_start_end
-    return superrun
+            runs_first_chunk[subrun_id] = subrun_start_end
+    return runs_first_chunk, runs_second_chunk
 
 
 @export
