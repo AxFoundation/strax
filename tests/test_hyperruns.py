@@ -128,7 +128,7 @@ class TestHyperRuns(unittest.TestCase):
         with open(self.context.storage[0]._run_meta_path(str(run_id)), "w") as fp:
             json.dump(run_doc, fp, sort_keys=True, indent=4, default=json_util.default)
 
-    def test_load_superruns_and_hyperruns(self):
+    def test_load_hyperruns_and_superruns(self):
         """Test loading superruns and hyperruns.
 
         The test also shows the difference between the two.
