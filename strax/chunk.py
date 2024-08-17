@@ -258,7 +258,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
-            superrun=_merge_superrun_in_chunk(chunks),
+            superrun=_merge_superrun_in_chunk(chunks, check_continuity=False),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
@@ -469,12 +469,13 @@ def _merge_subruns_in_chunk(chunks):
         return None
 
 
-def _merge_superrun_in_chunk(chunks):
+def _merge_superrun_in_chunk(chunks, check_continuity=True):
     """Updates superrun in a superrun chunk during concatenation."""
     superrun = dict()
     for c_i, c in enumerate(chunks):
         _merge_runs_in_chunk(c.superrun, superrun)
-    _continuity_check(superrun)
+    if check_continuity:
+        _continuity_check(superrun)
     return superrun
 
 
