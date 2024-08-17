@@ -621,15 +621,33 @@ class Plugin:
             # This plugin starts from scratch
             start, end = None, None
 
+        # Save superrun of chunks in kwargs for further usage
+        superruns = {k: v.superrun for k, v in kwargs.items()}
+        _superruns = list(superruns.values())
+        if not all(_superrun == _superruns[0] for _superrun in _superruns):
+            raise ValueError(f"Superruns of {kwargs} are different: {superruns}.")
+        if len(superruns) == 0:
+            superruns = {}
+        else:
+            superruns = _superruns[0]
+
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             kwargs["chunk_i"] = chunk_i
         if self.compute_takes_start_end:
             kwargs["start"] = start
             kwargs["end"] = end
-        result = self.compute(**kwargs)
+        result = self._fix_output(self.compute(**kwargs), start, end)
 
-        return self._fix_output(result, start, end)
+        # If superrun is not unique, set subruns of the chunk in result
+        if len(superruns) <= 1:
+            return result
+        if isinstance(result, strax.Chunk):
+            result.subruns = superruns
+        else:
+            for d in result:
+                result[d].subruns = superruns
+        return result
 
     def _fix_output(self, result, start, end, _dtype=None):
         if self.multi_output and _dtype is None:
