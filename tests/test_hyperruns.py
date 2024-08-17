@@ -141,3 +141,12 @@ class TestHyperRuns(unittest.TestCase):
         assert np.unique(sum_super["sum"]).size != 1
         # hyperruns will load and make subruns together
         assert np.unique(sum_hyper["sum"]).size == 1
+
+    def test_hyperrun_chunk_properties(self):
+        """Test hyperrun chunk properties."""
+        self.context.make(self.hyperrun_name, "sum")
+        # Now for a superrun
+        for chunk in self.context.get_iter(self.hyperrun_name, "sum"):
+            subruns = chunk.subruns
+            run_ids = list(subruns.keys())
+            assert len(run_ids) == 3
