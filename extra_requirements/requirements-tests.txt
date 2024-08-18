@@ -1,3 +1,0 @@
-# File for the requirements of strax with the automated tests
-sharedarray@https://xenon.isi.edu/python/SharedArray-3.2.3.tar.gz # workaround for numpy 2.0.0 build problem, see XENONnT/base_environment#1718
-git+https://github.com/XENONnT/base_environment

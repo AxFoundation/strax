@@ -14,7 +14,10 @@ repos:
     hooks:
     -   id: black
         args: [--safe, --line-length=100, --preview]
-    -   id: black-jupyter
+        language_version: python3
+    -   id: black
+        types_or: [file]
+        files: ^bin/
         args: [--safe, --line-length=100, --preview]
         language_version: python3
 
@@ -22,6 +25,8 @@ repos:
     rev: v1.7.5
     hooks:
     -   id: docformatter
+        additional_dependencies: [tomli]
+        args: [--config, pyproject.toml]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.1
