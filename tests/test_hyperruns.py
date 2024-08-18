@@ -128,7 +128,7 @@ class TestHyperRuns(unittest.TestCase):
         with open(self.context.storage[0]._run_meta_path(str(run_id)), "w") as fp:
             json.dump(run_doc, fp, sort_keys=True, indent=4, default=json_util.default)
 
-    def test_load_superruns_and_hyperruns(self):
+    def test_load_hyperruns_and_superruns(self):
         """Test loading superruns and hyperruns.
 
         The test also shows the difference between the two.
@@ -141,3 +141,12 @@ class TestHyperRuns(unittest.TestCase):
         assert np.unique(sum_super["sum"]).size != 1
         # hyperruns will load and make subruns together
         assert np.unique(sum_hyper["sum"]).size == 1
+
+    def test_hyperrun_chunk_properties(self):
+        """Test hyperrun chunk properties."""
+        self.context.make(self.hyperrun_name, "sum")
+        # Now for a superrun
+        for chunk in self.context.get_iter(self.hyperrun_name, "sum"):
+            subruns = chunk.subruns
+            run_ids = list(subruns.keys())
+            assert len(run_ids) == 3
