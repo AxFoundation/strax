@@ -25,6 +25,7 @@ class Chunk:
     # this could change during the run in superruns (in the future)
     run_id: str
     subruns: dict
+    superrun: dict
     start: int
     end: int
 
@@ -42,6 +43,7 @@ class Chunk:
         end,
         data,
         subruns=None,
+        superrun=None,
         target_size_mb=DEFAULT_CHUNK_SIZE_MB,
     ):
         self.data_type = data_type
@@ -91,12 +93,14 @@ class Chunk:
                     f"Attempt to create chunk {self} whose data ends late at {data_ends_at}"
                 )
 
-        # This is commented out for performance, but it's perhaps useful
-        # when debugging
-        # if len(data) > 1:
-        #     if min(np.diff(data['time'])) < 0:
-        #         raise ValueError(f"Attempt to create chunk {self} "
-        #                          "whose data is not sorted by time.")
+        if superrun is None:
+            self.superrun = {run_id: {"start": start, "end": end}}
+        else:
+            if not isinstance(superrun, dict):
+                raise ValueError(f"Attempt to create chunk {self} with non-dict superrun")
+            if superrun == {}:
+                raise ValueError(f"Attempt to create chunk {self} with empty superrun")
+            self.superrun = superrun
 
     def __len__(self):
         return len(self.data)
@@ -107,9 +111,9 @@ class Chunk:
 
     def __repr__(self):
         return (
-            f"[{self.run_id}.{self.data_type}: "
+            f"({self.run_id}.{self.data_type}: "
             f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items, " + "{0:.1f} MB/s]".format(self._mbs())
+            f"{len(self)} items, " + "{0:.1f} MB/s)".format(self._mbs())
         )
 
     @property
@@ -181,13 +185,15 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        subruns_first_chunk, subruns_second_chunk = _split_subruns_in_chunk(self.subruns, t)
+        subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
 
         c1 = strax.Chunk(
             start=self.start,
             end=max(self.start, t),  # type: ignore
             data=data1,
             subruns=subruns_first_chunk,
+            superrun=superrun_first_chunk,
             **common_kwargs,
         )
         c2 = strax.Chunk(
@@ -195,6 +201,7 @@ class Chunk:
             end=max(t, self.end),  # type: ignore
             data=data2,
             subruns=subruns_second_chunk,
+            superrun=superrun_second_chunk,
             **common_kwargs,
         )
         return c1, c2
@@ -246,6 +253,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
@@ -271,7 +279,12 @@ class Chunk:
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
 
-        run_id = run_ids[0]
+        if len(set(run_ids)) == 1:
+            run_id = run_ids[0]
+            superrun = None
+        else:
+            run_id = None
+            superrun = _merge_superrun_in_chunk(chunks)
         subruns = _merge_subruns_in_chunk(chunks)
 
         prev_end = 0
@@ -290,6 +303,7 @@ class Chunk:
             data_kind=chunks[0].data_kind,
             run_id=run_id,
             subruns=subruns,
+            superrun=superrun,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -392,6 +406,8 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     """
     if chunk is None:
         return chunk
+    if chunk.subruns is not None:
+        raise ValueError("Chunk {chunk} is already a superrun chunk.")
     subruns = {chunk.run_id: {"start": chunk.start, "end": chunk.end}}
 
     return Chunk(
@@ -407,48 +423,91 @@ def transform_chunk_to_superrun_chunk(superrun_id, chunk):
     )
 
 
+def _merge_runs_in_chunk(runs_of_chunk, merged_runs):
+    """Merge subruns information during concatenation or merge."""
+    if runs_of_chunk is None:
+        return
+    for run_id, run_start_end in runs_of_chunk.items():
+        merged_runs.setdefault(run_id, [])
+        merged_runs[run_id].append([run_start_end["start"], run_start_end["end"]])
+
+
+def _continuity_check(merged_runs, merge=False):
+    """Check continuity of runs in a superrun chunk."""
+    for run_id in merged_runs.keys():
+        merged_runs[run_id].sort(key=lambda x: x[0])
+        if not merge:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][i - 1][1]
+                if mask:
+                    raise ValueError(
+                        "Chunks are not continuous. "
+                        f"Run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
+        else:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][0][0]
+                mask |= merged_runs[run_id][i][1] != merged_runs[run_id][0][1]
+                if mask:
+                    raise ValueError(
+                        "If merging, all chunks should have the same start/end time. "
+                        f"But run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
+        merged_runs[run_id] = {
+            "start": merged_runs[run_id][0][0],
+            "end": merged_runs[run_id][-1][1],
+        }
+
+
 def _merge_subruns_in_chunk(chunks):
     """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
 
     """
-    subruns = None
+    subruns = dict()
     for c_i, c in enumerate(chunks):
-        if not subruns:
-            subruns = c.subruns
-            continue
-
-        for subrun_id, subrun_start_end in c.subruns.items():
-            if subrun_id in subruns:
-                subruns[subrun_id] = {
-                    "start": min(subruns[subrun_id]["start"], subrun_start_end["start"]),
-                    "end": max(subruns[subrun_id]["end"], subrun_start_end["end"]),
-                }
-            else:
-                subruns[subrun_id] = subrun_start_end
-    return subruns
+        _merge_runs_in_chunk(c.subruns, subruns)
+    _continuity_check(subruns)
+    if subruns:
+        return subruns
+    else:
+        return None
 
 
-def _split_subruns_in_chunk(subruns, t):
-    """Split list of subruns in a superrun chunk during split.
+def _merge_superrun_in_chunk(chunks, merge=False):
+    """Updates superrun in a superrun chunk during concatenation."""
+    superrun = dict()
+    for c_i, c in enumerate(chunks):
+        _merge_runs_in_chunk(c.superrun, superrun)
+    _continuity_check(superrun, merge)
+    return superrun
+
+
+def _split_runs_in_chunk(runs_of_chunk, t):
+    """Split list of runs in a superrun chunk during split.
 
     Updates also their start/ends too.
 
     """
-    if not subruns:
+    if runs_of_chunk is None:
         return None, None
-    subruns_first_chunk = {}
-    subruns_second_chunk = {}
-    for subrun_id, subrun_start_end in subruns.items():
+    runs_first_chunk = {}
+    runs_second_chunk = {}
+    for subrun_id, subrun_start_end in runs_of_chunk.items():
         if t < subrun_start_end["start"]:
-            subruns_second_chunk[subrun_id] = subrun_start_end
+            runs_second_chunk[subrun_id] = subrun_start_end
         elif subrun_start_end["start"] <= t < subrun_start_end["end"]:
-            subruns_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": int(t)}
-            subruns_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
+            runs_first_chunk[subrun_id] = {"start": subrun_start_end["start"], "end": int(t)}
+            runs_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
         elif subrun_start_end["end"] <= t:
-            subruns_first_chunk[subrun_id] = subrun_start_end
-    return subruns_first_chunk, subruns_second_chunk
+            runs_first_chunk[subrun_id] = subrun_start_end
+    # Make sure that either dictionary with content or None is assigned to Chunk
+    if runs_first_chunk == {}:
+        runs_first_chunk = None
+    if runs_second_chunk == {}:
+        runs_second_chunk = None
+    return runs_first_chunk, runs_second_chunk
 
 
 @export

@@ -479,8 +479,9 @@ class Plugin:
                     # can we optimize this, or code it more elegantly?
                     max_passes_left = 10
                     while max_passes_left > 0:
-                        this_chunk_end = min([x.end for x in inputs.values()] + [this_chunk_end])
-                        if len(set([x.end for x in inputs.values()])) <= 1:
+                        all_ends = [x.end for x in inputs.values()]
+                        this_chunk_end = min(all_ends + [this_chunk_end])
+                        if len(set(all_ends)) <= 1:
                             break
                         for d in self.depends_on:
                             inputs[d], back_to_buffer = inputs[d].split(
@@ -600,7 +601,7 @@ class Plugin:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     start = min([v.start for v in kwargs.values()])
-                    end = max([v.end for v in kwargs.values()])  # Don't delete
+                    end = max([v.end for v in kwargs.values()])
                     message = (
                         "New feature, we are ignoring inconsistent the "
                         "possible ValueError in time ranges for "
@@ -620,15 +621,33 @@ class Plugin:
             # This plugin starts from scratch
             start, end = None, None
 
+        # Save superrun of chunks in kwargs for further usage
+        superruns = {k: v.superrun for k, v in kwargs.items()}
+        _superruns = list(superruns.values())
+        if not all(_superrun == _superruns[0] for _superrun in _superruns):
+            raise ValueError(f"Superruns of {kwargs} are different: {superruns}.")
+        if len(superruns) == 0:
+            superruns = {}
+        else:
+            superruns = _superruns[0]
+
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             kwargs["chunk_i"] = chunk_i
         if self.compute_takes_start_end:
             kwargs["start"] = start
             kwargs["end"] = end
-        result = self.compute(**kwargs)
+        result = self._fix_output(self.compute(**kwargs), start, end)
 
-        return self._fix_output(result, start, end)
+        # If superrun is not unique, set subruns of the chunk in result
+        if len(superruns) <= 1:
+            return result
+        if isinstance(result, strax.Chunk):
+            result.subruns = superruns
+        else:
+            for d in result:
+                result[d].subruns = superruns
+        return result
 
     def _fix_output(self, result, start, end, _dtype=None):
         if self.multi_output and _dtype is None:
