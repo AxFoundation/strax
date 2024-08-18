@@ -31,7 +31,7 @@ jobs:
       - name: pre-install requirements
         run: pip install -r requirements.txt
       - name: Install strax
-        run: python setup.py install
+        run: pip install .
       - name: Test import
         run: python -c "import strax; print(strax.__version__)"
       - name: goodbye
