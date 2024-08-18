@@ -19,6 +19,9 @@ classifiers = [
 ]
 repository = "https://github.com/AxFoundation/strax"
 
+[tool.poetry.scripts]
+rechunker = "bin.rechunker:main"
+
 [tool.poetry.dependencies]
 python = ">=3.6,<3.13"
 blosc = "*"
