@@ -15,7 +15,7 @@ on:
       - master
 
 jobs:
-  update:
+  test:
     name: "${{ matrix.test }}_py${{ matrix.python-version }}"
     runs-on: ubuntu-latest
     strategy:
