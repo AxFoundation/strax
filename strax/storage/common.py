@@ -555,7 +555,7 @@ class StorageBackend:
                 f"but chunk_info {chunk_info} says {chunk_info['n']}"
             )
 
-        subruns = chunk_info["subruns"]
+        subruns = chunk_info.get("subruns", None)
 
         result = strax.Chunk(
             start=chunk_info["start"],

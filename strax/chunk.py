@@ -93,18 +93,13 @@ class Chunk:
                     f"Attempt to create chunk {self} whose data ends late at {data_ends_at}"
                 )
 
-        # This is commented out for performance, but it's perhaps useful
-        # when debugging
-        # if len(data) > 1:
-        #     if min(np.diff(data['time'])) < 0:
-        #         raise ValueError(f"Attempt to create chunk {self} "
-        #                          "whose data is not sorted by time.")
-
         if superrun is None:
             self.superrun = {run_id: {"start": start, "end": end}}
         else:
             if not isinstance(superrun, dict):
                 raise ValueError(f"Attempt to create chunk {self} with non-dict superrun")
+            if superrun == {}:
+                raise ValueError(f"Attempt to create chunk {self} with empty superrun")
             self.superrun = superrun
 
     def __len__(self):
@@ -507,6 +502,11 @@ def _split_runs_in_chunk(runs_of_chunk, t):
             runs_second_chunk[subrun_id] = {"start": int(t), "end": subrun_start_end["end"]}
         elif subrun_start_end["end"] <= t:
             runs_first_chunk[subrun_id] = subrun_start_end
+    # Make sure that either dictionary with content or None is assigned to Chunk
+    if runs_first_chunk == {}:
+        runs_first_chunk = None
+    if runs_second_chunk == {}:
+        runs_second_chunk = None
     return runs_first_chunk, runs_second_chunk
 
 
