@@ -126,15 +126,8 @@ class TestSuperRuns(unittest.TestCase):
         subrun_data = self.context.get_array(
             self.subrun_ids, "records", progress_bar=False, add_run_id_field=False
         )
-
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
-        superrun_data = self.context.get_array(
-            self.superrun_name,
-            "records",
-        )
+        self.context.make(self.superrun_name, "records")
+        superrun_data = self.context.get_array(self.superrun_name, "records")
 
         assert self.context.is_stored(self.superrun_name, "records")
         assert np.all(subrun_data == superrun_data)
@@ -163,21 +156,14 @@ class TestSuperRuns(unittest.TestCase):
 
     def test_select_runs(self):
         self.context.select_runs()
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
+        self.context.make(self.superrun_name, "records")
         df = self.context.select_runs(available=("records",))
         assert self.superrun_name in df["name"].values
 
     def test_superrun_chunk_and_meta(self):
         """Superrun chunks and meta data should contain information about its constituent
         subruns."""
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
-
+        self.context.make(self.superrun_name, "records")
         meta = self.context.get_meta(self.superrun_name, "records")
 
         n_chunks = 0
@@ -213,8 +199,7 @@ class TestSuperRuns(unittest.TestCase):
         """Tests rechunking and loading of superruns with multiple chunks.
 
         The test is required since it was possible to run into race conditions with
-        chunk.continuity_check in context.get_iter and transform_chunk_to_superrun_chunk in
-        storage.common.Saver.save_from.
+        chunk.continuity_check in context.get_iter.
 
         """
 
@@ -365,6 +350,7 @@ class RecordsExtension(strax.Plugin):
     depends_on = "records"
     provides = "records_extension"
     dtype = strax.time_dt_fields + [(("Some additional field", "additional_field"), np.int16)]
+    allow_superrun = True
 
     def compute(self, records):
         res = np.zeros(len(records), self.dtype)
@@ -389,6 +375,7 @@ class PeaksExtension(strax.Plugin):
     dtype = strax.time_dt_fields + [
         (("Some additional field", "some_additional_peak_field"), np.int16)
     ]
+    allow_superrun = True
 
     def compute(self, peaks):
         res = np.zeros(len(peaks), self.dtype)

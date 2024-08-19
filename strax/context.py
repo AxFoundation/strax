@@ -30,15 +30,6 @@ tqdm = strax.utils.tqdm
 
 @strax.takes_config(
     strax.Option(
-        name="storage_converter",
-        default=False,
-        type=bool,
-        help=(
-            "If True, save data that is loaded from one frontend "
-            "through all willing other storage frontends."
-        ),
-    ),
-    strax.Option(
         name="fuzzy_for",
         default=tuple(),
         type=tuple,
@@ -672,9 +663,11 @@ class Context:
         return plugin
 
     @staticmethod
-    def hyperrun_id(run_id):
+    def superrun_id(run_id):
         if run_id.startswith("__"):
             _run_id = run_id[2:]
+        elif run_id.startswith("_"):
+            _run_id = run_id[1:]
         else:
             _run_id = run_id
         return _run_id
@@ -682,7 +675,7 @@ class Context:
     def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
-        _run_id = self.hyperrun_id(run_id)
+        _run_id = self.superrun_id(run_id)
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
@@ -798,7 +791,7 @@ class Context:
                 continue
 
             requested_p = plugin.__copy__()
-            requested_p.run_id = self.hyperrun_id(run_id)
+            requested_p.run_id = self.superrun_id(run_id)
 
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
@@ -874,7 +867,7 @@ class Context:
 
         plugin = self._plugin_class_registry[data_type]()
 
-        plugin.run_id = self.hyperrun_id(run_id)
+        plugin.run_id = self.superrun_id(run_id)
 
         # The plugin may not get all the required options here
         # but we don't know if we need the plugin yet
@@ -1092,9 +1085,15 @@ class Context:
 
         plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
-        allow_hyperruns = [plugins[target_i].allow_hyperrun for target_i in targets]
-        if sum(allow_hyperruns) != 0 and sum(allow_hyperruns) != len(targets):
-            raise ValueError("Cannot mix plugins that allow hyperruns with those that do not.")
+        allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
+        if sum(allow_superruns) != 0 and sum(allow_superruns) != len(targets):
+            raise ValueError("Cannot mix plugins that allow superruns with those that do not.")
+
+        # run_id start with "_" or "__" are all superrun
+        _is_superrun = run_id.startswith("_")
+
+        if not sum(allow_superruns) and _is_superrun:
+            raise ValueError(f"Plugin {targets} are not allowed to be used in a superrun")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1125,14 +1124,8 @@ class Context:
                 key, chunk_number=_chunk_number, time_range=time_range
             )
 
-            _is_not_temp = not target_plugin.provides[0].startswith("_temp")
-            _is_superrun = run_id.startswith("_") and _is_not_temp
-            _is_hyperrun = run_id.startswith("__") and _is_not_temp
-            # hyperrun is always superrun
-            allow_hyperrun = plugins[target_i].allow_hyperrun
-            if not loader and (
-                (_is_superrun and not _is_hyperrun) or (_is_hyperrun and not allow_hyperrun)
-            ):
+            allow_superrun = plugins[target_i].allow_superrun
+            if not loader and _is_superrun and not allow_superrun:
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
 
@@ -1216,39 +1209,24 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            if self.context_config["storage_converter"]:
-                warnings.warn(
-                    'The storage converter mode will be replaced by "copy_to_frontend" soon. '
-                    "It will be removed in one of the future releases. Please let us know if "
-                    'you are still using the "storage_converter" option.',
-                    DeprecationWarning,
-                )
-
             # Should we save this data? If not, return.
             _can_store_superrun = self.context_config["write_superruns"] and _is_superrun
             # In case we can load the data already we want either use the storage converter
             # or make a new superrun.
-            if (
-                loading_this_data
-                and not self.context_config["storage_converter"]
-                and not _can_store_superrun
-            ):
+            if loading_this_data and not _can_store_superrun:
                 return
 
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
             # In case of the storage converter mode we copy already existing data. So we do not
             # have to check for the saving requirements here.
             current_plugin_to_savers = [target_i]
-            if (
-                not self._target_should_be_saved(
-                    target_plugin,
-                    target_i,
-                    targets,
-                    save,
-                    loader,
-                    _is_superrun and not _is_hyperrun,
-                )
-                and not self.context_config["storage_converter"]
+            if not self._target_should_be_saved(
+                target_plugin,
+                target_i,
+                targets,
+                save,
+                loader,
+                _is_superrun,
             ):
                 if len(target_plugin.provides) > 1:
                     # In case the plugin has more than a single provides we also have to check
@@ -1278,14 +1256,8 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            if _is_superrun and not _is_hyperrun:
-                # In case of a superrun we are only interested in the specified targets
-                # and not any other stuff provided by the corresponding plugin.
-                savers = self._add_saver(
-                    savers, target_i, run_id, target_plugin, _is_superrun, loading_this_data
-                )
-            elif not _is_hyperrun or allow_hyperrun:
-                # only save if we are not in a hyperrun or the plugin allows hyperruns
+            if not _is_superrun or allow_superrun:
+                # only save if we are not in a superrun or the plugin allows superruns
                 # otherwise we will see error at Chunk.concatenate
                 # but anyway the data is should already been made
                 for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
@@ -1298,16 +1270,13 @@ class Context:
                         key, time_range=time_range, chunk_number=_chunk_number
                     )
 
-                    if (
-                        not self._target_should_be_saved(
-                            target_plugin,
-                            d_to_save,
-                            targets,
-                            save,
-                            loader,
-                            _is_superrun and not _is_hyperrun,
-                        )
-                        and not self.context_config["storage_converter"]
+                    if not self._target_should_be_saved(
+                        target_plugin,
+                        d_to_save,
+                        targets,
+                        save,
+                        loader,
+                        _is_superrun,
                     ) or savers.get(d_to_save):
                         # This multi-output plugin was scanned before
                         # let's not create doubled savers or store data_types we do not want to.
@@ -1376,8 +1345,8 @@ class Context:
         :param d_to_save: String of the data_type to be saved.
         :param target_plugin: Plugin which produces the data_type
         :param _is_superrun: Boolean if run is a superrun
-        :param loading_this_data: Boolean if data can be loaded. Required for storing during
-            storage_converter mode and writing of superruns.
+        :param loading_this_data: Boolean if data can be loaded. Required for storing during writing
+            of superruns.
         :return: Updated savers dictionary.
 
         """
@@ -1387,9 +1356,7 @@ class Context:
                 continue
             if loading_this_data:
                 # Usually, we don't save if we're loading
-                if not self.context_config["storage_converter"] and (
-                    not self.context_config["write_superruns"] and _is_superrun
-                ):
+                if not self.context_config["write_superruns"] and _is_superrun:
                     continue
                     # ... but in storage converter mode we do,
                     # ... or we want to write a new superrun. This is different from
@@ -1592,12 +1559,15 @@ class Context:
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
-        if isinstance(targets, (list, tuple)) and len(targets) > 1:
+        mask = isinstance(targets, (list, tuple)) and len(targets) > 1
+        mask |= run_id.startswith("__")
+        if mask:
             targets = tuple(set(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = "_temp_" + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+                p.allow_superrun = run_id.startswith("__")
                 self.register(p)
                 targets = (temp_name,)
             elif not allow_multiple:
@@ -2686,37 +2656,37 @@ class Context:
                 _inverse_tree[d] += v().provides
         return _inverse_tree
 
-    def check_hyperrun(self):
-        """Raise if non-hyperrun plugins depends on hyperrun plugins."""
+    def check_superrun(self):
+        """Raise if non-superrun plugins depends on superrun plugins."""
         inverse_tree = self.inverse_tree
 
-        # define a recursive function to check if all the dependencies support hyperruns
-        def check_support_hyperrun(data_type, checked=set(), seen_allow=None):
+        # define a recursive function to check if all the dependencies support superruns
+        def check_support_superrun(data_type, checked=set(), seen_allow=None):
             if data_type in checked:
                 return checked
-            if self._plugin_class_registry[data_type].allow_hyperrun:
+            if self._plugin_class_registry[data_type].allow_superrun:
                 seen_allow = data_type
-            if seen_allow and not self._plugin_class_registry[data_type].allow_hyperrun:
+            if seen_allow and not self._plugin_class_registry[data_type].allow_superrun:
                 raise ValueError(
-                    f"Already support hyperruns in {seen_allow}, "
-                    f"but it's dependency {data_type} does not support hyperruns."
+                    f"Already support superruns in {seen_allow}, "
+                    f"but it's dependency {data_type} does not support superruns."
                 )
             checked |= set((data_type,))
             if data_type not in inverse_tree:
                 return checked
             for d in inverse_tree[data_type]:
-                checked |= check_support_hyperrun(d, checked, seen_allow)
+                checked |= check_support_superrun(d, checked, seen_allow)
             return checked
 
         # use checked set to record the data_type that has been checked
         # to shorten the time of checking
         checked = set()
         for data_type in self.root_data_types:
-            if self._plugin_class_registry[data_type].allow_hyperrun:
+            if self._plugin_class_registry[data_type].allow_superrun:
                 seen_allow = data_type
             else:
                 seen_allow = None
-            checked |= check_support_hyperrun(data_type, checked, seen_allow)
+            checked |= check_support_superrun(data_type, checked, seen_allow)
 
     @classmethod
     def add_method(cls, f):

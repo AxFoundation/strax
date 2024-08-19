@@ -104,7 +104,7 @@ class Plugin:
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
-    allow_hyperrun = False
+    allow_superrun = False
 
     def __init__(self):
         if not hasattr(self, "depends_on"):
@@ -385,7 +385,7 @@ class Plugin:
         try:
             # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
             self.input_buffer[d] = strax.Chunk.concatenate(
-                [self.input_buffer[d], next(iters[d])], self.allow_hyperrun
+                [self.input_buffer[d], next(iters[d])], self.allow_superrun
             )
             # print(f"Fetched {d} in {self}, "
             #      f"now have {self.input_buffer[d]}")
@@ -489,7 +489,7 @@ class Plugin:
                             )
                             self.input_buffer[d] = strax.Chunk.concatenate(
                                 [back_to_buffer, self.input_buffer[d]],
-                                self.allow_hyperrun,
+                                self.allow_superrun,
                             )
                         max_passes_left -= 1
                     else:

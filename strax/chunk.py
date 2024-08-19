@@ -258,7 +258,7 @@ class Chunk:
         )
 
     @classmethod
-    def concatenate(cls, chunks, allow_hyperrun=False):
+    def concatenate(cls, chunks, allow_superrun=False):
         """Create chunk by concatenating chunks of same data type You can pass None's, they will be
         ignored."""
         chunks = [c for c in chunks if c is not None]
@@ -274,7 +274,7 @@ class Chunk:
 
         run_ids = [c.run_id for c in chunks]
 
-        if len(set(run_ids)) != 1 and not allow_hyperrun:
+        if len(set(run_ids)) != 1 and not allow_superrun:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
@@ -395,34 +395,6 @@ def split_array(data, t, allow_early_split=False):
     return data[:splittable_i], data[splittable_i:], t
 
 
-@export
-def transform_chunk_to_superrun_chunk(superrun_id, chunk):
-    """Function which transforms/creates a new superrun chunk from subrun chunk.
-
-    :param superrun_id: id/name of the superrun.
-    :param chunk: strax.Chunk of a superrun subrun.
-    :return: strax.Chunk
-
-    """
-    if chunk is None:
-        return chunk
-    if chunk.subruns is not None:
-        raise ValueError("Chunk {chunk} is already a superrun chunk.")
-    subruns = {chunk.run_id: {"start": chunk.start, "end": chunk.end}}
-
-    return Chunk(
-        start=chunk.start,
-        end=chunk.end,
-        dtype=chunk.dtype,
-        data_type=chunk.data_type,
-        data_kind=chunk.data_kind,
-        run_id=superrun_id,
-        subruns=subruns,
-        data=chunk.data,
-        target_size_mb=chunk.target_size_mb,
-    )
-
-
 def _merge_runs_in_chunk(runs_of_chunk, merged_runs):
     """Merge subruns information during concatenation or merge."""
     if runs_of_chunk is None:
@@ -522,15 +494,13 @@ class Rechunker:
 
     def __init__(self, rechunk=False, run_id=None):
         self.rechunk = rechunk
-        self.is_superrun = run_id and run_id.startswith("_") and not run_id.startswith("__")
+        self.is_superrun = run_id and run_id.startswith("_")
         self.run_id = run_id
 
         self.cache = None
 
     def receive(self, chunk) -> list:
         """Receive a chunk, return list of chunks to send out after merging and splitting."""
-        if self.is_superrun:
-            chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
         if not self.rechunk:
             # We aren't rechunking
             return [chunk]

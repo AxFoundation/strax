@@ -48,7 +48,7 @@ class Sum(ExhaustPlugin):
     dtype = [
         (("Sum of numbers", "sum"), np.int32),
     ] + strax.time_dt_fields
-    allow_hyperrun = True
+    allow_superrun = True
 
     def compute(self, ranges):
         s = np.zeros(len(ranges), self.dtype)
