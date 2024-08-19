@@ -124,19 +124,19 @@ class TestSuperRuns(unittest.TestCase):
         """
 
         subrun_data = self.context.get_array(
-            self.subrun_ids, "records", progress_bar=False, add_run_id_field=False
+            self.subrun_ids, "peaks", progress_bar=False, add_run_id_field=False
         )
-        self.context.make(self.superrun_name, "records")
-        superrun_data = self.context.get_array(self.superrun_name, "records")
+        self.context.make(self.superrun_name, "peaks")
+        superrun_data = self.context.get_array(self.superrun_name, "peaks")
 
-        assert self.context.is_stored(self.superrun_name, "records")
+        assert self.context.is_stored(self.superrun_name, "peaks")
         assert np.all(subrun_data == superrun_data)
 
         # Load meta data and check if rechunking worked:
-        chunks = self.context.get_meta(self.superrun_name, "records")["chunks"]
+        chunks = self.context.get_meta(self.superrun_name, "peaks")["chunks"]
         assert len(chunks) == 1
         chunk = chunks[0]
-        assert chunk["run_id"] == self.superrun_name
+        assert chunk["run_id"] == self.superrun_name[1:]
         assert chunk["first_time"] == subrun_data["time"].min()
         assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
 

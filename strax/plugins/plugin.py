@@ -117,6 +117,12 @@ class Plugin:
         if duplicates:
             raise ValueError(f"Duplicate dependencies in {self.__class__.__name__}: {duplicates}")
 
+        if len(self.depends_on) == 0 and self.allow_superrun:
+            raise RuntimeError(
+                f"{self.__class__.__name__} does not depend on anything, "
+                "so can not set allow_superrun to True!"
+            )
+
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
         if "chunk_i" in compute_pars:
@@ -639,9 +645,6 @@ class Plugin:
             kwargs["end"] = end
         result = self._fix_output(self.compute(**kwargs), start, end)
 
-        # If superrun is not unique, set subruns of the chunk in result
-        if len(superruns) <= 1:
-            return result
         if isinstance(result, strax.Chunk):
             result.subruns = superruns
         else:
