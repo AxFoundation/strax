@@ -213,7 +213,6 @@ class Chunk:
             data1, data2, t = split_array(data=self.data, t=t, allow_early_split=allow_early_split)
 
         common_kwargs = dict(
-            run_id=self.run_id,
             dtype=self.dtype,
             data_type=self.data_type,
             data_kind=self.data_kind,
@@ -222,10 +221,16 @@ class Chunk:
 
         subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
         superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
+        # If the superrun is split and the fragment cover only one run,
+        # you need to recover the run_id
         if superrun_first_chunk is None or len(superrun_first_chunk) == 1:
             run_id_first_chunk = list(self.superrun.keys())[0]
+        else:
+            run_id_first_chunk = self.run_id
         if superrun_second_chunk is None or len(superrun_second_chunk) == 1:
             run_id_second_chunk = list(self.superrun.keys())[-1]
+        else:
+            run_id_second_chunk = self.run_id
 
         c1 = strax.Chunk(
             start=self.start,
@@ -233,7 +238,7 @@ class Chunk:
             data=data1,
             subruns=subruns_first_chunk,
             superrun=superrun_first_chunk,
-            **{**common_kwargs, **dict(run_id=run_id_first_chunk)},
+            **{**common_kwargs, "run_id": run_id_first_chunk},
         )
         c2 = strax.Chunk(
             start=max(self.start, t),  # type: ignore
@@ -241,7 +246,7 @@ class Chunk:
             data=data2,
             subruns=subruns_second_chunk,
             superrun=superrun_second_chunk,
-            **{**common_kwargs, **dict(run_id=run_id_second_chunk)},
+            **{**common_kwargs, "run_id": run_id_second_chunk},
         )
         return c1, c2
 
