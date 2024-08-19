@@ -96,8 +96,6 @@ class Plugin:
     takes_config = immutabledict()
 
     # These are set on plugin initialization, which is done in the core
-    run_id: str
-    run_i: int
     config: typing.Dict
     deps: typing.Dict  # Dictionary of dependency plugin instances
 
@@ -201,6 +199,19 @@ class Plugin:
             return self.config[name]
 
         raise AttributeError(f"{self.__class__.__name__} instance has no attribute {name}")
+
+    @property
+    def run_id(self):
+        return self.__run_id
+
+    @run_id.setter
+    def run_id(self, run_id):
+        self._run_id = run_id
+        self.__run_id = strax.Context._process_superrun_id(run_id)
+
+    @property
+    def is_superrun(self):
+        return self._run_id.startswith("_")
 
     def fix_dtype(self):
         try:
@@ -577,6 +588,18 @@ class Plugin:
                 f"Delivered: {got}."
             )
 
+    @staticmethod
+    def _unique_subruns(kwargs, subrunses):
+        _subrunses = list(subrunses.values())
+        if not all(_subruns == _subrunses[0] for _subruns in _subrunses):
+            raise ValueError(f"Superruns or subrunses of {kwargs} are different: {subrunses}.")
+        if len(subrunses) == 0:
+            # The plugin depends on nothing
+            subruns = None
+        else:
+            subruns = _subrunses[0]
+        return subruns
+
     def do_compute(self, chunk_i=None, **kwargs):
         """Wrapper for the user-defined compute method.
 
@@ -627,15 +650,9 @@ class Plugin:
             # This plugin starts from scratch
             start, end = None, None
 
-        # Save superrun of chunks in kwargs for further usage
-        superruns = {k: v.superrun for k, v in kwargs.items()}
-        _superruns = list(superruns.values())
-        if not all(_superrun == _superruns[0] for _superrun in _superruns):
-            raise ValueError(f"Superruns of {kwargs} are different: {superruns}.")
-        if len(superruns) == 0:
-            superruns = {}
-        else:
-            superruns = _superruns[0]
+        # Save superrun and subruns of chunks in kwargs for further usage
+        superrun = self._unique_subruns(kwargs, {k: v.superrun for k, v in kwargs.items()})
+        subruns = self._unique_subruns(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
@@ -645,11 +662,32 @@ class Plugin:
             kwargs["end"] = end
         result = self._fix_output(self.compute(**kwargs), start, end)
 
-        if isinstance(result, strax.Chunk):
-            result.subruns = superruns
+        # If processing superrun, set subruns to the result.
+        # If there is already _run_id in superrun,
+        # this means we are processing higher data_types
+        # after we done the merging of subruns' chunks.
+        # These lines of codes transfer chunks of normal subruns into superrun.
+        if self.is_superrun and self._run_id not in superrun:
+            if isinstance(result, strax.Chunk):
+                result.subruns = superrun
+            else:
+                for d in result:
+                    result[d].subruns = superrun
         else:
-            for d in result:
-                result[d].subruns = superruns
+            if isinstance(superrun, dict) and len(set(superrun.keys())) > 1:
+                raise ValueError(
+                    "Weird! You did not assign superrun "
+                    f"but the chunks have from different run_id: {superrun}."
+                )
+            # Here we need to set subruns because the subruns information
+            # need to be inherited when processing superrun
+            if isinstance(result, strax.Chunk):
+                result.subruns = subruns
+                result.superrun = superrun
+            else:
+                for d in result:
+                    result[d].subruns = subruns
+                    result[d].superrun = superrun
         return result
 
     def _fix_output(self, result, start, end, _dtype=None):
@@ -693,7 +731,7 @@ class Plugin:
                 )
             data_type = self.provides[0]
         if run_id is None:
-            run_id = self.run_id
+            run_id = self._run_id
         return strax.Chunk(
             start=start,
             end=end,

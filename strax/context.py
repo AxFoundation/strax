@@ -663,7 +663,9 @@ class Context:
         return plugin
 
     @staticmethod
-    def superrun_id(run_id):
+    def _process_superrun_id(run_id):
+        if not isinstance(run_id, str):
+            raise ValueError(f"run_id {run_id} must be str, but got {type(run_id)}")
         if run_id.startswith("__"):
             _run_id = run_id[2:]
         elif run_id.startswith("_"):
@@ -675,7 +677,7 @@ class Context:
     def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
-        _run_id = self.superrun_id(run_id)
+        _run_id = self._process_superrun_id(run_id)
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
@@ -791,7 +793,7 @@ class Context:
                 continue
 
             requested_p = plugin.__copy__()
-            requested_p.run_id = self.superrun_id(run_id)
+            requested_p.run_id = run_id
 
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
@@ -867,7 +869,7 @@ class Context:
 
         plugin = self._plugin_class_registry[data_type]()
 
-        plugin.run_id = self.superrun_id(run_id)
+        plugin.run_id = run_id
 
         # The plugin may not get all the required options here
         # but we don't know if we need the plugin yet

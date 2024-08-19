@@ -91,18 +91,7 @@ class Chunk:
                     f"Attempt to create chunk {self} whose data ends late at {data_ends_at}"
                 )
 
-        if superrun is None:
-            self.superrun = {run_id: {"start": start, "end": end}}
-        else:
-            if not isinstance(superrun, dict):
-                raise ValueError(f"Attempt to create chunk {self} with non-dict superrun")
-            if superrun == {}:
-                raise ValueError(f"Attempt to create chunk {self} with empty superrun")
-            if None in superrun:
-                raise ValueError(
-                    f"Attempt to create chunk {self} with None as run_id in superrun {superrun}"
-                )
-            self.superrun = superrun
+        self.superrun = superrun
 
     def __len__(self):
         return len(self.data)
@@ -176,6 +165,21 @@ class Chunk:
 
     @superrun.setter
     def superrun(self, superrun):
+        """Superrun can only be None or dict with non-None keys."""
+        if not isinstance(superrun, dict) and superrun is not None:
+            raise ValueError(
+                "When creating chunk, superrun can only be dict or None. "
+                f"But got {superrun} for {self}"
+            )
+        if superrun is None:
+            superrun = {self.run_id: {"start": self.start, "end": self.end}}
+        if len(superrun) == 0:
+            raise ValueError(f"Attempt to create chunk {self} with empty superrun")
+        if None in superrun:
+            raise ValueError(
+                f"Attempt to create chunk {self} with None as run_id in superrun {superrun}"
+            )
+        # The only chance self.run_id to be None is that self is concatenated from different runs
         if len(superrun) == 1 and self.run_id is None:
             raise ValueError(
                 f"If superrun {superrun} of {self} has only one run_id, run_id should be provided."

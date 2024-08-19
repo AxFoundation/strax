@@ -136,7 +136,7 @@ class TestSuperRuns(unittest.TestCase):
         chunks = self.context.get_meta(self.superrun_name, "peaks")["chunks"]
         assert len(chunks) == 1
         chunk = chunks[0]
-        assert chunk["run_id"] == self.superrun_name[1:]
+        assert chunk["run_id"] == self.superrun_name
         assert chunk["first_time"] == subrun_data["time"].min()
         assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
 
