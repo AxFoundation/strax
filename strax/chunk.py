@@ -531,18 +531,12 @@ def _split_runs_in_chunk(subruns, t):
     runs_first_chunk = {}
     runs_second_chunk = {}
     for run_id, run_start_end in subruns.items():
-        if t < run_start_end["start"]:
-            runs_second_chunk[run_id] = run_start_end
-        elif t == run_start_end["start"]:
-            runs_first_chunk[run_id] = {"start": int(t), "end": int(t)}
+        if t <= run_start_end["start"]:
             runs_second_chunk[run_id] = run_start_end
         elif run_start_end["start"] < t < run_start_end["end"]:
             runs_first_chunk[run_id] = {"start": run_start_end["start"], "end": int(t)}
             runs_second_chunk[run_id] = {"start": int(t), "end": run_start_end["end"]}
-        elif run_start_end["end"] == t:
-            runs_first_chunk[run_id] = run_start_end
-            runs_second_chunk[run_id] = {"start": int(t), "end": int(t)}
-        elif run_start_end["end"] < t:
+        elif run_start_end["end"] <= t:
             runs_first_chunk[run_id] = run_start_end
     # Pop out empty run_id
     _pop_out_empty_run_id(runs_first_chunk)

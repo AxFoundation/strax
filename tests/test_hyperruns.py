@@ -134,6 +134,7 @@ class TestHyperRuns(unittest.TestCase):
         The test also shows the difference between the two.
 
         """
+        self.context.check_superrun()
         sum_super = self.context.get_array(self.superrun_name, "sum")
         sum_hyper = self.context.get_array(self.hyperrun_name, "sum")
 

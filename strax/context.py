@@ -1095,6 +1095,8 @@ class Context:
             raise ValueError(
                 f"Cannot mix plugins {targets} that allow superruns with those that do not."
             )
+        if not sum(allow_superruns) and _is_superrun:
+            raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1127,6 +1129,8 @@ class Context:
 
             allow_superrun = plugins[target_i].allow_superrun
             if not loader and _is_superrun and not allow_superrun:
+                # allow_superrun is False so we start to collect the subruns' data_types,
+                # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
 
@@ -1560,9 +1564,7 @@ class Context:
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
-        mask = isinstance(targets, (list, tuple)) and len(targets) > 1
-        mask |= run_id.startswith("__")
-        if mask:
+        if (isinstance(targets, (list, tuple)) and len(targets) > 1) | run_id.startswith("__"):
             targets = tuple(set(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
