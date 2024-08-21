@@ -1087,15 +1087,14 @@ class Context:
 
         plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
-        allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
-        if sum(allow_superruns) != 0 and sum(allow_superruns) != len(targets):
-            raise ValueError("Cannot mix plugins that allow superruns with those that do not.")
-
         # run_id start with "_" or "__" are all superrun
         _is_superrun = run_id.startswith("_")
 
-        if not sum(allow_superruns) and _is_superrun:
-            raise ValueError(f"Plugin {targets} are not allowed to be used in a superrun")
+        allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
+        if _is_superrun and sum(allow_superruns) not in [0, len(targets)]:
+            raise ValueError(
+                f"Cannot mix plugins {targets} that allow superruns with those that do not."
+            )
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1569,6 +1568,7 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = "_temp_" + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+                # When the run_id starts with __, we create a dummy plugin which allow superrun
                 p.allow_superrun = run_id.startswith("__")
                 self.register(p)
                 targets = (temp_name,)

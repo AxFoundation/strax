@@ -169,7 +169,7 @@ class Chunk:
         if not isinstance(superrun, dict) and superrun is not None:
             raise ValueError(
                 "When creating chunk, superrun can only be dict or None. "
-                f"But got {superrun} for {self}"
+                f"But got {superrun} for {self}."
             )
         if superrun is None:
             superrun = {self.run_id: {"start": self.start, "end": self.end}}

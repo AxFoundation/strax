@@ -589,10 +589,14 @@ class Plugin:
             )
 
     @staticmethod
-    def _unique_subruns(kwargs, subrunses):
+    def _check_subruns_uniqueness(kwargs, subrunses):
+        """Check if the subruns of the all inputs are the same."""
         _subrunses = list(subrunses.values())
         if not all(_subruns == _subrunses[0] for _subruns in _subrunses):
-            raise ValueError(f"Superruns or subrunses of {kwargs} are different: {subrunses}.")
+            raise ValueError(
+                "Computing inputs' superruns or subrunses of "
+                f"{kwargs} are different: {subrunses}."
+            )
         if len(subrunses) == 0:
             # The plugin depends on nothing
             subruns = None
@@ -651,8 +655,10 @@ class Plugin:
             start, end = None, None
 
         # Save superrun and subruns of chunks in kwargs for further usage
-        superrun = self._unique_subruns(kwargs, {k: v.superrun for k, v in kwargs.items()})
-        subruns = self._unique_subruns(kwargs, {k: v.subruns for k, v in kwargs.items()})
+        superrun = self._check_subruns_uniqueness(
+            kwargs, {k: v.superrun for k, v in kwargs.items()}
+        )
+        subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
@@ -660,19 +666,35 @@ class Plugin:
         if self.compute_takes_start_end:
             kwargs["start"] = start
             kwargs["end"] = end
-        result = self._fix_output(self.compute(**kwargs), start, end)
+        result = self.compute(**kwargs)
+        return self._fix_output(result, start, end, superrun, subruns)
 
+    @staticmethod
+    def _update_superrun(item, superrun):
+        if isinstance(item, strax.Chunk):
+            item.superrun = superrun
+        else:
+            for d in item:
+                item[d].superrun = superrun
+
+    @staticmethod
+    def _update_subruns(item, subruns):
+        if isinstance(item, strax.Chunk):
+            item.subruns = subruns
+        else:
+            for d in item:
+                item[d].subruns = subruns
+
+    def superrun_transformation(self, result, superrun, subruns):
+        """Transform the combination of subruns into superrun."""
         # If processing superrun, set subruns to the result.
         # If there is already _run_id in superrun,
         # this means we are processing higher data_types
         # after we done the merging of subruns' chunks.
         # These lines of codes transfer chunks of normal subruns into superrun.
         if self.is_superrun and self._run_id not in superrun:
-            if isinstance(result, strax.Chunk):
-                result.subruns = superrun
-            else:
-                for d in result:
-                    result[d].subruns = superrun
+            # Assign superrun as subruns when combining and processing superrun
+            self._update_subruns(result, superrun)
         else:
             if isinstance(superrun, dict) and len(set(superrun.keys())) > 1:
                 raise ValueError(
@@ -680,24 +702,22 @@ class Plugin:
                     f"but the chunks have from different run_id: {superrun}."
                 )
             # Here we need to set subruns because the subruns information
-            # need to be inherited when processing superrun
-            if isinstance(result, strax.Chunk):
-                result.subruns = subruns
-                result.superrun = superrun
-            else:
-                for d in result:
-                    result[d].subruns = subruns
-                    result[d].superrun = superrun
+            # need to be inherited when only processing superrun (not combining)
+            self._update_subruns(result, subruns)
+            self._update_superrun(result, superrun)
         return result
 
-    def _fix_output(self, result, start, end, _dtype=None):
+    def _fix_output(self, result, start, end, superrun, subruns, _dtype=None):
         if self.multi_output and _dtype is None:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
                     "provide a dict output."
                 )
-            return {d: self._fix_output(result[d], start, end, _dtype=d) for d in self.provides}
+            return {
+                d: self._fix_output(result[d], start, end, superrun, subruns, _dtype=d)
+                for d in self.provides
+            }
 
         if _dtype is None:
             assert not self.multi_output
@@ -721,7 +741,7 @@ class Plugin:
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
             self._check_dtype(result, _dtype)
             result = self.chunk(start=start, end=end, data_type=_dtype, data=result)
-        return result
+        return self.superrun_transformation(result, superrun, subruns)
 
     def chunk(self, *, start, end, data, data_type=None, run_id=None):
         if data_type is None:
