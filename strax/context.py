@@ -1071,6 +1071,7 @@ class Context:
         save=tuple(),
         time_range=None,
         chunk_number=None,
+        _combining_subruns=False,
         multi_run_progress_bar=False,
     ) -> strax.ProcessorComponents:
         """Return components for setting up a processor.
@@ -1081,20 +1082,8 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
-        only_combining = run_id.startswith("__")
-        if only_combining:
-            if len(targets) > 1:
-                raise ValueError(
-                    "Can only combine single data_type of subruns into superrun at a time"
-                )
-            plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
-            temp_name = "_temp_" + strax.deterministic_hash(targets)
-            p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
-            p.allow_superrun = True
-            self.register(p)
-            targets = (temp_name,)
-        else:
-            temp_name = None
+        if _combining_subruns and len(targets) > 1:
+            raise ValueError("Combining subruns is only supported for a single target")
 
         for t in targets:
             if len(t) == 1:
@@ -1143,9 +1132,7 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            combine_subruns = _is_superrun and not allow_superrun
-            combine_subruns |= only_combining and temp_name != target_i
-            if not loader and combine_subruns:
+            if not loader and _is_superrun and not allow_superrun or _combining_subruns:
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1232,7 +1219,7 @@ class Context:
                     check_cache(dep_d)
 
             # Should we save this data? If not, return.
-            _can_store_superrun = self.context_config["write_superruns"] and _is_superrun
+            _can_store_superrun = self.context_config["write_superruns"] and _combining_subruns
             # In case we can load the data already we want either use the storage converter
             # or make a new superrun.
             if loading_this_data and not _can_store_superrun:
@@ -1247,8 +1234,7 @@ class Context:
                 target_i,
                 targets,
                 save,
-                loader,
-                _is_superrun,
+                loader and not _combining_subruns,
             ):
                 if len(target_plugin.provides) > 1:
                     # In case the plugin has more than a single provides we also have to check
@@ -1297,8 +1283,7 @@ class Context:
                         d_to_save,
                         targets,
                         save,
-                        loader,
-                        _is_superrun,
+                        loader and not _combining_subruns,
                     ) or savers.get(d_to_save):
                         # This multi-output plugin was scanned before
                         # let's not create doubled savers or store data_types we do not want to.
@@ -1406,15 +1391,14 @@ class Context:
         return savers
 
     @staticmethod
-    def _target_should_be_saved(target_plugin, target, targets, save, loader, _is_superrun):
+    def _target_should_be_saved(target_plugin, target, targets, save, loading_this_data):
         """Function which checks if a given target should be saved.
 
         :param target_plugin: Plugin to compute target data_type.
         :param target: Target data_type.
         :param targets: Other targets to be computed.
-        :param loader: Partial loader for the corresponding target
         :param save: Targets to be saved.
-        :param _is_superrun: Boolean if run is a superrun.
+        :param loading_this_data: Already loading the data, so will not save.
 
         """
         if target_plugin.save_when[target] == strax.SaveWhen.NEVER:
@@ -1427,9 +1411,7 @@ class Context:
         elif target_plugin.save_when[target] == strax.SaveWhen.EXPLICIT:
             if target not in save:
                 return False
-        elif target_plugin.save_when[target] == strax.SaveWhen.ALWAYS and (
-            loader and not _is_superrun
-        ):
+        elif target_plugin.save_when[target] == strax.SaveWhen.ALWAYS and loading_this_data:
             # If an loader for this data_type exists already we do not
             # have to store the data again, except it is a superrun.
             return False
@@ -1545,6 +1527,7 @@ class Context:
         multi_run_progress_bar=True,
         chunk_number=None,
         processor=None,
+        _combining_subruns=False,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -1606,6 +1589,7 @@ class Context:
             time_range=time_range,
             chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
+            _combining_subruns=_combining_subruns,
         )
 
         # Cleanup the temp plugins

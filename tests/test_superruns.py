@@ -20,7 +20,6 @@ class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name="_superrun_test"):
         self.offset_between_subruns = 10
         self.superrun_name = superrun_name
-        self._superrun_name = "_" + superrun_name
         self.subrun_modes = ["mode_a", "mode_b"]
         self.subrun_source = "test"
         # Temp directory for storing record data for the tests.
@@ -46,7 +45,6 @@ class TestSuperRuns(unittest.TestCase):
             config={
                 "bonus_area": 42,
                 "n_chunks": 1,
-                "chunks_length": 10,
             },
             store_run_fields=(
                 "name",
@@ -67,7 +65,6 @@ class TestSuperRuns(unittest.TestCase):
         self.context._plugin_class_registry["records"].chunk_target_size_mb = 1
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)
-        self.context.define_run(self._superrun_name, data=self.subrun_ids)
 
     def test_superrun_access(self):
         """Tests if storage fornt-ends which does not provide superruns raise correct exception."""
@@ -123,12 +120,16 @@ class TestSuperRuns(unittest.TestCase):
 
         # When we make superrun, subruns of the targeted data_type should
         # be first made individually and combined.
-        components = self.context.get_components(self._superrun_name, "peak_classification")
+        components = self.context.get_components(
+            self.superrun_name, "peak_classification", _combining_subruns=True
+        )
         assert len(components.loaders) == 1
         assert "peak_classification" in components.loaders
 
         with self.assertRaises(ValueError):
-            self.context.get_components(self._superrun_name, ("peaks", "peak_classification"))
+            self.context.get_components(
+                self.superrun_name, ("peaks", "peak_classification"), _combining_subruns=True
+            )
 
     def test_create_and_load_superruns(self):
         """Creates "new" superrun data from already existing data.
@@ -319,7 +320,7 @@ class TestSuperRuns(unittest.TestCase):
         """
         self.context.check_superrun()
         sum_super = self.context.get_array(self.superrun_name, "sum")
-        _sum_super = self.context.get_array(self._superrun_name, "sum")
+        _sum_super = self.context.get_array(self.superrun_name, "sum", _combining_subruns=True)
 
         # superruns will still load and make subruns together
         assert np.unique(sum_super["sum"]).size == 1
@@ -339,21 +340,18 @@ class TestSuperRuns(unittest.TestCase):
 
         for run_id in self.subrun_ids:
             rr = self.context.get_array(run_id, "records")
-            time = np.min(rr["time"])
-            endtime = np.max(strax.endtime(rr))
+            rg = self.context.get_array(run_id, "ranges")
+            assert np.min(rr["time"]) == np.min(rg["time"])
+            assert np.max(strax.endtime(rr)) == np.max(strax.endtime(rg))
+            time = np.min(rg["time"])
+            endtime = np.max(strax.endtime(rg))
             self.context.set_config(
                 {"secret_time_offset": int(endtime + self.offset_between_subruns)}
             )
-            rg = self.context.get_array(run_id, "ranges")
-            time = np.min(rg["time"])
-            endtime = np.max(strax.endtime(rg))
             self._write_run_doc(
                 run_id,
                 self.now + datetime.timedelta(0, int(time)),
                 self.now + datetime.timedelta(0, int(endtime)),
-            )
-            self.context.set_config(
-                {"zero_offset": (int(run_id) + 1) * self.context.config["chunks_length"]}
             )
             assert self.context.is_stored(run_id, "records")
             assert self.context.is_stored(run_id, "ranges")
@@ -427,9 +425,9 @@ class PeaksExtensionCopy(PeaksExtension):
 
 
 @strax.takes_config(
+    strax.Option("secret_time_offset", type=int, default=0, track=False),
     strax.Option("n_chunks", type=int, default=10, track=False),
-    strax.Option("chunks_length", type=int, default=10, track=True),
-    strax.Option("zero_offset", type=int, default=0, track=False),
+    strax.Option("chunks_length", type=int, default=1, track=True),
 )
 class Ranges(Plugin):
     provides = "ranges"
@@ -448,8 +446,8 @@ class Ranges(Plugin):
     def compute(self, chunk_i):
         length = self.config["chunks_length"]
         r = np.zeros(length, self.dtype)
-        t0 = self.config["zero_offset"]
-        r["time"] = np.arange(length) + t0
+        t0 = chunk_i + self.config["secret_time_offset"]
+        r["time"] = t0 + np.arange(length)
         r["length"] = r["dt"] = 1
         r["data"] = r["time"]
         return self.chunk(start=t0, end=t0 + length, data=r)
@@ -461,6 +459,7 @@ class Sum(ExhaustPlugin):
     dtype = [
         (("Sum of numbers", "sum"), np.int32),
     ] + strax.time_dt_fields
+    save_when = strax.SaveWhen.EXPLICIT
     allow_superrun = True
 
     def compute(self, ranges):
