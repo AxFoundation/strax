@@ -1120,9 +1120,7 @@ class Context:
             target_plugin = plugins[target_i]
 
             # Can we load this data?
-            loading_this_data = False
             key = self.key_for(run_id, target_i, chunk_number=chunk_number)
-
             if chunk_number is not None and target_i in chunk_number:
                 _chunk_number = chunk_number[target_i]
             else:
@@ -1180,7 +1178,6 @@ class Context:
 
             if loader:
                 # Found it! No need to make it or look in other frontends
-                loading_this_data = True
                 loaders[target_i] = loader
                 loader_plugins[target_i] = target_plugin
                 del plugins[target_i]
@@ -1218,11 +1215,8 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            # Should we save this data? If not, return.
-            _can_store_superrun = self.context_config["write_superruns"] and _combining_subruns
-            # In case we can load the data already we want either use the storage converter
-            # or make a new superrun.
-            if loading_this_data and not _can_store_superrun:
+            # In case we can load the data already we want make a new superrun.
+            if loader and not self.context_config["write_superruns"]:
                 return
 
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
@@ -1264,7 +1258,7 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            if not _is_superrun or allow_superrun:
+            if not _is_superrun or allow_superrun or _combining_subruns:
                 # only save if we are not in a superrun or the plugin allows superruns
                 # otherwise we will see error at Chunk.concatenate
                 # but anyway the data is should already been made
@@ -1291,7 +1285,12 @@ class Context:
                         continue
 
                     savers = self._add_saver(
-                        savers, d_to_save, run_id, target_plugin, _is_superrun, loading_this_data
+                        savers,
+                        d_to_save,
+                        run_id,
+                        target_plugin,
+                        _is_superrun,
+                        loader and not _combining_subruns,
                     )
 
         for target_i in targets:
@@ -1363,7 +1362,7 @@ class Context:
                 continue
             if loading_this_data:
                 # Usually, we don't save if we're loading
-                if not self.context_config["write_superruns"] and _is_superrun:
+                if _is_superrun and not self.context_config["write_superruns"]:
                     continue
                     # ... but in storage converter mode we do,
                     # ... or we want to write a new superrun. This is different from
