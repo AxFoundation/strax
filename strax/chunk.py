@@ -576,7 +576,7 @@ class Rechunker:
             # We have an old chunk, so we need to concatenate
             # We do not expect after concatenation that the chunk will be very large because
             # the self.cache is already after splitting according to the target size
-            chunk = strax.Chunk.concatenate([self.cache, chunk])
+            chunk = strax.Chunk.concatenate([self.cache, chunk], allow_superrun=self.is_superrun)
 
         target_size_b = chunk.target_size_mb * 1e6
 

@@ -1081,6 +1081,21 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
+        only_combining = run_id.startswith("__")
+        if only_combining:
+            if len(targets) > 1:
+                raise ValueError(
+                    "Can only combine single data_type of subruns into superrun at a time"
+                )
+            plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
+            temp_name = "_temp_" + strax.deterministic_hash(targets)
+            p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+            p.allow_superrun = True
+            self.register(p)
+            targets = (temp_name,)
+        else:
+            temp_name = None
+
         for t in targets:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
@@ -1128,7 +1143,9 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and _is_superrun and not allow_superrun:
+            combine_subruns = _is_superrun and not allow_superrun
+            combine_subruns |= only_combining and temp_name != target_i
+            if not loader and combine_subruns:
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1325,7 +1342,7 @@ class Context:
     def get_datakey(self, run_id, target, lineage):
         """Get datakey for a given run_id, target and lineage.
 
-        If super or hyperrun is detected, the subruns information are added to the key.
+        If super is detected, the subruns information are added to the key.
 
         """
         if run_id.startswith("_"):
@@ -1564,14 +1581,12 @@ class Context:
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
-        if (isinstance(targets, (list, tuple)) and len(targets) > 1) | run_id.startswith("__"):
+        if isinstance(targets, (list, tuple)) and len(targets) > 1:
             targets = tuple(set(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = "_temp_" + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
-                # When the run_id starts with __, we create a dummy plugin which allow superrun
-                p.allow_superrun = run_id.startswith("__")
                 self.register(p)
                 targets = (temp_name,)
             elif not allow_multiple:
