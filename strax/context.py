@@ -23,6 +23,7 @@ export, __all__ = strax.exporter()
 __all__.extend(["RUN_DEFAULTS_KEY"])
 
 RUN_DEFAULTS_KEY = "strax_defaults"
+TEMP_DATA_TYPE_PREFIX = "_temp_"
 
 # use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
 tqdm = strax.utils.tqdm
@@ -725,7 +726,7 @@ class Context:
             {
                 data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
                 for data_type, plugin in self._plugin_class_registry.items()
-                if not data_type.startswith("_temp_")
+                if not data_type.startswith(TEMP_DATA_TYPE_PREFIX)
             }
         )
         return strax.deterministic_hash(self._base_hash_on_config)
@@ -1097,6 +1098,11 @@ class Context:
                 f"Cannot mix plugins {targets} that allow superruns with those that do not."
             )
         if not sum(allow_superruns) and _is_superrun:
+            if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
+                raise ValueError(
+                    "When only combining subruns, you can only assign one target, "
+                    f"but got{plugins[targets[0]].depends_on}!"
+                )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
@@ -1564,7 +1570,7 @@ class Context:
             targets = tuple(set(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
-                temp_name = "_temp_" + strax.deterministic_hash(targets)
+                temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
