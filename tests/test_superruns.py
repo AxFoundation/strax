@@ -314,6 +314,21 @@ class TestSuperRuns(unittest.TestCase):
         self.context.define_run(self.superrun_name, data=self.subrun_ids)
         assert self.context.is_stored(self.superrun_name, "peaks")
 
+    def test_superrun_chunk_number(self):
+        """Test that superrun does not work with chunk_number."""
+        with self.assertRaises(ValueError):
+            self.context.get_array(self.superrun_name, "peaks", chunk_number=[0])
+
+    def test_bare_combining_subruns(self):
+        """Test that _combining_subruns does not work with non-superrun."""
+        with self.assertRaises(ValueError):
+            self.context.get_array(self.subrun_ids[0], "peaks", _combining_subruns=True)
+
+    def test_superrun_mutiple_targets(self):
+        """Test that multiple targets does not work with superrun."""
+        with self.assertRaises(ValueError):
+            self.context.get_array(self.superrun_name, ("peaks", "peak_classification"))
+
     def test_only_combining_superruns(self):
         """Test loading superruns when only combining subruns.
 

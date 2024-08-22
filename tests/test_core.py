@@ -32,6 +32,17 @@ def test_core(allow_multiprocess, max_workers, processor):
     assert bla.dtype == strax.peak_dtype()
 
 
+def test_post_office_state():
+    mystrax = strax.Context(
+        storage=[],
+        register=[Records, Peaks],
+        use_per_run_defaults=True,
+    )
+    components = mystrax.get_components(run_id, "peaks")
+    processor = strax.PROCESSORS["single_thread"](components)
+    processor.post_office.state()
+
+
 def test_multirun():
     for max_workers in [1, 2]:
         mystrax = strax.Context(
