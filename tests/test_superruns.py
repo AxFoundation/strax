@@ -262,7 +262,7 @@ class TestSuperRuns(unittest.TestCase):
             self.context.set_config(
                 {"secret_time_offset": int(endtime + self.offset_between_subruns)}
             )
-            rr = self.context.get_array(str(run_id), "peaks")
+            rr = self.context.get_array(str(run_id), "records")
             self._write_run_doc(
                 run_id,
                 self.now + datetime.timedelta(0, int(rr["time"].min())),
