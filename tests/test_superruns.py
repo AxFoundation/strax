@@ -19,6 +19,7 @@ from strax.testutils import Records, Peaks, PeakClassification
 class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name="_superrun_test"):
         self.offset_between_subruns = 9  # Because the length of records is 1
+        self.init_secret_time_offset = 0
         self.superrun_name = superrun_name
         self.subrun_modes = ["mode_a", "mode_b"]
         self.subrun_source = "test"
@@ -43,7 +44,7 @@ class TestSuperRuns(unittest.TestCase):
             ]
             + [Ranges, Sum],
             config={
-                "secret_time_offset": 0,
+                "secret_time_offset": self.init_secret_time_offset,
                 "bonus_area": 42,
                 "n_chunks": 1,
             },
@@ -302,7 +303,7 @@ class TestSuperRuns(unittest.TestCase):
         """Tests if only superrun is written to new sf if subruns already exist in different sf."""
         self.context.storage[0].readonly = True
         self.context.storage.append(strax.DataDirectory(self.tempdir2, provide_run_metadata=True))
-        self.context.make(self.superrun_name, "peaks")
+        self.context.make(self.superrun_name, "peaks", _combining_subruns=True)
         superrun_sf = self.context.storage.pop(1)
         # Check if first sf contains superrun, it should not:
         assert not self.context.is_stored(self.superrun_name, "peaks")
@@ -338,6 +339,7 @@ class TestSuperRuns(unittest.TestCase):
         self.now = datetime.datetime.now()
         self.now.replace(tzinfo=pytz.utc)
         self.subrun_ids = [str(r) for r in range(n_subruns)]
+        self.context.set_config({"secret_time_offset": self.init_secret_time_offset})
 
         for run_id in self.subrun_ids:
             assert not self.context.is_stored(run_id, "records")
