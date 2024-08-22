@@ -18,7 +18,7 @@ from strax.testutils import Records, Peaks, PeakClassification
 
 class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name="_superrun_test"):
-        self.offset_between_subruns = 10
+        self.offset_between_subruns = 9  # Because the length of records is 1
         self.superrun_name = superrun_name
         self.subrun_modes = ["mode_a", "mode_b"]
         self.subrun_source = "test"
@@ -337,6 +337,7 @@ class TestSuperRuns(unittest.TestCase):
         self.now = datetime.datetime.now()
         self.now.replace(tzinfo=pytz.utc)
         self.subrun_ids = [str(r) for r in range(n_subruns)]
+        self.context.set_config({"secret_time_offset": 0})
 
         for run_id in self.subrun_ids:
             rr = self.context.get_array(run_id, "records")
