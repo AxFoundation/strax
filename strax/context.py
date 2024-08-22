@@ -666,9 +666,7 @@ class Context:
     def _process_superrun_id(run_id):
         if not isinstance(run_id, str):
             raise ValueError(f"run_id {run_id} must be str, but got {type(run_id)}")
-        if run_id.startswith("__"):
-            _run_id = run_id[2:]
-        elif run_id.startswith("_"):
+        if run_id.startswith("_"):
             _run_id = run_id[1:]
         else:
             _run_id = run_id
@@ -1091,7 +1089,6 @@ class Context:
 
         plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
-        # run_id start with "_" or "__" are all superrun
         _is_superrun = run_id.startswith("_")
 
         allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
