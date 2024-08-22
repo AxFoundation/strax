@@ -116,11 +116,6 @@ class Option:
                 f"Please update {self.name} accordingly."
             )
 
-        # if self.default_by_run is not OMITTED:
-        #     warnings.warn(f"The {self.name} option uses default_by_run,"
-        #                   f" which will soon stop working!",
-        #                   DeprecationWarning)
-
         if (
             sum(
                 [
