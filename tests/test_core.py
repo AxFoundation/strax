@@ -175,40 +175,6 @@ def test_fuzzy_matching():
         assert not st.is_stored(run_id, "records")
 
 
-def test_storage_converter():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        st = strax.Context(
-            storage=strax.DataDirectory(temp_dir),
-            register=[Records, Peaks],
-            use_per_run_defaults=True,
-        )
-        st.make(run_id=run_id, targets="peaks")
-
-        with tempfile.TemporaryDirectory() as temp_dir_2:
-            st = strax.Context(
-                storage=[
-                    strax.DataDirectory(temp_dir, readonly=True),
-                    strax.DataDirectory(temp_dir_2),
-                ],
-                register=[Records, Peaks],
-                use_per_run_defaults=True,
-                storage_converter=True,
-            )
-            store_1, store_2 = st.storage
-
-            # Data is now in store 1, but not store 2
-            key = st.key_for(run_id, "peaks")
-            store_1.find(key)
-            with pytest.raises(strax.DataNotAvailable):
-                store_2.find(key)
-
-            st.make(run_id, "peaks", _skip_if_built=False)
-
-            # Data is now in both stores
-            store_1.find(key)
-            store_2.find(key)
-
-
 @processing_conditions
 def test_exception(allow_multiprocess, max_workers, processor):
     with tempfile.TemporaryDirectory() as temp_dir:

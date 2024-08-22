@@ -556,6 +556,8 @@ class StorageBackend:
             )
 
         subruns = chunk_info.get("subruns", None)
+        if chunk_info["run_id"].startswith("_") and subruns is None:
+            raise ValueError(f"Superrun {chunk_info} has no subruns information!")
 
         result = strax.Chunk(
             start=chunk_info["start"],

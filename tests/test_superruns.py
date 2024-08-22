@@ -12,12 +12,14 @@ import numpy as np
 import pandas as pd
 
 import strax
+from strax import Plugin, ExhaustPlugin
 from strax.testutils import Records, Peaks, PeakClassification
 
 
 class TestSuperRuns(unittest.TestCase):
     def setUp(self, superrun_name="_superrun_test"):
-        self.offset_between_subruns = 10
+        self.offset_between_subruns = 9  # Because the length of records is 1
+        self.init_secret_time_offset = 0
         self.superrun_name = superrun_name
         self.subrun_modes = ["mode_a", "mode_b"]
         self.subrun_source = "test"
@@ -32,9 +34,19 @@ class TestSuperRuns(unittest.TestCase):
                     self.tempdir, provide_run_metadata=True, readonly=False, deep_scan=True
                 )
             ],
-            register=[Records, RecordsExtension, Peaks, PeaksExtension, PeakClassification],
+            register=[
+                Records,
+                RecordsExtension,
+                Peaks,
+                PeakClassification,
+                PeaksExtension,
+                PeaksExtensionCopy,
+            ]
+            + [Ranges, Sum],
             config={
+                "secret_time_offset": self.init_secret_time_offset,
                 "bonus_area": 42,
+                "n_chunks": 1,
             },
             store_run_fields=(
                 "name",
@@ -54,13 +66,13 @@ class TestSuperRuns(unittest.TestCase):
         )
         self.context._plugin_class_registry["records"].chunk_target_size_mb = 1
         self._create_subruns()
-        self.context.define_run(self.superrun_name, data=self.subrun_ids)  # Define superrun
+        self.context.define_run(self.superrun_name, data=self.subrun_ids)
 
     def test_superrun_access(self):
         """Tests if storage fornt-ends which does not provide superruns raise correct exception."""
         self.context.storage[0].provide_superruns = False
         with self.assertRaises(strax.DataNotAvailable):
-            self.context.storage[0].find(self.context.key_for(self.superrun_name, "records"))
+            self.context.storage[0].find(self.context.key_for(self.superrun_name, "peaks"))
 
     def test_run_meta_data(self):
         """Check if superrun has the correct run start/end and livetime and subruns are sroted by
@@ -82,28 +94,105 @@ class TestSuperRuns(unittest.TestCase):
             assert start > prev_start, "Subruns should be sorted by run starts"
             prev_start = start
 
-    def test_load_superruns(self):
-        """Load superruns from already existing subruns.
+    def test_loaders_and_savers(self):
+        """Tests if loaders and savers are correctly set for superruns.
 
-        Does not write "new" data.
+        The context will dig the dependency tree till the plugin which does not allow_superrun, Then
+        the subruns of data_type of that plugin will be collected and combined. The superrun is
+        processed based on the combined subruns.
 
         """
+        self.context.make(self.subrun_ids, "peaks")
+        # Only if peak_classification depends on only peaks the test works
+        assert len(self.context._plugin_class_registry["peak_classification"].depends_on) == 1
+        assert all(self.context.is_stored(subrun_id, "peaks") for subrun_id in self.subrun_ids)
+        # Although peaks are saved, processing
+        # peak_classification's records will still starts from records
+        components = self.context.get_components(self.superrun_name, "peak_classification")
+        # Because records is not allow_superrun
+        assert "records" in components.loaders
+        # Because though we call for peak_classification,
+        # peaks already allow_superrun
+        assert "peaks" not in components.loaders
+        # peaks and lone_hits should all be saved
+        assert "peaks" in components.savers
+        assert "lone_hits" in components.savers
+        # of course peak_classification should be saved
+        assert "peak_classification" in components.savers
+
+        # When we make superrun, subruns of the targeted data_type should
+        # be first made individually and combined.
+        components = self.context.get_components(
+            self.superrun_name, "peak_classification", _combining_subruns=True
+        )
+        assert len(components.loaders) == 1
+        assert "peak_classification" in components.loaders
+
+        with self.assertRaises(ValueError):
+            self.context.get_components(
+                self.superrun_name, ("peaks", "peak_classification"), _combining_subruns=True
+            )
+
+    def test_create_and_load_superruns(self):
+        """Creates "new" superrun data from already existing data.
+
+        Loads and compare data afterwards. Also tests "add_run_id_field" option.
+
+        """
+
+        subrun_data = self.context.get_array(
+            self.subrun_ids, "peaks", progress_bar=False, add_run_id_field=False
+        )
+        self.context.make(self.superrun_name, "peaks")
+        superrun_data = self.context.get_array(self.superrun_name, "peaks")
+
+        assert self.context.is_stored(self.superrun_name, "peaks")
+        assert np.all(subrun_data == superrun_data)
+
+        # Load meta data and check if rechunking worked:
+        chunks = self.context.get_meta(self.superrun_name, "peaks")["chunks"]
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert chunk["run_id"] == self.superrun_name
+        assert chunk["first_time"] == subrun_data["time"].min()
+        assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
+
+        # Check if subruns and superrun have the same time stamps
         self.context.set_context_config({"write_superruns": False})
-        subrun_data = self.context.get_array(self.subrun_ids, "records", progress_bar=False)
-        superrun_data = self.context.get_array(self.superrun_name, "records")
+        subrun_data = self.context.get_array(self.subrun_ids, "peaks", progress_bar=False)
+        superrun_data = self.context.get_array(self.superrun_name, "peaks")
         assert np.all(subrun_data["time"] == superrun_data["time"])
 
+    def test_select_runs_with_superruns(self):
+        """Test if select_runs works correctly with superruns."""
+        df = self.context.select_runs()
+        mask_superrun = df["name"] == self.superrun_name
+        assert pd.api.types.is_string_dtype(df["mode"])
+        modes = df.loc[mask_superrun, "mode"].values[0]
+        modes = modes.split(",")
+        assert set(modes) == set(self.subrun_modes)
+
+        assert pd.api.types.is_string_dtype(df["tags"])
+        assert pd.api.types.is_string_dtype(df["source"])
+        assert df.loc[mask_superrun, "source"].values[0] == "test"
+        assert pd.api.types.is_timedelta64_dtype(df["livetime"])
+
+        self.context.make(self.superrun_name, "peaks")
+        df = self.context.select_runs(available=("peaks",))
+        assert self.superrun_name in df["name"].values
+
     def test_superrun_chunk_properties(self):
-        self.context.make(self.superrun_name, "records")
+        """Check properties of superrun's chunk information."""
+        self.context.make(self.superrun_name, "peaks")
 
         # Load subrun and see if propeties work:
-        for chunk in self.context.get_iter(self.subrun_ids[0], "records"):
+        for chunk in self.context.get_iter(self.subrun_ids[0], "peaks"):
             assert not chunk.is_superrun
             assert not chunk.first_subrun
             assert not chunk.last_subrun
 
         # Now for a superrun
-        for chunk in self.context.get_iter(self.superrun_name, "records"):
+        for chunk in self.context.get_iter(self.superrun_name, "peaks"):
             assert chunk.is_superrun
             subruns = chunk.subruns
             run_ids = list(subruns.keys())
@@ -116,111 +205,56 @@ class TestSuperRuns(unittest.TestCase):
                 assert _subruns["start"] == subruns[run_ids[ind]]["start"]
                 assert _subruns["end"] == subruns[run_ids[ind]]["end"]
 
-    def test_create_and_load_superruns(self):
-        """Creates "new" superrun data from already existing data.
-
-        Loads and compare data afterwards. Also tests "add_run_id_field" option.
-
-        """
-
-        subrun_data = self.context.get_array(
-            self.subrun_ids, "records", progress_bar=False, add_run_id_field=False
-        )
-
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
-        superrun_data = self.context.get_array(
-            self.superrun_name,
-            "records",
-        )
-
-        assert self.context.is_stored(self.superrun_name, "records")
-        assert np.all(subrun_data == superrun_data)
-
-        # Load meta data and check if rechunking worked:
-        chunks = self.context.get_meta(self.superrun_name, "records")["chunks"]
-        assert len(chunks) == 1
-        chunk = chunks[0]
-        assert chunk["run_id"] == self.superrun_name
-        assert chunk["first_time"] == subrun_data["time"].min()
-        assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
-
     def test_superrun_definition(self):
         """Test if superrun definition works correctly.
 
         After redefining the superrun, the DataKey of superrun will be different.
 
         """
-        self.context.get_array(self.superrun_name, "records")
-        assert self.context.is_stored(self.superrun_name, "records")
+        self.context.get_array(self.superrun_name, "peaks")
+        assert self.context.is_stored(self.superrun_name, "peaks")
         # After redefining the superrun with only different subruns,
         # the superrun should not be stored
         self.context.define_run(self.superrun_name, data=self.subrun_ids[:-1])
-        assert not self.context.is_stored(self.superrun_name, "records")
+        assert not self.context.is_stored(self.superrun_name, "peaks")
         self.context.define_run(self.superrun_name, data=self.subrun_ids)
-
-    def test_select_runs(self):
-        self.context.select_runs()
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
-        df = self.context.select_runs(available=("records",))
-        assert self.superrun_name in df["name"].values
 
     def test_superrun_chunk_and_meta(self):
         """Superrun chunks and meta data should contain information about its constituent
         subruns."""
-        self.context.make(
-            self.superrun_name,
-            "records",
-        )
-
-        meta = self.context.get_meta(self.superrun_name, "records")
+        self.context.make(self.superrun_name, "peaks")
+        meta = self.context.get_meta(self.superrun_name, "peaks")
 
         n_chunks = 0
         superrun_chunk = None
-        for chunk in self.context.get_iter(self.superrun_name, "records"):
+        for chunk in self.context.get_iter(self.superrun_name, "peaks"):
             superrun_chunk = chunk
             n_chunks += 1
 
         assert len(meta["chunks"]) == n_chunks == 1
+        assert superrun_chunk.subruns is not None
         assert meta["chunks"][0]["subruns"] == superrun_chunk.subruns
 
         for subrun_id, start_and_end in superrun_chunk.subruns.items():
-            rr = self.context.get_array(subrun_id, "records")
-            # Tests below only true for records as we have not rechunked yet.
+            rr = self.context.get_array(subrun_id, "peaks")
+            # Tests below only true for peaks as we have not rechunked yet.
             # After rechunking in general data start can be different from chunk start
             mes = f"Start time did not match for subrun: {subrun_id}"
             assert rr["time"].min() == start_and_end["start"], mes
             mes = f"End time did not match for subrun: {subrun_id}"
             assert np.max(strax.endtime(rr)) == start_and_end["end"], mes
 
-    def test_merger_plugin_subruns(self):
-        """Tests if merge plugins for subruns work.
-
-        This test is needed to ensure that superruns do not interfer with merge plguns. (both are
-        using underscores as identification).
-
-        """
-        rr = self.context.get_array(self.subrun_ids, ("records", "records_extension"))
-        p = self.context.get_single_plugin(self.subrun_ids[0], "records_extension")
-        assert np.all(rr["additional_field"] == p.config["some_additional_value"])
-
     def test_rechnunking_and_loading(self):
         """Tests rechunking and loading of superruns with multiple chunks.
 
         The test is required since it was possible to run into race conditions with
-        chunk.continuity_check in context.get_iter and transform_chunk_to_superrun_chunk in
-        storage.common.Saver.save_from.
+        chunk.continuity_check in context.get_iter.
 
         """
 
         self.context.set_config({"recs_per_chunk": 500})  # Make chunks > 1 MB
 
-        rr = self.context.get_array(self.subrun_ids, "records")
+        rr = self.context.get_array(self.subrun_ids, "peaks")
         endtime = np.max(strax.endtime(rr))
 
         # Make two additional chunks which are large comapred to the first
@@ -239,11 +273,13 @@ class TestSuperRuns(unittest.TestCase):
             endtime = np.max(strax.endtime(rr))
             self.subrun_ids.append(str(run_id))
 
-        self.context.define_run("_superrun_test_rechunking", self.subrun_ids)
-        self.context.make("_superrun_test_rechunking", "records")
+        superrun_test_rechunking = "_superrun_test_rechunking"
+        self.context.define_run(superrun_test_rechunking, self.subrun_ids)
+        self.context.make(superrun_test_rechunking, "peaks")
+        assert self.context.is_stored(superrun_test_rechunking, "peaks")
 
-        rr_superrun = self.context.get_array("_superrun_test_rechunking", "records")
-        rr_subruns = self.context.get_array(self.subrun_ids, "records")
+        rr_superrun = self.context.get_array(superrun_test_rechunking, "peaks")
+        rr_subruns = self.context.get_array(self.subrun_ids, "peaks")
 
         assert np.all(rr_superrun["time"] == rr_subruns["time"])
 
@@ -253,66 +289,45 @@ class TestSuperRuns(unittest.TestCase):
         Which it should.
 
         """
-        assert not self.context.is_stored(self.superrun_name, "peaks")
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks")
-
-        self.context.make(self.superrun_name, "peaks")
-        assert self.context.is_stored(self.superrun_name, "peaks")
-        assert self.context.is_stored(self.subrun_ids[0], "peaks")
-
-    def test_superruns_and_save_when(self):
-        """Tests if only the highest level for save_when.EXPLICIT plugins is stored."""
-        assert not self.context.is_stored(self.superrun_name, "peaks")
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks")
+        self.context._plugin_class_registry["peaks"].allow_superrun = False
+        assert not self.context.is_stored(self.superrun_name, "peaks_extension_copy")
         assert not self.context.is_stored(self.subrun_ids[0], "peaks_extension")
-        assert not self.context.is_stored(self.superrun_name, "peaks_extension")
-        self.context._plugin_class_registry["peaks"].save_when = strax.SaveWhen.EXPLICIT
 
-        self.context.make(self.superrun_name, "peaks_extension", save=("peaks_extension",))
-        assert not self.context.is_stored(self.superrun_name, "peaks")
-        assert not self.context.is_stored(self.subrun_ids[0], "peaks")
-        assert self.context.is_stored(self.superrun_name, "peaks_extension")
-        assert self.context.is_stored(self.subrun_ids[0], "peaks_extension")
+        self.context.make(self.superrun_name, "peaks_extension_copy", save="peaks_extension_copy")
+        assert self.context.is_stored(self.superrun_name, "peaks_extension_copy")
+        # Only the highest level for save_when.EXPLICIT plugins should be stored.
+        assert not self.context.is_stored(self.subrun_ids[0], "peaks_extension")
+        assert self.context.is_stored(self.subrun_ids[0], "peaks")
 
     def test_storing_with_second_sf(self):
         """Tests if only superrun is written to new sf if subruns already exist in different sf."""
         self.context.storage[0].readonly = True
         self.context.storage.append(strax.DataDirectory(self.tempdir2, provide_run_metadata=True))
-        self.context.make(self.superrun_name, "records")
+        self.context.make(self.superrun_name, "peaks", _combining_subruns=True)
         superrun_sf = self.context.storage.pop(1)
         # Check if first sf contains superrun, it should not:
-        assert not self.context.is_stored(self.superrun_name, "records")
+        assert not self.context.is_stored(self.superrun_name, "peaks")
 
-        # Now check second sf for which only the superrun should be
-        # stored:
+        # Now check second sf for which only the superrun should be stored
         self.context.storage = [superrun_sf]
         self._create_subruns()
         self.context.define_run(self.superrun_name, data=self.subrun_ids)
-        assert self.context.is_stored(self.superrun_name, "records")
+        assert self.context.is_stored(self.superrun_name, "peaks")
 
-    def test_run_selection_with_superruns(self):
-        df_runs = self.context.select_runs()
-        mask_superrun = df_runs["name"] == self.superrun_name
-        assert pd.api.types.is_string_dtype(df_runs["mode"])
-        modes = df_runs.loc[mask_superrun, "mode"].values[0]
-        modes = modes.split(",")
-        assert set(modes) == set(self.subrun_modes)
+    def test_only_combining_superruns(self):
+        """Test loading superruns when only combining subruns.
 
-        assert pd.api.types.is_string_dtype(df_runs["tags"])
-        assert pd.api.types.is_string_dtype(df_runs["source"])
-        assert df_runs.loc[mask_superrun, "source"].values[0] == "test"
-        assert pd.api.types.is_timedelta64_dtype(df_runs["livetime"])
-
-    def test_if_only_target_produces_savers(self):
-        """Normally we produce for a multi-output plugin for each data_type we are producing and
-        want to store a saver.
-
-        But for superruns we only want to store the target data_type.
+        The test also shows the difference between the two.
 
         """
-        components = self.context.get_components(self.superrun_name, "peak_classification")
-        assert "peak_classification" in components.savers
-        assert "lone_hits" not in components.savers
+        self.context.check_superrun()
+        sum_super = self.context.get_array(self.superrun_name, "sum")
+        _sum_super = self.context.get_array(self.superrun_name, "sum", _combining_subruns=True)
+
+        # superruns will still load and make subruns together
+        assert np.unique(sum_super["sum"]).size == 1
+        # superruns in only-combining mode will load and make subruns separately
+        assert np.unique(_sum_super["sum"]).size != 1
 
     def tearDown(self):
         if os.path.exists(self.tempdir):
@@ -324,22 +339,27 @@ class TestSuperRuns(unittest.TestCase):
         self.now = datetime.datetime.now()
         self.now.replace(tzinfo=pytz.utc)
         self.subrun_ids = [str(r) for r in range(n_subruns)]
+        self.context.set_config({"secret_time_offset": self.init_secret_time_offset})
 
         for run_id in self.subrun_ids:
+            assert not self.context.is_stored(run_id, "records")
+            assert not self.context.is_stored(run_id, "ranges")
             rr = self.context.get_array(run_id, "records")
-            time = np.min(rr["time"])
-            endtime = np.max(strax.endtime(rr))
-
+            rg = self.context.get_array(run_id, "ranges")
+            assert np.min(rr["time"]) == np.min(rg["time"])
+            assert np.max(strax.endtime(rr)) == np.max(strax.endtime(rg))
+            time = np.min(rg["time"])
+            endtime = np.max(strax.endtime(rg))
+            self.context.set_config(
+                {"secret_time_offset": int(endtime + self.offset_between_subruns)}
+            )
             self._write_run_doc(
                 run_id,
                 self.now + datetime.timedelta(0, int(time)),
                 self.now + datetime.timedelta(0, int(endtime)),
             )
-
-            self.context.set_config(
-                {"secret_time_offset": int(endtime + self.offset_between_subruns)}
-            )
             assert self.context.is_stored(run_id, "records")
+            assert self.context.is_stored(run_id, "ranges")
 
     def _write_run_doc(self, run_id, time, endtime):
         """Function which writes a dummy run document."""
@@ -365,6 +385,7 @@ class RecordsExtension(strax.Plugin):
     depends_on = "records"
     provides = "records_extension"
     dtype = strax.time_dt_fields + [(("Some additional field", "additional_field"), np.int16)]
+    allow_superrun = True
 
     def compute(self, records):
         res = np.zeros(len(records), self.dtype)
@@ -389,6 +410,7 @@ class PeaksExtension(strax.Plugin):
     dtype = strax.time_dt_fields + [
         (("Some additional field", "some_additional_peak_field"), np.int16)
     ]
+    allow_superrun = True
 
     def compute(self, peaks):
         res = np.zeros(len(peaks), self.dtype)
@@ -397,3 +419,59 @@ class PeaksExtension(strax.Plugin):
         res["dt"] = peaks["dt"]
         res["some_additional_peak_field"] = self.config["some_additional_peak_value"]
         return res
+
+
+class PeaksExtensionCopy(PeaksExtension):
+    depends_on = "peaks_extension"
+    provides = "peaks_extension_copy"
+
+    def compute(self, peaks):
+        return peaks
+
+
+@strax.takes_config(
+    strax.Option("secret_time_offset", type=int, default=0, track=False),
+    strax.Option("n_chunks", type=int, default=10, track=False),
+    strax.Option("chunks_length", type=int, default=1, track=True),
+)
+class Ranges(Plugin):
+    provides = "ranges"
+    depends_on: tuple = tuple()
+    rechunk_on_save = False
+    dtype = [
+        (("Numbers in order", "data"), np.int32),
+    ] + strax.time_dt_fields
+
+    def source_finished(self):
+        return True
+
+    def is_ready(self, chunk_i):
+        return chunk_i < self.config["n_chunks"]
+
+    def compute(self, chunk_i):
+        length = self.config["chunks_length"]
+        r = np.zeros(length, self.dtype)
+        t0 = chunk_i + self.config["secret_time_offset"]
+        r["time"] = t0 + np.arange(length)
+        r["length"] = r["dt"] = 1
+        r["data"] = r["time"]
+        return self.chunk(start=t0, end=t0 + length, data=r)
+
+
+class Sum(ExhaustPlugin):
+    provides = "sum"
+    depends_on = "ranges"
+    dtype = [
+        (("Sum of numbers", "sum"), np.int32),
+    ] + strax.time_dt_fields
+    save_when = strax.SaveWhen.EXPLICIT
+    allow_superrun = True
+
+    def compute(self, ranges):
+        s = np.zeros(len(ranges), self.dtype)
+        s["time"] = ranges["time"]
+        s["length"] = ranges["length"]
+        s["dt"] = ranges["dt"]
+        # if data is in order, and uniform, sum will only have one value
+        s["sum"] = ranges["data"] + ranges["data"][::-1]
+        return s
