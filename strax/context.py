@@ -1081,9 +1081,6 @@ class Context:
         save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
 
-        if _combining_subruns and len(targets) > 1:
-            raise ValueError("Combining subruns is only supported for a single target")
-
         for t in targets:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
@@ -1091,6 +1088,12 @@ class Context:
         plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
         _is_superrun = run_id.startswith("_")
+        if _combining_subruns and len(targets) > 1:
+            raise ValueError("Combining subruns is only supported for a single target")
+        if _is_superrun and chunk_number is not None:
+            raise ValueError("Per chunk processing is only allied when not processing superrun.")
+        if not _is_superrun and _combining_subruns:
+            raise ValueError("Combining subruns is only supported for superruns.")
 
         allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
         if _is_superrun and sum(allow_superruns) not in [0, len(targets)]:
