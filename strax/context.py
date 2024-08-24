@@ -967,6 +967,12 @@ class Context:
         if chunk_number is not None:
             for d_depends in plugin.depends_on:
                 if d_depends in chunk_number:
+                    not_allowed_plugins = (strax.LoopPlugin, strax.OverlapWindowPlugin)
+                    if issubclass(plugin.__class__, not_allowed_plugins):
+                        raise ValueError(
+                            f"Can not assign chunk_number for {plugin.__class__} "
+                            f"because it is subclass of {not_allowed_plugins}!"
+                        )
                     configs.setdefault("chunk_number", {})
                     if d_depends in configs["chunk_number"]:
                         raise ValueError(
@@ -1088,10 +1094,10 @@ class Context:
         plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
         _is_superrun = run_id.startswith("_")
-        if _combining_subruns and len(targets) > 1:
+        if len(targets) > 1 and _combining_subruns:
             raise ValueError("Combining subruns is only supported for a single target")
         if _is_superrun and chunk_number is not None:
-            raise ValueError("Per chunk processing is only allied when not processing superrun.")
+            raise ValueError("Per chunk processing is only allowed when not processing superrun.")
         if not _is_superrun and _combining_subruns:
             raise ValueError("Combining subruns is only supported for superruns.")
 
@@ -1132,7 +1138,7 @@ class Context:
             else:
                 _chunk_number = None
             loader = self._get_partial_loader_for(
-                key, chunk_number=_chunk_number, time_range=time_range
+                key, time_range=time_range, chunk_number=_chunk_number
             )
 
             allow_superrun = plugins[target_i].allow_superrun
@@ -1270,12 +1276,10 @@ class Context:
                 # but anyway the data is should already been made
                 for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
                     key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
-                    if chunk_number is not None and d_to_save in chunk_number:
-                        _chunk_number = chunk_number[d_to_save]
-                    else:
-                        _chunk_number = None
+                    # Here we just check the availability of key,
+                    # chunk_number for _get_partial_loader_for can be None
                     loader = self._get_partial_loader_for(
-                        key, time_range=time_range, chunk_number=_chunk_number
+                        key, time_range=time_range, chunk_number=None
                     )
 
                     if not self._target_should_be_saved(
@@ -2389,6 +2393,9 @@ class Context:
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
 
+        if self.is_stored(run_id, target):
+            raise ValueError(f"Data {target} for {run_id} already exists.")
+
         if chunk_number_group is not None:
             combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
             if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
@@ -2527,8 +2534,7 @@ class Context:
         if this_target_is_stored:
             return _targets_stored
 
-        # Need to init the class e.g. if we want to allow depends on like this:
-        # https://github.com/XENONnT/cutax/blob/d7ec0685650d03771fef66507fd6882676151b9b/cutax/cutlist.py#L33  # noqa
+        # Need to init the class e.g. if we want to allow depends_on which is not a class attribute
         plugin = self._plugin_class_registry[target]()
         dependencies = strax.to_str_tuple(plugin.depends_on)
         if not dependencies:
@@ -2655,18 +2661,30 @@ class Context:
         return _root_data_types
 
     @property
-    def inverse_tree(self):
-        """Inverse tree whose key is depends_on and value is provides."""
+    def tree(self):
+        """Dependency tree whose key is provides and value is depends_on."""
+        _tree = dict()
+        for v in self._plugin_class_registry.values():
+            _v = v()
+            for p in _v.provides:
+                _tree.setdefault(p, [])
+                _tree[p] += _v.depends_on
+        return _tree
+
+    @property
+    def inversed_tree(self):
+        """Inversed dependency tree whose key is depends_on and value is provides."""
         _inverse_tree = dict()
-        for k, v in self._plugin_class_registry.items():
-            for d in v().depends_on:
+        for v in self._plugin_class_registry.values():
+            _v = v()
+            for d in _v.depends_on:
                 _inverse_tree.setdefault(d, [])
-                _inverse_tree[d] += v().provides
+                _inverse_tree[d] += _v.provides
         return _inverse_tree
 
     def check_superrun(self):
         """Raise if non-superrun plugins depends on superrun plugins."""
-        inverse_tree = self.inverse_tree
+        inversed_tree = self.inversed_tree
 
         # define a recursive function to check if all the dependencies support superruns
         def check_support_superrun(data_type, checked=set(), seen_allow=None):
@@ -2680,9 +2698,9 @@ class Context:
                     f"but it's dependency {data_type} does not support superruns."
                 )
             checked |= set((data_type,))
-            if data_type not in inverse_tree:
+            if data_type not in inversed_tree:
                 return checked
-            for d in inverse_tree[data_type]:
+            for d in inversed_tree[data_type]:
                 checked |= check_support_superrun(d, checked, seen_allow)
             return checked
 
