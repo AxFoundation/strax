@@ -126,7 +126,9 @@ class TestSuperRuns(unittest.TestCase):
             self.superrun_name, "peak_classification", _combining_subruns=True
         )
         assert len(components.loaders) == 1
+        assert len(components.savers) == 1
         assert "peak_classification" in components.loaders
+        assert "peak_classification" in components.savers
 
         with self.assertRaises(ValueError):
             self.context.get_components(

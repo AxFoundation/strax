@@ -1274,7 +1274,11 @@ class Context:
                 # only save if we are not in a superrun or the plugin allows superruns
                 # otherwise we will see error at Chunk.concatenate
                 # but anyway the data is should already been made
-                for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
+                if not _combining_subruns:
+                    data_type_to_save = set(current_plugin_to_savers + list(target_plugin.provides))
+                else:
+                    data_type_to_save = set(current_plugin_to_savers)
+                for d_to_save in data_type_to_save:
                     key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
                     # Here we just check the availability of key,
                     # chunk_number for _get_partial_loader_for can be None
