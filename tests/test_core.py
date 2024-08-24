@@ -438,3 +438,31 @@ def test_available_for_run():
                 if len(df):
                     # We haven't made any data
                     assert not sum(df["is_stored"])
+
+
+def test_per_chunk_storage():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(
+            storage=strax.DataDirectory(temp_dir, deep_scan=True),
+            register=[Records, Peaks],
+            use_per_run_defaults=True,
+        )
+        st.make(run_id, "records")
+        n_chunks = len(st.get_metadata(run_id, "records")["chunks"])
+        assert n_chunks > 2
+        for i in range(n_chunks):
+            st.make(run_id, "peaks", chunk_number={"records": [i]})
+        assert not st.is_stored(run_id, "peaks")
+        st.merge_per_chunk_storage(
+            run_id, "peaks", "records", chunk_number_group=[[i] for i in range(n_chunks // 2)]
+        )
+        assert not st.is_stored(run_id, "peaks")
+        st.merge_per_chunk_storage(run_id, "peaks", "records")
+        assert st.is_stored(run_id, "peaks")
+        with pytest.raises(ValueError):
+            st.merge_per_chunk_storage(run_id, "peaks", "records")
+
+        p = type("whatever", (strax.OverlapWindowPlugin,), dict(depends_on="records"))
+        st.register(p)
+        with pytest.raises(ValueError):
+            st.make(run_id, "whatever", chunk_number={"records": [0]})

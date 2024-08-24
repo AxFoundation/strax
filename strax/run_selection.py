@@ -378,7 +378,7 @@ def define_run(
             )
 
     if isinstance(data, (list, tuple)):
-        # list of runids
+        # list of run_ids
         data = strax.to_str_tuple(data)
         return self.define_run(name, {run_id: "all" for run_id in data})
 
