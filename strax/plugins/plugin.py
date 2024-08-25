@@ -272,7 +272,7 @@ class Plugin:
         raise RuntimeError("No infer dtype method defined")
 
     @property
-    def _auto_version(self):
+    def _auto_version(self) -> str:
         """Generate some auto-incremented version for the context hashing system, see
         github.com/AxFoundation/strax/issues/217.
 
@@ -298,13 +298,9 @@ class Plugin:
         res = {attr: _return_hashable(attr) for attr in attributes}
         return "auto_" + strax.deterministic_hash(res)
 
-    def version(self, run_id=None):
-        """Return version number applicable to the run_id.
-
-        Most plugins just have a single version (in .__version__) but some may be at different
-        versions for different runs (e.g. time-dependent corrections).
-
-        """
+    @property
+    def version(self) -> str:
+        """Return version number of the plugin."""
         if self.__version__ is None:
             return self._auto_version
         return self.__version__
