@@ -399,7 +399,7 @@ class Context:
                                 "Two plugins have a different default value"
                                 " for the same option. The option"
                                 f' "{new_option}" in "{plugin.__name__}" takes'
-                                f' as a default "{default}"  while in'
+                                f' as a default "{default}" while in'
                                 f' "{plugin_class.__name__}" the default value'
                                 f' is set to "{new_default}". Please change'
                                 " one of the defaults."
@@ -1952,7 +1952,7 @@ class Context:
         overwrite=True,
         **kwargs,
     ):
-        """Get persistent  arrays using zarr. This is useful when loading large amounts of data that
+        """Get persistent arrays using zarr. This is useful when loading large amounts of data that
         cannot fit in memory zarr is very compatible with dask. Targets are loaded into separate
         arrays and runs are merged. the data is added to any existing data in the storage location.
 
@@ -2049,7 +2049,7 @@ class Context:
             are found for the inputs does not do the comparison
 
         example usage:
-            context.compare_metadata( ("053877", "peak_basics"),  "./my_path_to/JSONfile.json")
+            context.compare_metadata(("053877", "peak_basics"), "./my_path_to/JSONfile.json")
             first_metadata = context.get_metadata(run_id, "events")
             context.compare_metadata(
                  ("053877", "peak_basics"), first_metadata)

@@ -580,7 +580,7 @@ class Plugin:
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
-                f"Promised:  {expect}\n"
+                f"Promised: {expect}\n"
                 f"Delivered: {got}."
             )
 

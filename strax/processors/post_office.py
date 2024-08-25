@@ -76,7 +76,7 @@ class PostOffice:
     _readers_done: ty.Dict[str, ty.List[str]]
 
     # (Factoring the above variables into a Topic class didn't work for me.
-    #  Multi-output producers exist, topic would be != topic_name, etc..)
+    # Multi-output producers exist, topic would be != topic_name, etc..)
 
     def __init__(self):
         self.time_spent = dict()
@@ -199,7 +199,7 @@ class PostOffice:
                 except StopIteration:
                     # Message actually won't come, exit the while loop.
                     # (The while condition wasn't triggered because
-                    #  the producer only just realized the topic is exhausted)
+                    # the producer only just realized the topic is exhausted)
                     break
             log.debug(f"{reader} receiving message {result}, number {msg_number} of {topic}")
             # Note receipt before yielding, so we can clear unnecessary
