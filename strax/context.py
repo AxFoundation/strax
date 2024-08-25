@@ -724,7 +724,7 @@ class Context:
         # Also take into account the versions of the plugins registered
         self._base_hash_on_config.update(
             {
-                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+                data_type: (plugin.version, plugin.compressor, plugin.input_timeout)
                 for data_type, plugin in self._plugin_class_registry.items()
                 if not data_type.startswith(TEMP_DATA_TYPE_PREFIX)
             }
@@ -954,7 +954,7 @@ class Context:
 
             # Also adding name and version of the parent to the lineage:
             for parent_class in plugin.__class__.__bases__:
-                configs[parent_class.__name__] = parent_class.__version__
+                configs[parent_class.__name__] = parent_class.version
 
         else:
             configs = {
@@ -2639,7 +2639,7 @@ class Context:
                     data_type,
                     self.key_for(runid, data_type).lineage_hash,
                     self.get_save_when(data_type),
-                    plugin.__version__,
+                    plugin.version,
                 )
                 for plugin in self._plugin_class_registry.values()
                 for data_type in plugin.provides
