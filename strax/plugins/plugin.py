@@ -282,7 +282,7 @@ class Plugin:
         attributes = [attr for attr in self.__dir__() if not attr.startswith("__")]
 
         def _return_hashable(attr):
-            if attr in ["takes_config", "_auto_version"]:
+            if attr in ["takes_config", "version", "_auto_version"]:
                 # handled by context (or not worth tracking)
                 return
             obj = getattr(self, attr)
