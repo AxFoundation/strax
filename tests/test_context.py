@@ -129,7 +129,7 @@ def test_accumulate():
         )
         channels_from_array = np.sum(context.get_array(run_id, "records")["channel"])
         channels_accumulate = context.accumulate(run_id, "records", fields="channel")
-        n_chunks = len(context.get_meta(run_id, "records")["chunks"])
+        n_chunks = len(context.get_metadata(run_id, "records")["chunks"])
     channels = channels_accumulate["channel"]
     assert n_chunks == channels_accumulate["n_chunks"]
     assert channels_from_array == channels
