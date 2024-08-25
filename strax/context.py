@@ -1462,10 +1462,10 @@ class Context:
                     continue
                 self.log.debug(f"Try inferring start/stop from {t}")
                 try:
-                    t0 = self.get_meta(run_id, t)["chunks"][0]["start"]
+                    t0 = self.get_metadata(run_id, t)["chunks"][0]["start"]
                     t0 = (int(t0) // int(1e9)) * int(1e9)
 
-                    t1 = self.get_meta(run_id, t)["chunks"][-1]["end"]
+                    t1 = self.get_metadata(run_id, t)["chunks"][-1]["end"]
                     t1 = (int(t1) // int(1e9)) * int(1e9)
                     return t0, t1
                 except strax.DataNotAvailable:
@@ -2026,7 +2026,7 @@ class Context:
         lineage = plugins[target].lineage
         return self.get_data_key(run_id, target, lineage)
 
-    def get_meta(self, run_id, target, chunk_number=None) -> dict:
+    def get_metadata(self, run_id, target, chunk_number=None) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable if data is not yet
         available.
 
@@ -2041,8 +2041,6 @@ class Context:
             except strax.DataNotAvailable:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, data for {key} not available")
-
-    get_metadata = get_meta
 
     def compare_metadata(self, data1, data2, return_results=False):
         """Compare the metadata between two strax data.
@@ -2156,7 +2154,7 @@ class Context:
 
     def size_mb(self, run_id, target):
         """Return megabytes of memory required to hold data."""
-        md = self.get_meta(run_id, target)
+        md = self.get_metadata(run_id, target)
         return sum([x["nbytes"] for x in md["chunks"]]) / 1e6
 
     def run_defaults(self, run_id):
@@ -2407,7 +2405,7 @@ class Context:
             _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
         else:
             # if no chunk numbers are given, use information from the dependency
-            chunks = self.get_meta(run_id, per_chunked_dependency)["chunks"]
+            chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
             chunk_number_group = [[c["chunk_i"]] for c in chunks]
             _chunk_number = None
 

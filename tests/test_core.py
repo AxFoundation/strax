@@ -92,7 +92,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         assert sorted(os.listdir(data_dirs[0])) == [f"{prefix}-000000", f"{prefix}-metadata.json"]
 
         # Check metadata got written correctly.
-        metadata = mystrax.get_meta(run_id, "peaks")
+        metadata = mystrax.get_metadata(run_id, "peaks")
         assert len(metadata)
         assert "writing_ended" in metadata
         assert "exception" not in metadata
@@ -115,7 +115,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
             use_per_run_defaults=True,
             register=[Records, Peaks],
         )
-        metadata_2 = mystrax.get_meta(run_id, "peaks")
+        metadata_2 = mystrax.get_metadata(run_id, "peaks")
         assert metadata == metadata_2
 
 
@@ -166,7 +166,7 @@ def test_fuzzy_matching():
         assert st2.list_available("peaks") == [run_id]
 
         # And we can actually load it
-        st2.get_meta(run_id, "peaks")
+        st2.get_metadata(run_id, "peaks")
         st2.get_array(run_id, "peaks")
 
         # Fuzzy for options also works
@@ -205,7 +205,7 @@ def test_exception(allow_multiprocess, max_workers, processor):
         # Check exception is recorded in metadata
         # in both its original data type and dependents
         for target in ("peaks", "records"):
-            assert "SomeCrash" in st.get_meta(run_id, target)["exception"]
+            assert "SomeCrash" in st.get_metadata(run_id, target)["exception"]
 
         # Check corrupted data does not load
         st.context_config["forbid_creation_of"] = ("peaks",)

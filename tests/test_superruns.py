@@ -152,7 +152,7 @@ class TestSuperRuns(unittest.TestCase):
         assert np.all(subrun_data == superrun_data)
 
         # Load meta data and check if rechunking worked:
-        chunks = self.context.get_meta(self.superrun_name, "peaks")["chunks"]
+        chunks = self.context.get_metadata(self.superrun_name, "peaks")["chunks"]
         assert len(chunks) == 1
         chunk = chunks[0]
         assert chunk["run_id"] == self.superrun_name
@@ -225,7 +225,7 @@ class TestSuperRuns(unittest.TestCase):
         """Superrun chunks and meta data should contain information about its constituent
         subruns."""
         self.context.make(self.superrun_name, "peaks")
-        meta = self.context.get_meta(self.superrun_name, "peaks")
+        meta = self.context.get_metadata(self.superrun_name, "peaks")
 
         n_chunks = 0
         superrun_chunk = None
