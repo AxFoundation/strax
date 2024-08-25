@@ -244,9 +244,9 @@ def _get_hitlets_data(hitlets, records, to_pe):
             )
 
             if (r_end - r_start) == 0 and (h_end - h_start) == 0:
-                # _touching_windows will give a range of overlapping records  with hitlet
+                # _touching_windows will give a range of overlapping records with hitlet
                 # independent of channel. Hence, in rare cases it might be that a record of
-                # channel A touches with a hitlet of channel B which  starts before the previous
+                # channel A touches with a hitlet of channel B which starts before the previous
                 # record of channel b. Hence we get one non-overlapping record in channel b.
                 continue
 

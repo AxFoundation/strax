@@ -235,7 +235,7 @@ def select_runs(
         for required tags
     :param exclude_tags: String / list of strings of patterns
         for forbidden tags.
-        Exclusion criteria  have higher priority than inclusion criteria.
+        Exclusion criteria have higher priority than inclusion criteria.
     :param pattern_type: Type of pattern matching to use.
         Defaults to 'fnmatch', which means you can use
         unix shell-style wildcards (`?`, `*`).

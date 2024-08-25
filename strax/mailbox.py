@@ -107,7 +107,7 @@ class Mailbox:
         # Do NOT call notify_all when the condition is False!
         # We use wait_for, which also returns False when the timeout is broken
         # (Is this an odd design decision in the standard library
-        #  or am I misunderstanding something?)
+        # or am I misunderstanding something?)
         class Condition:
             """Small helper class which wraps "threading.Condition" to get some useful logging
             information for debugging."""
