@@ -95,9 +95,9 @@ class ThreadedMailboxProcessor(BaseProcessor):
                 self.process_executor = self.thread_executor  # type: ignore
 
         # Figure which outputs
-        #  - we should exclude from the flow control in lazy mode,
+        # - we should exclude from the flow control in lazy mode,
         #    because they are produced but not required.
-        #  - we should discard (produced but neither required not saved)
+        # - we should discard (produced but neither required not saved)
         produced = set(components.loaders)
         required = set(components.targets)
         # Do not just take keys from savers, perhaps some keys
