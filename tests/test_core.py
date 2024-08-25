@@ -447,6 +447,20 @@ def test_per_chunk_storage():
             register=[Records, Peaks],
             use_per_run_defaults=True,
         )
+
+        # If per-chunk storage is not for dependencies, DataKey will not be different.
+        key_1st = st.key_for(run_id, "records", chunk_number={"records": [0]})
+        key_2nd = st.key_for(run_id, "records", chunk_number={"records": [1]})
+        assert str(key_1st) == str(key_2nd)
+
+        # If per-chunk storage is for dependencies, savers will not be different.
+        components_1st = st.get_components(run_id, "peaks", chunk_number={"peaks": [0]})
+        components_2nd = st.get_components(run_id, "peaks", chunk_number={"peaks": [1]})
+        assert (
+            components_1st.savers["peaks"][0].dirname == components_2nd.savers["peaks"][0].dirname
+        )
+
+        # Test merge_per_chunk_storage
         st.make(run_id, "records")
         n_chunks = len(st.get_metadata(run_id, "records")["chunks"])
         assert n_chunks > 2
@@ -462,6 +476,7 @@ def test_per_chunk_storage():
         with pytest.raises(ValueError):
             st.merge_per_chunk_storage(run_id, "peaks", "records")
 
+        # Per-chunk storage not allowed for some plugins
         p = type("whatever", (strax.OverlapWindowPlugin,), dict(depends_on="records"))
         st.register(p)
         with pytest.raises(ValueError):

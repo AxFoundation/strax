@@ -1337,7 +1337,7 @@ class Context:
             targets=strax.to_str_tuple(final_plugin),
         )
 
-    def get_datakey(self, run_id, target, lineage):
+    def get_data_key(self, run_id, target, lineage):
         """Get datakey for a given run_id, target and lineage.
 
         If super is detected, the subruns information are added to the key.
@@ -1370,7 +1370,7 @@ class Context:
         :return: Updated savers dictionary.
 
         """
-        key = self.get_datakey(run_id, d_to_save, target_plugin.lineage)
+        key = self.get_data_key(run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -2024,7 +2024,7 @@ class Context:
             plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)
 
         lineage = plugins[target].lineage
-        return self.get_datakey(run_id, target, lineage)
+        return self.get_data_key(run_id, target, lineage)
 
     def get_meta(self, run_id, target, chunk_number=None) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable if data is not yet

@@ -68,7 +68,7 @@ def keys_for_runs(
         # Get the lineage once, for the context specifies that the
         # defaults may not change!
         p = self._get_plugins((target,), run_ids[0])[target]
-        return [self.get_datakey(r, target, p.lineage) for r in run_ids]
+        return [self.get_data_key(r, target, p.lineage) for r in run_ids]
     else:
         return []
 
