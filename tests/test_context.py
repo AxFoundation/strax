@@ -453,7 +453,7 @@ class TestContext(unittest.TestCase):
         key = st.key_for(run_id, "records")
         plugin = st.get_single_plugin(run_id, "records")
         # Check that the version is auto-inferred
-        assert plugin.version.startswith("auto_")
+        assert plugin.version().startswith("auto_")
 
         # Check that loading and saving works as expected
         st.make(run_id, "records")
