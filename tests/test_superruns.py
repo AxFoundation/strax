@@ -126,7 +126,9 @@ class TestSuperRuns(unittest.TestCase):
             self.superrun_name, "peak_classification", _combining_subruns=True
         )
         assert len(components.loaders) == 1
+        assert len(components.savers) == 1
         assert "peak_classification" in components.loaders
+        assert "peak_classification" in components.savers
 
         with self.assertRaises(ValueError):
             self.context.get_components(
@@ -335,6 +337,8 @@ class TestSuperRuns(unittest.TestCase):
         The test also shows the difference between the two.
 
         """
+        self.context.tree
+        self.context.inversed_tree
         self.context.check_superrun()
         sum_super = self.context.get_array(self.superrun_name, "sum")
         _sum_super = self.context.get_array(self.superrun_name, "sum", _combining_subruns=True)
