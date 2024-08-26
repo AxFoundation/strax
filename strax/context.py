@@ -2739,7 +2739,7 @@ select_docs = """
     - fully_contained: (default) select things fully contained in the range
     - touching: select things that (partially) overlap with the range
     - skip: Do not select a time range, even if other arguments say so
-:param chunk_number: For internal use: return data from one chunk.
+:param chunk_number: Load chunk from the dependency according to this dictionary.
 :param progress_bar: Display a progress bar if metedata exists.
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """
