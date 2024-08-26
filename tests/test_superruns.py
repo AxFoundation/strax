@@ -319,7 +319,7 @@ class TestSuperRuns(unittest.TestCase):
     def test_superrun_chunk_number(self):
         """Test that superrun does not work with chunk_number."""
         with self.assertRaises(ValueError):
-            self.context.get_array(self.superrun_name, "peaks", chunk_number=[0])
+            self.context.get_array(self.superrun_name, "peaks", chunk_number={"raw_records": [0]})
 
     def test_bare_combining_subruns(self):
         """Test that _combining_subruns does not work with non-superrun."""
