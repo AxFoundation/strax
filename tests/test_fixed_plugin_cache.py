@@ -36,8 +36,6 @@ class TestContextFixedPluginCache(unittest.TestCase):
         st = self.get_context(use_per_run_defaults=False)
         if config_update is not None:
             st.set_context_config(config_update)
-        # Compute the key/hash under
-        st.key_for(run_ids[0], "records")
         data = st.get_array(run_ids, "records", **kwargs)
         run_id_channel_diff = data["run_id"].astype(np.int64) - data["channel"]
         assert np.all(run_id_channel_diff == 0)
