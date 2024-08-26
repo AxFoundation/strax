@@ -724,7 +724,7 @@ class Context:
         # Also take into account the versions of the plugins registered
         self._base_hash_on_config.update(
             {
-                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+                data_type: (plugin.version(), plugin.compressor, plugin.input_timeout)
                 for data_type, plugin in self._plugin_class_registry.items()
                 if not data_type.startswith(TEMP_DATA_TYPE_PREFIX)
             }
@@ -954,7 +954,7 @@ class Context:
 
             # Also adding name and version of the parent to the lineage:
             for parent_class in plugin.__class__.__bases__:
-                configs[parent_class.__name__] = parent_class.__version__
+                configs[parent_class.__name__] = parent_class.version()
 
         else:
             configs = {
@@ -981,9 +981,7 @@ class Context:
                     self._check_chunk_number(chunk_number[d_depends])
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
-        plugin.lineage = {
-            last_provide: (plugin.__class__.__name__, plugin.version(run_id), configs)
-        }
+        plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
 
         # This is why the lineage of a plugin contains all its dependencies
         for d_depends in plugin.depends_on:
@@ -2641,7 +2639,7 @@ class Context:
                     data_type,
                     self.key_for(runid, data_type).lineage_hash,
                     self.get_save_when(data_type),
-                    plugin.__version__,
+                    plugin.version(),
                 )
                 for plugin in self._plugin_class_registry.values()
                 for data_type in plugin.provides
@@ -2741,7 +2739,7 @@ select_docs = """
     - fully_contained: (default) select things fully contained in the range
     - touching: select things that (partially) overlap with the range
     - skip: Do not select a time range, even if other arguments say so
-:param chunk_number: For internal use: return data from one chunk.
+:param chunk_number: Load chunk from the dependency according to this dictionary.
 :param progress_bar: Display a progress bar if metedata exists.
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """

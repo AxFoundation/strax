@@ -271,21 +271,23 @@ class Plugin:
         # implementing all abstract methods...
         raise RuntimeError("No infer dtype method defined")
 
-    @property
-    def _auto_version(self):
+    @classmethod
+    def _auto_version(cls) -> str:
         """Generate some auto-incremented version for the context hashing system, see
         github.com/AxFoundation/strax/issues/217.
 
         Activate with setting __version__ to None
 
         """
-        attributes = [attr for attr in self.__dir__() if not attr.startswith("__")]
+        attributes = [
+            attr for attr in dir(cls) if not attr.startswith("__") and attr not in cls.takes_config
+        ]
 
         def _return_hashable(attr):
-            if attr in ["takes_config", "_auto_version"]:
+            if attr in ["takes_config", "version", "_auto_version"]:
                 # handled by context (or not worth tracking)
                 return
-            obj = getattr(self, attr)
+            obj = getattr(cls, attr)
             try:
                 return strax.deterministic_hash(inspect.getsource(obj))
             except TypeError:
@@ -298,16 +300,12 @@ class Plugin:
         res = {attr: _return_hashable(attr) for attr in attributes}
         return "auto_" + strax.deterministic_hash(res)
 
-    def version(self, run_id=None):
-        """Return version number applicable to the run_id.
-
-        Most plugins just have a single version (in .__version__) but some may be at different
-        versions for different runs (e.g. time-dependent corrections).
-
-        """
-        if self.__version__ is None:
-            return self._auto_version
-        return self.__version__
+    @classmethod
+    def version(cls) -> str:
+        """Return version number of the plugin."""
+        if cls.__version__ is None:
+            return cls._auto_version()
+        return cls.__version__
 
     def __repr__(self):
         return self.__class__.__name__
