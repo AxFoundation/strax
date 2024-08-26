@@ -52,7 +52,7 @@ class Plugin:
 
     """
 
-    __version__: typing.Optional[str] = "0.0.0"
+    __version__: typing.Optional[str] = None
 
     # For multi-output plugins these should be (immutable)dicts
     data_kind: typing.Union[str, immutabledict, dict]
