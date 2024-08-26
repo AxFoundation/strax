@@ -279,7 +279,9 @@ class Plugin:
         Activate with setting __version__ to None
 
         """
-        attributes = [attr for attr in dir(cls) if not attr.startswith("__")]
+        attributes = [
+            attr for attr in dir(cls) if not attr.startswith("__") and attr not in cls.takes_config
+        ]
 
         def _return_hashable(attr):
             if attr in ["takes_config", "version", "_auto_version"]:

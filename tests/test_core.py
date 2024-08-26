@@ -367,13 +367,16 @@ def test_dtype_mismatch():
 def test_get_single_plugin():
     mystrax = strax.Context(
         storage=[],
-        register=[Records, Peaks],
+        register=[Records, Peaks, PeakClassification],
         use_per_run_defaults=True,
     )
     p = mystrax.get_single_plugin("0", "peaks")
+    p.empty_result()
     assert isinstance(p, Peaks)
     assert len(p.config)
     assert p.config["base_area"] == 0
+    p = mystrax.get_single_plugin("0", "peak_classification")
+    p.empty_result()
 
 
 def test_allow_multiple(targets=("peaks", "records")):
