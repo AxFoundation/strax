@@ -62,7 +62,7 @@ class DataDirectory(StorageFrontend):
         with open(self._run_meta_path(run_id), mode="w") as f:
             if "name" not in metadata:
                 metadata["name"] = run_id
-            f.write(json.dumps(metadata, default=json_util.default))
+            f.write(json.dumps(metadata, sort_keys=True, indent=4, default=json_util.default))
 
     def _scan_runs(self, store_fields):
         """Iterable of run document dictionaries.
@@ -166,7 +166,7 @@ class DataDirectory(StorageFrontend):
         # Check exact match
         if _data_type != key.data_type:
             return False
-        if not ignore_name and _run_id != key.run_id:
+        if not ignore_name and _run_id != key._run_id:
             return False
 
         # Check fuzzy match

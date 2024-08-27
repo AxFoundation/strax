@@ -44,7 +44,7 @@ class OverlapWindowPlugin(Plugin):
         for data_kind, chunk in kwargs.items():
             if len(self.cached_input):
                 kwargs[data_kind] = strax.Chunk.concatenate(
-                    [self.cached_input[data_kind], chunk], self.allow_hyperrun
+                    [self.cached_input[data_kind], chunk], self.allow_superrun
                 )
 
         # Compute new results

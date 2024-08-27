@@ -31,8 +31,8 @@ class TestContext(unittest.TestCase):
         st.make(run_id, "records")
         st.make(run_id, "records_down_chunked")
 
-        chunks_records = st.get_meta(run_id, "records")["chunks"]
-        chunks_records_down_chunked = st.get_meta(run_id, "records_down_chunked")["chunks"]
+        chunks_records = st.get_metadata(run_id, "records")["chunks"]
+        chunks_records_down_chunked = st.get_metadata(run_id, "records_down_chunked")["chunks"]
 
         _chunks_are_downsampled = len(chunks_records) * 2 == len(chunks_records_down_chunked)
         assert _chunks_are_downsampled

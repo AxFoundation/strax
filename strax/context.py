@@ -1,20 +1,20 @@
-import datetime
-import logging
-import warnings
-import fnmatch
-from functools import partial
-import typing as ty
 import time
+import logging
+import fnmatch
+import itertools
 import json
+from functools import partial
+import types
+import typing as ty
+from enum import IntEnum
+import datetime
+import inspect
+from collections import defaultdict
+
+from immutabledict import immutabledict
 import numpy as np
 import pandas as pd
 import strax
-import inspect
-import types
-from collections import defaultdict
-from immutabledict import immutabledict
-from enum import IntEnum
-
 from strax import CutList
 
 
@@ -22,21 +22,13 @@ export, __all__ = strax.exporter()
 __all__.extend(["RUN_DEFAULTS_KEY"])
 
 RUN_DEFAULTS_KEY = "strax_defaults"
+TEMP_DATA_TYPE_PREFIX = "_temp_"
 
 # use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
 tqdm = strax.utils.tqdm
 
 
 @strax.takes_config(
-    strax.Option(
-        name="storage_converter",
-        default=False,
-        type=bool,
-        help=(
-            "If True, save data that is loaded from one frontend "
-            "through all willing other storage frontends."
-        ),
-    ),
     strax.Option(
         name="fuzzy_for",
         default=tuple(),
@@ -377,7 +369,7 @@ class Context:
                 if old_plugin == currently_registered:
                     # Must be equal here, because we are only looking for the remanants which were
                     # not overwritten above.
-                    warnings.warn(
+                    self.log.warning(
                         "Provides of multi-output plugins overlap, deregister old plugins"
                         f" {old_plugin}."
                     )
@@ -406,7 +398,7 @@ class Context:
                                 "Two plugins have a different default value"
                                 " for the same option. The option"
                                 f' "{new_option}" in "{plugin.__name__}" takes'
-                                f' as a default "{default}"  while in'
+                                f' as a default "{default}" while in'
                                 f' "{plugin_class.__name__}" the default value'
                                 f' is set to "{new_default}". Please change'
                                 " one of the defaults."
@@ -600,10 +592,10 @@ class Context:
             return pd.DataFrame(r, columns=r[0].keys())
         return pd.DataFrame([])
 
-    def lineage(self, run_id, data_type):
+    def lineage(self, run_id, data_type, chunk_number=None):
         """Return lineage dictionary for data_type and run_id, based on the options in this
         context."""
-        return self._get_plugins((data_type,), run_id)[data_type].lineage
+        return self._get_plugins((data_type,), run_id, chunk_number=chunk_number)[data_type].lineage
 
     def register_all(self, module):
         """Register all plugins defined in module.
@@ -659,21 +651,23 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get_single_plugin(self, run_id, data_name):
+    def get_single_plugin(self, run_id, data_name, chunk_number=None):
         """Return a single fully initialized plugin that produces data_name for run_id.
 
         For use in custom processing.
 
         """
-        plugin = self._get_plugins((data_name,), run_id)[data_name]
+        plugin = self._get_plugins((data_name,), run_id, chunk_number=chunk_number)[data_name]
         self._set_plugin_config(plugin, run_id, tolerant=False)
         plugin.setup()
         return plugin
 
     @staticmethod
-    def hyperrun_id(run_id):
-        if run_id.startswith("__"):
-            _run_id = run_id[2:]
+    def _process_superrun_id(run_id):
+        if not isinstance(run_id, str):
+            raise ValueError(f"run_id {run_id} must be str, but got {type(run_id)}")
+        if run_id.startswith("_"):
+            _run_id = run_id[1:]
         else:
             _run_id = run_id
         return _run_id
@@ -681,7 +675,7 @@ class Context:
     def _set_plugin_config(self, p, run_id, tolerant=True):
         # Explicit type check, since if someone calls this with
         # plugin CLASSES, funny business might ensue
-        _run_id = self.hyperrun_id(run_id)
+        _run_id = self._process_superrun_id(run_id)
         assert isinstance(p, strax.Plugin)
         config = self.config.copy()
         for opt in p.takes_config.values():
@@ -729,9 +723,9 @@ class Context:
         # Also take into account the versions of the plugins registered
         self._base_hash_on_config.update(
             {
-                data_type: (plugin.__version__, plugin.compressor, plugin.input_timeout)
+                data_type: (plugin.version(), plugin.compressor, plugin.input_timeout)
                 for data_type, plugin in self._plugin_class_registry.items()
-                if not data_type.startswith("_temp_")
+                if not data_type.startswith(TEMP_DATA_TYPE_PREFIX)
             }
         )
         return strax.deterministic_hash(self._base_hash_on_config)
@@ -739,9 +733,14 @@ class Context:
     def _plugins_are_cached(
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> bool:
         """Check if all the requested targets are in the _fixed_plugin_cache."""
-        if self.context_config["use_per_run_defaults"] or self._fixed_plugin_cache is None:
+        if (
+            self.context_config["use_per_run_defaults"]
+            or self._fixed_plugin_cache is None
+            or chunk_number is not None
+        ):
             # There is no point in caching if plugins (lineage) can
             # change per run or the cache is empty.
             return False
@@ -752,8 +751,12 @@ class Context:
         plugin_cache = self._fixed_plugin_cache[context_hash]
         return all([t in plugin_cache for t in targets])
 
-    def _plugins_to_cache(self, plugins: dict) -> None:
-        if self.context_config["use_per_run_defaults"]:
+    def _plugins_to_cache(
+        self,
+        plugins: dict,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ) -> None:
+        if self.context_config["use_per_run_defaults"] or chunk_number is not None:
             # There is no point in caching if plugins (lineage) can change per run
             return
         context_hash = self._context_hash()
@@ -773,8 +776,12 @@ class Context:
         run_id: str,
         targets: ty.Tuple[str],
     ) -> ty.Dict[str, strax.Plugin]:
-        # Doubly underscored since we don't do any key-checks etc here
-        """Load requested plugins from the plugin_cache."""
+        """Load requested plugins from the plugin_cache.
+
+        Doubly underscored since we don't do any key-checks etc here. Please be very careful of
+        using it since no check is done.
+
+        """
         requested_plugins = {}
         cached_plugins = self._fixed_plugin_cache[self._context_hash()]  # type: ignore
         for target, plugin in cached_plugins.items():
@@ -784,7 +791,7 @@ class Context:
                 continue
 
             requested_p = plugin.__copy__()
-            requested_p.run_id = self.hyperrun_id(run_id)
+            requested_p.run_id = run_id
 
             # Re-use only one instance if the plugin is multi output
             for provides in strax.to_str_tuple(requested_p.provides):
@@ -801,6 +808,7 @@ class Context:
         self,
         targets: ty.Union[ty.Tuple[str], ty.List[str]],
         run_id: str,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
     ) -> ty.Dict[str, strax.Plugin]:
         """Return dictionary of plugin instances necessary to compute targets from scratch.
 
@@ -827,7 +835,7 @@ class Context:
             if target in plugins:
                 continue
 
-            target_plugin = self.__get_plugin(run_id, target)
+            target_plugin = self.__get_plugin(run_id, target, chunk_number=chunk_number)
             for provides in target_plugin.provides:
                 plugins[provides] = target_plugin
             targets += list(target_plugin.depends_on)
@@ -841,10 +849,15 @@ class Context:
 
         return plugins
 
-    def __get_plugin(self, run_id: str, data_type: str):
+    def __get_plugin(
+        self,
+        run_id: str,
+        data_type: str,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ):
         """Get single plugin either from cache or initialize it."""
         # Check if plugin for data_type is already cached
-        if self._plugins_are_cached((data_type,)):
+        if self._plugins_are_cached((data_type,), chunk_number=chunk_number):
             cached_plugins = self.__get_requested_plugins_from_cache(run_id, (data_type,))
             target_plugin = cached_plugins[data_type]
             return target_plugin
@@ -854,17 +867,18 @@ class Context:
 
         plugin = self._plugin_class_registry[data_type]()
 
-        plugin.run_id = self.hyperrun_id(run_id)
+        plugin.run_id = run_id
 
         # The plugin may not get all the required options here
         # but we don't know if we need the plugin yet
         self._set_plugin_config(plugin, run_id, tolerant=True)
 
         plugin.deps = {
-            d_depends: self.__get_plugin(run_id, d_depends) for d_depends in plugin.depends_on
+            d_depends: self.__get_plugin(run_id, d_depends, chunk_number=chunk_number)
+            for d_depends in plugin.depends_on
         }
 
-        self.__add_lineage_to_plugin(run_id, plugin)
+        self.__add_lineage_to_plugin(run_id, plugin, chunk_number=chunk_number)
 
         if not hasattr(plugin, "data_kind") and not plugin.multi_output:
             if len(plugin.depends_on):
@@ -879,11 +893,34 @@ class Context:
         plugin.fix_dtype()
 
         # Add plugin to cache
-        self._plugins_to_cache({data_type: plugin for data_type in plugin.provides})
+        self._plugins_to_cache(
+            {data_type: plugin for data_type in plugin.provides}, chunk_number=chunk_number
+        )
 
         return plugin
 
-    def __add_lineage_to_plugin(self, run_id, plugin):
+    @staticmethod
+    def _check_chunk_number(chunk_number: ty.List[int]):
+        """Check if the chunk_number is a list of consecutive integers."""
+        mask = isinstance(chunk_number, list)
+        mask &= all([isinstance(x, int) for x in chunk_number])
+        if not mask:
+            raise ValueError(f"chunk_number should be a list of integers, but got {chunk_number}")
+
+        # Check if the difference between adjacent elements is exactly one
+        for i in range(len(chunk_number) - 1):
+            if chunk_number[i + 1] - chunk_number[i] != 1:
+                raise ValueError(
+                    "chunk_number should be a list of consecutive integers, "
+                    f"but got {chunk_number}"
+                )
+
+    def __add_lineage_to_plugin(
+        self,
+        run_id,
+        plugin,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ):
         """Adds lineage to plugin in place.
 
         Also adds parent infromation in case of a child plugin.
@@ -916,24 +953,36 @@ class Context:
 
             # Also adding name and version of the parent to the lineage:
             for parent_class in plugin.__class__.__bases__:
-                configs[parent_class.__name__] = parent_class.__version__
+                configs[parent_class.__name__] = parent_class.version()
 
-            plugin.lineage = {
-                last_provide: (plugin.__class__.__name__, plugin.version(run_id), configs)
-            }
         else:
-            plugin.lineage = {
-                last_provide: (
-                    plugin.__class__.__name__,
-                    plugin.version(run_id),
-                    {
-                        option: setting
-                        for option, setting in plugin.config.items()
-                        if plugin.takes_config[option].track
-                    },
-                )
+            configs = {
+                option: setting
+                for option, setting in plugin.config.items()
+                if plugin.takes_config[option].track
             }
 
+        # Set chunk_number in the lineage
+        if chunk_number is not None:
+            for d_depends in plugin.depends_on:
+                if d_depends in chunk_number:
+                    not_allowed_plugins = (strax.LoopPlugin, strax.OverlapWindowPlugin)
+                    if issubclass(plugin.__class__, not_allowed_plugins):
+                        raise ValueError(
+                            f"Can not assign chunk_number for {plugin.__class__} "
+                            f"because it is subclass of {not_allowed_plugins}!"
+                        )
+                    configs.setdefault("chunk_number", {})
+                    if d_depends in configs["chunk_number"]:
+                        raise ValueError(
+                            f"Chunk number for {d_depends} is already set in the lineage"
+                        )
+                    self._check_chunk_number(chunk_number[d_depends])
+                    configs["chunk_number"][d_depends] = chunk_number[d_depends]
+
+        plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
+
+        # This is why the lineage of a plugin contains all its dependencies
         for d_depends in plugin.depends_on:
             plugin.lineage.update(plugin.deps[d_depends].lineage)
 
@@ -1024,6 +1073,7 @@ class Context:
         save=tuple(),
         time_range=None,
         chunk_number=None,
+        _combining_subruns=False,
         multi_run_progress_bar=False,
     ) -> strax.ProcessorComponents:
         """Return components for setting up a processor.
@@ -1038,11 +1088,40 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        plugins = self._get_plugins(targets, run_id)
+        _is_superrun = run_id.startswith("_")
+        if len(targets) > 1 and _combining_subruns:
+            raise ValueError("Combining subruns is only supported for a single target")
+        if _is_superrun and chunk_number is not None:
+            raise ValueError("Per chunk processing is only allowed when not processing superrun.")
+        if not _is_superrun and _combining_subruns:
+            raise ValueError("Combining subruns is only supported for superruns.")
 
-        allow_hyperruns = [plugins[target_i].allow_hyperrun for target_i in targets]
-        if sum(allow_hyperruns) != 0 and sum(allow_hyperruns) != len(targets):
-            raise ValueError("Cannot mix plugins that allow hyperruns with those that do not.")
+        sources = set().union(
+            *[s for s in (self.get_source(run_id, target) for target in targets) if s is not None]
+        )
+        if chunk_number is not None:
+            chunk_number_keys = set(chunk_number.keys())
+            if not chunk_number_keys <= sources:
+                self.log.warning(
+                    f"Chunk number is specified for dependencies {chunk_number_keys} "
+                    f"but {targets} are made from stored dependencies {sources}. "
+                    "So some values in chunk_number will be ignored."
+                )
+
+        plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
+
+        allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
+        if _is_superrun and sum(allow_superruns) not in [0, len(targets)]:
+            raise ValueError(
+                f"Cannot mix plugins {targets} that allow superruns with those that do not."
+            )
+        if not sum(allow_superruns) and _is_superrun:
+            if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
+                raise ValueError(
+                    "When only combining subruns, you can only assign one target, "
+                    f"but got{plugins[targets[0]].depends_on}!"
+                )
+            raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1062,25 +1141,23 @@ class Context:
             target_plugin = plugins[target_i]
 
             # Can we load this data?
-            loading_this_data = False
-            key = self.key_for(run_id, target_i)
-
+            key = self.key_for(run_id, target_i, chunk_number=chunk_number)
+            if chunk_number is not None and target_i in chunk_number:
+                _chunk_number = chunk_number[target_i]
+            else:
+                _chunk_number = None
             loader = self._get_partial_loader_for(
-                key, chunk_number=chunk_number, time_range=time_range
+                key, time_range=time_range, chunk_number=_chunk_number
             )
 
-            _is_temp = not target_plugin.provides[0].startswith("_temp")
-            _is_superrun = run_id.startswith("_") and _is_temp
-            _is_hyperrun = run_id.startswith("__") and _is_temp
-            # hyperrun is always superrun
-            allow_hyperrun = plugins[target_i].allow_hyperrun
-            if not loader and (
-                (_is_superrun and not _is_hyperrun) or (_is_hyperrun and not allow_hyperrun)
-            ):
+            allow_superrun = plugins[target_i].allow_superrun
+            if not loader and _is_superrun and not allow_superrun or _combining_subruns:
+                # allow_superrun is False so we start to collect the subruns' data_types,
+                # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
                     raise NotImplementedError("time range loading not yet supported for superruns")
 
-                sub_run_spec = self.run_metadata(run_id, "sub_run_spec")["sub_run_spec"]
+                sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
 
                 # Make subruns if they do not exist.
                 self.make(
@@ -1092,14 +1169,18 @@ class Context:
 
                 ldrs = []
                 for subrun in sub_run_spec:
-                    sub_key = self.key_for(subrun, target_i)
+                    sub_key = self.key_for(subrun, target_i, chunk_number=chunk_number)
 
                     if sub_run_spec[subrun] == "all":
                         _subrun_time_range = None
                     else:
                         _subrun_time_range = sub_run_spec[subrun]
+                    if chunk_number is not None and target_i in chunk_number:
+                        _chunk_number = chunk_number[target_i]
+                    else:
+                        _chunk_number = None
                     loader = self._get_partial_loader_for(
-                        sub_key, time_range=_subrun_time_range, chunk_number=chunk_number
+                        sub_key, time_range=_subrun_time_range, chunk_number=_chunk_number
                     )
                     if not loader:
                         raise RuntimeError(
@@ -1118,7 +1199,6 @@ class Context:
 
             if loader:
                 # Found it! No need to make it or look in other frontends
-                loading_this_data = True
                 loaders[target_i] = loader
                 loader_plugins[target_i] = target_plugin
                 del plugins[target_i]
@@ -1156,39 +1236,20 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            if self.context_config["storage_converter"]:
-                warnings.warn(
-                    'The storage converter mode will be replaced by "copy_to_frontend" soon. '
-                    "It will be removed in one of the future releases. Please let us know if "
-                    'you are still using the "storage_converter" option.',
-                    DeprecationWarning,
-                )
-
-            # Should we save this data? If not, return.
-            _can_store_superrun = self.context_config["write_superruns"] and _is_superrun
-            # In case we can load the data already we want either use the storage converter
-            # or make a new superrun.
-            if (
-                loading_this_data
-                and not self.context_config["storage_converter"]
-                and not _can_store_superrun
-            ):
+            # In case we can load the data already we want make a new superrun.
+            if loader and not self.context_config["write_superruns"]:
                 return
 
             # Now we should check whether we meet the saving requirements (Explicit, Target etc.)
             # In case of the storage converter mode we copy already existing data. So we do not
             # have to check for the saving requirements here.
             current_plugin_to_savers = [target_i]
-            if (
-                not self._target_should_be_saved(
-                    target_plugin,
-                    target_i,
-                    targets,
-                    save,
-                    loader,
-                    _is_superrun and not _is_hyperrun,
-                )
-                and not self.context_config["storage_converter"]
+            if not self._target_should_be_saved(
+                target_plugin,
+                target_i,
+                targets,
+                save,
+                loader and not _combining_subruns,
             ):
                 if len(target_plugin.provides) > 1:
                     # In case the plugin has more than a single provides we also have to check
@@ -1218,32 +1279,28 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            if _is_superrun and not _is_hyperrun:
-                # In case of a superrun we are only interested in the specified targets
-                # and not any other stuff provided by the corresponding plugin.
-                savers = self._add_saver(
-                    savers, target_i, run_id, target_plugin, _is_superrun, loading_this_data
-                )
-            elif not _is_hyperrun or allow_hyperrun:
-                # only save if we are not in a hyperrun or the plugin allows hyperruns
+            if not _is_superrun or allow_superrun or _combining_subruns:
+                # only save if we are not in a superrun or the plugin allows superruns
                 # otherwise we will see error at Chunk.concatenate
                 # but anyway the data is should already been made
-                for d_to_save in set(current_plugin_to_savers + list(target_plugin.provides)):
-                    key = self.key_for(run_id, d_to_save)
+                if not _combining_subruns:
+                    data_type_to_save = set(current_plugin_to_savers + list(target_plugin.provides))
+                else:
+                    data_type_to_save = set(current_plugin_to_savers)
+                for d_to_save in data_type_to_save:
+                    key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
+                    # Here we just check the availability of key,
+                    # chunk_number for _get_partial_loader_for can be None
                     loader = self._get_partial_loader_for(
-                        key, time_range=time_range, chunk_number=chunk_number
+                        key, time_range=time_range, chunk_number=None
                     )
 
-                    if (
-                        not self._target_should_be_saved(
-                            target_plugin,
-                            d_to_save,
-                            targets,
-                            save,
-                            loader,
-                            _is_superrun and not _is_hyperrun,
-                        )
-                        and not self.context_config["storage_converter"]
+                    if not self._target_should_be_saved(
+                        target_plugin,
+                        d_to_save,
+                        targets,
+                        save,
+                        loader and not _combining_subruns,
                     ) or savers.get(d_to_save):
                         # This multi-output plugin was scanned before
                         # let's not create doubled savers or store data_types we do not want to.
@@ -1251,7 +1308,12 @@ class Context:
                         continue
 
                     savers = self._add_saver(
-                        savers, d_to_save, run_id, target_plugin, _is_superrun, loading_this_data
+                        savers,
+                        d_to_save,
+                        run_id,
+                        target_plugin,
+                        _is_superrun,
+                        loader and not _combining_subruns,
                     )
 
         for target_i in targets:
@@ -1284,6 +1346,18 @@ class Context:
             targets=strax.to_str_tuple(final_plugin),
         )
 
+    def get_data_key(self, run_id, target, lineage):
+        """Get datakey for a given run_id, target and lineage.
+
+        If super is detected, the subruns information are added to the key.
+
+        """
+        if run_id.startswith("_"):
+            sub_run_spec = self.run_metadata(run_id, projection=["sub_run_spec"])["sub_run_spec"]
+        else:
+            sub_run_spec = None
+        return strax.DataKey(run_id, target, lineage, subruns=sub_run_spec)
+
     def _add_saver(
         self,
         savers: dict,
@@ -1300,20 +1374,18 @@ class Context:
         :param d_to_save: String of the data_type to be saved.
         :param target_plugin: Plugin which produces the data_type
         :param _is_superrun: Boolean if run is a superrun
-        :param loading_this_data: Boolean if data can be loaded. Required for storing during
-            storage_converter mode and writing of superruns.
+        :param loading_this_data: Boolean if data can be loaded. Required for storing during writing
+            of superruns.
         :return: Updated savers dictionary.
 
         """
-        key = strax.DataKey(run_id, d_to_save, target_plugin.lineage)
+        key = self.get_data_key(run_id, d_to_save, target_plugin.lineage)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
             if loading_this_data:
                 # Usually, we don't save if we're loading
-                if not self.context_config["storage_converter"] and (
-                    not self.context_config["write_superruns"] and _is_superrun
-                ):
+                if _is_superrun and not self.context_config["write_superruns"]:
                     continue
                     # ... but in storage converter mode we do,
                     # ... or we want to write a new superrun. This is different from
@@ -1341,15 +1413,14 @@ class Context:
         return savers
 
     @staticmethod
-    def _target_should_be_saved(target_plugin, target, targets, save, loader, _is_superrun):
+    def _target_should_be_saved(target_plugin, target, targets, save, loading_this_data):
         """Function which checks if a given target should be saved.
 
         :param target_plugin: Plugin to compute target data_type.
         :param target: Target data_type.
         :param targets: Other targets to be computed.
-        :param loader: Partial loader for the corresponding target
         :param save: Targets to be saved.
-        :param _is_superrun: Boolean if run is a superrun.
+        :param loading_this_data: Already loading the data, so will not save.
 
         """
         if target_plugin.save_when[target] == strax.SaveWhen.NEVER:
@@ -1362,9 +1433,7 @@ class Context:
         elif target_plugin.save_when[target] == strax.SaveWhen.EXPLICIT:
             if target not in save:
                 return False
-        elif target_plugin.save_when[target] == strax.SaveWhen.ALWAYS and (
-            loader and not _is_superrun
-        ):
+        elif target_plugin.save_when[target] == strax.SaveWhen.ALWAYS and loading_this_data:
             # If an loader for this data_type exists already we do not
             # have to store the data again, except it is a superrun.
             return False
@@ -1402,10 +1471,10 @@ class Context:
                     continue
                 self.log.debug(f"Try inferring start/stop from {t}")
                 try:
-                    t0 = self.get_meta(run_id, t)["chunks"][0]["start"]
+                    t0 = self.get_metadata(run_id, t)["chunks"][0]["start"]
                     t0 = (int(t0) // int(1e9)) * int(1e9)
 
-                    t1 = self.get_meta(run_id, t)["chunks"][-1]["end"]
+                    t1 = self.get_metadata(run_id, t)["chunks"][-1]["end"]
                     t1 = (int(t1) // int(1e9)) * int(1e9)
                     return t0, t1
                 except strax.DataNotAvailable:
@@ -1478,8 +1547,9 @@ class Context:
         allow_multiple=False,
         progress_bar=True,
         multi_run_progress_bar=True,
-        _chunk_number=None,
+        chunk_number=None,
         processor=None,
+        _combining_subruns=False,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -1517,9 +1587,10 @@ class Context:
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            plugins = self._get_plugins(targets=targets, run_id=run_id)
+            targets = tuple(set(strax.to_str_tuple(targets)))
+            plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
-                temp_name = "_temp_" + strax.deterministic_hash(targets)
+                temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
@@ -1538,8 +1609,9 @@ class Context:
             targets=targets,
             save=save,
             time_range=time_range,
-            chunk_number=_chunk_number,
+            chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
+            _combining_subruns=_combining_subruns,
         )
 
         # Cleanup the temp plugins
@@ -1686,6 +1758,7 @@ class Context:
         save=tuple(),
         max_workers=None,
         _skip_if_built=True,
+        chunk_number=None,
         **kwargs,
     ) -> None:
         """Compute target for run_id. Returns nothing (None).
@@ -1708,13 +1781,21 @@ class Context:
                 log=self.log,
                 save=save,
                 max_workers=max_workers,
+                chunk_number=chunk_number,
                 **kwargs,
             )
 
-        if _skip_if_built and self.is_stored(run_ids[0], targets):
+        if _skip_if_built and self.is_stored(run_ids[0], targets, chunk_number=chunk_number):
             return
 
-        for _ in self.get_iter(run_ids[0], targets, save=save, max_workers=max_workers, **kwargs):
+        for _ in self.get_iter(
+            run_ids[0],
+            targets,
+            save=save,
+            max_workers=max_workers,
+            chunk_number=chunk_number,
+            **kwargs,
+        ):
             pass
 
     def get_array(
@@ -1882,7 +1963,7 @@ class Context:
         overwrite=True,
         **kwargs,
     ):
-        """Get persistent  arrays using zarr. This is useful when loading large amounts of data that
+        """Get persistent arrays using zarr. This is useful when loading large amounts of data that
         cannot fit in memory zarr is very compatible with dask. Targets are loaded into separate
         arrays and runs are merged. the data is added to any existing data in the storage location.
 
@@ -1913,7 +1994,7 @@ class Context:
             for run_id in strax.to_str_tuple(run_ids):
                 if zarray is not None and run_id in zarray.attrs.get("RUNS", {}):
                     continue
-                key = self.key_for(run_id, target)
+                key = self.key_for(run_id, target, chunk_number=kwargs.get("chunk_number", None))
                 INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
                 for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
                     end_idx = idx + chunk.data.size
@@ -1928,7 +2009,7 @@ class Context:
             zarray.attrs["RUNS"] = dict(zarray.attrs.get("RUNS", {}), **INSERTED)
         return group
 
-    def key_for(self, run_id, target):
+    def key_for(self, run_id, target, chunk_number=None):
         """Get the DataKey for a given run and a given target plugin. The DataKey is inferred from
         the plugin lineage. The lineage can come either from the _fixed_plugin_cache or computed on
         the fly.
@@ -1938,7 +2019,7 @@ class Context:
         :return: strax.DataKey of the target
 
         """
-        if self._plugins_are_cached((target,)):
+        if self._plugins_are_cached((target,), chunk_number=chunk_number):
             context_hash = self._context_hash()
             if context_hash in self._fixed_plugin_cache:
                 plugins = self._fixed_plugin_cache[self._context_hash()]
@@ -1947,14 +2028,14 @@ class Context:
                 self.log.warning(
                     f"Context hash changed to {context_hash} for {self._plugin_class_registry}?"
                 )
-                plugins = self._get_plugins((target,), run_id)
+                plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)
         else:
-            plugins = self._get_plugins((target,), run_id)
+            plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)
 
         lineage = plugins[target].lineage
-        return strax.DataKey(run_id, target, lineage)
+        return self.get_data_key(run_id, target, lineage)
 
-    def get_meta(self, run_id, target) -> dict:
+    def get_metadata(self, run_id, target, chunk_number=None) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable if data is not yet
         available.
 
@@ -1962,15 +2043,13 @@ class Context:
         :param target: data type to get
 
         """
-        key = self.key_for(run_id, target)
+        key = self.key_for(run_id, target, chunk_number=chunk_number)
         for sf in self._sorted_storage:
             try:
                 return sf.get_metadata(key, **self._find_options)
             except strax.DataNotAvailable:
                 self.log.debug(f"Frontend {sf} does not have {key}")
         raise strax.DataNotAvailable(f"Can't load metadata, data for {key} not available")
-
-    get_metadata = get_meta
 
     def compare_metadata(self, data1, data2, return_results=False):
         """Compare the metadata between two strax data.
@@ -1981,7 +2060,7 @@ class Context:
             are found for the inputs does not do the comparison
 
         example usage:
-            context.compare_metadata( ("053877", "peak_basics"),  "./my_path_to/JSONfile.json")
+            context.compare_metadata(("053877", "peak_basics"), "./my_path_to/JSONfile.json")
             first_metadata = context.get_metadata(run_id, "events")
             context.compare_metadata(
                  ("053877", "peak_basics"), first_metadata)
@@ -2025,8 +2104,6 @@ class Context:
                 lineage = (
                     metadata["lineage"] if _is_stored else self.key_for(run_id, target).lineage
                 )
-                _lineage_hash = str(self.key_for(run_id, target))
-                print(_lineage_hash)
             elif isinstance(metafile, dict):
                 metadata = metafile
                 lineage = metadata["lineage"]
@@ -2086,7 +2163,7 @@ class Context:
 
     def size_mb(self, run_id, target):
         """Return megabytes of memory required to hold data."""
-        md = self.get_meta(run_id, target)
+        md = self.get_metadata(run_id, target)
         return sum([x["nbytes"] for x in md["chunks"]]) / 1e6
 
     def run_defaults(self, run_id):
@@ -2109,7 +2186,7 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, detailed=False, **kwargs):
+    def is_stored(self, run_id, target, detailed=False, chunk_number=None, **kwargs):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -2118,7 +2195,9 @@ class Context:
 
         """
         if isinstance(target, (tuple, list)):
-            return all([self.is_stored(run_id, t, **kwargs) for t in target])
+            return all(
+                [self.is_stored(run_id, t, chunk_number=chunk_number, **kwargs) for t in target]
+            )
 
         # If any new options given, replace the current context
         # with a temporary one
@@ -2128,7 +2207,7 @@ class Context:
             self = self.new_context(**kwargs)
 
         for sf in self._sorted_storage:
-            if self._is_stored_in_sf(run_id, target, sf):
+            if self._is_stored_in_sf(run_id, target, sf, chunk_number=chunk_number):
                 return True
         # None of the frontends has the data
 
@@ -2141,7 +2220,7 @@ class Context:
             save_when = save_when[target]
 
         if save_when < strax.SaveWhen.ALWAYS and detailed:
-            warnings.warn(
+            self.log.warning(
                 f"{target} is not set to always be saved. "
                 "This is probably because it can be trivially made from other data. "
                 f"{target} depends on {plugin.depends_on}. Check if these are stored."
@@ -2210,7 +2289,7 @@ class Context:
                 f"Cannot select {target_frontend_id}-th frontend as "
                 f"we only have {len(self.storage)} frontends!"
             )
-        if rechunk and rechunk_to_mb == strax.default_chunk_size_mb:
+        if rechunk and rechunk_to_mb == strax.DEFAULT_CHUNK_SIZE_MB:
             self.log.warning("No <rechunk_to_mb> specified!")
 
     def copy_to_frontend(
@@ -2220,7 +2299,7 @@ class Context:
         target_frontend_id: ty.Optional[int] = None,
         target_compressor: ty.Optional[str] = None,
         rechunk: bool = False,
-        rechunk_to_mb: int = strax.default_chunk_size_mb,
+        rechunk_to_mb: int = strax.DEFAULT_CHUNK_SIZE_MB,
     ):
         """Copy data from one frontend to another.
 
@@ -2315,6 +2394,82 @@ class Context:
                     "do you have two storage frontends writing to the same place?"
                 )
 
+    def merge_per_chunk_storage(
+        self,
+        run_id: str,
+        target: str,
+        per_chunked_dependency: str,
+        rechunk=True,
+        chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
+    ):
+        """Merge the per-chunked data from the per-chunked dependency into the target storage."""
+
+        if self.is_stored(run_id, target):
+            raise ValueError(f"Data {target} for {run_id} already exists.")
+
+        if chunk_number_group is not None:
+            combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
+            if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
+                raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
+            _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
+        else:
+            # if no chunk numbers are given, use information from the dependency
+            chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
+            chunk_number_group = [[c["chunk_i"]] for c in chunks]
+            _chunk_number = None
+
+        # Make sure that all needed runs are stored
+        for chunk_number in chunk_number_group:
+            assert self.is_stored(
+                run_id, target, chunk_number={per_chunked_dependency: chunk_number}
+            )
+
+        # Usually we want to save in the same storage frontend
+        # Here we assume that the target is stored chunk by chunk of the dependency
+        target_sf = source_sf = self.get_source_sf(
+            run_id,
+            target,
+            chunk_number={per_chunked_dependency: chunk_number},
+            should_exist=True,
+        )[0]
+
+        def wrapped_loader():
+            """Wrapped loader for changing the target_size_mb."""
+            for chunk_number in chunk_number_group:
+                # Mostly copied from self.copy_to_frontend
+                # Get the info from the source backend (s_be) that we need to fill
+                # the target backend (t_be) with
+                data_key = self.key_for(
+                    run_id, target, chunk_number={per_chunked_dependency: chunk_number}
+                )
+                # This should never fail, we just tried
+                s_be_str, s_be_key = source_sf.find(data_key)
+                s_be = source_sf._get_backend(s_be_str)
+                md = s_be.get_metadata(s_be_key)
+
+                loader = s_be.loader(s_be_key)
+                try:
+                    while True:
+                        # pylint: disable=cell-var-from-loop
+                        data = next(loader)
+                        # Update target chunk size for re-chunking
+                        data.target_size_mb = md["chunk_target_size_mb"]
+                        yield data
+                except StopIteration:
+                    continue
+
+        # Fill the target buffer
+        data_key = self.key_for(run_id, target, chunk_number=_chunk_number)
+        t_be_str, t_be_key = target_sf.find(data_key, write=True)
+        target_be = target_sf._get_backend(t_be_str)
+        target_plugin = self.__get_plugin(run_id, target, chunk_number=_chunk_number)
+        target_md = target_plugin.metadata(run_id, target)
+        # Copied from StorageBackend.saver
+        if "dtype" in target_md:
+            target_md["dtype"] = target_md["dtype"].descr.__repr__()
+        saver = target_be._saver(t_be_key, target_md)
+        saver.save_from(wrapped_loader(), rechunk=rechunk)
+
     def get_source(
         self,
         run_id: str,
@@ -2390,8 +2545,7 @@ class Context:
         if this_target_is_stored:
             return _targets_stored
 
-        # Need to init the class e.g. if we want to allow depends on like this:
-        # https://github.com/XENONnT/cutax/blob/d7ec0685650d03771fef66507fd6882676151b9b/cutax/cutlist.py#L33  # noqa
+        # Need to init the class e.g. if we want to allow depends_on which is not a class attribute
         plugin = self._plugin_class_registry[target]()
         dependencies = strax.to_str_tuple(plugin.depends_on)
         if not dependencies:
@@ -2419,7 +2573,13 @@ class Context:
         )
         return _targets_stored
 
-    def _is_stored_in_sf(self, run_id, target, storage_frontend: strax.StorageFrontend) -> bool:
+    def _is_stored_in_sf(
+        self,
+        run_id,
+        target,
+        storage_frontend: strax.StorageFrontend,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ) -> bool:
         """Check if the storage frontend has the requested datakey for the run_id and target.
 
         :param storage_frontend: strax.StorageFrontend to check if it has the requested datakey for
@@ -2427,14 +2587,14 @@ class Context:
         :return: if the frontend has the key or not.
 
         """
-        key = self.key_for(run_id, target)
+        key = self.key_for(run_id, target, chunk_number=chunk_number)
         try:
             storage_frontend.find(key, **self._find_options)
             return True
         except strax.DataNotAvailable:
             return False
 
-    def get_source_sf(self, run_id, target, should_exist=False):
+    def get_source_sf(self, run_id, target, should_exist=False, chunk_number=None):
         """Get the source storage frontends for a given run_id and target.
 
         :param run_id, target: run_id, target
@@ -2451,6 +2611,7 @@ class Context:
                     run_id,
                     t,
                     should_exist=should_exist,
+                    chunk_number=chunk_number,
                 )
                 for t in target
             ]
@@ -2458,7 +2619,7 @@ class Context:
 
         frontends = []
         for sf in self._sorted_storage:
-            if self._is_stored_in_sf(run_id, target, sf):
+            if self._is_stored_in_sf(run_id, target, sf, chunk_number=chunk_number):
                 frontends.append(sf)
         if should_exist and not frontends:
             raise ValueError(
@@ -2489,7 +2650,7 @@ class Context:
                     data_type,
                     self.key_for(runid, data_type).lineage_hash,
                     self.get_save_when(data_type),
-                    plugin.__version__,
+                    plugin.version(),
                 )
                 for plugin in self._plugin_class_registry.values()
                 for data_type in plugin.provides
@@ -2511,46 +2672,58 @@ class Context:
         return _root_data_types
 
     @property
-    def inverse_tree(self):
-        """Inverse tree whose key is depends_on and value is provides."""
+    def tree(self):
+        """Dependency tree whose key is provides and value is depends_on."""
+        _tree = dict()
+        for v in self._plugin_class_registry.values():
+            _v = v()
+            for p in _v.provides:
+                _tree.setdefault(p, [])
+                _tree[p] += _v.depends_on
+        return _tree
+
+    @property
+    def inversed_tree(self):
+        """Inversed dependency tree whose key is depends_on and value is provides."""
         _inverse_tree = dict()
-        for k, v in self._plugin_class_registry.items():
-            for d in v().depends_on:
+        for v in self._plugin_class_registry.values():
+            _v = v()
+            for d in _v.depends_on:
                 _inverse_tree.setdefault(d, [])
-                _inverse_tree[d] += v().provides
+                _inverse_tree[d] += _v.provides
         return _inverse_tree
 
-    def check_hyperrun(self):
-        """Raise if non-hyperrun plugins depends on hyperrun plugins."""
-        inverse_tree = self.inverse_tree
+    def check_superrun(self):
+        """Raise if non-superrun plugins depends on superrun plugins."""
+        inversed_tree = self.inversed_tree
 
-        # define a recursive function to check if all the dependencies support hyperruns
-        def check_support_hyperrun(data_type, checked=set(), seen_allow=None):
+        # define a recursive function to check if all the dependencies support superruns
+        def check_support_superrun(data_type, checked=set(), seen_allow=None):
             if data_type in checked:
                 return checked
-            if self._plugin_class_registry[data_type].allow_hyperrun:
+            if self._plugin_class_registry[data_type].allow_superrun:
                 seen_allow = data_type
-            if seen_allow and not self._plugin_class_registry[data_type].allow_hyperrun:
+            if seen_allow and not self._plugin_class_registry[data_type].allow_superrun:
                 raise ValueError(
-                    f"Already support hyperruns in {seen_allow}, "
-                    f"but it's dependency {data_type} does not support hyperruns."
+                    f"Already support superruns in {seen_allow}, "
+                    f"but it's dependency {data_type} does not support superruns."
                 )
             checked |= set((data_type,))
-            if data_type not in inverse_tree:
+            if data_type not in inversed_tree:
                 return checked
-            for d in inverse_tree[data_type]:
-                checked |= check_support_hyperrun(d, checked, seen_allow)
+            for d in inversed_tree[data_type]:
+                checked |= check_support_superrun(d, checked, seen_allow)
             return checked
 
         # use checked set to record the data_type that has been checked
         # to shorten the time of checking
         checked = set()
         for data_type in self.root_data_types:
-            if self._plugin_class_registry[data_type].allow_hyperrun:
+            if self._plugin_class_registry[data_type].allow_superrun:
                 seen_allow = data_type
             else:
                 seen_allow = None
-            checked |= check_support_hyperrun(data_type, checked, seen_allow)
+            checked |= check_support_superrun(data_type, checked, seen_allow)
 
     @classmethod
     def add_method(cls, f):
@@ -2577,7 +2750,7 @@ select_docs = """
     - fully_contained: (default) select things fully contained in the range
     - touching: select things that (partially) overlap with the range
     - skip: Do not select a time range, even if other arguments say so
-:param _chunk_number: For internal use: return data from one chunk.
+:param chunk_number: Load chunk from the dependency according to this dictionary.
 :param progress_bar: Display a progress bar if metedata exists.
 :param multi_run_progress_bar: Display a progress bar for loading multiple runs
 """

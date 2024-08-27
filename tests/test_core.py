@@ -32,6 +32,17 @@ def test_core(allow_multiprocess, max_workers, processor):
     assert bla.dtype == strax.peak_dtype()
 
 
+def test_post_office_state():
+    mystrax = strax.Context(
+        storage=[],
+        register=[Records, Peaks],
+        use_per_run_defaults=True,
+    )
+    components = mystrax.get_components(run_id, "peaks")
+    processor = strax.PROCESSORS["single_thread"](components)
+    processor.post_office.state()
+
+
 def test_multirun():
     for max_workers in [1, 2]:
         mystrax = strax.Context(
@@ -81,7 +92,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         assert sorted(os.listdir(data_dirs[0])) == [f"{prefix}-000000", f"{prefix}-metadata.json"]
 
         # Check metadata got written correctly.
-        metadata = mystrax.get_meta(run_id, "peaks")
+        metadata = mystrax.get_metadata(run_id, "peaks")
         assert len(metadata)
         assert "writing_ended" in metadata
         assert "exception" not in metadata
@@ -104,7 +115,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
             use_per_run_defaults=True,
             register=[Records, Peaks],
         )
-        metadata_2 = mystrax.get_meta(run_id, "peaks")
+        metadata_2 = mystrax.get_metadata(run_id, "peaks")
         assert metadata == metadata_2
 
 
@@ -155,7 +166,7 @@ def test_fuzzy_matching():
         assert st2.list_available("peaks") == [run_id]
 
         # And we can actually load it
-        st2.get_meta(run_id, "peaks")
+        st2.get_metadata(run_id, "peaks")
         st2.get_array(run_id, "peaks")
 
         # Fuzzy for options also works
@@ -173,40 +184,6 @@ def test_fuzzy_matching():
         st.make(run_id, "peaks")
         assert not st.is_stored(run_id, "peaks")
         assert not st.is_stored(run_id, "records")
-
-
-def test_storage_converter():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        st = strax.Context(
-            storage=strax.DataDirectory(temp_dir),
-            register=[Records, Peaks],
-            use_per_run_defaults=True,
-        )
-        st.make(run_id=run_id, targets="peaks")
-
-        with tempfile.TemporaryDirectory() as temp_dir_2:
-            st = strax.Context(
-                storage=[
-                    strax.DataDirectory(temp_dir, readonly=True),
-                    strax.DataDirectory(temp_dir_2),
-                ],
-                register=[Records, Peaks],
-                use_per_run_defaults=True,
-                storage_converter=True,
-            )
-            store_1, store_2 = st.storage
-
-            # Data is now in store 1, but not store 2
-            key = st.key_for(run_id, "peaks")
-            store_1.find(key)
-            with pytest.raises(strax.DataNotAvailable):
-                store_2.find(key)
-
-            st.make(run_id, "peaks", _skip_if_built=False)
-
-            # Data is now in both stores
-            store_1.find(key)
-            store_2.find(key)
 
 
 @processing_conditions
@@ -228,7 +205,7 @@ def test_exception(allow_multiprocess, max_workers, processor):
         # Check exception is recorded in metadata
         # in both its original data type and dependents
         for target in ("peaks", "records"):
-            assert "SomeCrash" in st.get_meta(run_id, target)["exception"]
+            assert "SomeCrash" in st.get_metadata(run_id, target)["exception"]
 
         # Check corrupted data does not load
         st.context_config["forbid_creation_of"] = ("peaks",)
@@ -390,13 +367,16 @@ def test_dtype_mismatch():
 def test_get_single_plugin():
     mystrax = strax.Context(
         storage=[],
-        register=[Records, Peaks],
+        register=[Records, Peaks, PeakClassification],
         use_per_run_defaults=True,
     )
     p = mystrax.get_single_plugin("0", "peaks")
+    p.empty_result()
     assert isinstance(p, Peaks)
     assert len(p.config)
     assert p.config["base_area"] == 0
+    p = mystrax.get_single_plugin("0", "peak_classification")
+    p.empty_result()
 
 
 def test_allow_multiple(targets=("peaks", "records")):
@@ -461,3 +441,46 @@ def test_available_for_run():
                 if len(df):
                     # We haven't made any data
                     assert not sum(df["is_stored"])
+
+
+def test_per_chunk_storage():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st = strax.Context(
+            storage=strax.DataDirectory(temp_dir, deep_scan=True),
+            register=[Records, Peaks],
+            use_per_run_defaults=True,
+        )
+
+        # If per-chunk storage is not for dependencies, DataKey will not be different.
+        key_1st = st.key_for(run_id, "records", chunk_number={"records": [0]})
+        key_2nd = st.key_for(run_id, "records", chunk_number={"records": [1]})
+        assert str(key_1st) == str(key_2nd)
+
+        # If per-chunk storage is for dependencies, savers will not be different.
+        components_1st = st.get_components(run_id, "peaks", chunk_number={"peaks": [0]})
+        components_2nd = st.get_components(run_id, "peaks", chunk_number={"peaks": [1]})
+        assert (
+            components_1st.savers["peaks"][0].dirname == components_2nd.savers["peaks"][0].dirname
+        )
+
+        # Test merge_per_chunk_storage
+        st.make(run_id, "records")
+        n_chunks = len(st.get_metadata(run_id, "records")["chunks"])
+        assert n_chunks > 2
+        for i in range(n_chunks):
+            st.make(run_id, "peaks", chunk_number={"records": [i]})
+        assert not st.is_stored(run_id, "peaks")
+        st.merge_per_chunk_storage(
+            run_id, "peaks", "records", chunk_number_group=[[i] for i in range(n_chunks // 2)]
+        )
+        assert not st.is_stored(run_id, "peaks")
+        st.merge_per_chunk_storage(run_id, "peaks", "records")
+        assert st.is_stored(run_id, "peaks")
+        with pytest.raises(ValueError):
+            st.merge_per_chunk_storage(run_id, "peaks", "records")
+
+        # Per-chunk storage not allowed for some plugins
+        p = type("whatever", (strax.OverlapWindowPlugin,), dict(depends_on="records"))
+        st.register(p)
+        with pytest.raises(ValueError):
+            st.make(run_id, "whatever", chunk_number={"records": [0]})

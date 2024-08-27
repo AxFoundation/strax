@@ -157,7 +157,6 @@ class Records(strax.Plugin):
     parallel = "process"
     depends_on: tuple = tuple()
     dtype = strax.record_dtype()
-
     rechunk_on_save = False
 
     def source_finished(self):
@@ -192,6 +191,7 @@ class Peaks(strax.Plugin):
     depends_on = ("records",)
     dtype = strax.peak_dtype()
     parallel: Union[str, bool] = True
+    allow_superrun = True
 
     def compute(self, records):
         if self.config["give_wrong_dtype"]:
@@ -235,6 +235,7 @@ class PeakClassification(strax.Plugin):
     depends_on = ("peaks",)
     rechunk_on_save = True
     save_when = immutabledict({k: strax.SaveWhen.ALWAYS for k in provides})
+    allow_superrun = True
 
     def infer_dtype(self):
         peaks_dtype = strax.time_fields + [("type", np.int8, "Classification of the peak.")]

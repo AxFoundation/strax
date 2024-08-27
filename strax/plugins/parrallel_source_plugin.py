@@ -87,6 +87,7 @@ class ParallelSourcePlugin(Plugin):
                     del savers[d]
 
         p = cls(depends_on=sub_plugins[start_from].depends_on)
+        p.run_id = sub_plugins[start_from]._run_id
         p.sub_plugins = sub_plugins
         assert len(outputs_to_send)
         p.provides = tuple(outputs_to_send)
@@ -185,7 +186,9 @@ class ParallelSourcePlugin(Plugin):
             results = r0 = results[self.provides[0]]
             assert isinstance(r0, strax.Chunk)
 
-        return self._fix_output(results, start=r0.start, end=r0.end)
+        return self._fix_output(
+            results, start=r0.start, end=r0.end, superrun=r0.superrun, subruns=r0.subruns
+        )
 
     def cleanup(self, wait_for):
         print(f"{self.__class__.__name__} terminated. Waiting for {len(wait_for)} pending futures.")

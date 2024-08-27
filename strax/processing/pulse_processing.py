@@ -152,7 +152,7 @@ def record_links(records):
             next_record[last_i] = i
 
         # (If neither matches, this is a continuing record, but the starting
-        #  record has been cut away (e.g. for data reduction))
+        # record has been cut away (e.g. for data reduction))
         last_record_seen[ch] = i
         expected_next_start[ch] = r["time"] + samples_per_record * r["dt"]
 
