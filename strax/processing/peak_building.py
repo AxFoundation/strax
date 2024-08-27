@@ -195,6 +195,9 @@ def simple_summed_waveform(records, containers, to_pe):
     if not len(containers):
         return
 
+    assert np.all(records["dt"] != 0), "Records dt is not allowed to be zero"
+    assert np.all(containers["dt"] != 0), "Containers dt is not allowed to be zero"
+
     touching_windows = strax.touching_windows(records, containers)
     _simple_summed_waveform(records, containers, touching_windows, to_pe)
 
