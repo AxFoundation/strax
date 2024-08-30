@@ -1,6 +1,5 @@
 import time
 import logging
-import warnings
 import fnmatch
 import itertools
 import json
@@ -371,7 +370,7 @@ class Context:
                 if old_plugin == currently_registered:
                     # Must be equal here, because we are only looking for the remanants which were
                     # not overwritten above.
-                    warnings.warn(
+                    self.log.warning(
                         "Provides of multi-output plugins overlap, deregister old plugins"
                         f" {old_plugin}."
                     )
@@ -1092,8 +1091,6 @@ class Context:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
-        plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
-
         _is_superrun = run_id.startswith("_")
         if len(targets) > 1 and _combining_subruns:
             raise ValueError("Combining subruns is only supported for a single target")
@@ -1101,6 +1098,20 @@ class Context:
             raise ValueError("Per chunk processing is only allowed when not processing superrun.")
         if not _is_superrun and _combining_subruns:
             raise ValueError("Combining subruns is only supported for superruns.")
+
+        sources = set().union(
+            *[s for s in (self.get_source(run_id, target) for target in targets) if s is not None]
+        )
+        if chunk_number is not None:
+            chunk_number_keys = set(chunk_number.keys())
+            if not chunk_number_keys <= sources:
+                self.log.warning(
+                    f"Chunk number is specified for dependencies {chunk_number_keys} "
+                    f"but {targets} are made from stored dependencies {sources}. "
+                    "So some values in chunk_number will be ignored."
+                )
+
+        plugins = self._get_plugins(targets, run_id, chunk_number=chunk_number)
 
         allow_superruns = [plugins[target_i].allow_superrun for target_i in targets]
         if _is_superrun and sum(allow_superruns) not in [0, len(targets)]:
@@ -2212,7 +2223,7 @@ class Context:
             save_when = save_when[target]
 
         if save_when < strax.SaveWhen.ALWAYS and detailed:
-            warnings.warn(
+            self.log.warning(
                 f"{target} is not set to always be saved. "
                 "This is probably because it can be trivially made from other data. "
                 f"{target} depends on {plugin.depends_on}. Check if these are stored."
