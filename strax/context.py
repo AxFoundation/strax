@@ -1279,7 +1279,7 @@ class Context:
                 key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
                 # Here we just check the availability of key,
                 # chunk_number for _get_partial_loader_for can be None
-                if self._get_partial_loader_for(key, time_range=time_range, chunk_number=None):
+                if self._get_partial_loader_for(key, time_range=time_range):
                     return
 
                 if not self._target_should_be_saved(
