@@ -4,6 +4,7 @@ import fnmatch
 import itertools
 import json
 from functools import partial
+from copy import deepcopy
 import types
 import typing as ty
 from enum import IntEnum
@@ -719,16 +720,18 @@ class Context:
         If any item changes in the config, so does this hash.
 
         """
-        self._base_hash_on_config = self.config.copy()
+        # do not set _base_hash_on_config as an attribute of Context
+        # because it might be changed across threads
+        _base_hash_on_config = deepcopy(self.config)
         # Also take into account the versions of the plugins registered
-        self._base_hash_on_config.update(
+        _base_hash_on_config.update(
             {
                 data_type: (plugin.version(), plugin.compressor, plugin.input_timeout)
                 for data_type, plugin in self._plugin_class_registry.items()
                 if not data_type.startswith(TEMP_DATA_TYPE_PREFIX)
             }
         )
-        return strax.deterministic_hash(self._base_hash_on_config)
+        return strax.deterministic_hash(_base_hash_on_config)
 
     def _plugins_are_cached(
         self,
