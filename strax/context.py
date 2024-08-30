@@ -1244,7 +1244,7 @@ class Context:
             # Now we should check whether we meet the saving requirements.
             current_plugin_to_savers = [target_i]
             if not self._target_should_be_saved(target_plugin, target_i, targets, save):
-                if target_plugin.multi_output > 1:
+                if target_plugin.multi_output:
                     # In case the plugin has more than a single provides we also have to check
                     # whether any of the other data_types should be stored. Hence only remove
                     # the current traget from the list of plugins_to_savers.
