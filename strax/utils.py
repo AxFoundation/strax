@@ -612,12 +612,7 @@ def multi_run(
             pbar.close()
             return None
 
-        if add_run_id_field:
-            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
-        else:
-            # In case we do not have any run_id sort according to time:
-            start_of_runs = [np.min(res["time"]) for res in final_result]
-            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
+        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(

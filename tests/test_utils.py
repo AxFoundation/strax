@@ -235,5 +235,10 @@ class TestMultiRun(unittest.TestCase):
         rr_multi = self.context.get_array(self.run_ids, "records", max_worker=max_worker)
         assert np.all(np.diff(rr_multi["run_id"].astype(np.int8)) >= 0)
 
+        # Test always False selection
+        self.context.get_array(
+            self.run_ids, "records", max_worker=max_worker, selection="(time>42)&(time<42)"
+        )
+
     def tearDown(self):
         shutil.rmtree(self.tempdir)
