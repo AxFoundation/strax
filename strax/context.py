@@ -1077,7 +1077,7 @@ class Context:
         time_range=None,
         chunk_number=None,
         multi_run_progress_bar=False,
-        _combining_subruns=False,
+        combining=False,
     ) -> strax.ProcessorComponents:
         """Return components for setting up a processor.
 
@@ -1092,11 +1092,11 @@ class Context:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         is_superrun = run_id.startswith("_")
-        if len(targets) > 1 and _combining_subruns:
+        if len(targets) > 1 and combining:
             raise ValueError("Combining subruns is only supported for a single target")
         if is_superrun and chunk_number is not None:
             raise ValueError("Per chunk processing is only allowed when not processing superrun.")
-        if not is_superrun and _combining_subruns:
+        if not is_superrun and combining:
             raise ValueError("Combining subruns is only supported for superruns.")
 
         sources = set().union(
@@ -1144,7 +1144,7 @@ class Context:
             target_plugin = plugins[target_i]
 
             # Can we load this data?
-            key = self.key_for(run_id, target_i, chunk_number=chunk_number)
+            key = self.key_for(run_id, target_i, chunk_number=chunk_number, combining=combining)
             if chunk_number is not None and target_i in chunk_number:
                 _chunk_number = chunk_number[target_i]
             else:
@@ -1154,7 +1154,7 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and is_superrun and not allow_superrun or _combining_subruns:
+            if not loader and is_superrun and not allow_superrun or combining:
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1173,6 +1173,8 @@ class Context:
 
                 ldrs = []
                 for subrun in sub_run_spec:
+                    # combining is by default False
+                    # so we can not combine subrun which is superrun generated in combining mode
                     sub_key = self.key_for(subrun, target_i, chunk_number=chunk_number)
 
                     if sub_run_spec[subrun] == "all":
@@ -1273,13 +1275,15 @@ class Context:
                 return
 
             # Save the target and any other outputs of the plugin.
-            if not _combining_subruns:
+            if not combining:
                 data_type_to_save = set(current_plugin_to_savers + list(target_plugin.provides))
             else:
                 # In case of a combining mode we are only interested in the specified target
                 data_type_to_save = set(current_plugin_to_savers)
             for d_to_save in data_type_to_save:
-                key = self.key_for(run_id, d_to_save, chunk_number=chunk_number)
+                key = self.key_for(
+                    run_id, d_to_save, chunk_number=chunk_number, combining=combining
+                )
                 # Here we just check the availability of key,
                 # chunk_number for _get_partial_loader_for can be None
                 if self._get_partial_loader_for(key, time_range=time_range):
@@ -1293,7 +1297,9 @@ class Context:
                     assert target_plugin.multi_output
                     continue
 
-                savers = self._add_saver(savers, d_to_save, run_id, target_plugin)
+                savers = self._add_saver(
+                    savers, d_to_save, run_id, target_plugin, combining=combining
+                )
 
         for target_i in targets:
             check_cache(target_i)
@@ -1325,7 +1331,7 @@ class Context:
             targets=strax.to_str_tuple(final_plugin),
         )
 
-    def get_data_key(self, run_id, target, lineage):
+    def get_data_key(self, run_id, target, lineage, combining=False):
         """Get datakey for a given run_id, target and lineage.
 
         If super is detected, the subruns information are added to the key.
@@ -1335,7 +1341,7 @@ class Context:
             sub_run_spec = self.run_metadata(run_id, projection=["sub_run_spec"])["sub_run_spec"]
         else:
             sub_run_spec = None
-        return strax.DataKey(run_id, target, lineage, subruns=sub_run_spec)
+        return strax.DataKey(run_id, target, lineage, subruns=sub_run_spec, combining=combining)
 
     def _add_saver(
         self,
@@ -1343,6 +1349,7 @@ class Context:
         d_to_save: str,
         run_id,
         target_plugin: strax.Plugin,
+        combining: bool = False,
     ):
         """Adds savers to already existing savers. Checks if data_type can be stored in any storage
         frontend.
@@ -1353,7 +1360,7 @@ class Context:
         :return: Updated savers dictionary.
 
         """
-        key = self.get_data_key(run_id, d_to_save, target_plugin.lineage)
+        key = self.get_data_key(run_id, d_to_save, target_plugin.lineage, combining=combining)
         for sf in self._sorted_storage:
             if sf.readonly:
                 continue
@@ -1504,7 +1511,7 @@ class Context:
         multi_run_progress_bar=True,
         chunk_number=None,
         processor=None,
-        _combining_subruns=False,
+        combining=False,
         **kwargs,
     ) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
@@ -1566,7 +1573,7 @@ class Context:
             time_range=time_range,
             chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
-            _combining_subruns=_combining_subruns,
+            combining=combining,
         )
 
         # Cleanup the temp plugins
@@ -1714,6 +1721,7 @@ class Context:
         max_workers=None,
         _skip_if_built=True,
         chunk_number=None,
+        combining=False,
         **kwargs,
     ) -> None:
         """Compute target for run_id. Returns nothing (None).
@@ -1740,7 +1748,9 @@ class Context:
                 **kwargs,
             )
 
-        if _skip_if_built and self.is_stored(run_ids[0], targets, chunk_number=chunk_number):
+        if _skip_if_built and self.is_stored(
+            run_ids[0], targets, chunk_number=chunk_number, combining=combining
+        ):
             return
 
         for _ in self.get_iter(
@@ -1749,6 +1759,7 @@ class Context:
             save=save,
             max_workers=max_workers,
             chunk_number=chunk_number,
+            combining=combining,
             **kwargs,
         ):
             pass
@@ -1949,7 +1960,12 @@ class Context:
             for run_id in strax.to_str_tuple(run_ids):
                 if zarray is not None and run_id in zarray.attrs.get("RUNS", {}):
                     continue
-                key = self.key_for(run_id, target, chunk_number=kwargs.get("chunk_number", None))
+                key = self.key_for(
+                    run_id,
+                    target,
+                    chunk_number=kwargs.get("chunk_number", None),
+                    combining=kwargs.get("combining", None),
+                )
                 INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
                 for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
                     end_idx = idx + chunk.data.size
@@ -1964,7 +1980,7 @@ class Context:
             zarray.attrs["RUNS"] = dict(zarray.attrs.get("RUNS", {}), **INSERTED)
         return group
 
-    def key_for(self, run_id, target, chunk_number=None):
+    def key_for(self, run_id, target, chunk_number=None, combining=False):
         """Get the DataKey for a given run and a given target plugin. The DataKey is inferred from
         the plugin lineage. The lineage can come either from the _fixed_plugin_cache or computed on
         the fly.
@@ -1988,9 +2004,9 @@ class Context:
             plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)
 
         lineage = plugins[target].lineage
-        return self.get_data_key(run_id, target, lineage)
+        return self.get_data_key(run_id, target, lineage, combining=combining)
 
-    def get_metadata(self, run_id, target, chunk_number=None) -> dict:
+    def get_metadata(self, run_id, target, chunk_number=None, combining=False) -> dict:
         """Return metadata for target for run_id, or raise DataNotAvailable if data is not yet
         available.
 
@@ -1998,7 +2014,7 @@ class Context:
         :param target: data type to get
 
         """
-        key = self.key_for(run_id, target, chunk_number=chunk_number)
+        key = self.key_for(run_id, target, chunk_number=chunk_number, combining=combining)
         for sf in self._sorted_storage:
             try:
                 return sf.get_metadata(key, **self._find_options)
@@ -2141,7 +2157,9 @@ class Context:
         self._run_defaults_cache[run_id] = defs
         return defs
 
-    def is_stored(self, run_id, target, detailed=False, chunk_number=None, **kwargs):
+    def is_stored(
+        self, run_id, target, detailed=False, chunk_number=None, combining=False, **kwargs
+    ):
         """Return whether data type target has been saved for run_id through any of the registered
         storage frontends.
 
@@ -2151,7 +2169,12 @@ class Context:
         """
         if isinstance(target, (tuple, list)):
             return all(
-                [self.is_stored(run_id, t, chunk_number=chunk_number, **kwargs) for t in target]
+                [
+                    self.is_stored(
+                        run_id, t, chunk_number=chunk_number, combining=combining, **kwargs
+                    )
+                    for t in target
+                ]
             )
 
         # If any new options given, replace the current context
@@ -2162,7 +2185,9 @@ class Context:
             self = self.new_context(**kwargs)
 
         for sf in self._sorted_storage:
-            if self._is_stored_in_sf(run_id, target, sf, chunk_number=chunk_number):
+            if self._is_stored_in_sf(
+                run_id, target, sf, chunk_number=chunk_number, combining=combining
+            ):
                 return True
         # None of the frontends has the data
 
@@ -2534,6 +2559,7 @@ class Context:
         target,
         storage_frontend: strax.StorageFrontend,
         chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+        combining: bool = False,
     ) -> bool:
         """Check if the storage frontend has the requested datakey for the run_id and target.
 
@@ -2542,7 +2568,7 @@ class Context:
         :return: if the frontend has the key or not.
 
         """
-        key = self.key_for(run_id, target, chunk_number=chunk_number)
+        key = self.key_for(run_id, target, chunk_number=chunk_number, combining=combining)
         try:
             storage_frontend.find(key, **self._find_options)
             return True

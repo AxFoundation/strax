@@ -123,7 +123,7 @@ class TestSuperRuns(unittest.TestCase):
         # When we make superrun, subruns of the targeted data_type should
         # be first made individually and combined.
         components = self.context.get_components(
-            self.superrun_name, "peak_classification", _combining_subruns=True
+            self.superrun_name, "peak_classification", combining=True
         )
         assert len(components.loaders) == 1
         assert len(components.savers) == 1
@@ -132,7 +132,7 @@ class TestSuperRuns(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.context.get_components(
-                self.superrun_name, ("peaks", "peak_classification"), _combining_subruns=True
+                self.superrun_name, ("peaks", "peak_classification"), combining=True
             )
 
     def test_create_and_load_superruns(self):
@@ -305,7 +305,7 @@ class TestSuperRuns(unittest.TestCase):
         """Tests if only superrun is written to new sf if subruns already exist in different sf."""
         self.context.storage[0].readonly = True
         self.context.storage.append(strax.DataDirectory(self.tempdir2, provide_run_metadata=True))
-        self.context.make(self.superrun_name, "peaks", _combining_subruns=True)
+        self.context.make(self.superrun_name, "peaks")
         superrun_sf = self.context.storage.pop(1)
         # Check if first sf contains superrun, it should not:
         assert not self.context.is_stored(self.superrun_name, "peaks")
@@ -322,9 +322,9 @@ class TestSuperRuns(unittest.TestCase):
             self.context.get_array(self.superrun_name, "peaks", chunk_number={"raw_records": [0]})
 
     def test_bare_combining_subruns(self):
-        """Test that _combining_subruns does not work with non-superrun."""
+        """Test that combining does not work with non-superrun."""
         with self.assertRaises(ValueError):
-            self.context.get_array(self.subrun_ids[0], "peaks", _combining_subruns=True)
+            self.context.get_array(self.subrun_ids[0], "peaks", combining=True)
 
     def test_superrun_mutiple_targets(self):
         """Test that multiple targets does not work with superrun."""
@@ -340,8 +340,10 @@ class TestSuperRuns(unittest.TestCase):
         self.context.tree
         self.context.inversed_tree
         self.context.check_superrun()
-        sum_super = self.context.get_array(self.superrun_name, "sum")
-        _sum_super = self.context.get_array(self.superrun_name, "sum", _combining_subruns=True)
+        sum_super = self.context.get_array(self.superrun_name, "sum", save="sum")
+        assert self.context.is_stored(self.superrun_name, "sum")
+        assert not self.context.is_stored(self.superrun_name, "sum", combining=True)
+        _sum_super = self.context.get_array(self.superrun_name, "sum", save="sum", combining=True)
 
         # superruns will still load and make subruns together
         assert np.unique(sum_super["sum"]).size == 1
