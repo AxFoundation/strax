@@ -1964,7 +1964,7 @@ class Context:
                     run_id,
                     target,
                     chunk_number=kwargs.get("chunk_number", None),
-                    combining=kwargs.get("combining", None),
+                    combining=kwargs.get("combining", False),
                 )
                 INSERTED[run_id] = dict(start_idx=idx, end_idx=idx, lineage_hash=key.lineage_hash)
                 for chunk in self.get_iter(run_id, target, progress_bar=progress_bar, **kwargs):
