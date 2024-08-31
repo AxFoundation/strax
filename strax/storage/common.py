@@ -12,7 +12,7 @@ import time
 import typing
 import warnings
 from enum import IntEnum
-from typing import List
+from typing import Optional, Dict, Union, List
 import numpy as np
 
 import strax
@@ -38,16 +38,40 @@ class DataKey:
     _lineage: dict
     _lineage_hash: str
 
-    def __init__(self, run_id, data_type, lineage, subruns=None):
+    def __init__(
+        self,
+        run_id,
+        data_type,
+        lineage,
+        subruns: Optional[Dict[str, Union[str, List[int]]]] = None,
+        combining: bool = False,
+    ):
         if run_id.startswith("_") and subruns is None:
             raise ValueError(f"You must assign subruns information for superrun {run_id}!")
         self.run_id = run_id
         self.data_type = data_type
         self.lineage = lineage
+
+        # Check arguments
+        if subruns is not None:
+            if not isinstance(subruns, dict):
+                raise ValueError(f"Subruns must be a dictionary, not {type(subruns)}")
+        if not isinstance(combining, bool):
+            raise ValueError(f"combining must be a boolean, not {type(combining)}")
+        if not self.is_superrun and combining:
+            raise ValueError(f"Combining subruns is only allowed for superruns, not for {run_id}")
+        if self.is_superrun and subruns is None:
+            raise ValueError(f"Subruns must be assigned for run {run_id}")
+
         self.subruns = subruns
+        self.combining = combining
 
     def __repr__(self):
         return "-".join([self._run_id, self.data_type, self.lineage_hash])
+
+    @property
+    def is_superrun(self):
+        return self.run_id is None or self.run_id.startswith("_")
 
     @property
     def lineage(self):
@@ -65,11 +89,12 @@ class DataKey:
 
     @property
     def _run_id(self):
-        if self.subruns is not None:
-            _run_id = self.run_id + "_" + strax.deterministic_hash(self.subruns)
+        suffix = ""
+        if self.is_superrun:
+            suffix = "_" + strax.deterministic_hash((self.subruns, self.combining))
         else:
-            _run_id = self.run_id
-        return _run_id
+            suffix = ""
+        return self.run_id + suffix
 
 
 @export
