@@ -34,7 +34,7 @@ def test_core(allow_multiprocess, max_workers, processor):
 
 @processing_conditions
 def test_core_df(allow_multiprocess, max_workers, processor):
-    """Test that get_df works with N-dimensional data"""
+    """Test that get_df works with N-dimensional data."""
     mystrax = strax.Context(
         storage=[],
         register=[Records, Peaks],

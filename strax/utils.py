@@ -814,16 +814,18 @@ def convert_tuple_to_list(init_func_input):
         # if not a container, return. i.e. int, float, bytes, str etc.
         return func_input
 
+
 @export
 def convert_structured_array_to_df(structured_array):
-    """
-    Convert a structured numpy array to a pandas DataFrame.
+    """Convert a structured numpy array to a pandas DataFrame.
+
     Parameters:
     structured_array (numpy.ndarray): The structured array to be converted.
     Returns:
     pandas.DataFrame: The converted DataFrame.
+
     """
-    
+
     data_dict = {}
     for name in structured_array.dtype.names:
         col = structured_array[name]

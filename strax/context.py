@@ -1913,7 +1913,6 @@ class Context:
 
         return strax.convert_structured_array_to_df(df)
 
-
     def get_zarr(
         self,
         run_ids,
