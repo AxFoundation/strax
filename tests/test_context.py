@@ -129,7 +129,7 @@ def test_accumulate():
         )
         channels_from_array = np.sum(context.get_array(run_id, "records")["channel"])
         channels_accumulate = context.accumulate(run_id, "records", fields="channel")
-        n_chunks = len(context.get_meta(run_id, "records")["chunks"])
+        n_chunks = len(context.get_metadata(run_id, "records")["chunks"])
     channels = channels_accumulate["channel"]
     assert n_chunks == channels_accumulate["n_chunks"]
     assert channels_from_array == channels
@@ -444,7 +444,7 @@ class TestContext(unittest.TestCase):
         Set auto-inferring version by setting __version__ = None for a plugin.
 
         """
-        st = self.get_context(True)
+        st = self.get_context(False)
 
         class DevelopRecords(Records):
             __version__ = None
@@ -480,6 +480,10 @@ class TestContext(unittest.TestCase):
 
         st3 = st.new_context(register=DevelopRecords)
         assert key.lineage != st3.key_for(run_id, "records").lineage
+
+        st.set_context_config(dict(allow_multiprocess=True, forbid_creation_of=tuple()))
+        # Test that multithreaded processing works when the __version__ is None
+        st.get_array([str(r) for r in range(10)], "records", max_workers=10)
 
     @staticmethod
     def get_dummy_peaks_dependency():

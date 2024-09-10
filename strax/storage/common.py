@@ -12,7 +12,7 @@ import time
 import typing
 import warnings
 from enum import IntEnum
-from typing import List
+from typing import Optional, Dict, Union, List
 import numpy as np
 
 import strax
@@ -38,13 +38,40 @@ class DataKey:
     _lineage: dict
     _lineage_hash: str
 
-    def __init__(self, run_id, data_type, lineage):
+    def __init__(
+        self,
+        run_id,
+        data_type,
+        lineage,
+        subruns: Optional[Dict[str, Union[str, List[int]]]] = None,
+        combining: bool = False,
+    ):
+        if run_id.startswith("_") and subruns is None:
+            raise ValueError(f"You must assign subruns information for superrun {run_id}!")
         self.run_id = run_id
         self.data_type = data_type
         self.lineage = lineage
 
+        # Check arguments
+        if subruns is not None:
+            if not isinstance(subruns, dict):
+                raise ValueError(f"Subruns must be a dictionary, not {type(subruns)}")
+        if not isinstance(combining, bool):
+            raise ValueError(f"combining must be a boolean, not {type(combining)}")
+        if not self.is_superrun and combining:
+            raise ValueError(f"Combining subruns is only allowed for superruns, not for {run_id}")
+        if self.is_superrun and subruns is None:
+            raise ValueError(f"Subruns must be assigned for run {run_id}")
+
+        self.subruns = subruns
+        self.combining = combining
+
     def __repr__(self):
-        return "-".join([self.run_id, self.data_type, self.lineage_hash])
+        return "-".join([self._run_id, self.data_type, self.lineage_hash])
+
+    @property
+    def is_superrun(self):
+        return self.run_id is None or self.run_id.startswith("_")
 
     @property
     def lineage(self):
@@ -59,6 +86,15 @@ class DataKey:
     def lineage_hash(self):
         """Deterministic hash of the lineage."""
         return self._lineage_hash
+
+    @property
+    def _run_id(self):
+        suffix = ""
+        if self.is_superrun:
+            suffix = "_" + strax.deterministic_hash((self.subruns, self.combining))
+        else:
+            suffix = ""
+        return self.run_id + suffix
 
 
 @export
@@ -485,7 +521,7 @@ class StorageBackend:
             data_type=metadata["data_type"],
             data_kind=metadata["data_kind"],
             dtype=dtype,
-            target_size_mb=metadata.get("chunk_target_size_mb", strax.default_chunk_size_mb),
+            target_size_mb=metadata.get("chunk_target_size_mb", strax.DEFAULT_CHUNK_SIZE_MB),
         )
 
         required_chunk_metadata_fields = "start end run_id".split()
@@ -544,10 +580,9 @@ class StorageBackend:
                 f"but chunk_info {chunk_info} says {chunk_info['n']}"
             )
 
-        _is_superrun = chunk_info["run_id"].startswith("_")
-        subruns = None
-        if _is_superrun:
-            subruns = chunk_info["subruns"]
+        subruns = chunk_info.get("subruns", None)
+        if chunk_info["run_id"].startswith("_") and subruns is None:
+            raise ValueError(f"Superrun {chunk_info} has no subruns information!")
 
         result = strax.Chunk(
             start=chunk_info["start"],
@@ -571,7 +606,7 @@ class StorageBackend:
 
     def saver(self, key, metadata, **kwargs):
         """Return saver for data described by key."""
-        metadata.setdefault("compressor", "blosc")  # TODO wrong place?
+        metadata.setdefault("compressor", "blosc")  # TODO: wrong place?
         metadata["strax_version"] = strax.__version__
         if "dtype" in metadata:
             metadata["dtype"] = metadata["dtype"].descr.__repr__()
@@ -648,22 +683,18 @@ class Saver:
 
         try:
             while not exhausted:
-                chunk = None
-
                 try:
-                    chunk = rechunker.receive(next(source))
+                    chunks = rechunker.receive(next(source))
                 except StopIteration:
                     exhausted = True
-                    chunk = rechunker.flush()
+                    chunks = rechunker.flush()
 
-                if chunk is None:
-                    continue
-
-                new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
-                pending = [f for f in pending if not f.done()]
-                if new_f is not None:
-                    pending += [new_f]
-                chunk_i += 1
+                for chunk in chunks:
+                    new_f = self.save(chunk=chunk, chunk_i=chunk_i, executor=executor)
+                    pending = [f for f in pending if not f.done()]
+                    if new_f is not None:
+                        pending += [new_f]
+                    chunk_i += 1
 
         except strax.MailboxKilled:
             # Write exception (with close), but exit gracefully.

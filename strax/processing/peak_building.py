@@ -189,6 +189,56 @@ def store_downsampled_waveform(
 
 
 @export
+def simple_summed_waveform(records, containers, to_pe):
+    """Computes simple (downsampled) summed waveform based on raw data touching a certain container.
+
+    :param container: Things for which summed waveform should be
+        computed. Must contain data field of desired length.
+    :param records: Record infromation which should be used to compute
+        summed waveform.
+
+    Note: To keep this function simple the floating part of the baseline
+        is only added if the data field in records is not zero.
+        This will lead to a biased representation of the summed waveform!
+        However, this bias is small for shape estimates, but the total
+        charge of the signal should be estimated in an unbiased way.
+
+    """
+    if not len(containers):
+        return
+
+    assert np.all(records["dt"] != 0), "Records dt is not allowed to be zero"
+    assert np.all(containers["dt"] != 0), "Containers dt is not allowed to be zero"
+
+    touching_windows = strax.touching_windows(records, containers)
+    _simple_summed_waveform(records, containers, touching_windows, to_pe)
+
+
+@numba.njit
+def _simple_summed_waveform(records, containers, touching_windows, to_pe):
+    summed_wf_buffer = np.zeros(2 * containers["length"].max(), np.float32)
+    for (tw_s, tw_e), container in zip(touching_windows, containers):
+        records_in_wf = records[tw_s:tw_e]
+
+        for r in records_in_wf:
+            (r_start, r_end), (c_start, c_end) = strax.overlap_indices(
+                r["time"] // r["dt"],
+                r["length"],
+                container["time"] // container["dt"],
+                container["length"],
+            )
+            bl_fpart = r["baseline"] % 1
+            _is_not_zero = r["data"][r_start:r_end] != 0
+            bl_fpart = _is_not_zero.astype(np.float32) * bl_fpart
+            summed_wf_buffer[c_start:c_end] += (r["data"][r_start:r_end] + bl_fpart) * to_pe[
+                r["channel"]
+            ]
+
+        strax.store_downsampled_waveform(container, summed_wf_buffer)
+        summed_wf_buffer[:] = 0
+
+
+@export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(
     peaks,

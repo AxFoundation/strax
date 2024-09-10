@@ -6,10 +6,11 @@ import numba
 import strax
 
 export, __all__ = strax.exporter()
-__all__.extend(["default_chunk_size_mb"])
+__all__.extend(["DEFAULT_CHUNK_SIZE_MB", "DEFAULT_CHUNK_SPLIT_NS"])
 
 
-default_chunk_size_mb = 200
+DEFAULT_CHUNK_SIZE_MB = 200
+DEFAULT_CHUNK_SPLIT_NS = 1000
 
 
 @export
@@ -23,7 +24,6 @@ class Chunk:
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
-    subruns: dict
     start: int
     end: int
 
@@ -41,7 +41,8 @@ class Chunk:
         end,
         data,
         subruns=None,
-        target_size_mb=default_chunk_size_mb,
+        superrun=None,
+        target_size_mb=DEFAULT_CHUNK_SIZE_MB,
     ):
         self.data_type = data_type
         self.data_kind = data_kind
@@ -90,12 +91,7 @@ class Chunk:
                     f"Attempt to create chunk {self} whose data ends late at {data_ends_at}"
                 )
 
-        # This is commented out for performance, but it's perhaps useful
-        # when debugging
-        # if len(data) > 1:
-        #     if min(np.diff(data['time'])) < 0:
-        #         raise ValueError(f"Attempt to create chunk {self} "
-        #                          "whose data is not sorted by time.")
+        self.superrun = superrun
 
     def __len__(self):
         return len(self.data)
@@ -106,9 +102,9 @@ class Chunk:
 
     def __repr__(self):
         return (
-            f"[{self.run_id}.{self.data_type}: "
+            f"({self.run_id}.{self.data_type}: "
             f"{self._t_fmt(self.start)} - {self._t_fmt(self.end)}, "
-            f"{len(self)} items, " + "{0:.1f} MB/s]".format(self._mbs())
+            f"{len(self)} items, " + "{0:.1f} MB/s)".format(self._mbs())
         )
 
     @property
@@ -122,6 +118,22 @@ class Chunk:
     @property
     def is_superrun(self):
         return bool(self.subruns) and self.run_id.startswith("_")
+
+    @property
+    def subruns(self):
+        return self._subruns
+
+    @subruns.setter
+    def subruns(self, subruns):
+        if isinstance(subruns, dict) and None in subruns:
+            raise ValueError(
+                f"Attempt to create chunk {self} with None as run_id in subrun {subruns}"
+            )
+        if subruns is None:
+            self._subruns = None
+        else:
+            self._subruns = dict(sorted(subruns.items(), key=lambda x: x[1]["start"]))
+            _sorted_subruns_check(self._subruns)
 
     @property
     def first_subrun(self):
@@ -139,13 +151,41 @@ class Chunk:
 
     def _get_subrun(self, index):
         """Returns subrun according to position in chunk."""
-        subrun_id = list(self.subruns.keys())[index]
+        run_id = list(self.subruns.keys())[index]
         _subrun = {
-            "run_id": subrun_id,
-            "start": self.subruns[subrun_id]["start"],
-            "end": self.subruns[subrun_id]["end"],
+            "run_id": run_id,
+            "start": self.subruns[run_id]["start"],
+            "end": self.subruns[run_id]["end"],
         }
         return _subrun
+
+    @property
+    def superrun(self):
+        return self._superrun
+
+    @superrun.setter
+    def superrun(self, superrun):
+        """Superrun can only be None or dict with non-None keys."""
+        if not isinstance(superrun, dict) and superrun is not None:
+            raise ValueError(
+                "When creating chunk, superrun can only be dict or None. "
+                f"But got {superrun} for {self}."
+            )
+        if superrun is None:
+            superrun = {self.run_id: {"start": self.start, "end": self.end}}
+        if len(superrun) == 0:
+            raise ValueError(f"Attempt to create chunk {self} with empty superrun")
+        if None in superrun:
+            raise ValueError(
+                f"Attempt to create chunk {self} with None as run_id in superrun {superrun}"
+            )
+        # The only chance self.run_id to be None is that self is concatenated from different runs
+        if len(superrun) == 1 and self.run_id is None:
+            raise ValueError(
+                f"If superrun {superrun} of {self} has only one run_id, run_id should be provided."
+            )
+        self._superrun = dict(sorted(superrun.items(), key=lambda x: x[1]["start"]))
+        _sorted_subruns_check(self._superrun)
 
     def _mbs(self):
         if self.duration:
@@ -173,24 +213,40 @@ class Chunk:
             data1, data2, t = split_array(data=self.data, t=t, allow_early_split=allow_early_split)
 
         common_kwargs = dict(
-            run_id=self.run_id,
             dtype=self.dtype,
             data_type=self.data_type,
             data_kind=self.data_kind,
             target_size_mb=self.target_size_mb,
         )
 
+        subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
+        # If the superrun is split and the fragment cover only one run,
+        # you need to recover the run_id
+        if superrun_first_chunk is None or len(superrun_first_chunk) == 1:
+            run_id_first_chunk = list(self.superrun.keys())[0]
+        else:
+            run_id_first_chunk = self.run_id
+        if superrun_second_chunk is None or len(superrun_second_chunk) == 1:
+            run_id_second_chunk = list(self.superrun.keys())[-1]
+        else:
+            run_id_second_chunk = self.run_id
+
         c1 = strax.Chunk(
             start=self.start,
             end=max(self.start, t),  # type: ignore
             data=data1,
-            **common_kwargs,
+            subruns=subruns_first_chunk,
+            superrun=superrun_first_chunk,
+            **{**common_kwargs, "run_id": run_id_first_chunk},
         )
         c2 = strax.Chunk(
             start=max(self.start, t),  # type: ignore
             end=max(t, self.end),  # type: ignore
             data=data2,
-            **common_kwargs,
+            subruns=subruns_second_chunk,
+            superrun=superrun_second_chunk,
+            **{**common_kwargs, "run_id": run_id_second_chunk},
         )
         return c1, c2
 
@@ -241,11 +297,12 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
     @classmethod
-    def concatenate(cls, chunks, allow_hyperrun=False):
+    def concatenate(cls, chunks, allow_superrun=False):
         """Create chunk by concatenating chunks of same data type You can pass None's, they will be
         ignored."""
         chunks = [c for c in chunks if c is not None]
@@ -261,13 +318,18 @@ class Chunk:
 
         run_ids = [c.run_id for c in chunks]
 
-        if len(set(run_ids)) != 1 and not allow_hyperrun:
+        if len(set(run_ids)) != 1 and not allow_superrun:
             raise ValueError(
                 f"Cannot concatenate {data_type} chunks with different run ids: {run_ids}"
             )
 
-        run_id = run_ids[0]
-        subruns = _update_subruns_in_chunk(chunks)
+        if len(set(run_ids)) == 1:
+            run_id = run_ids[0]
+            superrun = None
+        else:
+            run_id = None
+            superrun = _merge_superrun_in_chunk(chunks)
+        subruns = _merge_subruns_in_chunk(chunks)
 
         prev_end = 0
         for c in chunks:
@@ -285,6 +347,7 @@ class Chunk:
             data_kind=chunks[0].data_kind,
             run_id=run_id,
             subruns=subruns,
+            superrun=superrun,
             data=np.concatenate([c.data for c in chunks]),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -376,50 +439,114 @@ def split_array(data, t, allow_early_split=False):
     return data[:splittable_i], data[splittable_i:], t
 
 
-@export
-def transform_chunk_to_superrun_chunk(superrun_id, chunk):
-    """Function which transforms/creates a new superrun chunk from subrun chunk.
+def _sorted_subruns_check(subruns):
+    """Check if subruns are not overlapping."""
+    if subruns is None:
+        return
+    runs_start_end = list(subruns.values())
+    for i in range(len(runs_start_end) - 1):
+        if runs_start_end[i]["end"] > runs_start_end[i + 1]["start"]:
+            raise ValueError(f"Subruns are overlapping: {subruns}.")
 
-    :param superrun_id: id/name of the superrun.
-    :param chunk: strax.Chunk of a superrun subrun.
-    :return: strax.Chunk
+
+def _merge_runs_in_chunk(subruns, merged_runs):
+    """Merge subruns information during concatenation or merge."""
+    if subruns is None:
+        return
+    for run_id, run_start_end in subruns.items():
+        merged_runs.setdefault(run_id, [])
+        merged_runs[run_id].append([run_start_end["start"], run_start_end["end"]])
+
+
+def _mergable_check(merged_runs, merge=False):
+    """Check continuity of runs in a superrun chunk."""
+    for run_id in merged_runs.keys():
+        merged_runs[run_id].sort(key=lambda x: x[0])
+        if not merge:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][i - 1][1]
+                if mask:
+                    raise ValueError(
+                        "Chunks are not continuous. "
+                        f"Run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
+        else:
+            for i in range(1, len(merged_runs[run_id])):
+                mask = merged_runs[run_id][i][0] != merged_runs[run_id][0][0]
+                mask |= merged_runs[run_id][i][1] != merged_runs[run_id][0][1]
+                if mask:
+                    raise ValueError(
+                        "If merging, all chunks should have the same start/end time. "
+                        f"But run {run_id} was split into chunks {merged_runs[run_id]}."
+                    )
+        merged_runs[run_id] = {
+            "start": merged_runs[run_id][0][0],
+            "end": merged_runs[run_id][-1][1],
+        }
+
+
+def _merge_subruns_in_chunk(chunks):
+    """Merge list of subruns in a superrun chunk during concatenation.
+
+    Updates also their start/ends too.
 
     """
-    if chunk is None:
-        return chunk
-    subruns = {chunk.run_id: {"start": chunk.start, "end": chunk.end}}
-
-    return Chunk(
-        start=chunk.start,
-        end=chunk.end,
-        dtype=chunk.dtype,
-        data_type=chunk.data_type,
-        data_kind=chunk.data_kind,
-        run_id=superrun_id,
-        subruns=subruns,
-        data=chunk.data,
-        target_size_mb=chunk.target_size_mb,
-    )
-
-
-def _update_subruns_in_chunk(chunks):
-    """Updates list of subruns in a superrun chunk during concatenation Updates also their
-    start/ends too."""
-    subruns = None
+    subruns = dict()
     for c_i, c in enumerate(chunks):
-        if not subruns:
-            subruns = c.subruns
-            continue
+        _merge_runs_in_chunk(c.subruns, subruns)
+    _mergable_check(subruns)
+    if subruns:
+        return subruns
+    else:
+        return None
 
-        for subrun_id, subrun_start_end in c.subruns.items():
-            if subrun_id in subruns:
-                subruns[subrun_id] = {
-                    "start": min(subruns[subrun_id]["start"], subrun_start_end["start"]),
-                    "end": max(subruns[subrun_id]["end"], subrun_start_end["end"]),
-                }
-            else:
-                subruns[subrun_id] = subrun_start_end
-    return subruns
+
+def _merge_superrun_in_chunk(chunks, merge=False):
+    """Updates superrun in a superrun chunk during concatenation."""
+    superrun = dict()
+    for c_i, c in enumerate(chunks):
+        _merge_runs_in_chunk(c.superrun, superrun)
+    _mergable_check(superrun, merge)
+    return superrun
+
+
+def _pop_out_empty_run_id(subruns):
+    """Remove empty run_id from chunks in superrun."""
+    keys_to_remove = []
+    for key in subruns.keys():
+        if subruns[key]["start"] == subruns[key]["end"]:
+            keys_to_remove.append(key)
+    for key in keys_to_remove:
+        subruns.pop(key)
+
+
+def _split_runs_in_chunk(subruns, t):
+    """Split list of runs in a superrun chunk during split.
+
+    Updates also their start/ends too.
+
+    """
+    if subruns is None:
+        return None, None
+    runs_first_chunk = {}
+    runs_second_chunk = {}
+    for run_id, run_start_end in subruns.items():
+        if t <= run_start_end["start"]:
+            runs_second_chunk[run_id] = run_start_end
+        elif run_start_end["start"] < t < run_start_end["end"]:
+            runs_first_chunk[run_id] = {"start": run_start_end["start"], "end": int(t)}
+            runs_second_chunk[run_id] = {"start": int(t), "end": run_start_end["end"]}
+        elif run_start_end["end"] <= t:
+            runs_first_chunk[run_id] = run_start_end
+    # Pop out empty run_id
+    _pop_out_empty_run_id(runs_first_chunk)
+    _pop_out_empty_run_id(runs_second_chunk)
+    # Make sure that either dictionary with content or None is assigned to Chunk
+    if runs_first_chunk == {}:
+        runs_first_chunk = None
+    if runs_second_chunk == {}:
+        runs_second_chunk = None
+    return runs_first_chunk, runs_second_chunk
 
 
 @export
@@ -434,30 +561,58 @@ class Rechunker:
 
     def __init__(self, rechunk=False, run_id=None):
         self.rechunk = rechunk
-        self.is_superrun = run_id and run_id.startswith("_") and not run_id.startswith("__")
+        self.is_superrun = run_id and run_id.startswith("_")
         self.run_id = run_id
 
         self.cache = None
 
-    def receive(self, chunk):
-        if self.is_superrun:
-            chunk = strax.transform_chunk_to_superrun_chunk(self.run_id, chunk)
+    def receive(self, chunk) -> list:
+        """Receive a chunk, return list of chunks to send out after merging and splitting."""
         if not self.rechunk:
             # We aren't rechunking
-            return chunk
+            return [chunk]
+
         if self.cache is not None:
             # We have an old chunk, so we need to concatenate
-            chunk = strax.Chunk.concatenate([self.cache, chunk])
-        if chunk.data.nbytes >= chunk.target_size_mb * 1e6:
-            # Enough data to send a new chunk!
-            self.cache = None
-            return chunk
-        else:
-            # Not enough data yet, so we cache the chunk
-            self.cache = chunk
-            return None
+            # We do not expect after concatenation that the chunk will be very large because
+            # the self.cache is already after splitting according to the target size
+            chunk = strax.Chunk.concatenate([self.cache, chunk], allow_superrun=self.is_superrun)
 
-    def flush(self):
-        result = self.cache
-        self.cache = None
-        return result
+        target_size_b = chunk.target_size_mb * 1e6
+
+        # Get the split indices according to the allowed minimum gaps
+        # between data and the target size of chunk
+        split_indices = self.get_splits(chunk.data, target_size_b, DEFAULT_CHUNK_SPLIT_NS)
+        # Split the cache into chunks and return list of chunks
+        chunks = []
+        for index in split_indices:
+            _chunk, chunk = chunk.split(
+                t=chunk.data["time"][index] - int(DEFAULT_CHUNK_SPLIT_NS // 2),
+                allow_early_split=False,
+            )
+            chunks.append(_chunk)
+        self.cache = chunk
+        return chunks
+
+    def flush(self) -> list:
+        """Flush the cache and return the remaining chunk in a list."""
+        if self.cache is None:
+            return []
+        else:
+            result = self.cache
+            self.cache = None
+            return [result]
+
+    @staticmethod
+    def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT_NS):
+        """Get indices where to split the data into chunks of approximately target_size."""
+        assumed_i = int(target_size // data.itemsize)
+        gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
+        split_indices = [0]
+        if len(gap_indices) != 0:
+            while split_indices[-1] + assumed_i < gap_indices[-1]:
+                split_indices.append(
+                    gap_indices[np.abs(gap_indices - assumed_i - split_indices[-1]).argmin()]
+                )
+        split_indices = np.diff(split_indices)
+        return split_indices

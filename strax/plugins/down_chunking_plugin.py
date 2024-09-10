@@ -31,9 +31,9 @@ class DownChunkingPlugin(Plugin):
     def _iter_compute(self, chunk_i, **inputs_merged):
         return self.do_compute(chunk_i=chunk_i, **inputs_merged)
 
-    def _fix_output(self, result, start, end, _dtype=None):
+    def _fix_output(self, result, start, end, superrun, subruns, _dtype=None):
         """Wrapper around _fix_output to support the return of iterators."""
-        if self.multi_output and not isinstance(result, Generator):
+        if not isinstance(result, Generator):
             raise ValueError(
                 f"Plugin {self.__class__.__name__} should return a generator in compute method."
             )
@@ -53,4 +53,4 @@ class DownChunkingPlugin(Plugin):
                     f"Plugin {self.__class__.__name__} should yield (dict of) "
                     "strax.Chunk in compute method."
                 )
-            yield _result
+            yield self.superrun_transformation(_result, superrun, subruns)

@@ -40,15 +40,6 @@ if any("jupyter" in arg for arg in sys.argv):
 else:
     from tqdm import tqdm  # type: ignore
 
-# Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
-    warn(
-        "Using strax in python 3.6-3.7 is deprecated since 2022/01 consider "
-        "upgrading to python 3.8, 3.9 or 3.10. This will result in an error"
-        " in strax 1.2",
-        DeprecationWarning,
-    )
-
 
 def exporter(export_self=False):
     """Export utility modified from https://stackoverflow.com/a/41895194
@@ -621,12 +612,7 @@ def multi_run(
             pbar.close()
             return None
 
-        if add_run_id_field:
-            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
-        else:
-            # In case we do not have any run_id sort according to time:
-            start_of_runs = [np.min(res["time"]) for res in final_result]
-            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
+        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(
