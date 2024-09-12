@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 import argparse
 
@@ -66,7 +65,22 @@ def parse_args():
     return args
 
 
-def main(args):
+def main():
+    args = parse_args()
+    if args.profile_memory:
+        from memory_profiler import memory_usage
+        import time
+
+        start = time.time()
+        mem = memory_usage(proc=(rechunk, (args,)))
+        print(f"Memory profiler says peak RAM usage was: {max(mem):.1f} MB")
+        print(f"Took {time.time() - start:.1f} s = {(time.time() - start) / 3600:.2f} h ")
+        print("Bye, bye")
+    else:
+        rechunk(args)
+
+
+def rechunk(args):
     source_mb = strax.utils.dir_size_mb(args.source)
     report = strax.rechunker(
         source_directory=args.source,
@@ -97,15 +111,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    if args.profile_memory:
-        from memory_profiler import memory_usage
-        import time
-
-        start = time.time()
-        mem = memory_usage(proc=(main, (args,)))
-        print(f"Memory profiler says peak RAM usage was: {max(mem):.1f} MB")
-        print(f"Took {time.time() - start:.1f} s = {(time.time() - start) / 3600:.2f} h ")
-        print("Bye, bye")
-    else:
-        main(args)
+    main()
