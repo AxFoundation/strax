@@ -2641,12 +2641,28 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
+    def get_dependencies(self, data_type):
+        """Get the dependencies of a data_type."""
+        dependencies = set()
+
+        def _get_dependencies(_data_type):
+            if _data_type in self.root_data_types:
+                return
+            plugin = self._plugin_class_registry[_data_type]()
+            dependencies.update(plugin.depends_on)
+            for d in plugin.depends_on:
+                _get_dependencies(d)
+
+        _get_dependencies(data_type)
+        return dependencies
+
     @property
     def root_data_types(self):
         """Root data_type that does not depend on anything."""
         _root_data_types = set()
         for k, v in self._plugin_class_registry.items():
-            if not v.depends_on:
+            _v = v()
+            if not _v.depends_on:
                 _root_data_types |= set((k,))
         return _root_data_types
 
