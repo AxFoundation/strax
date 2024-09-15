@@ -520,3 +520,10 @@ class TestContext(unittest.TestCase):
             "cut_peaks": "peaks",
         }
         assert data_type_collection == expected_data_type_collection
+
+    def test_get_dependencies(self):
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(self.get_dummy_peaks_dependency())
+        assert "records" in st.get_dependencies("cut_peaks")
