@@ -1503,7 +1503,6 @@ class Context:
         time_within=None,
         time_selection="fully_contained",
         selection=None,
-        selection_str=None,
         keep_columns=None,
         drop_columns=None,
         allow_multiple=False,
@@ -1621,7 +1620,6 @@ class Context:
 
                     result.data = strax.apply_selection(
                         result.data,
-                        selection_str=selection_str,
                         selection=selection,
                         keep_columns=keep_columns,
                         drop_columns=drop_columns,
@@ -2643,12 +2641,28 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
+    def get_dependencies(self, data_type):
+        """Get the dependencies of a data_type."""
+        dependencies = set()
+
+        def _get_dependencies(_data_type):
+            if _data_type in self.root_data_types:
+                return
+            plugin = self._plugin_class_registry[_data_type]()
+            dependencies.update(plugin.depends_on)
+            for d in plugin.depends_on:
+                _get_dependencies(d)
+
+        _get_dependencies(data_type)
+        return dependencies
+
     @property
     def root_data_types(self):
         """Root data_type that does not depend on anything."""
         _root_data_types = set()
         for k, v in self._plugin_class_registry.items():
-            if not v.depends_on:
+            _v = v()
+            if not _v.depends_on:
                 _root_data_types |= set((k,))
         return _root_data_types
 
@@ -2716,7 +2730,6 @@ select_docs = """
 :param selection: Query string, sequence of strings, or simple function to apply.
     The function must take a single argument which represents the structure
     numpy array of the loaded data.
-:param selection_str: Same as selection (deprecated)
 :param keep_columns: Array field/dataframe column names to keep.
     Useful to reduce amount of data in memory. (You can only specify
     either keep or drop column.)
