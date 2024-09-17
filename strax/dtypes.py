@@ -215,9 +215,9 @@ def peak_dtype(
     if save_waveform_start:
         dtype += [
             (
-                ("Waveform data in PE/sample (not PE/ns!), first 110 sample", "data_start"),
+                ("Waveform data in PE/sample (not PE/ns!), first 200 not downsampled samples", "data_start"),
                 np.float32,
-                110,
+                n_sum_wv_samples,
             )
         ]
 
