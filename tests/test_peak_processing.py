@@ -316,6 +316,7 @@ def test_simple_summed_waveform(pulses):
     fake_event_dtype = strax.time_dt_fields + [
         ("data", np.float32, 200),
         ("data_top", np.float32, 200),
+        ("data_start", np.float32, 110),
     ]
 
     records = np.zeros(len(pulses), dtype=strax.record_dtype())
