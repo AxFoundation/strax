@@ -836,7 +836,8 @@ def convert_structured_array_to_df(structured_array, log=None):
     if converted_cols:
         log.warning(
             f"Columns {converted_cols} contain non-scalar entries. "
-            "Some pandas functions (e.g., groupby, apply) might not perform as expected on these columns."
+            "Some pandas functions (e.g., groupby, apply) might "
+            "not perform as expected on these columns."
         )
 
     return pd.DataFrame(data_dict)

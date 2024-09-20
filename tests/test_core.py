@@ -35,6 +35,7 @@ def test_core(allow_multiprocess, max_workers, processor):
 @processing_conditions
 def test_core_df(allow_multiprocess, max_workers, processor, caplog):
     """Test that get_df works with N-dimensional data."""
+    """Test that get_df works with N-dimensional data."""
     mystrax = strax.Context(
         storage=[],
         register=[Records, Peaks],
@@ -48,7 +49,8 @@ def test_core_df(allow_multiprocess, max_workers, processor, caplog):
     assert len(df.loc[0, "data"]) == 200
     assert len(df) == p.config["recs_per_chunk"] * p.config["n_chunks"]
     assert (
-        "contain non-scalar entries. Some pandas functions (e.g., groupby, apply) might not perform as expected on these columns."
+        "contain non-scalar entries. Some pandas functions (e.g., groupby, apply)"
+        " might not perform as expected on these columns." 
         in caplog.text
     )
 
