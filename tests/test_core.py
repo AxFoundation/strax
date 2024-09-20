@@ -50,8 +50,7 @@ def test_core_df(allow_multiprocess, max_workers, processor, caplog):
     assert len(df) == p.config["recs_per_chunk"] * p.config["n_chunks"]
     assert (
         "contain non-scalar entries. Some pandas functions (e.g., groupby, apply)"
-        " might not perform as expected on these columns." 
-        in caplog.text
+        " might not perform as expected on these columns." in caplog.text
     )
 
 
