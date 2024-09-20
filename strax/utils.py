@@ -678,7 +678,6 @@ def parse_selection(x, selection):
 def apply_selection(
     x,
     selection=None,
-    selection_str=None,
     keep_columns=None,
     drop_columns=None,
     time_range=None,
@@ -688,7 +687,6 @@ def apply_selection(
 
     :param x: Numpy structured array
     :param selection: Query string, sequence of strings, or simple function to apply.
-    :param selection_str: Same as selection (deprecated)
     :param time_range: (start, stop) range to load, in ns since the epoch
     :param keep_columns: Field names of the columns to keep.
     :param drop_columns: Field names of the columns to drop.
@@ -717,13 +715,6 @@ def apply_selection(
         x = x[(strax.endtime(x) > time_range[0]) & (x["time"] < time_range[1])]
     else:
         raise ValueError(f"Unknown time_selection {time_selection}")
-
-    if selection_str:
-        warn(
-            'The option "selection_str" is depricated and will be removed in a future release. '
-            'Please use "selection" instead.'
-        )
-        selection = selection_str
 
     if selection:
         x = x[parse_selection(x, selection)]

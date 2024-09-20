@@ -15,11 +15,6 @@ repos:
     -   id: black
         args: [--safe, --line-length=100, --preview]
         language_version: python3
-    -   id: black
-        types_or: [file]
-        files: ^bin/
-        args: [--safe, --line-length=100, --preview]
-        language_version: python3
 
 -   repo: https://github.com/pycqa/docformatter
     rev: v1.7.5
