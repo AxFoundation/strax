@@ -808,8 +808,8 @@ def convert_tuple_to_list(init_func_input):
 
 @export
 def convert_structured_array_to_df(structured_array, log=None):
-    """
-    Convert a structured numpy array to a pandas DataFrame.
+    """Convert a structured numpy array to a pandas DataFrame.
+
     Parameters:
     structured_array (numpy.ndarray): The structured array to be converted.
     Returns:
@@ -821,7 +821,7 @@ def convert_structured_array_to_df(structured_array, log=None):
         import logging
 
         log = logging.getLogger("strax_array_to_df")
-    
+
     data_dict = {}
     converted_cols = []
     for name in structured_array.dtype.names:
