@@ -1909,7 +1909,7 @@ class Context:
         """
         df = self.get_array(run_id, targets, save=save, max_workers=max_workers, **kwargs)
 
-        return strax.convert_structured_array_to_df(df)
+        return strax.convert_structured_array_to_df(df, log=self.log)
 
     def get_zarr(
         self,

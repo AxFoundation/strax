@@ -807,9 +807,9 @@ def convert_tuple_to_list(init_func_input):
 
 
 @export
-def convert_structured_array_to_df(structured_array):
-    """Convert a structured numpy array to a pandas DataFrame.
-
+def convert_structured_array_to_df(structured_array, log=None):
+    """
+    Convert a structured numpy array to a pandas DataFrame.
     Parameters:
     structured_array (numpy.ndarray): The structured array to be converted.
     Returns:
@@ -817,12 +817,26 @@ def convert_structured_array_to_df(structured_array):
 
     """
 
+    if log is None:
+        import logging
+
+        log = logging.getLogger("strax_array_to_df")
+    
     data_dict = {}
+    converted_cols = []
     for name in structured_array.dtype.names:
         col = structured_array[name]
         if col.ndim > 1:
             # Convert n-dimensional columns to lists of ndarrays
             data_dict[name] = [np.array(row) for row in col]
+            converted_cols.append(name)
         else:
             data_dict[name] = col
+
+    if converted_cols:
+        log.warning(
+            f"Columns {converted_cols} contain non-scalar entries. "
+            "Some pandas functions (e.g., groupby, apply) might not perform as expected on these columns."
+        )
+
     return pd.DataFrame(data_dict)
