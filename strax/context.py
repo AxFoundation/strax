@@ -199,7 +199,7 @@ class Context:
             applied to plugins
         :param register: plugin class or list of plugin classes to register
         :param register_all: module for which all plugin classes defined in it
-           will be registered.
+            will be registered.
         :param processors: A mapping of processor names to classes to use for
             data processing.
         Any additional kwargs are considered Context-specific options; see
@@ -2253,15 +2253,32 @@ class Context:
         """Simple kwargs checks for copy_to_frontend."""
         if not self.is_stored(run_id, target):
             raise strax.DataNotAvailable(f"Cannot copy {run_id} {target} since it does not exist")
-        if len(strax.to_str_tuple(target)) > 1:
-            raise ValueError("copy_to_frontend only works for a single target at the time")
-        if target_frontend_id is not None and target_frontend_id >= len(self.storage):
-            raise ValueError(
-                f"Cannot select {target_frontend_id}-th frontend as "
-                f"we only have {len(self.storage)} frontends!"
-            )
         if rechunk and rechunk_to_mb == strax.DEFAULT_CHUNK_SIZE_MB:
             self.log.warning("No <rechunk_to_mb> specified!")
+        # Reuse some codes
+        self._check_merge_per_chunk_storage_kwargs(run_id, target, target_frontend_id)
+
+    def _get_target_sf(self, run_id, target, target_frontend_id):
+        """Get the target storage frontends for copy_to_frontend and merge_per_chunk_storage."""
+        if target_frontend_id is None:
+            target_sf = self.storage
+        elif len(self.storage) > target_frontend_id:
+            target_sf = [self.storage[target_frontend_id]]
+
+        # Keep frontends that:
+        #  1. don't already have the data; and
+        #  2. take the data; and
+        #  3. are not readonly
+        target_sf = [
+            t_sf
+            for t_sf in target_sf
+            if (
+                not self._is_stored_in_sf(run_id, target, t_sf)
+                and t_sf._we_take(target)
+                and t_sf.readonly is False
+            )
+        ]
+        return target_sf
 
     def copy_to_frontend(
         self,
@@ -2288,27 +2305,12 @@ class Context:
         self._check_copy_to_frontend_kwargs(
             run_id, target, target_frontend_id, rechunk, rechunk_to_mb
         )
-        if target_frontend_id is None:
-            target_sf = self.storage
-        elif len(self.storage) > target_frontend_id:
-            target_sf = [self.storage[target_frontend_id]]
 
         # Figure out which of the frontends has the data. Raise error when none
         source_sf = self.get_source_sf(run_id, target, should_exist=True)[0]
 
-        # Keep frontends that:
-        #  1. don't already have the data; and
-        #  2. take the data; and
-        #  3. are not readonly
-        target_sf = [
-            t_sf
-            for t_sf in target_sf
-            if (
-                not self._is_stored_in_sf(run_id, target, t_sf)
-                and t_sf._we_take(target)
-                and t_sf.readonly is False
-            )
-        ]
+        # Get the target storage frontends
+        target_sf = self._get_target_sf(run_id, target, target_frontend_id)
         self.log.info(f"Copy data from {source_sf} to {target_sf}")
 
         if not len(target_sf):
@@ -2365,6 +2367,15 @@ class Context:
                     "do you have two storage frontends writing to the same place?"
                 )
 
+    def _check_merge_per_chunk_storage_kwargs(self, run_id, target, target_frontend_id) -> None:
+        if len(strax.to_str_tuple(target)) > 1:
+            raise ValueError("copy_to_frontend only works for a single target at the time")
+        if target_frontend_id is not None and target_frontend_id >= len(self.storage):
+            raise ValueError(
+                f"Cannot select {target_frontend_id}-th frontend as "
+                f"we only have {len(self.storage)} frontends!"
+            )
+
     def merge_per_chunk_storage(
         self,
         run_id: str,
@@ -2372,11 +2383,14 @@ class Context:
         per_chunked_dependency: str,
         rechunk=True,
         chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
+        target_frontend_id: ty.Optional[int] = None,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
 
         if self.is_stored(run_id, target):
             raise ValueError(f"Data {target} for {run_id} already exists.")
+
+        self._check_merge_per_chunk_storage_kwargs(run_id, target, target_frontend_id)
 
         if chunk_number_group is not None:
             combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
@@ -2397,17 +2411,20 @@ class Context:
 
         # Usually we want to save in the same storage frontend
         # Here we assume that the target is stored chunk by chunk of the dependency
-        target_sf = source_sf = self.get_source_sf(
+        source_sf = self.get_source_sf(
             run_id,
             target,
             chunk_number={per_chunked_dependency: chunk_number},
             should_exist=True,
         )[0]
 
+        # Get the target storage frontends
+        target_sf = self._get_target_sf(run_id, target, target_frontend_id)
+
         def wrapped_loader():
             """Wrapped loader for changing the target_size_mb."""
             for chunk_number in chunk_number_group:
-                # Mostly copied from self.copy_to_frontend
+                # Mostly revised from self.copy_to_frontend
                 # Get the info from the source backend (s_be) that we need to fill
                 # the target backend (t_be) with
                 data_key = self.key_for(
@@ -2429,17 +2446,18 @@ class Context:
                 except StopIteration:
                     continue
 
-        # Fill the target buffer
         data_key = self.key_for(run_id, target, chunk_number=_chunk_number)
-        t_be_str, t_be_key = target_sf.find(data_key, write=True)
-        target_be = target_sf._get_backend(t_be_str)
         target_plugin = self.__get_plugin(run_id, target, chunk_number=_chunk_number)
         target_md = target_plugin.metadata(run_id, target)
         # Copied from StorageBackend.saver
         if "dtype" in target_md:
             target_md["dtype"] = target_md["dtype"].descr.__repr__()
-        saver = target_be._saver(t_be_key, target_md)
-        saver.save_from(wrapped_loader(), rechunk=rechunk)
+        for t_sf in target_sf:
+            # Fill the target buffer
+            t_be_str, t_be_key = t_sf.find(data_key, write=True)
+            target_be = t_sf._get_backend(t_be_str)
+            saver = target_be._saver(t_be_key, target_md)
+            saver.save_from(wrapped_loader(), rechunk=rechunk)
 
     def get_source(
         self,

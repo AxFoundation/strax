@@ -187,7 +187,7 @@ class TestStorageType(TestCase):
         prefix = strax.storage.files.dirname_to_prefix(backend_key)
         md = st_new.get_metadata(self.run_id, self.target)
         md["chunks"][0]["n"] += 1
-        md_path = os.path.join(backend_key, f"{prefix}-metadata.json")
+        md_path = os.path.join(backend_key, strax.RUN_METADATA_PATTERN % prefix)
         with open(md_path, "w") as file:
             json.dump(md, file, indent=4)
 
