@@ -4,6 +4,8 @@ from strax.testutils import Records, Peaks
 import os
 import tempfile
 
+from strax import RUN_METADATA_PATTERN
+
 
 class TestPerRunDefaults(unittest.TestCase):
     """Test the saving behavior of the context."""
@@ -72,7 +74,7 @@ class TestPerRunDefaults(unittest.TestCase):
 
         # copied from FileSytemBackend (maybe abstractify the method separately?)
         prefix = strax.dirname_to_prefix(data_path)
-        metadata_json = f"{prefix}-metadata.json"
+        metadata_json = RUN_METADATA_PATTERN % prefix
         md_path = os.path.join(data_path, metadata_json)
         assert os.path.exists(md_path)
 

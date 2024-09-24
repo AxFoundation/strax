@@ -5,6 +5,7 @@ import os
 import os.path as osp
 import pytest
 
+from strax import RUN_METADATA_PATTERN
 from strax.testutils import *
 
 processing_conditions = pytest.mark.parametrize(
@@ -89,7 +90,10 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
         prefix = strax.dirname_to_prefix(data_dirs[0])
-        assert sorted(os.listdir(data_dirs[0])) == [f"{prefix}-000000", f"{prefix}-metadata.json"]
+        assert sorted(os.listdir(data_dirs[0])) == [
+            f"{prefix}-000000",
+            RUN_METADATA_PATTERN % prefix,
+        ]
 
         # Check metadata got written correctly.
         metadata = mystrax.get_metadata(run_id, "peaks")
@@ -99,7 +103,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         assert len(metadata["chunks"]) == 1
 
         # Check data gets loaded from cache, not rebuilt
-        md_filename = osp.join(data_dirs[0], f"{prefix}-metadata.json")
+        md_filename = osp.join(data_dirs[0], RUN_METADATA_PATTERN % prefix)
         mtime_before = osp.getmtime(md_filename)
         peaks_2 = mystrax.get_array(run_id=run_id, targets="peaks")
         np.testing.assert_array_equal(peaks_1, peaks_2)
