@@ -1908,15 +1908,8 @@ class Context:
 
         """
         df = self.get_array(run_id, targets, save=save, max_workers=max_workers, **kwargs)
-        try:
-            return pd.DataFrame.from_records(df)
-        except Exception as e:
-            if "Data must be 1-dimensional" in str(e):
-                raise ValueError(
-                    f"Cannot load '{targets}' as a dataframe because it has "
-                    "array fields. Please use get_array."
-                )
-            raise
+
+        return strax.convert_structured_array_to_df(df, log=self.log)
 
     def get_zarr(
         self,

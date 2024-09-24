@@ -33,6 +33,28 @@ def test_core(allow_multiprocess, max_workers, processor):
     assert bla.dtype == strax.peak_dtype()
 
 
+@processing_conditions
+def test_core_df(allow_multiprocess, max_workers, processor, caplog):
+    """Test that get_df works with N-dimensional data."""
+    """Test that get_df works with N-dimensional data."""
+    mystrax = strax.Context(
+        storage=[],
+        register=[Records, Peaks],
+        processors=[processor],
+        allow_multiprocess=allow_multiprocess,
+        use_per_run_defaults=True,
+    )
+
+    df = mystrax.get_df(run_id=run_id, targets="peaks", max_workers=max_workers)
+    p = mystrax.get_single_plugin(run_id, "records")
+    assert len(df.loc[0, "data"]) == 200
+    assert len(df) == p.config["recs_per_chunk"] * p.config["n_chunks"]
+    assert (
+        "contain non-scalar entries. Some pandas functions (e.g., groupby, apply)"
+        " might not perform as expected on these columns." in caplog.text
+    )
+
+
 def test_post_office_state():
     mystrax = strax.Context(
         storage=[],
