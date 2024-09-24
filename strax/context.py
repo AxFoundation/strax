@@ -2392,14 +2392,18 @@ class Context:
 
         self._check_merge_per_chunk_storage_kwargs(run_id, target, target_frontend_id)
 
+        chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
         if chunk_number_group is not None:
             combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
             if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
                 raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
-            _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
+            if min(combined_chunk_numbers) == 0 and max(combined_chunk_numbers) == len(chunks) - 1:
+                # If the chunks are all the chunks of the dependency, we can drop the chunk_number
+                _chunk_number = None
+            else:
+                _chunk_number = {per_chunked_dependency: combined_chunk_numbers}
         else:
             # if no chunk numbers are given, use information from the dependency
-            chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
             chunk_number_group = [[c["chunk_i"]] for c in chunks]
             _chunk_number = None
 
