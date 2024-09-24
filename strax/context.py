@@ -2384,10 +2384,11 @@ class Context:
         rechunk=True,
         chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
         target_frontend_id: ty.Optional[int] = None,
+        check_is_stored: bool = True,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
 
-        if self.is_stored(run_id, target):
+        if check_is_stored and self.is_stored(run_id, target):
             raise ValueError(f"Data {target} for {run_id} already exists.")
 
         self._check_merge_per_chunk_storage_kwargs(run_id, target, target_frontend_id)
