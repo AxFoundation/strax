@@ -2454,6 +2454,7 @@ class Context:
         data_key = self.key_for(run_id, target, chunk_number=_chunk_number)
         target_plugin = self.__get_plugin(run_id, target, chunk_number=_chunk_number)
         target_md = target_plugin.metadata(run_id, target)
+        target_md["strax_version"] = strax.__version__
         # Copied from StorageBackend.saver
         if "dtype" in target_md:
             target_md["dtype"] = target_md["dtype"].descr.__repr__()
