@@ -188,6 +188,14 @@ class S3Frontend(StorageFrontend):
                     return self.backend_key(fn)
 
         raise strax.DataNotAvailable
+    
+    def _get_config_value(self, variable, option_name):
+        if variable is None:
+            if "s3" not in self.config:
+                raise EnvironmentError("S3 access point not spesified")
+            if not self.config.has_option("s3", option_name):
+                raise EnvironmentError(f"S3 access point lacks a {option_name}")
+            return self.config.get('s3', 'aws_access_key_id')
 
     def s3_object_exists(self, bucket_name, key):
         try:
