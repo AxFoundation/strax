@@ -804,3 +804,45 @@ def convert_tuple_to_list(init_func_input):
     else:
         # if not a container, return. i.e. int, float, bytes, str etc.
         return func_input
+
+
+@export
+def stx_file_parser(path: str):
+    """
+    Strax assumes 2 main structures for directories it generates
+    and files, as such we will want to understand these file
+    """
+
+    chunk_i = None
+    run_id = None
+    #is_json = False
+
+    assert type(path) is str 
+
+    try:
+        temp1, temp2, temp3 = re.split(r'-', path)
+
+        if temp1.isdigit():
+            file_data = {"run_id" : temp1,
+                        "dtype" : temp2,
+                        "lineage" : temp3,
+                        "is_json": False}
+        # Covers chunks
+        else:
+            #dtype, lineage, x = re.split(r'-', path)
+            if temp3 == "metadata.json":
+                file_data = {"run_id" : temp1,
+                        "dtype" : temp2,
+                        "lineage" : temp3,
+                        "is_json": True}
+            else:
+                file_data = {"chunk_i" : temp3,
+                        "dtype" : temp1,
+                        "lineage" : temp2,
+                        "is_json": False}
+        
+    except ValueError:
+        print("An invalid string was given to this function")
+
+    return file_data
+            
