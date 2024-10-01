@@ -64,7 +64,7 @@ def _load_file(f, compressor, dtype):
 
 
 @export
-def save_file(f, data, compressor="zstd"):
+def save_file(f, data, compressor="zstd", is_s3_path = False):
     """Save data to file and return number of bytes written.
 
     :param f: file name or handle to save to
@@ -72,13 +72,32 @@ def save_file(f, data, compressor="zstd"):
     :param compressor: compressor to use
 
     """
+    
     if isinstance(f, str):
         final_fn = f
         temp_fn = f + "_temp"
-        with open(temp_fn, mode="wb") as write_file:
-            result = _save_file(write_file, data, compressor)
-        os.rename(temp_fn, final_fn)
-        return result
+        if is_s3_path is False:
+            with open(temp_fn, mode="wb") as write_file:
+                result = _save_file(write_file, data, compressor)
+            os.rename(temp_fn, final_fn)
+            return result
+        else:
+            s3_interface = strax.S3Frontend(s3_access_key_id=None,
+                 s3_secret_access_key=None,
+                 path="", 
+                 deep_scan=False, )
+            # Copy temp file to final file
+            result = _save_file_to_s3(s3_interface, temp_fn, data, compressor)
+            s3_interface.s3.copy_object(
+                Bucket=s3_interface.BUCKET, 
+                Key=final_fn, 
+                CopySource={"Bucket": s3_interface.BUCKET, "Key": temp_fn}
+                )
+            
+            # Delete the temporary file
+            s3_interface.s3.delete_object(Bucket=s3_interface.BUCKET, Key=temp_fn)  
+
+            return result
     else:
         return _save_file(f, data, compressor)
 
@@ -88,6 +107,28 @@ def _save_file(f, data, compressor="zstd"):
     d_comp = COMPRESSORS[compressor]["compress"](data)
     f.write(d_comp)
     return len(d_comp)
+
+
+def _save_file_to_s3(s3_client, key, data, compressor=None):
+    # Use this method to save file directly to S3
+    # If compression is needed, handle it here
+    # Use `BytesIO` to handle binary data in-memory
+    assert isinstance(data, np.ndarray), "Please pass a numpy array"
+
+    # Create a binary buffer to simulate writing to a file
+    buffer = BytesIO()
+
+    # Simulate saving file content (you can compress or directly write data here)
+    if compressor:
+        data = COMPRESSORS[compressor]["compress"](data)
+    buffer.write(data)
+    buffer.seek(0)  # Reset the buffer to the beginning
+
+    # Upload buffer to S3 under the specified key
+    s3_client.s3.put_object(Bucket=s3_client.BUCKET, 
+                            Key=key, Body=buffer.getvalue())
+
+    return len(data) 
 
 
 def _compress_blosc(data):

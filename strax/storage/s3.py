@@ -1,7 +1,6 @@
 import glob
 import json
 import os
-import configparser
 import os.path as osp
 from typing import Optional
 from bson import json_util
@@ -9,6 +8,7 @@ import shutil
 import boto3
 from botocore.exceptions import ClientError
 from botocore.client import Config
+import configparser
 
 import strax
 from .common import StorageFrontend
@@ -33,9 +33,9 @@ class S3Frontend(StorageFrontend):
     BUCKET = "mlrice"
 
     def __init__(self, 
-                 s3_access_key_id: str=None,
-                 s3_secret_access_key: str=None,
-                 endpoint_url=None,
+                 s3_access_key_id=None,
+                 s3_secret_access_key=None,
+                 endpoint_url='https://rice1.osn.mghpcc.org/',
                  path="", 
                  deep_scan=False, 
                  *args, 
@@ -61,11 +61,12 @@ class S3Frontend(StorageFrontend):
             raise EnvironmentError("XENON_CONFIG file not found")
         else:
             self.config = configparser.ConfigParser()
+            self.config.read(self.config_path)
 
             s3_access_key_id = self._get_config_value(s3_access_key_id, 
-                                                      "s3_access_key_id")
+                                                      "aws_access_key_id")
             s3_secret_access_key = self._get_config_value(s3_secret_access_key, 
-                                                          "s3_secret_access_key")
+                                                          "aws_secret_access_key")
             endpoint_url = self._get_config_value(endpoint_url,
                                                   "endpoint_url")
 
@@ -188,26 +189,32 @@ class S3Frontend(StorageFrontend):
                     return self.backend_key(fn)
 
         raise strax.DataNotAvailable
-    
+
     def _get_config_value(self, variable, option_name):
         if variable is None:
             if "s3" not in self.config:
                 raise EnvironmentError("S3 access point not spesified")
             if not self.config.has_option("s3", option_name):
                 raise EnvironmentError(f"S3 access point lacks a {option_name}")
-            return self.config.get('s3', 'aws_access_key_id')
+            return self.config.get('s3', option_name)
+
+        else:
+            return variable
 
     def s3_object_exists(self, bucket_name, key):
         try:
-            self.s3.head_object(Bucket=bucket_name, Key=key)
-            return True  # Object exists
+            response = self.s3.list_objects_v2(Bucket=bucket_name, Prefix=key)
+
+            # Check if any objects were returned, and if the key exactly matches
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    if obj['Key'] == key:
+                        return True  # Object exists
+
+            return False  # Object does not exist
         except ClientError as e:
-            # If a 404 error is returned, the object does not exist
-            if e.response['Error']['Code'] == '404':
-                return False
-            else:
-                # For any other error, you can choose to raise the exception or handle it
-                raise e
+            # Handle any other error as needed
+            raise e
 
     def _subfolders(self):
         """Loop over subfolders of self.path that match our folder format."""
@@ -377,7 +384,7 @@ class S3Backend(strax.StorageBackend):
         #        f"Can't write data to {dirname}, no write permissions in {parent_dir}."
         #    )
 
-        return S3Saver(dirname, metadata=metadata, **kwargs)
+        return S3Saver(dirname, self.s3, metadata=metadata, **kwargs)
 
 
 @export
@@ -388,13 +395,14 @@ class S3Saver(strax.Saver):
     # When writing chunks, rewrite the json file every time we write a chunk
     _flush_md_for_every_chunk = True
 
-    def __init__(self, dirname, metadata, **kwargs):
+    def __init__(self, dirname, s3, metadata, **kwargs):
         super().__init__(metadata = metadata)
         self.dirname = dirname
         self.tempdirname = dirname + "_temp"
         self.prefix = dirname_to_prefix(dirname)
         self.metadata_json = f"{self.prefix}-metadata.json"
-        self.s3 = boto3.client(**kwargs)
+
+        self.s3 = s3
         self.bucket_name = "mlrice"
 
         self.config = boto3.s3.transfer.TransferConfig(
@@ -404,11 +412,11 @@ class S3Saver(strax.Saver):
         if self.s3.list_objects_v2(Bucket=BUCKET_NAME,
                                        Prefix=dirname)['KeyCount'] == 1:
             print(f"Removing data in {dirname} to overwrite")
-            shutil.rmtree(dirname)
+            self.s3.delete_object(Bucket=BUCKET_NAME, Key=dirname)
         if self.s3.list_objects_v2(Bucket=BUCKET_NAME,
-                                       Prefix=self.tempdirname)['KeyCount'] == 0:
+                                       Prefix=self.tempdirname)['KeyCount'] == 1:
             print(f"Removing old incomplete data in {self.tempdirname}")
-            shutil.rmtree(self.tempdirname)
+            self.s3.delete_object(Bucket=BUCKET_NAME, Key=dirname)
         #os.makedirs(self.tempdirname)
         self._flush_metadata()
 
@@ -434,17 +442,17 @@ class S3Saver(strax.Saver):
         fn = os.path.join(self.tempdirname, filename)
         kwargs = dict(data=data, compressor=self.md["compressor"])
         if executor is None:
-            filesize = strax.save_file(fn, **kwargs)
-            fn.seek(0)
+            filesize = strax.save_file(fn, is_s3_path = True, **kwargs)
+            #fn.seek(0)
             # Giving just the filename wont work, needs to be the full path
-            self.s3.upload_fileobj(fn,
-                                   BUCKET_NAME,
-                                   filename,
-                                   Config=self.config,)
+            #self.s3.upload_fileobj(fn,
+            #                       BUCKET_NAME,
+            #                       filename,
+            #                       Config=self.config,)
             return dict(filename=filename, filesize=filesize), None
         else:
             # Might need to add some s3 stuff here
-            return dict(filename=filename), executor.submit(strax.save_file, fn, **kwargs)
+            return dict(filename=filename), executor.submit(strax.save_file, fn, is_s3_path = True, **kwargs)
 
     def _save_chunk_metadata(self, chunk_info):
         is_first = chunk_info["chunk_i"] == 0

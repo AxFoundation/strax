@@ -813,10 +813,6 @@ def stx_file_parser(path: str):
     and files, as such we will want to understand these file
     """
 
-    chunk_i = None
-    run_id = None
-    #is_json = False
-
     assert type(path) is str 
 
     try:
