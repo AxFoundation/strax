@@ -65,7 +65,7 @@ def _load_file(f, compressor, dtype):
 
 
 @export
-def save_file(f, data, compressor="zstd", is_s3_path = False):
+def save_file(f, data, compressor="zstd", is_s3_path=False):
     """Save data to file and return number of bytes written.
 
     :param f: file name or handle to save to
@@ -73,7 +73,7 @@ def save_file(f, data, compressor="zstd", is_s3_path = False):
     :param compressor: compressor to use
 
     """
-    
+
     if isinstance(f, str):
         final_fn = f
         temp_fn = f + "_temp"
@@ -83,20 +83,22 @@ def save_file(f, data, compressor="zstd", is_s3_path = False):
             os.rename(temp_fn, final_fn)
             return result
         else:
-            s3_interface = strax.S3Frontend(s3_access_key_id=None,
-                 s3_secret_access_key=None,
-                 path="", 
-                 deep_scan=False, )
+            s3_interface = strax.S3Frontend(
+                s3_access_key_id=None,
+                s3_secret_access_key=None,
+                path="",
+                deep_scan=False,
+            )
             # Copy temp file to final file
             result = _save_file_to_s3(s3_interface, temp_fn, data, compressor)
             s3_interface.s3.copy_object(
-                Bucket=s3_interface.BUCKET, 
-                Key=final_fn, 
-                CopySource={"Bucket": s3_interface.BUCKET, "Key": temp_fn}
-                )
-            
+                Bucket=s3_interface.BUCKET,
+                Key=final_fn,
+                CopySource={"Bucket": s3_interface.BUCKET, "Key": temp_fn},
+            )
+
             # Delete the temporary file
-            s3_interface.s3.delete_object(Bucket=s3_interface.BUCKET, Key=temp_fn)  
+            s3_interface.s3.delete_object(Bucket=s3_interface.BUCKET, Key=temp_fn)
 
             return result
     else:
@@ -126,10 +128,9 @@ def _save_file_to_s3(s3_client, key, data, compressor=None):
     buffer.seek(0)  # Reset the buffer to the beginning
 
     # Upload buffer to S3 under the specified key
-    s3_client.s3.put_object(Bucket=s3_client.BUCKET, 
-                            Key=key, Body=buffer.getvalue())
+    s3_client.s3.put_object(Bucket=s3_client.BUCKET, Key=key, Body=buffer.getvalue())
 
-    return len(data) 
+    return len(data)
 
 
 def _compress_blosc(data):
