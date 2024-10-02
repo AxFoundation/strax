@@ -33,11 +33,11 @@ class S3Frontend(StorageFrontend):
     BUCKET = "mlrice"
 
     def __init__(self, 
-                 s3_access_key_id=None,
-                 s3_secret_access_key=None,
-                 endpoint_url='https://rice1.osn.mghpcc.org/',
-                 path="", 
-                 deep_scan=False, 
+                 s3_access_key_id: str = None,
+                 s3_secret_access_key: str = None,
+                 endpoint_url: str ='https://rice1.osn.mghpcc.org/',
+                 path: str = "", 
+                 deep_scan: bool = False, 
                  *args, 
                  **kwargs):
         """
@@ -101,7 +101,11 @@ class S3Frontend(StorageFrontend):
         #    md = json.loads(f.read(), object_hook=json_util.object_hook)
         md = strax.flatten_run_metadata(md)
         if projection is not None:
-            md = {k: v for k, v in md.items() if k in projection}
+            md = {
+            key: value
+            for key, value in md.items()
+            if key in projection
+            }
         return md
 
     def write_run_metadata(self, run_id, metadata):
