@@ -11,6 +11,7 @@ import lz4.frame as lz4
 from ast import literal_eval
 
 import strax
+from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 
@@ -143,7 +144,7 @@ COMPRESSORS["blosc"]["compress"] = _compress_blosc
 @export
 def dry_load_files(dirname, chunk_number=None):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
-    metadata_json = f"{prefix}-metadata.json"
+    metadata_json = RUN_METADATA_PATTERN % prefix
     md_path = os.path.join(dirname, metadata_json)
 
     with open(md_path, mode="r") as f:

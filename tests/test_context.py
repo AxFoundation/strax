@@ -185,9 +185,9 @@ def test_copy_to_frontend():
             # Make sure both frontends have the same data.
             assert os.listdir(temp_dir) == os.listdir(temp_dir)
             rec_folder = os.listdir(temp_dir)[0]
-            assert os.listdir(os.path.join(temp_dir, rec_folder)) == os.listdir(
-                os.path.join(temp_dir_2, rec_folder)
-            )
+            list_temp_dir = sorted(os.listdir(os.path.join(temp_dir, rec_folder)))
+            list_temp_dir_2 = sorted(os.listdir(os.path.join(temp_dir_2, rec_folder)))
+            assert list_temp_dir == list_temp_dir_2
 
             # Clear the temp dir
             shutil.rmtree(temp_dir_2)

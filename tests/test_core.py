@@ -5,6 +5,7 @@ import os
 import os.path as osp
 import pytest
 
+from strax import RUN_METADATA_PATTERN
 from strax.testutils import *
 
 processing_conditions = pytest.mark.parametrize(
@@ -30,6 +31,28 @@ def test_core(allow_multiprocess, max_workers, processor):
     p = mystrax.get_single_plugin(run_id, "records")
     assert len(bla) == p.config["recs_per_chunk"] * p.config["n_chunks"]
     assert bla.dtype == strax.peak_dtype()
+
+
+@processing_conditions
+def test_core_df(allow_multiprocess, max_workers, processor, caplog):
+    """Test that get_df works with N-dimensional data."""
+    """Test that get_df works with N-dimensional data."""
+    mystrax = strax.Context(
+        storage=[],
+        register=[Records, Peaks],
+        processors=[processor],
+        allow_multiprocess=allow_multiprocess,
+        use_per_run_defaults=True,
+    )
+
+    df = mystrax.get_df(run_id=run_id, targets="peaks", max_workers=max_workers)
+    p = mystrax.get_single_plugin(run_id, "records")
+    assert len(df.loc[0, "data"]) == 200
+    assert len(df) == p.config["recs_per_chunk"] * p.config["n_chunks"]
+    assert (
+        "contain non-scalar entries. Some pandas functions (e.g., groupby, apply)"
+        " might not perform as expected on these columns." in caplog.text
+    )
 
 
 def test_post_office_state():
@@ -89,7 +112,10 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         # The first dir contains peaks.
         # It should have one data chunk (rechunk is on) and a metadata file
         prefix = strax.dirname_to_prefix(data_dirs[0])
-        assert sorted(os.listdir(data_dirs[0])) == [f"{prefix}-000000", f"{prefix}-metadata.json"]
+        assert sorted(os.listdir(data_dirs[0])) == [
+            f"{prefix}-000000",
+            RUN_METADATA_PATTERN % prefix,
+        ]
 
         # Check metadata got written correctly.
         metadata = mystrax.get_metadata(run_id, "peaks")
@@ -99,7 +125,7 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         assert len(metadata["chunks"]) == 1
 
         # Check data gets loaded from cache, not rebuilt
-        md_filename = osp.join(data_dirs[0], f"{prefix}-metadata.json")
+        md_filename = osp.join(data_dirs[0], RUN_METADATA_PATTERN % prefix)
         mtime_before = osp.getmtime(md_filename)
         peaks_2 = mystrax.get_array(run_id=run_id, targets="peaks")
         np.testing.assert_array_equal(peaks_1, peaks_2)
