@@ -337,8 +337,6 @@ class TestSuperRuns(unittest.TestCase):
         The test also shows the difference between the two.
 
         """
-        self.context.tree
-        self.context.inversed_tree
         self.context.check_superrun()
         sum_super = self.context.get_array(self.superrun_name, "sum", save="sum")
         assert self.context.is_stored(self.superrun_name, "sum")

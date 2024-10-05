@@ -2737,6 +2737,47 @@ class Context:
                 seen_allow = None
             checked |= check_support_superrun(data_type, checked, seen_allow)
 
+    @property
+    def tree_levels(self):
+        """Get the levels of the data types in the context.
+
+        This function will be useful to tell us which data_type to process first.
+
+        For Example, for a given class with Records, Peaks registered, the tree_levels will return:
+        {'records': {'level': 0, 'class': 'Records', 'index': 0, 'order': 0}, 'peaks': {'level': 1,
+        'class': 'Peaks', 'index': 0, 'order': 1}}
+
+        """
+
+        def _get_levels(data_type=None, results=None):
+            """Get the level data_type in the context."""
+            if results is None:
+                results = dict()
+            for k in [data_type] if data_type else self._plugin_class_registry.keys():
+                results[k] = dict()
+                _v = self._plugin_class_registry[k]()
+                if _v.depends_on:
+                    results[k]["level"] = (
+                        max(_get_levels(d, results)[d]["level"] for d in _v.depends_on) + 1
+                    )
+                else:
+                    results[k]["level"] = 0
+                results[k]["class"] = self._plugin_class_registry[k].__name__
+                results[k]["index"] = _v.provides.index(k)
+            return results
+
+        # Sort the results by level, class, and index in provides
+        _results = sorted(
+            _get_levels().items(), key=lambda x: (x[1]["level"], x[1]["class"], x[1]["index"])
+        )
+
+        # Assign order to the results
+        for order, (key, value) in enumerate(_results):
+            value["order"] = order
+        results = dict(_results)
+
+        return results
+
     @classmethod
     def add_method(cls, f):
         """Add f as a new Context method."""
