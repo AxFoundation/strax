@@ -181,6 +181,7 @@ class Context:
 
     runs: ty.Optional[pd.DataFrame] = None
     _fixed_plugin_cache: ty.Optional[dict] = None
+    _fixed_level_cache: ty.Optional[dict] = None
     _run_defaults_cache: dict
     storage: ty.List[strax.StorageFrontend]
 
@@ -2534,10 +2535,9 @@ class Context:
         if target in _targets_stored:
             return None
 
-        this_target_is_stored = self.is_stored(run_id, target)
-        _targets_stored[target] = this_target_is_stored
+        _targets_stored[target] = self.is_stored(run_id, target)
 
-        if this_target_is_stored:
+        if _targets_stored[target]:
             return _targets_stored
 
         # Need to init the class e.g. if we want to allow depends_on which is not a class attribute
@@ -2749,6 +2749,10 @@ class Context:
 
         """
 
+        context_hash = self._context_hash()
+        if self._fixed_level_cache is not None and context_hash in self._fixed_level_cache:
+            return self._fixed_level_cache[context_hash]
+
         def _get_levels(data_type=None, results=None):
             """Get the level data_type in the context."""
             if results is None:
@@ -2775,6 +2779,12 @@ class Context:
         for order, (key, value) in enumerate(_results):
             value["order"] = order
         results = dict(_results)
+
+        if self._fixed_level_cache is None:
+            self._fixed_level_cache = {context_hash: results}
+        elif context_hash not in self._fixed_level_cache:
+            self.log.info("Replacing context._fixed_level_cache since plugins/versions changed")
+            self._fixed_level_cache = {context_hash: results}
 
         return results
 
