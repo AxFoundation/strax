@@ -2542,8 +2542,7 @@ class Context:
 
         # Need to init the class e.g. if we want to allow depends_on which is not a class attribute
         plugin = self._plugin_class_registry[target]()
-        dependencies = strax.to_str_tuple(plugin.depends_on)
-        if not dependencies:
+        if not plugin.depends_on:
             raise strax.DataNotAvailable(f"Lowest level dependency {target} is not stored")
 
         forbidden = strax.to_str_tuple(self.context_config["forbid_creation_of"])
@@ -2562,7 +2561,7 @@ class Context:
 
         self.stored_dependencies(
             run_id,
-            target=dependencies,
+            target=plugin.depends_on,
             check_forbidden=check_forbidden,
             _targets_stored=_targets_stored,
         )
