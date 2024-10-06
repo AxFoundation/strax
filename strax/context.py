@@ -2657,20 +2657,32 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
+    def get_dependency_plugins(
+        self,
+        target: str,
+        run_id: str,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ) -> ty.Dict[str, strax.Plugin]:
+        """Return all plugins required to produce targets.
+
+        :param target: data type to produce
+        :param run_id: run id to use for run-dependent config options
+        :param chunk_number: Chunk number to use for run-dependent config options
+        :return: dictionary with data type as key and plugin as value
+
+        """
+        # Get all plugins required to produce targets
+        plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)[target]
+        _dependencies = [plugins.deps.items()]
+        _dependencies += [
+            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugins.deps
+        ]
+        dependencies = dict(itertools.chain.from_iterable(_dependencies))
+        return dependencies
+
     def get_dependencies(self, data_type):
         """Get the dependencies of a data_type."""
-        dependencies = set()
-
-        def _get_dependencies(_data_type):
-            if _data_type in self.root_data_types:
-                return
-            plugin = self._plugin_class_registry[_data_type]()
-            dependencies.update(plugin.depends_on)
-            for d in plugin.depends_on:
-                _get_dependencies(d)
-
-        _get_dependencies(data_type)
-        return dependencies
+        return set(self.get_dependency_plugins(data_type, "0").keys())
 
     @property
     def root_data_types(self):
