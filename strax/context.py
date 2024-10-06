@@ -555,7 +555,7 @@ class Context:
 
         :param data_type: Data type name
         :param pattern: Show only options that match (fnmatch) pattern
-        :param run_id: Run id to use for run-dependent config options. If omitted, will show
+        :param run_id: run id to use for run-dependent config options. If omitted, will show
             defaults active for new runs.
 
         """
@@ -1925,7 +1925,7 @@ class Context:
         cannot fit in memory zarr is very compatible with dask. Targets are loaded into separate
         arrays and runs are merged. the data is added to any existing data in the storage location.
 
-        :param run_ids: (Iterable) Run ids you wish to load.
+        :param run_ids: (Iterable) run ids you wish to load.
         :param targets: (Iterable) targets to load.
         :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
         :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at
@@ -2396,7 +2396,7 @@ class Context:
 
         chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
         if chunk_number_group is not None:
-            combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
+            combined_chunk_numbers = list(itertools.chain.from_iterable(chunk_number_group))
             if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
                 raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
             if min(combined_chunk_numbers) == 0 and max(combined_chunk_numbers) == len(chunks) - 1:
