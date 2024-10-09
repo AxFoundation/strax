@@ -155,7 +155,10 @@ def store_downsampled_waveform(
         downsampling results in a fractional number of samples, the peak is shortened rather than
         extended. This causes data loss, but it is necessary to prevent overlaps between peaks.
     :param store_waveform_start: Boolean which indicates whether to store the first samples of the
-        waveform in the peak. It will only store the first samples if the waveform is downsampled and the downsample factor is smaller equal to 6. It should cover basically all S1s while keeping the disk usage low.
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to 6. It should cover basically all S1s while
+        keeping the disk usage low.
+
     """
 
     n_samples = len(p["data"])
