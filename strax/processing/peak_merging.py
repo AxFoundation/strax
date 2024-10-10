@@ -85,7 +85,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
 
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, True, buffer_top)
+        strax.store_downsampled_waveform(new_p, buffer, True, True, 6, buffer_top)
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
