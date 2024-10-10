@@ -16,7 +16,7 @@ def split_peaks(
     data_type="peaks",
     n_top_channels=0,
     save_waveform_start=False,
-    max_downsample_factor_waveform_start=None,
+    max_downsample_factor_waveform_start=2,
     **kwargs,
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
