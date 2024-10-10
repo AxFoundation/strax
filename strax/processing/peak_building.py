@@ -142,7 +142,7 @@ def store_downsampled_waveform(
     wv_buffer,
     store_in_data_top=False,
     store_waveform_start=False,
-    max_downsample_factor_waveform_start=None,
+    max_downsample_factor_waveform_start=2,
     wv_buffer_top=np.ones(1, dtype=np.float32),
 ):
     """Downsample the waveform in buffer and store it in p['data'] and in p['data_top'] if indicated
@@ -255,7 +255,7 @@ def sum_waveform(
     n_top_channels=0,
     select_peaks_indices=None,
     save_waveform_start=False,
-    max_downsample_factor_waveform_start=None,
+    max_downsample_factor_waveform_start=2,
 ):
     """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
     which hits were found. This is required to avoid any bias due to zero-padding and baselining.
