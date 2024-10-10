@@ -64,7 +64,7 @@ def split_peaks(
         data_type,
         n_top_channels=n_top_channels,
         save_waveform_start=save_waveform_start,
-        max_downsample_factor_waveform_star=max_downsample_factor_waveform_start,
+        max_downsample_factor_waveform_start=max_downsample_factor_waveform_start,
         **kwargs,
     )
 
