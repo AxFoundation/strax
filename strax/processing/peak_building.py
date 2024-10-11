@@ -138,7 +138,12 @@ def find_peaks(
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def store_downsampled_waveform(
-    p, wv_buffer, store_in_data_top=False, wv_buffer_top=np.ones(1, dtype=np.float32)
+    p,
+    wv_buffer,
+    store_in_data_top=False,
+    store_waveform_start=False,
+    max_downsample_factor_waveform_start=2,
+    wv_buffer_top=np.ones(1, dtype=np.float32),
 ):
     """Downsample the waveform in buffer and store it in p['data'] and in p['data_top'] if indicated
     to do so.
@@ -150,6 +155,11 @@ def store_downsampled_waveform(
     :param store_in_data_top: Boolean which indicates whether to also store into p['data_top'] When
         downsampling results in a fractional number of samples, the peak is shortened rather than
         extended. This causes data loss, but it is necessary to prevent overlaps between peaks.
+    :param store_waveform_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
 
     """
 
@@ -170,6 +180,14 @@ def store_downsampled_waveform(
             wv_buffer[: p["length"] * downsample_factor].reshape(-1, downsample_factor).sum(axis=1)
         )
         p["dt"] *= downsample_factor
+
+        # If the waveform is downsampled, we can store the first samples of the waveform
+        if store_waveform_start & (downsample_factor <= max_downsample_factor_waveform_start):
+            if p["length"] > len(p["data_start"]):
+                p["data_start"] = wv_buffer[: len(p["data_start"])]
+            else:
+                p["data_start"][: p["length"]] = wv_buffer[: p["length"]]
+
     else:
         if store_in_data_top:
             p["data_top"][: p["length"]] = wv_buffer_top[: p["length"]]
@@ -229,7 +247,15 @@ def _simple_summed_waveform(records, containers, touching_windows, to_pe):
 @export
 @numba.jit(nopython=True, nogil=True, cache=True)
 def sum_waveform(
-    peaks, hits, records, record_links, adc_to_pe, n_top_channels=0, select_peaks_indices=None
+    peaks,
+    hits,
+    records,
+    record_links,
+    adc_to_pe,
+    n_top_channels=0,
+    select_peaks_indices=None,
+    save_waveform_start=False,
+    max_downsample_factor_waveform_start=2,
 ):
     """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
     which hits were found. This is required to avoid any bias due to zero-padding and baselining.
@@ -243,6 +269,11 @@ def sum_waveform(
     :param select_peaks_indices: Indices of the peaks for partial processing. In the form of
         np.array([np.int, np.int, ..]). If None (default), all the peaks are used for the summation.
         Assumes all peaks AND pulses have the same dt!
+    :param save_waveform_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
 
     """
     if not len(records):
@@ -357,9 +388,18 @@ def sum_waveform(
             p["area"] += area_pe
 
         if n_top_channels > 0:
-            store_downsampled_waveform(p, swv_buffer, True, twv_buffer)
+            store_downsampled_waveform(
+                p,
+                swv_buffer,
+                True,
+                save_waveform_start,
+                max_downsample_factor_waveform_start,
+                twv_buffer,
+            )
         else:
-            store_downsampled_waveform(p, swv_buffer)
+            store_downsampled_waveform(
+                p, swv_buffer, False, save_waveform_start, max_downsample_factor_waveform_start
+            )
 
         p["n_saturated_channels"] = p["saturated_channel"].sum()
         p["area_per_channel"][:] = area_per_channel

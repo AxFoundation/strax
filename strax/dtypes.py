@@ -161,7 +161,12 @@ def hitlet_with_data_dtype(n_samples=2):
 
 
 def peak_dtype(
-    n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=True, hits_timing=True
+    n_channels=100,
+    n_sum_wv_samples=200,
+    n_widths=11,
+    digitize_top=True,
+    hits_timing=True,
+    save_waveform_start=True,
 ):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
@@ -206,6 +211,19 @@ def peak_dtype(
             n_sum_wv_samples,
         )
         dtype.insert(9, top_field)
+
+    if save_waveform_start:
+        dtype += [
+            (
+                (
+                    "Waveform data in PE/sample (not PE/ns!), first 200 not downsampled samples",
+                    "data_start",
+                ),
+                np.float32,
+                n_sum_wv_samples,
+            )
+        ]
+
     return dtype
 
 
