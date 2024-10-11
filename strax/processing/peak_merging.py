@@ -8,8 +8,14 @@ export, __all__ = strax.exporter()
 
 
 @export
-def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5), save_waveform_start=False,
-    max_downsample_factor_waveform_start=2):
+def merge_peaks(
+    peaks,
+    start_merge_at,
+    end_merge_at,
+    max_buffer=int(1e5),
+    save_waveform_start=False,
+    max_downsample_factor_waveform_start=2,
+):
     """Merge specified peaks with their neighbors, return merged peaks.
 
     :param peaks: Record array of strax peak dtype.
@@ -91,7 +97,14 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5), save_w
 
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, save_waveform_start, max_downsample_factor_waveform_start, buffer_top)
+        strax.store_downsampled_waveform(
+            new_p,
+            buffer,
+            True,
+            save_waveform_start,
+            max_downsample_factor_waveform_start,
+            buffer_top,
+        )
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
