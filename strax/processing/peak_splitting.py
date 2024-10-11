@@ -15,6 +15,8 @@ def split_peaks(
     algorithm="local_minimum",
     data_type="peaks",
     n_top_channels=0,
+    save_waveform_start=False,
+    max_downsample_factor_waveform_start=2,
     **kwargs,
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
@@ -37,6 +39,11 @@ def split_peaks(
         the new split peaks/hitlets.
     :param n_top_channels: Number of top array channels.
     :param result_dtype: dtype of the result.
+    :param save_waveform_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
 
     Any other options are passed to the algorithm.
 
@@ -49,7 +56,16 @@ def split_peaks(
     if data_type_is_not_supported:
         raise TypeError(f'Data_type "{data_type}" is not supported.')
     return splitter(
-        peaks, hits, records, rlinks, to_pe, data_type, n_top_channels=n_top_channels, **kwargs
+        peaks,
+        hits,
+        records,
+        rlinks,
+        to_pe,
+        data_type,
+        n_top_channels=n_top_channels,
+        save_waveform_start=save_waveform_start,
+        max_downsample_factor_waveform_start=max_downsample_factor_waveform_start,
+        **kwargs,
     )
 
 
@@ -72,6 +88,11 @@ class PeakSplitter:
         implemented in each subclass defines the algorithm, which takes in a peak's waveform and
         returns the index to split the peak at, if a split point is found. Otherwise NO_MORE_SPLITS
         is returned and the peak is left as is.
+    :param save_waveform_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
 
     """
 
@@ -88,6 +109,8 @@ class PeakSplitter:
         do_iterations=1,
         min_area=0,
         n_top_channels=0,
+        save_waveform_start=False,
+        max_downsample_factor_waveform_start=None,
         **kwargs,
     ):
         if not len(records) or not len(peaks) or not do_iterations:
@@ -127,7 +150,16 @@ class PeakSplitter:
         if is_split.sum() != 0:
             # Found new peaks: compute basic properties
             if data_type == "peaks":
-                strax.sum_waveform(new_peaks, hits, records, rlinks, to_pe, n_top_channels)
+                strax.sum_waveform(
+                    new_peaks,
+                    hits,
+                    records,
+                    rlinks,
+                    to_pe,
+                    n_top_channels,
+                    save_waveform_start=save_waveform_start,
+                    max_downsample_factor_waveform_start=max_downsample_factor_waveform_start,
+                )
                 strax.compute_widths(new_peaks)
             elif data_type == "hitlets":
                 # Add record fields here
