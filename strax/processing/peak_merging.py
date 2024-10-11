@@ -8,7 +8,8 @@ export, __all__ = strax.exporter()
 
 
 @export
-def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
+def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5), save_waveform_start=False,
+    max_downsample_factor_waveform_start=2):
     """Merge specified peaks with their neighbors, return merged peaks.
 
     :param peaks: Record array of strax peak dtype.
@@ -17,6 +18,11 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
     :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
         resulting peaks (after merging). Peaks must be constructed based on the properties of
         constituent peaks, it being too time-consuming to revert to records/hits.
+    :param save_waveform_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak. It will only store the first samples if the waveform is downsampled
+        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
 
     """
     assert len(start_merge_at) == len(end_merge_at)
@@ -85,7 +91,7 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
 
         # Downsample the buffers into new_p['data'], new_p['data_top'],
         # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, True, 6, buffer_top)
+        strax.store_downsampled_waveform(new_p, buffer, True, save_waveform_start, max_downsample_factor_waveform_start, buffer_top)
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
