@@ -95,8 +95,8 @@ def merge_peaks(
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
 
-        # Downsample the buffers into new_p['data'], new_p['data_top'],
-        # and new_p['data_bot']
+        # Downsample the buffers into
+        # new_p['data'], new_p['data_top'], and new_p['data_bot']
         strax.store_downsampled_waveform(
             new_p,
             buffer,

@@ -182,7 +182,7 @@ def store_downsampled_waveform(
         p["dt"] *= downsample_factor
 
         # If the waveform is downsampled, we can store the first samples of the waveform
-        if store_waveform_start & (downsample_factor <= max_downsample_factor_waveform_start):
+        if store_waveform_start and (downsample_factor <= max_downsample_factor_waveform_start):
             if p["length"] > len(p["data_start"]):
                 p["data_start"] = wv_buffer[: len(p["data_start"])]
             else:
