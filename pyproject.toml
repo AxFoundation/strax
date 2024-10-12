@@ -42,7 +42,7 @@ pymongo = "*"
 scipy = "*"
 tqdm = ">=4.46.0"
 zarr = "*"
-zstd = "*"
+zstandard = "*"
 sharedarray = { url = "https://xenon.isi.edu/python/SharedArray-3.2.3.tar.gz", optional = true }
 base_environment = { git = "https://github.com/XENONnT/base_environment.git", optional = true }
 sphinx = { version = "*", optional = true }

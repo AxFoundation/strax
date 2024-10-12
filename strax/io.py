@@ -6,7 +6,7 @@ import json
 
 import numpy as np
 import blosc
-import zstd
+import zstandard
 import lz4.frame as lz4
 from ast import literal_eval
 
@@ -16,11 +16,15 @@ from strax import RUN_METADATA_PATTERN
 export, __all__ = strax.exporter()
 
 blosc.set_releasegil(True)
+blosc.set_nthreads(1)
 
 
 COMPRESSORS = dict(
     bz2=dict(compress=bz2.compress, decompress=bz2.decompress),
-    zstd=dict(compress=zstd.compress, decompress=zstd.decompress),
+    zstd=dict(
+        compress=zstandard.ZstdCompressor(threads=1).compress,
+        decompress=zstandard.ZstdDecompressor().decompress,
+    ),
     blosc=dict(
         compress=None,  # add special function to prevent overflow at bottom module
         decompress=blosc.decompress,
