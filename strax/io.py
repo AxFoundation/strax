@@ -6,7 +6,7 @@ import json
 
 import numpy as np
 import blosc
-import zstandard
+import zstd
 import lz4.frame as lz4
 from ast import literal_eval
 
@@ -19,12 +19,16 @@ blosc.set_releasegil(True)
 blosc.set_nthreads(1)
 
 
+# zstd's default compression level is 3:
+# https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L53
+# we also need to constraint the number of worker threads to 1
+# https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L98
+zstd_compress = lambda data: zstd.compress(data, 3, 1)
+
+
 COMPRESSORS = dict(
     bz2=dict(compress=bz2.compress, decompress=bz2.decompress),
-    zstd=dict(
-        compress=zstandard.ZstdCompressor(threads=1).compress,
-        decompress=zstandard.ZstdDecompressor().decompress,
-    ),
+    zstd=dict(compress=zstd_compress, decompress=zstd.decompress),
     blosc=dict(
         compress=None,  # add special function to prevent overflow at bottom module
         decompress=blosc.decompress,
