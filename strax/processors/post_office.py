@@ -113,7 +113,12 @@ class PostOffice:
         result.append(f"Total time spent: {sum(self.time_spent.values())}")
         return "\n".join(result)
 
-    def register_producer(self, iterator: ty.Iterator[ty.Any], topic: ty.Union[str, ty.Tuple[str]]):
+    def register_producer(
+        self,
+        iterator: ty.Iterator[ty.Any],
+        topic: ty.Union[str, ty.Tuple[str]],
+        registered: ty.Tuple[str, ...] = tuple(),
+    ):
         """Register iterator as the source of messages for topic.
 
         If topic is a tuple of strings, the iterator should produce (topic -> message) dicts, with
@@ -128,7 +133,8 @@ class PostOffice:
                 # Multi-output producer, recurse
                 for sub_topic in topic:
                     self._multi_output_topics[sub_topic] = topic
-                    self.register_producer(iterator, sub_topic)
+                    if sub_topic not in registered:
+                        self.register_producer(iterator, sub_topic)
                 return
         assert isinstance(topic, str)
         if topic in self._producers:
