@@ -37,13 +37,10 @@ class SingleThreadProcessor(BaseProcessor):
 
             # Some data_types might be already saved and can be loaded;
             # remove them from the list of provides
-            provides = strax.to_str_tuple(
-                list(set(strax.to_str_tuple(p.provides)) - set(components.loaders))
-            )
-
             self.post_office.register_producer(
                 p.iter(iters={dep: self.post_office.get_iter(dep, d) for dep in p.depends_on}),
-                topic=strax.to_str_tuple(provides),
+                topic=strax.to_str_tuple(p.provides),
+                registered=tuple(components.loaders),
             )
 
         dtypes_built = {d: p for p in components.plugins.values() for d in p.provides}

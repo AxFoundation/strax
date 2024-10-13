@@ -1006,7 +1006,7 @@ class Context:
         """Get the datatype that is provided by a plugin but not depended on by any other plugin."""
         provides = [prov for p in plugins.values() for prov in strax.to_str_tuple(p.provides)]
         depends_on = [dep for p in plugins.values() for dep in strax.to_str_tuple(p.depends_on)]
-        uniques = list(set(provides) ^ set(depends_on))
+        uniques = list(set(provides) - set(depends_on))
         return strax.to_str_tuple(uniques)
 
     @property
@@ -1310,7 +1310,8 @@ class Context:
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
         if len(targets) > 1:
-            final_plugin = [t for t in targets if t in self._get_end_targets(plugins)][:1]
+            pendants = set(targets) & set(self._get_end_targets(plugins))
+            final_plugin = tuple(pendants - set(loaders))[:1]
             self.log.warning(
                 "Multiple targets detected! This is only suitable for mass "
                 f"producing dataypes since only {final_plugin} will be "
