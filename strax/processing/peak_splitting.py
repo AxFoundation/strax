@@ -110,7 +110,7 @@ class PeakSplitter:
         min_area=0,
         n_top_channels=0,
         save_waveform_start=False,
-        max_downsample_factor_waveform_start=None,
+        max_downsample_factor_waveform_start=2,
         **kwargs,
     ):
         if not len(records) or not len(peaks) or not do_iterations:
