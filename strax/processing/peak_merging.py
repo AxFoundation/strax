@@ -193,7 +193,7 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
-    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0)
+    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=n_top_channels)
 
 
 @numba.njit(cache=True, nogil=True)
