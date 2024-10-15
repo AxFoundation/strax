@@ -182,7 +182,7 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 
 @export
-def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
+def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=False):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
 
@@ -190,14 +190,15 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
+    :param waveform_start: Boolean indicating if a lone hit should be added to the data_start field of peaks
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
-    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0)
+    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=n_top_channels, waveform_start=waveform_start)
 
 
 @numba.njit(cache=True, nogil=True)
-def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
+def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=False):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
@@ -218,3 +219,13 @@ def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
         if n_top_channels > 0:
             if lh_i["channel"] < n_top_channels:
                 p["data_top"][index] += lh_area
+
+        if waveform_start:
+            # Non-downsampled waveforms have a fixed dt of 10 ns
+            index_wf_start = (lh_i["time"] - p["time"]) // 10
+
+            if index_wf_start < 0:
+                raise ValueError("Hit outside of full containment!")
+            
+            if index_wf_start < len(p["data_start"]):
+                p["data_start"][index_wf_start] += lh_area
