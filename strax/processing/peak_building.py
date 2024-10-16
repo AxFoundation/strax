@@ -380,13 +380,16 @@ def sum_waveform(
             area_per_channel[ch] += area_pe
             p["area"] += area_pe
 
-        store_downsampled_waveform(
-            p,
-            swv_buffer,
-            n_top_channels > 0,
-            store_data_start,
-            twv_buffer,
-        )
+        if n_top_channels > 0:
+            store_downsampled_waveform(
+                p,
+                swv_buffer,
+                True,
+                store_data_start,
+                twv_buffer,
+            )
+        else:
+            store_downsampled_waveform(p, swv_buffer, False, store_data_start)
 
         p["n_saturated_channels"] = p["saturated_channel"].sum()
         p["area_per_channel"][:] = area_per_channel
