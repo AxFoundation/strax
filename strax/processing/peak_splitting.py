@@ -147,8 +147,8 @@ class PeakSplitter:
                     records,
                     rlinks,
                     to_pe,
-                    n_top_channels,
-                    store_data_start,
+                    n_top_channels=n_top_channels,
+                    store_data_start=store_data_start,
                 )
                 strax.compute_widths(new_peaks)
             elif data_type == "hitlets":
