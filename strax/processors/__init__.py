@@ -8,7 +8,7 @@ from .threaded_mailbox import ThreadedMailboxProcessor
 from .single_thread import SingleThreadProcessor
 
 PROCESSORS = {
-    "default": ThreadedMailboxProcessor,
+    "default": SingleThreadProcessor,
     "threaded_mailbox": ThreadedMailboxProcessor,
     "single_thread": SingleThreadProcessor,
 }
