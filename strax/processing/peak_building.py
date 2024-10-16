@@ -139,22 +139,22 @@ def find_peaks(
 @numba.jit(nopython=True, nogil=True, cache=True)
 def store_downsampled_waveform(
     p,
-    wv_buffer,
-    store_in_data_top=False,
-    store_in_data_start=False,
-    wv_buffer_top=np.ones(1, dtype=np.float32),
+    waveform_buffer,
+    store_data_top=False,
+    store_data_start=False,
+    waveform_buffer_top=np.ones(1, dtype=np.float32),
 ):
     """Downsample the waveform in buffer and store it in p['data'] and in p['data_top'] if indicated
     to do so.
 
     :param p: Row of a strax peak array, or compatible type. Note that p['dt'] is adjusted to match
         the downsampling.
-    :param wv_buffer: numpy array containing sum waveform during the peak at the input peak's
+    :param waveform_buffer: numpy array containing sum waveform during the peak at the input peak's
         sampling resolution p['dt'].
-    :param store_in_data_top: Boolean which indicates whether to also store into p['data_top'] When
+    :param store_data_top: Boolean which indicates whether to also store into p['data_top'] When
         downsampling results in a fractional number of samples, the peak is shortened rather than
         extended. This causes data loss, but it is necessary to prevent overlaps between peaks.
-    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
     """
@@ -166,28 +166,30 @@ def store_downsampled_waveform(
         # Compute peak length after downsampling.
         # Do not ceil: see docstring!
         p["length"] = int(np.floor(p["length"] / downsample_factor))
-        if store_in_data_top:
+        if store_data_top:
             p["data_top"][: p["length"]] = (
-                wv_buffer_top[: p["length"] * downsample_factor]
+                waveform_buffer_top[: p["length"] * downsample_factor]
                 .reshape(-1, downsample_factor)
                 .sum(axis=1)
             )
         p["data"][: p["length"]] = (
-            wv_buffer[: p["length"] * downsample_factor].reshape(-1, downsample_factor).sum(axis=1)
+            waveform_buffer[: p["length"] * downsample_factor]
+            .reshape(-1, downsample_factor)
+            .sum(axis=1)
         )
         p["dt"] *= downsample_factor
 
         # If the waveform is downsampled, we can store the first samples of the waveform
-        if store_in_data_start:
+        if store_data_start:
             if p["length"] > len(p["data_start"]):
-                p["data_start"] = wv_buffer[: len(p["data_start"])]
+                p["data_start"] = waveform_buffer[: len(p["data_start"])]
             else:
-                p["data_start"][: p["length"]] = wv_buffer[: p["length"]]
+                p["data_start"][: p["length"]] = waveform_buffer[: p["length"]]
 
     else:
-        if store_in_data_top:
-            p["data_top"][: p["length"]] = wv_buffer_top[: p["length"]]
-        p["data"][: p["length"]] = wv_buffer[: p["length"]]
+        if store_data_top:
+            p["data_top"][: p["length"]] = waveform_buffer_top[: p["length"]]
+        p["data"][: p["length"]] = waveform_buffer[: p["length"]]
 
 
 @export
@@ -249,7 +251,7 @@ def sum_waveform(
     record_links,
     adc_to_pe,
     n_top_channels=0,
-    store_in_data_start=False,
+    store_data_start=False,
     select_peaks_indices=None,
 ):
     """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
@@ -261,7 +263,7 @@ def sum_waveform(
     :param records: Records to be used to build peaks.
     :param record_links: Tuple of previous and next records.
     :param n_top_channels: Number of top array channels.
-    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
     :param select_peaks_indices: Indices of the peaks for partial processing. In the form of
         np.array([np.int, np.int, ..]). If None (default), all the peaks are used for the summation.
@@ -383,7 +385,7 @@ def sum_waveform(
             p,
             swv_buffer,
             n_top_channels > 0,
-            store_in_data_start,
+            store_data_start,
             twv_buffer,
         )
 

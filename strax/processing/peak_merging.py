@@ -174,7 +174,7 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 
 @export
-def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start=False):
+def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_data_start=False):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
 
@@ -182,7 +182,7 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
-    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
     """
@@ -192,12 +192,12 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start
         lone_hits,
         to_pe,
         n_top_channels=n_top_channels,
-        store_in_data_start=store_in_data_start,
+        store_data_start=store_data_start,
     )
 
 
 @numba.njit(cache=True, nogil=True)
-def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start=False):
+def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_data_start=False):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
@@ -219,7 +219,7 @@ def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_star
             if lh_i["channel"] < n_top_channels:
                 p["data_top"][index] += lh_area
 
-        if store_in_data_start:
+        if store_data_start:
             # Non-downsampled waveforms have a fixed dt of 10 ns
             index_wf_start = (lh_i["time"] - p["time"]) // 10
 

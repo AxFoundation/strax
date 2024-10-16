@@ -164,7 +164,7 @@ def peak_dtype(
     n_channels=100,
     n_sum_wv_samples=200,
     n_widths=11,
-    digitize_top=True,
+    store_data_top=True,
     hits_timing=True,
     save_waveform_start=True,
 ):
@@ -204,7 +204,7 @@ def peak_dtype(
                 np.int32,
             ),
         ]
-    if digitize_top:
+    if store_data_top:
         top_field = (
             ("Waveform data in PE/sample (not PE/ns!), top array", "data_top"),
             np.float32,

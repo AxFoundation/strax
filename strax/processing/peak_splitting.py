@@ -15,7 +15,7 @@ def split_peaks(
     algorithm="local_minimum",
     data_type="peaks",
     n_top_channels=0,
-    store_in_data_start=False,
+    store_data_start=False,
     **kwargs,
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
@@ -38,7 +38,7 @@ def split_peaks(
         the new split peaks/hitlets.
     :param n_top_channels: Number of top array channels.
     :param result_dtype: dtype of the result.
-    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
     Any other options are passed to the algorithm.
@@ -59,7 +59,7 @@ def split_peaks(
         to_pe,
         data_type,
         n_top_channels=n_top_channels,
-        store_in_data_start=store_in_data_start,
+        store_data_start=store_data_start,
         **kwargs,
     )
 
@@ -83,7 +83,7 @@ class PeakSplitter:
         implemented in each subclass defines the algorithm, which takes in a peak's waveform and
         returns the index to split the peak at, if a split point is found. Otherwise NO_MORE_SPLITS
         is returned and the peak is left as is.
-    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
     """
@@ -101,7 +101,7 @@ class PeakSplitter:
         do_iterations=1,
         min_area=0,
         n_top_channels=0,
-        store_in_data_start=False,
+        store_data_start=False,
         **kwargs,
     ):
         if not len(records) or not len(peaks) or not do_iterations:
@@ -148,7 +148,7 @@ class PeakSplitter:
                     rlinks,
                     to_pe,
                     n_top_channels,
-                    store_in_data_start,
+                    store_data_start,
                 )
                 strax.compute_widths(new_peaks)
             elif data_type == "hitlets":
