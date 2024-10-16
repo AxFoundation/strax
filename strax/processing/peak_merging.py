@@ -178,7 +178,9 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 
 @export
-def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=False):
+def add_lone_hits(
+    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=-1
+):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
 
@@ -186,18 +188,24 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=Fals
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
-    :param waveform_start: Boolean indicating if a lone hit should be added to the data_start field
-        of peaks
+    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
+        samples of the waveform.
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
     _add_lone_hits(
-        peaks, lone_hits, to_pe, n_top_channels=n_top_channels, waveform_start=waveform_start
+        peaks,
+        lone_hits,
+        to_pe,
+        n_top_channels=n_top_channels,
+        max_downsample_factor_waveform_start=max_downsample_factor_waveform_start,
     )
 
 
 @numba.njit(cache=True, nogil=True)
-def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=False):
+def _add_lone_hits(
+    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=-1
+):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
@@ -219,7 +227,7 @@ def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=Fal
             if lh_i["channel"] < n_top_channels:
                 p["data_top"][index] += lh_area
 
-        if waveform_start:
+        if max_downsample_factor_waveform_start > 0:
             # Non-downsampled waveforms have a fixed dt of 10 ns
             index_wf_start = (lh_i["time"] - p["time"]) // 10
 
