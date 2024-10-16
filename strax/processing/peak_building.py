@@ -176,18 +176,17 @@ def store_downsampled_waveform(
             wv_buffer[: p["length"] * downsample_factor].reshape(-1, downsample_factor).sum(axis=1)
         )
         p["dt"] *= downsample_factor
-
-        # If the waveform is downsampled, we can store the first samples of the waveform
-        if store_in_data_start:
-            if p["length"] > len(p["data_start"]):
-                p["data_start"] = wv_buffer[: len(p["data_start"])]
-            else:
-                p["data_start"][: p["length"]] = wv_buffer[: p["length"]]
-
     else:
         if store_in_data_top:
             p["data_top"][: p["length"]] = wv_buffer_top[: p["length"]]
         p["data"][: p["length"]] = wv_buffer[: p["length"]]
+
+    # If the waveform is downsampled, we can store the first samples of the waveform
+    if store_in_data_start:
+        if p["length"] > len(p["data_start"]):
+            p["data_start"] = wv_buffer[: len(p["data_start"])]
+        else:
+            p["data_start"][: p["length"]] = wv_buffer[: p["length"]]
 
 
 @export
