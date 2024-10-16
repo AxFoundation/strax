@@ -284,14 +284,14 @@ def test_raw_to_records(r):
 def test_dtype_change_copy_to_buffer():
     """Tests if dtype change does not let copy to buffer fail, even if copy function name stays the
     same."""
-    peaks = np.ones(1, dtype=strax.peak_dtype(digitize_top=True))
-    buffer = np.zeros(1, dtype=strax.peak_dtype(digitize_top=True))
+    peaks = np.ones(1, dtype=strax.peak_dtype(store_data_top=True))
+    buffer = np.zeros(1, dtype=strax.peak_dtype(store_data_top=True))
 
     strax.copy_to_buffer(peaks, buffer, "_test_copy_to_buffer")
     assert np.all(peaks == buffer)
 
-    peaks = np.ones(1, dtype=strax.peak_dtype(digitize_top=False))
-    buffer = np.zeros(1, dtype=strax.peak_dtype(digitize_top=False))
+    peaks = np.ones(1, dtype=strax.peak_dtype(store_data_top=False))
+    buffer = np.zeros(1, dtype=strax.peak_dtype(store_data_top=False))
 
     strax.copy_to_buffer(peaks, buffer, "_test_copy_to_buffer")
     assert np.all(peaks == buffer)
