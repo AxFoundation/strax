@@ -13,7 +13,7 @@ def merge_peaks(
     start_merge_at,
     end_merge_at,
     max_buffer=int(1e5),
-    max_downsample_factor_waveform_start=-1,
+    max_downsample_factor_waveform_start=2,
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
 
@@ -179,7 +179,7 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 @export
 def add_lone_hits(
-    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=-1
+    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=2
 ):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
@@ -204,7 +204,7 @@ def add_lone_hits(
 
 @numba.njit(cache=True, nogil=True)
 def _add_lone_hits(
-    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=-1
+    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=2
 ):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)

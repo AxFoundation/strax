@@ -15,7 +15,7 @@ def split_peaks(
     algorithm="local_minimum",
     data_type="peaks",
     n_top_channels=0,
-    max_downsample_factor_waveform_start=-1,
+    max_downsample_factor_waveform_start=2,
     **kwargs,
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
@@ -103,7 +103,7 @@ class PeakSplitter:
         do_iterations=1,
         min_area=0,
         n_top_channels=0,
-        max_downsample_factor_waveform_start=-1,
+        max_downsample_factor_waveform_start=2,
         **kwargs,
     ):
         if not len(records) or not len(peaks) or not do_iterations:
