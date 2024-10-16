@@ -13,8 +13,7 @@ def merge_peaks(
     start_merge_at,
     end_merge_at,
     max_buffer=int(1e5),
-    save_waveform_start=False,
-    max_downsample_factor_waveform_start=2,
+    max_downsample_factor_waveform_start=-1,
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
 
@@ -24,11 +23,9 @@ def merge_peaks(
     :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
         resulting peaks (after merging). Peaks must be constructed based on the properties of
         constituent peaks, it being too time-consuming to revert to records/hits.
-    :param save_waveform_start: Boolean which indicates whether to store the first samples of the
-        waveform in the peak. It will only store the first samples if the waveform is downsampled
-        and the downsample factor is smaller equal to max_downsample_factor_waveform_start.
     :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
         samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
+        If negative, it will not store the first samples of the waveform.
 
     """
     assert len(start_merge_at) == len(end_merge_at)
@@ -101,7 +98,6 @@ def merge_peaks(
             new_p,
             buffer,
             True,
-            save_waveform_start,
             max_downsample_factor_waveform_start,
             buffer_top,
         )
