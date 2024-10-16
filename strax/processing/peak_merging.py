@@ -190,11 +190,14 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=Fals
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
-    :param waveform_start: Boolean indicating if a lone hit should be added to the data_start field of peaks
+    :param waveform_start: Boolean indicating if a lone hit should be added to the data_start field
+        of peaks
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
-    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=n_top_channels, waveform_start=waveform_start)
+    _add_lone_hits(
+        peaks, lone_hits, to_pe, n_top_channels=n_top_channels, waveform_start=waveform_start
+    )
 
 
 @numba.njit(cache=True, nogil=True)
@@ -226,6 +229,6 @@ def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, waveform_start=Fal
 
             if index_wf_start < 0:
                 raise ValueError("Hit outside of full containment!")
-            
+
             if index_wf_start < len(p["data_start"]):
                 p["data_start"][index_wf_start] += lh_area
