@@ -141,7 +141,7 @@ def store_downsampled_waveform(
     p,
     wv_buffer,
     store_in_data_top=False,
-    max_downsample_factor_waveform_start=2,
+    store_in_data_start=False,
     wv_buffer_top=np.ones(1, dtype=np.float32),
 ):
     """Downsample the waveform in buffer and store it in p['data'] and in p['data_top'] if indicated
@@ -154,9 +154,8 @@ def store_downsampled_waveform(
     :param store_in_data_top: Boolean which indicates whether to also store into p['data_top'] When
         downsampling results in a fractional number of samples, the peak is shortened rather than
         extended. This causes data loss, but it is necessary to prevent overlaps between peaks.
-    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
-        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
-        If negative, it will not store the first samples of the waveform.
+    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak.
 
     """
 
@@ -179,7 +178,7 @@ def store_downsampled_waveform(
         p["dt"] *= downsample_factor
 
         # If the waveform is downsampled, we can store the first samples of the waveform
-        if downsample_factor <= max_downsample_factor_waveform_start:
+        if store_in_data_start:
             if p["length"] > len(p["data_start"]):
                 p["data_start"] = wv_buffer[: len(p["data_start"])]
             else:
@@ -250,8 +249,8 @@ def sum_waveform(
     record_links,
     adc_to_pe,
     n_top_channels=0,
+    store_in_data_start=False,
     select_peaks_indices=None,
-    max_downsample_factor_waveform_start=2,
 ):
     """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
     which hits were found. This is required to avoid any bias due to zero-padding and baselining.
@@ -262,12 +261,11 @@ def sum_waveform(
     :param records: Records to be used to build peaks.
     :param record_links: Tuple of previous and next records.
     :param n_top_channels: Number of top array channels.
+    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak.
     :param select_peaks_indices: Indices of the peaks for partial processing. In the form of
         np.array([np.int, np.int, ..]). If None (default), all the peaks are used for the summation.
         Assumes all peaks AND pulses have the same dt!
-    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
-        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
-        If negative, it will not store the first samples of the waveform.
 
     """
     if not len(records):
@@ -381,16 +379,13 @@ def sum_waveform(
             area_per_channel[ch] += area_pe
             p["area"] += area_pe
 
-        if n_top_channels > 0:
-            store_downsampled_waveform(
-                p,
-                swv_buffer,
-                True,
-                max_downsample_factor_waveform_start,
-                twv_buffer,
-            )
-        else:
-            store_downsampled_waveform(p, swv_buffer, False, max_downsample_factor_waveform_start)
+        store_downsampled_waveform(
+            p,
+            swv_buffer,
+            n_top_channels > 0,
+            store_in_data_start,
+            twv_buffer,
+        )
 
         p["n_saturated_channels"] = p["saturated_channel"].sum()
         p["area_per_channel"][:] = area_per_channel

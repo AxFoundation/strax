@@ -13,7 +13,6 @@ def merge_peaks(
     start_merge_at,
     end_merge_at,
     max_buffer=int(1e5),
-    max_downsample_factor_waveform_start=2,
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
 
@@ -23,9 +22,6 @@ def merge_peaks(
     :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
         resulting peaks (after merging). Peaks must be constructed based on the properties of
         constituent peaks, it being too time-consuming to revert to records/hits.
-    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
-        samples of the waveform. It should cover basically all S1s while keeping the disk usage low.
-        If negative, it will not store the first samples of the waveform.
 
     """
     assert len(start_merge_at) == len(end_merge_at)
@@ -98,7 +94,7 @@ def merge_peaks(
             new_p,
             buffer,
             True,
-            max_downsample_factor_waveform_start,
+            True,
             buffer_top,
         )
 
@@ -178,9 +174,7 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 
 @export
-def add_lone_hits(
-    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=2
-):
+def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start=False):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
 
@@ -188,8 +182,8 @@ def add_lone_hits(
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
-    :param max_downsample_factor_waveform_start: Maximum downsample factor for storing the first
-        samples of the waveform.
+    :param store_in_data_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak.
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
@@ -198,14 +192,12 @@ def add_lone_hits(
         lone_hits,
         to_pe,
         n_top_channels=n_top_channels,
-        max_downsample_factor_waveform_start=max_downsample_factor_waveform_start,
+        store_in_data_start=store_in_data_start,
     )
 
 
 @numba.njit(cache=True, nogil=True)
-def _add_lone_hits(
-    peaks, lone_hits, to_pe, n_top_channels=0, max_downsample_factor_waveform_start=2
-):
+def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_in_data_start=False):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
@@ -227,7 +219,7 @@ def _add_lone_hits(
             if lh_i["channel"] < n_top_channels:
                 p["data_top"][index] += lh_area
 
-        if max_downsample_factor_waveform_start > 0:
+        if store_in_data_start:
             # Non-downsampled waveforms have a fixed dt of 10 ns
             index_wf_start = (lh_i["time"] - p["time"]) // 10
 
