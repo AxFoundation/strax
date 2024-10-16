@@ -56,6 +56,7 @@ class TestInline(TestCase):
             run_id,
             targets,
             allow_multiple=True,
+            processor="threaded_mailbox",
             **make_kwargs,
         )
         for target in list(st._plugin_class_registry.keys()):
