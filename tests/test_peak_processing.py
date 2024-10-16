@@ -88,7 +88,7 @@ def test_sum_waveform(records):
         min_channels=1,
         max_duration=10_000_000,
     )
-    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels)
+    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels=n_top_channels)
 
     for p in peaks:
         # Area measures must be consistent
@@ -117,7 +117,7 @@ def test_sum_waveform(records):
             records,
             rlinks,
             np.ones(n_ch),
-            n_top_channels,
+            n_top_channels=n_top_channels,
             select_peaks_indices=np.array([0]),
         )
 
