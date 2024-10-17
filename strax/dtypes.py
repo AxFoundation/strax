@@ -115,6 +115,7 @@ hit_dtype = interval_dtype + [
     (("Internal (temporary) index of fragment in which hit was found", "record_i"), np.int32),
     (("ADC threshold applied in order to find hits", "threshold"), np.float32),
     (("Maximum amplitude above baseline [ADC counts]", "height"), np.float32),
+    (("Time when hit reach maximum amplitude [ns]", "max_time"), np.int64),
 ]
 
 
