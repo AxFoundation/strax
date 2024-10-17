@@ -1,4 +1,4 @@
-2.0.0 / 2024-10-17
+2.0.0 / 2024-10-18
 ---------------------
 * Allow `_chunk_number` to be list or tuple by @dachengx in https://github.com/AxFoundation/strax/pull/856
 * Filter out duplicated targets in function `get_iter` by @dachengx in https://github.com/AxFoundation/strax/pull/860
@@ -42,6 +42,7 @@
 * Make variables names more robust in `peak_dtype` by @dachengx in https://github.com/AxFoundation/strax/pull/911
 * Set `SingleThreadProcessor` as the default processor by @dachengx in https://github.com/AxFoundation/strax/pull/904
 * Switch to master for docformatter by @dachengx in https://github.com/AxFoundation/strax/pull/912
+* Add `max_time` which is the time when hit reaches its maximum by @dachengx in https://github.com/AxFoundation/strax/pull/913
 
 New Contributors
 * @yuema137 made their first contribution in https://github.com/AxFoundation/strax/pull/859
