@@ -1545,6 +1545,15 @@ class Context:
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
 
+        if processor is None:
+            processor = list(self.processors)[0]
+
+        if isinstance(processor, str):
+            processor = self.processors[processor]
+
+        if not hasattr(processor, "iter"):
+            raise ValueError("Processors must implement a iter methed.")
+
         is_superrun = run_id.startswith("_")
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
@@ -1557,7 +1566,7 @@ class Context:
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            elif not allow_multiple:
+            elif not allow_multiple or processor is strax.SingleThreadProcessor:
                 raise RuntimeError("Cannot automerge different data kinds!")
             elif self.context_config["timeout"] > 7200 or (
                 self.context_config["allow_lazy"] and not self.context_config["allow_multiprocess"]
@@ -1581,15 +1590,6 @@ class Context:
         for k in list(self._plugin_class_registry.keys()):
             if k.startswith("_temp"):
                 del self._plugin_class_registry[k]
-
-        if processor is None:
-            processor = list(self.processors)[0]
-
-        if isinstance(processor, str):
-            processor = self.processors[processor]
-
-        if not hasattr(processor, "iter"):
-            raise ValueError("Processors must implement a iter methed.")
 
         seen_a_chunk = False
         generator = processor(

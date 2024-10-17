@@ -426,13 +426,15 @@ def test_allow_multiple(targets=("peaks", "records")):
             raise ValueError(f"{function} could run with allow_multiple")
 
         try:
-            mystrax.make(run_id=run_id, targets=targets)
+            mystrax.make(run_id=run_id, targets=targets, processor="threaded_mailbox")
         except RuntimeError:
             # Great, we shouldn't be allowed
             pass
 
         assert not mystrax.is_stored(run_id, "peaks")
-        mystrax.make(run_id=run_id, allow_multiple=True, targets=targets)
+        mystrax.make(
+            run_id=run_id, allow_multiple=True, targets=targets, processor="threaded_mailbox"
+        )
 
         for t in targets:
             assert mystrax.is_stored(run_id, t)

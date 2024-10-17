@@ -164,9 +164,9 @@ def peak_dtype(
     n_channels=100,
     n_sum_wv_samples=200,
     n_widths=11,
-    digitize_top=True,
     hits_timing=True,
-    save_waveform_start=True,
+    store_data_top=True,
+    store_data_start=True,
 ):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
@@ -204,7 +204,7 @@ def peak_dtype(
                 np.int32,
             ),
         ]
-    if digitize_top:
+    if store_data_top:
         top_field = (
             ("Waveform data in PE/sample (not PE/ns!), top array", "data_top"),
             np.float32,
@@ -212,17 +212,16 @@ def peak_dtype(
         )
         dtype.insert(9, top_field)
 
-    if save_waveform_start:
-        dtype += [
+    if store_data_start:
+        start_field = (
             (
-                (
-                    "Waveform data in PE/sample (not PE/ns!), first 200 not downsampled samples",
-                    "data_start",
-                ),
-                np.float32,
-                n_sum_wv_samples,
-            )
-        ]
+                "Waveform data in PE/sample (not PE/ns!), first 200 not downsampled samples",
+                "data_start",
+            ),
+            np.float32,
+            n_sum_wv_samples,
+        )
+        dtype.insert(10, start_field)
 
     return dtype
 
