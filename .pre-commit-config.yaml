@@ -17,7 +17,7 @@ repos:
         language_version: python3
 
 -   repo: https://github.com/pycqa/docformatter
-    rev: v1.7.5
+    rev: master
     hooks:
     -   id: docformatter
         additional_dependencies: [tomli]
