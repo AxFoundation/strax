@@ -1,4 +1,4 @@
-2.0.0 / 2024-10-14
+2.0.0 / 2024-10-17
 ---------------------
 * Allow `_chunk_number` to be list or tuple by @dachengx in https://github.com/AxFoundation/strax/pull/856
 * Filter out duplicated targets in function `get_iter` by @dachengx in https://github.com/AxFoundation/strax/pull/860
@@ -35,6 +35,13 @@
 * Set default `max_downsample_factor_waveform_start` as not `None` by @dachengx in https://github.com/AxFoundation/strax/pull/900
 * Turn back to `zstd` because `zstandard` raise errors by @dachengx in https://github.com/AxFoundation/strax/pull/902
 * Do not add producer that has been added by saver by @dachengx in https://github.com/AxFoundation/strax/pull/901
+* Propagate n_top_channels to _add_lone_hits by @HenningSE in https://github.com/AxFoundation/strax/pull/907
+* Add option to merge `lone_hits` into `data_start` by @HenningSE in https://github.com/AxFoundation/strax/pull/908
+* Save `data_start` even there is no downsampling by @dachengx in https://github.com/AxFoundation/strax/pull/909
+* Remove `max_downsample_factor_waveform_start`, simplify the saving of `data_start` by @dachengx in https://github.com/AxFoundation/strax/pull/910
+* Make variables names more robust in `peak_dtype` by @dachengx in https://github.com/AxFoundation/strax/pull/911
+* Set `SingleThreadProcessor` as the default processor by @dachengx in https://github.com/AxFoundation/strax/pull/904
+* Switch to master for docformatter by @dachengx in https://github.com/AxFoundation/strax/pull/912
 
 New Contributors
 * @yuema137 made their first contribution in https://github.com/AxFoundation/strax/pull/859
