@@ -149,7 +149,9 @@ class TestMongoFrontend(unittest.TestCase):
 
         self.log.info(f"Starting with empty db {self.chunk_summary}")
         # Get the iterator separately and complete with "next(iterator)
-        iterator = self.st.get_iter(self.test_run_id, self.mongo_target)
+        iterator = self.st.get_iter(
+            self.test_run_id, self.mongo_target, processor="threaded_mailbox"
+        )
 
         self.log.info(f"Got iterator, still no data?: {self.chunk_summary}")
         # Chunk 0

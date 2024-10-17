@@ -40,6 +40,7 @@ def _loop_test_inner(
     target="added_thing",
     time_selection="fully_contained",
     force_value_error=False,
+    processor=None,
 ):
     """Test loop plugins for random data. For this test we are going to setup two plugins that will
     be looped over and combined into a loop plugin (depending on the target, this may be a multi
@@ -161,7 +162,7 @@ def _loop_test_inner(
         st.register((BigThing, SmallThing, AddBigToSmall, AddBigToSmallMultiOutput))
 
         # Make small thing in order to allow re-chunking
-        st.make(run_id="some_run", targets="small_thing")
+        st.make(run_id="some_run", targets="small_thing", processor=processor)
 
         # Make the loop plugin
         result = st.get_array(run_id="some_run", targets=target)
@@ -212,16 +213,18 @@ def test_loop_plugin_multi_output(
 )
 @settings(deadline=None)
 @example(big_data=np.array([], dtype=full_dt_dtype), nchunks=2)
-def test_value_error_for_loop_plugin(big_data, nchunks):
+def test_error_for_loop_plugin(big_data, nchunks):
     """Make sure that we are are getting the right ValueError."""
-    try:
-        _loop_test_inner(big_data, nchunks, force_value_error=True)
-        raise RuntimeError(
-            "did not run into ValueError despite the fact we are having multiple none-type chunks"
-        )
-    except ValueError:
-        # Good we got the ValueError we wanted
-        pass
+    for error, processor in zip([RuntimeError, ValueError], ["single_thread", "threaded_mailbox"]):
+        try:
+            _loop_test_inner(big_data, nchunks, force_value_error=True, processor=processor)
+            raise RuntimeError(
+                f"Did not run into {error.__name__} despite the fact "
+                "we are having multiple none-type chunks"
+            )
+        except error:
+            # Good we got the Error we wanted
+            pass
 
 
 @given(

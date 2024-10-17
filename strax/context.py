@@ -181,6 +181,7 @@ class Context:
 
     runs: ty.Optional[pd.DataFrame] = None
     _fixed_plugin_cache: ty.Optional[dict] = None
+    _fixed_level_cache: ty.Optional[dict] = None
     _run_defaults_cache: dict
     storage: ty.List[strax.StorageFrontend]
 
@@ -554,7 +555,7 @@ class Context:
 
         :param data_type: Data type name
         :param pattern: Show only options that match (fnmatch) pattern
-        :param run_id: Run id to use for run-dependent config options. If omitted, will show
+        :param run_id: run id to use for run-dependent config options. If omitted, will show
             defaults active for new runs.
 
         """
@@ -1005,7 +1006,7 @@ class Context:
         """Get the datatype that is provided by a plugin but not depended on by any other plugin."""
         provides = [prov for p in plugins.values() for prov in strax.to_str_tuple(p.provides)]
         depends_on = [dep for p in plugins.values() for dep in strax.to_str_tuple(p.depends_on)]
-        uniques = list(set(provides) ^ set(depends_on))
+        uniques = list(set(provides) - set(depends_on))
         return strax.to_str_tuple(uniques)
 
     @property
@@ -1309,7 +1310,8 @@ class Context:
         if len(intersec):
             raise RuntimeError(f"{intersec} both computed and loaded?!")
         if len(targets) > 1:
-            final_plugin = [t for t in targets if t in self._get_end_targets(plugins)][:1]
+            pendants = set(targets) & set(self._get_end_targets(plugins))
+            final_plugin = tuple(pendants - set(loaders))[:1]
             self.log.warning(
                 "Multiple targets detected! This is only suitable for mass "
                 f"producing dataypes since only {final_plugin} will be "
@@ -1543,6 +1545,15 @@ class Context:
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
 
+        if processor is None:
+            processor = list(self.processors)[0]
+
+        if isinstance(processor, str):
+            processor = self.processors[processor]
+
+        if not hasattr(processor, "iter"):
+            raise ValueError("Processors must implement a iter methed.")
+
         is_superrun = run_id.startswith("_")
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
@@ -1555,7 +1566,7 @@ class Context:
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            elif not allow_multiple:
+            elif not allow_multiple or processor is strax.SingleThreadProcessor:
                 raise RuntimeError("Cannot automerge different data kinds!")
             elif self.context_config["timeout"] > 7200 or (
                 self.context_config["allow_lazy"] and not self.context_config["allow_multiprocess"]
@@ -1579,15 +1590,6 @@ class Context:
         for k in list(self._plugin_class_registry.keys()):
             if k.startswith("_temp"):
                 del self._plugin_class_registry[k]
-
-        if processor is None:
-            processor = list(self.processors)[0]
-
-        if isinstance(processor, str):
-            processor = self.processors[processor]
-
-        if not hasattr(processor, "iter"):
-            raise ValueError("Processors must implement a iter methed.")
 
         seen_a_chunk = False
         generator = processor(
@@ -1924,7 +1926,7 @@ class Context:
         cannot fit in memory zarr is very compatible with dask. Targets are loaded into separate
         arrays and runs are merged. the data is added to any existing data in the storage location.
 
-        :param run_ids: (Iterable) Run ids you wish to load.
+        :param run_ids: (Iterable) run ids you wish to load.
         :param targets: (Iterable) targets to load.
         :param storage: (str, optional) fsspec path to store array. Defaults to './strax_temp_data'.
         :param overwrite: (boolean, optional) whether to overwrite existing arrays for targets at
@@ -2395,7 +2397,7 @@ class Context:
 
         chunks = self.get_metadata(run_id, per_chunked_dependency)["chunks"]
         if chunk_number_group is not None:
-            combined_chunk_numbers = list(itertools.chain(*chunk_number_group))
+            combined_chunk_numbers = list(itertools.chain.from_iterable(chunk_number_group))
             if len(combined_chunk_numbers) != len(set(combined_chunk_numbers)):
                 raise ValueError(f"Duplicate chunk numbers found in {chunk_number_group}")
             if min(combined_chunk_numbers) == 0 and max(combined_chunk_numbers) == len(chunks) - 1:
@@ -2534,16 +2536,14 @@ class Context:
         if target in _targets_stored:
             return None
 
-        this_target_is_stored = self.is_stored(run_id, target)
-        _targets_stored[target] = this_target_is_stored
+        _targets_stored[target] = self.is_stored(run_id, target)
 
-        if this_target_is_stored:
+        if _targets_stored[target]:
             return _targets_stored
 
         # Need to init the class e.g. if we want to allow depends_on which is not a class attribute
         plugin = self._plugin_class_registry[target]()
-        dependencies = strax.to_str_tuple(plugin.depends_on)
-        if not dependencies:
+        if not plugin.depends_on:
             raise strax.DataNotAvailable(f"Lowest level dependency {target} is not stored")
 
         forbidden = strax.to_str_tuple(self.context_config["forbid_creation_of"])
@@ -2562,7 +2562,7 @@ class Context:
 
         self.stored_dependencies(
             run_id,
-            target=dependencies,
+            target=plugin.depends_on,
             check_forbidden=check_forbidden,
             _targets_stored=_targets_stored,
         )
@@ -2658,20 +2658,32 @@ class Context:
             for data_type, _hash, save_when, version in hashes
         }
 
+    def get_dependency_plugins(
+        self,
+        target: str,
+        run_id: str,
+        chunk_number: ty.Optional[ty.Dict[str, ty.List[int]]] = None,
+    ) -> ty.Dict[str, strax.Plugin]:
+        """Return all plugins required to produce targets.
+
+        :param target: data type to produce
+        :param run_id: run id to use for run-dependent config options
+        :param chunk_number: Chunk number to use for run-dependent config options
+        :return: dictionary with data type as key and plugin as value
+
+        """
+        # Get all plugins required to produce targets
+        plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)[target]
+        _dependencies = [plugins.deps.items()]
+        _dependencies += [
+            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugins.deps
+        ]
+        dependencies = dict(itertools.chain.from_iterable(_dependencies))
+        return dependencies
+
     def get_dependencies(self, data_type):
         """Get the dependencies of a data_type."""
-        dependencies = set()
-
-        def _get_dependencies(_data_type):
-            if _data_type in self.root_data_types:
-                return
-            plugin = self._plugin_class_registry[_data_type]()
-            dependencies.update(plugin.depends_on)
-            for d in plugin.depends_on:
-                _get_dependencies(d)
-
-        _get_dependencies(data_type)
-        return dependencies
+        return set(self.get_dependency_plugins(data_type, "0").keys())
 
     @property
     def root_data_types(self):
@@ -2736,6 +2748,57 @@ class Context:
             else:
                 seen_allow = None
             checked |= check_support_superrun(data_type, checked, seen_allow)
+
+    @property
+    def tree_levels(self):
+        """Get the levels of the data types in the context.
+
+        This function will be useful to tell us which data_type to process first.
+
+        For Example, for a given class with Records, Peaks registered, the tree_levels will return:
+        {'records': {'level': 0, 'class': 'Records', 'index': 0, 'order': 0}, 'peaks': {'level': 1,
+        'class': 'Peaks', 'index': 0, 'order': 1}}
+
+        """
+
+        context_hash = self._context_hash()
+        if self._fixed_level_cache is not None and context_hash in self._fixed_level_cache:
+            return self._fixed_level_cache[context_hash]
+
+        def _get_levels(data_type=None, results=None):
+            """Get the level data_type in the context."""
+            if results is None:
+                results = dict()
+            for k in [data_type] if data_type else self._plugin_class_registry.keys():
+                results[k] = dict()
+                _v = self._plugin_class_registry[k]()
+                if _v.depends_on:
+                    results[k]["level"] = (
+                        max(_get_levels(d, results)[d]["level"] for d in _v.depends_on) + 1
+                    )
+                else:
+                    results[k]["level"] = 0
+                results[k]["class"] = self._plugin_class_registry[k].__name__
+                results[k]["index"] = _v.provides.index(k)
+            return results
+
+        # Sort the results by level, class, and index in provides
+        _results = sorted(
+            _get_levels().items(), key=lambda x: (x[1]["level"], x[1]["class"], x[1]["index"])
+        )
+
+        # Assign order to the results
+        for order, (key, value) in enumerate(_results):
+            value["order"] = order
+        results = dict(_results)
+
+        if self._fixed_level_cache is None:
+            self._fixed_level_cache = {context_hash: results}
+        elif context_hash not in self._fixed_level_cache:
+            self.log.info("Replacing context._fixed_level_cache since plugins/versions changed")
+            self._fixed_level_cache = {context_hash: results}
+
+        return results
 
     @classmethod
     def add_method(cls, f):
