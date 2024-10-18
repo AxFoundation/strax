@@ -43,6 +43,7 @@
 * Set `SingleThreadProcessor` as the default processor by @dachengx in https://github.com/AxFoundation/strax/pull/904
 * Switch to master for docformatter by @dachengx in https://github.com/AxFoundation/strax/pull/912
 * Add `max_time` which is the time when hit reaches its maximum by @dachengx in https://github.com/AxFoundation/strax/pull/913
+* Small fix of dtype description by @dachengx in https://github.com/AxFoundation/strax/pull/914
 
 New Contributors
 * @yuema137 made their first contribution in https://github.com/AxFoundation/strax/pull/859
