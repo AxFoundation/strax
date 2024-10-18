@@ -43,8 +43,6 @@ scipy = "*"
 tqdm = ">=4.46.0"
 zarr = "*"
 zstd = "*"
-sharedarray = { url = "https://xenon.isi.edu/python/SharedArray-3.2.3.tar.gz", optional = true }
-base_environment = { git = "https://github.com/XENONnT/base_environment.git", optional = true }
 sphinx = { version = "*", optional = true }
 sphinx_rtd_theme = { version = "*", optional = true }
 nbsphinx = { version = "*", optional = true }
@@ -56,10 +54,6 @@ urllib3 = { version = "2.2.2", optional = true }
 lxml_html_clean = { version = "*", optional = true }
 
 [tool.poetry.extras]
-tests = [
-  "sharedarray",
-  "base_environment",
-]
 docs = [
   "sphinx",
   "sphinx_rtd_theme",
