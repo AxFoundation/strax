@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "strax"
-version = "1.6.5"
+version = "2.0.0"
 description = "Streaming analysis for xenon TPCs"
 readme = "README.md"
 authors = [
