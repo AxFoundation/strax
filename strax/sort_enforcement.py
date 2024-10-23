@@ -16,7 +16,8 @@ class SortingError(Exception):
 def enforce_mergesort(func_name):
     """Raises warning if not using mergesort"""
     warnings.warn(
-        f"Direct use of {func_name} detected. Please use the mergesort wrapper to ensure deterministic behavior.",
+        f"Direct use of {func_name} detected.\n"
+        "Please use the mergesort wrapper to ensure deterministic behavior.",
         UserWarning,
         stacklevel=3,
     )
@@ -30,8 +31,9 @@ def create_sort_wrapper(original_func, func_name):
         # Check if explicit quicksort is requested
         if kwargs.get("kind") == "quicksort" or kwargs.get("kind") == "heapsort":
             raise SortingError(
-                "quicksort and heapsort are not allowed due to non-deterministic behavior. "
-                "Please use mergesort explicitely or remove the 'kind' parameter to use mergesort by default."
+                "quicksort and heapsort are not allowed due to non-deterministic behavior.\n"
+                "Please use mergesort explicitely, "
+                "or remove the 'kind' parameter to use mergesort by default."
             )
 
         # Always use mergesort
