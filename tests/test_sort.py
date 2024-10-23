@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import warnings
-from strax.sort_init import SortingError, mergesort, mergesort_argsort, restore_sorts
+from strax.sort_enforcement import SortingError, mergesort, mergesort_argsort, restore_sorts
 
 
 class TestSortEnforcement(unittest.TestCase):
