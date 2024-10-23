@@ -8,13 +8,13 @@ original_argsort = np.argsort
 
 
 class SortingError(Exception):
-    """Custom exception for sorting violations"""
+    """Custom exception for sorting violations."""
 
     pass
 
 
 def enforce_mergesort(func_name):
-    """Raises warning if not using mergesort"""
+    """Raises warning if not using mergesort."""
     warnings.warn(
         f"Direct use of {func_name} detected.\n"
         "Please use the mergesort wrapper to ensure deterministic behavior.",
@@ -24,7 +24,7 @@ def enforce_mergesort(func_name):
 
 
 def create_sort_wrapper(original_func, func_name):
-    """Creates a wrapper that enforces mergesort usage"""
+    """Creates a wrapper that enforces mergesort usage."""
 
     @functools.wraps(original_func)
     def wrapper(arr, *args, **kwargs):
@@ -58,16 +58,17 @@ mergesort_argsort = argsort_wrapper
 
 
 def enable_safe_sorting():
-    """
-    Patches all NumPy sorting methods to enforce mergesort.
+    """Patches all NumPy sorting methods to enforce mergesort.
+
     Returns a function to restore original behavior if needed.
+
     """
     # Replace all sorting methods
     np.sort = sort_wrapper
     np.argsort = argsort_wrapper
 
     def restore_original_sorts():
-        """Restores original NumPy sorting behavior"""
+        """Restores original NumPy sorting behavior."""
         np.sort = original_sort
         np.argsort = original_argsort
 

@@ -6,7 +6,7 @@ from strax.sort_enforcement import SortingError, mergesort, mergesort_argsort, r
 
 class TestSortEnforcement(unittest.TestCase):
     def setUp(self):
-        """Set up test fixtures before each test method"""
+        """Set up test fixtures before each test method."""
         self.arr = np.array([3, 1, 4, 1, 5, 9, 2, 6])
         # Store expected sorted array and indices for comparison
         self.expected_sorted = np.array([1, 1, 2, 3, 4, 5, 6, 9])
@@ -27,7 +27,7 @@ class TestSortEnforcement(unittest.TestCase):
             np.testing.assert_array_equal(sorted_indices, self.expected_argsort)
 
     def test_quicksort_rejection(self):
-        """Test that quicksort and heapsort raise errors for both sort and argsort"""
+        """Test that quicksort and heapsort raise errors for both sort and argsort."""
         # Test np.sort
         with self.assertRaises(SortingError):
             np.sort(self.arr, kind="quicksort")
@@ -54,7 +54,7 @@ class TestSortEnforcement(unittest.TestCase):
         self.assertEqual(sorted_arr[3]["letter"], "d")
 
     def test_restore_functionality(self):
-        """Test that restore_sorts function works correctly"""
+        """Test that restore_sorts function works correctly."""
         # First verify mergesort is enforced
         with self.assertRaises(SortingError):
             np.sort(self.arr, kind="quicksort")
