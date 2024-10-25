@@ -52,7 +52,7 @@ class TestSortEnforcement(unittest.TestCase):
         # Test np.argsort with quicksort
         try:
             quicksort_indices = np.argsort(self.arr, kind="quicksort")
-            # Note: We don't check exact equality because quicksort might give different 
+            # Note: We don't check exact equality because quicksort might give different
             # but valid ordering for equal elements
             self.assertTrue(np.all(self.arr[quicksort_indices] == self.expected_sorted))
         except Exception as e:
@@ -62,8 +62,7 @@ class TestSortEnforcement(unittest.TestCase):
         """Test that wrapped sorting is stable (stablesort property)"""
         # Create array with duplicate values
         arr = np.array(
-            [(1, "a"), (2, "b"), (1, "c"), (2, "d")], 
-            dtype=[("num", int), ("letter", "U1")]
+            [(1, "a"), (2, "b"), (1, "c"), (2, "d")], dtype=[("num", int), ("letter", "U1")]
         )
         sorted_arr = stablesort(arr, order="num")
         # Check that relative order of equal elements is preserved
