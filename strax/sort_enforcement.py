@@ -1,7 +1,6 @@
 import numpy as np
 import functools
 import warnings
-from copy import deepcopy
 
 class SortingError(Exception):
     """Custom exception for sorting violations."""
