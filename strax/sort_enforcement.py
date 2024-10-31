@@ -7,6 +7,7 @@ UNSTABLE_SORT_MESSAGE = (
     "Please use mergesort for deterministic sorting behavior."
 )
 
+
 # Define custom exception for sorting errors
 class SortingError(Exception):
     pass
