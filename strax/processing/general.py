@@ -37,9 +37,9 @@ def sort_by_time(x):
         # Faster sorting:
         x = _sort_by_time_and_channel(x, channel, channel.max() + 1)
     elif "channel" in x.dtype.names:
-        x = np.sort(x, order=("time", "channel"))
+        x = strax.stablesort(x, order=("time", "channel"))
     else:
-        x = np.sort(x, order=("time",))
+        x = strax.stablesort(x, order=("time",))
     return x
 
 
@@ -47,7 +47,7 @@ def sort_by_time(x):
 def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind="mergesort"):
     """Assumes you have no more than 10k channels, and records don't span more than 11 days.
 
-    (5-10x) faster than np.sort(order=...), as np.sort looks at all fields
+    (5-10x) faster than strax.stablesort(order=...), as strax.stablesort looks at all fields
 
     """
     # I couldn't get fast argsort on multiple keys to work in numba
@@ -426,7 +426,7 @@ def _touching_windows(
     thing_start, thing_end, container_start, container_end, window=0, endtime_sort_kind="mergesort"
 ):
     n = len(thing_start)
-    container_end_argsort = np.argsort(container_end, kind=endtime_sort_kind)
+    container_end_argsort = strax.numba_stableargsort(container_end, kind=endtime_sort_kind)
 
     # we search twice, first for the beginning of the interval, then for the end
     left_i = right_i = 0
