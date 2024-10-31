@@ -3,8 +3,10 @@ import functools
 import warnings
 import numba
 
+
 class SortingError(Exception):
     """Custom exception for sorting violations."""
+
     pass
 
 # Common error message for unstable sort methods
@@ -21,6 +23,7 @@ def enforce_stable_sort_warning():
         UserWarning,
         stacklevel=3,
     )
+
 
 def create_sort_wrapper(original_func):
     """Creates a wrapper that enforces stable_sort usage."""
