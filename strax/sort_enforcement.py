@@ -7,9 +7,11 @@ UNSTABLE_SORT_MESSAGE = (
     "Please use mergesort for deterministic sorting behavior."
 )
 
+
 # Define custom exception for sorting errors
 class SortingError(Exception):
     pass
+
 
 @numba.njit(nogil=True, cache=True)
 def stable_sort(arr, kind="mergesort"):
