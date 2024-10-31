@@ -1,5 +1,4 @@
 import numpy as np
-import numba
 from numba.extending import register_jitable
 
 import strax
