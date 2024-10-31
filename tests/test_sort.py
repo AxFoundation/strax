@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import warnings
-from strax.sort_enforcement import SortingError, stablesort, stableargsort
+from strax.sort_enforcement import SortingError, stable_sort, stable_argsort
 
 
 class TestSortEnforcement(unittest.TestCase):
@@ -12,33 +12,33 @@ class TestSortEnforcement(unittest.TestCase):
         self.expected_sorted = np.array([1, 1, 2, 3, 4, 5, 6, 9])
         self.expected_argsort = np.array([1, 3, 6, 0, 2, 4, 7, 5])
 
-    def test_explicit_stablesort(self):
-        """Test explicit stablesort function (should not warn)"""
+    def test_explicit_stable_sort(self):
+        """Test explicit stable_sort function (should not warn)"""
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # Turn warnings into errors
-            sorted_arr = stablesort(self.arr)
+            sorted_arr = stable_sort(self.arr)
             np.testing.assert_array_equal(sorted_arr, self.expected_sorted)
 
-    def test_explicit_stablesort_argsort(self):
-        """Test explicit stablesort_argsort function (should not warn)"""
+    def test_explicit_stable_sort_argsort(self):
+        """Test explicit stable_sort_argsort function (should not warn)"""
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # Turn warnings into errors
-            sorted_indices = stableargsort(self.arr)
+            sorted_indices = stable_argsort(self.arr)
             np.testing.assert_array_equal(sorted_indices, self.expected_argsort)
 
     def test_wrapped_quicksort_rejection(self):
         """Test that quicksort and heapsort raise errors in wrapped functions."""
-        # Test stablesort wrapper
+        # Test stable_sort wrapper
         with self.assertRaises(SortingError):
-            stablesort(self.arr, kind="quicksort")
+            stable_sort(self.arr, kind="quicksort")
         with self.assertRaises(SortingError):
-            stablesort(self.arr, kind="heapsort")
+            stable_sort(self.arr, kind="heapsort")
 
-        # Test stablesort_argsort wrapper
+        # Test stable_sort_argsort wrapper
         with self.assertRaises(SortingError):
-            stableargsort(self.arr, kind="quicksort")
+            stable_argsort(self.arr, kind="quicksort")
         with self.assertRaises(SortingError):
-            stableargsort(self.arr, kind="heapsort")
+            stable_argsort(self.arr, kind="heapsort")
 
     def test_original_numpy_unaffected(self):
         """Test that original numpy sort functions still work with quicksort."""
@@ -59,13 +59,13 @@ class TestSortEnforcement(unittest.TestCase):
             self.fail(f"np.argsort with quicksort raised an unexpected exception: {e}")
 
     def test_sort_stability(self):
-        """Test that wrapped sorting is stable (stablesort property)"""
+        """Test that wrapped sorting is stable (stable_sort property)"""
         # Create array with duplicate values
         arr = np.array(
             [(1, "a"), (2, "b"), (1, "c"), (2, "d")], 
             dtype=[("num", int), ("letter", "U1")]
         )
-        sorted_arr = stablesort(arr, order="num")
+        sorted_arr = stable_sort(arr, order="num")
         # Check that relative order of equal elements is preserved
         self.assertEqual(sorted_arr[0]["letter"], "a")
         self.assertEqual(sorted_arr[1]["letter"], "c")

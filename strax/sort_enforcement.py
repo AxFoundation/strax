@@ -14,16 +14,16 @@ UNSTABLE_SORT_MESSAGE = (
     "or remove the 'kind' parameter to use mergesort by default."
 )
 
-def enforce_stablesort_warning():
-    """Issues warning about using stablesort wrapper."""
+def enforce_stable_sort_warning():
+    """Issues warning about using stable_sort wrapper."""
     warnings.warn(
-        "Consider using stablesort or stableargsort to ensure deterministic behavior.",
+        "Consider using stable_sort or stable_argsort to ensure deterministic behavior.",
         UserWarning,
         stacklevel=3,
     )
 
 def create_sort_wrapper(original_func):
-    """Creates a wrapper that enforces stablesort usage."""
+    """Creates a wrapper that enforces stable_sort usage."""
     @functools.wraps(original_func)
     def wrapper(arr, *args, **kwargs):
         # Check for explicitly disallowed sorting methods
@@ -36,7 +36,7 @@ def create_sort_wrapper(original_func):
 
     return wrapper
 
-def create_numba_stablesort(sort_func):
+def create_numba_stable_sort(sort_func):
     """Creates a Numba-optimized stable sort function."""
     @numba.njit(nogil=True, cache=True)
     def _stable_sort(arr, kind='mergesort'):
@@ -46,9 +46,9 @@ def create_numba_stablesort(sort_func):
     return _stable_sort
 
 # Create Numba-optimized versions
-numba_stablesort = create_numba_stablesort(np.sort)
-numba_stableargsort = create_numba_stablesort(np.argsort)
+numba_stable_sort = create_numba_stable_sort(np.sort)
+numba_stable_argsort = create_numba_stable_sort(np.argsort)
 
 # Create wrapped versions of regular numpy sort functions
-stablesort = create_sort_wrapper(np.sort)
-stableargsort = create_sort_wrapper(np.argsort)
+stable_sort = create_sort_wrapper(np.sort)
+stable_argsort = create_sort_wrapper(np.argsort)

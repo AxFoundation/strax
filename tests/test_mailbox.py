@@ -35,7 +35,7 @@ def mailbox_tester(
         numbers = np.arange(len(messages))
     if expected_result is None:
         messages = np.asarray(messages)
-        expected_result = messages[strax.stableargsort(numbers)]
+        expected_result = messages[strax.stable_argsort(numbers)]
 
     mb = strax.Mailbox(max_messages=max_messages, timeout=timeout, lazy=lazy)
 
