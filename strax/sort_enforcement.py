@@ -12,6 +12,7 @@ UNSTABLE_SORT_MESSAGE = (
 class SortingError(Exception):
     pass
 
+
 def stable_sort(arr, kind="mergesort"):
     """Numba-optimized stable sort function using mergesort.
 
@@ -30,14 +31,15 @@ def stable_sort(arr, kind="mergesort"):
 
 def stable_argsort(arr, kind="mergesort"):
     """Get indices that will sort an array.
-    
+
     Args:
         arr: Array to sort, can include any comparable type
         kind: Sort algorithm to use (only 'mergesort' is allowed)
-        
+
     Returns:
-        Array of indices that can be used to sort arr while preserving 
+        Array of indices that can be used to sort arr while preserving
         relative order of equal elements (stable sort)
+
     """
     if kind != "mergesort":
         raise SortingError(UNSTABLE_SORT_MESSAGE)
@@ -48,7 +50,8 @@ def stable_argsort(arr, kind="mergesort"):
         # Fall back to regular numpy if Numba fails
         return np.argsort(arr, kind=kind)
 
+
 @numba.njit(nogil=True, cache=True)
 def _stable_argsort_numba(arr, kind):
-    """Internal Numba-accelerated version"""
+    """Internal Numba-accelerated version."""
     return np.argsort(arr, kind=kind)
