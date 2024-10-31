@@ -27,7 +27,8 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
     Note:
         Also goes by the name highest posterior density. Please note,
         that the right edge corresponds to the right side of the sample.
-        Hence the corresponding index is -= 1.  
+        Hence the corresponding index is -= 1.
+
     """
     fi = 0  # number of fractions seen
     # Buffer for the result if we find more then _buffer_size edges the function fails.
