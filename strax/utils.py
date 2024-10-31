@@ -523,7 +523,7 @@ def multi_run(
 
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
-    run_id_numpy = np.sort(run_id_numpy)
+    run_id_numpy = strax.stablesort(run_id_numpy)
     _is_superrun = np.any([r.startswith("_") for r in run_id_numpy])
 
     # Get from kwargs whether output should contain a run_id field.
@@ -612,7 +612,7 @@ def multi_run(
             pbar.close()
             return None
 
-        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        final_result = [final_result[ind] for ind in strax.stableargsort(run_id_output)]
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(

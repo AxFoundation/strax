@@ -390,7 +390,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
 
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
-    ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
+    ind_max_template, size_template = strax.stablesort(size_template_and_ind_max_template)
 
     # Make dummy hitlet:
     data = data.astype(np.float32)

@@ -42,7 +42,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
         )
 
     # Need an index which sorted by amplitude
-    max_to_min = np.argsort(data, kind="mergesort")[::-1]
+    max_to_min = strax.stableargsort(data)[::-1]
 
     lowest_sample_seen = np.inf
     for j in range(1, len(data)):
@@ -82,7 +82,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
             res_amp[fi] = true_height
 
             # Find gaps and get edges of hdr intervals:
-            ind = np.sort(max_to_min[:j])
+            ind = strax.stablesort(max_to_min[:j])
             gaps = np.arange(1, len(ind) + 1)
 
             g0 = 0

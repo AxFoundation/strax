@@ -441,7 +441,7 @@ def define_run(
     run_md["comments"] = [{"comment": comment} for comment in comments]
 
     # Make sure subruns are sorted in time
-    sort_index = np.argsort(starts)
+    sort_index = strax.stableargsort(starts)
     data = {keys[i]: data[keys[i]] for i in sort_index}
 
     # Superrun names must start with an underscore
