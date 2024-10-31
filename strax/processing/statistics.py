@@ -1,13 +1,15 @@
 import numpy as np
 import numba
+from numba.extending import register_jitable
 
 import strax
+from strax.sort_enforcement import stable_argsort, stable_sort
 
 export, __all__ = strax.exporter()
 
 
 @export
-@numba.njit(cache=True)
+@register_jitable
 def highest_density_region(data, fractions_desired, only_upper_part=False, _buffer_size=10):
     """Computes for a given sampled distribution the highest density region of the desired
     fractions. Does not assume anything on the normalisation of the data.
@@ -25,8 +27,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
     Note:
         Also goes by the name highest posterior density. Please note,
         that the right edge corresponds to the right side of the sample.
-        Hence the corresponding index is -= 1.
-
+        Hence the corresponding index is -= 1.  
     """
     fi = 0  # number of fractions seen
     # Buffer for the result if we find more then _buffer_size edges the function fails.
@@ -42,7 +43,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
         )
 
     # Need an index which sorted by amplitude
-    max_to_min = strax.stable_argsort(data)[::-1]
+    max_to_min = stable_argsort(data)[::-1]
 
     lowest_sample_seen = np.inf
     for j in range(1, len(data)):
@@ -82,7 +83,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
             res_amp[fi] = true_height
 
             # Find gaps and get edges of hdr intervals:
-            ind = strax.stable_sort(max_to_min[:j])
+            ind = stable_sort(max_to_min[:j])
             gaps = np.arange(1, len(ind) + 1)
 
             g0 = 0
