@@ -38,9 +38,9 @@ def sort_by_time(x):
         # Faster sorting:
         x = _sort_by_time_and_channel(x, channel, channel.max() + 1)
     elif "channel" in x.dtype.names:
-        x = strax.stable_sort(x, order=("time", "channel"))
+        x = stable_sort(x, order=("time", "channel"))
     else:
-        x = strax.stable_sort(x, order=("time",))
+        x = stable_sort(x, order=("time",))
     return x
 
 
