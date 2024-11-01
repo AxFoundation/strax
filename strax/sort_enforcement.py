@@ -14,7 +14,7 @@ class SortingError(Exception):
 
 
 def stable_sort(arr, kind="mergesort", **kwargs):
-    """stable sort function using mergesort, w/o numba optimization.
+    """Stable sort function using mergesort, w/o numba optimization.
 
     Args:
         arr: numpy array to sort
