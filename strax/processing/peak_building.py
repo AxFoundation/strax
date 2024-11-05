@@ -190,7 +190,7 @@ def store_downsampled_waveform(
         if p_length > len(p["data_start"]):
             p["data_start"] = waveform_buffer[: len(p["data_start"])]
         else:
-            p["data_start"][: p_length] = waveform_buffer[: p_length]
+            p["data_start"][:p_length] = waveform_buffer[:p_length]
 
 
 @export
