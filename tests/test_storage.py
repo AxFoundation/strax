@@ -139,6 +139,7 @@ class TestStorageType(TestCase):
             dirname = os.path.join(sf.path, str(key))
             strax.io.dry_load_files(dirname)
             strax.io.dry_load_files(dirname, 0)
+            strax.io.dry_load_files(dirname, [0])
             with self.assertRaises(ValueError):
                 strax.io.dry_load_files(dirname, 99)
 
