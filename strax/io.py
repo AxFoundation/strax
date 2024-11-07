@@ -137,11 +137,11 @@ def dry_load_files(dirname, chunk_number=None):
     if chunk_number is None:
         chunk_numbers = list(range(len(metadata["chunks"])))
     else:
-        if not isinstance(chunk_number, int):
-            raise ValueError(f"Chunk number must be an integer, not {chunk_number}.")
-        if chunk_number >= len(metadata["chunks"]):
-            raise ValueError(f"Chunk {chunk_number:06d} does not exist in {dirname}.")
-        chunk_numbers = [chunk_number]
+        if not isinstance(chunk_number, (int, list, tuple)):
+            raise ValueError(f"Chunk number must be int, list, or tuple, not {type(chunk_number)}.")
+        chunk_numbers = chunk_number if isinstance(chunk_number, (list, tuple)) else [chunk_number]
+        if max(chunk_numbers) >= len(metadata["chunks"]):
+            raise ValueError(f"Chunk {max(chunk_numbers):06d} does not exist in {dirname}.")
 
     results = []
     for c in chunk_numbers:
