@@ -13,6 +13,7 @@ import time
 import typing
 from warnings import warn
 from immutabledict import immutabledict
+import gc
 import numpy as np
 from copy import copy, deepcopy
 import strax
@@ -103,6 +104,8 @@ class Plugin:
     compute_takes_start_end = False
 
     allow_superrun = False
+
+    gc_collect_after_compute = False
 
     def __init__(self):
         if not hasattr(self, "depends_on"):
@@ -529,6 +532,8 @@ class Plugin:
                     yield new_future
                 else:
                     yield from self._iter_compute(chunk_i=chunk_i, **inputs_merged)
+                if self.gc_collect_after_compute:
+                    gc.collect()
 
         except IterDone:
             # Check all sources are exhausted.
@@ -549,9 +554,13 @@ class Plugin:
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
                         raise RuntimeError(f"Plugin {d} terminated with leftover {d}: {buffer}")
+            if self.gc_collect_after_compute:
+                gc.collect()
 
         finally:
             self.cleanup(wait_for=pending_futures)
+            if self.gc_collect_after_compute:
+                gc.collect()
 
     def _iter_compute(self, chunk_i, **inputs_merged):
         """Either yields or returns strax chunks from the input."""
