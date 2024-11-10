@@ -158,6 +158,12 @@ def test_show_config():
     assert len(df)
 
 
+def test_data_itemsize():
+    """Test data itemsize in the context."""
+    context = _get_context()
+    context.data_itemsize("peaks")
+
+
 def test_data_info():
     """Test data info in the context."""
     context = _get_context()
