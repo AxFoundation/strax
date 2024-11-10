@@ -2678,17 +2678,22 @@ class Context:
 
         """
         # Get all plugins required to produce targets
-        plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)[target]
-        _dependencies = [plugins.deps.items()]
+        plugin = self.__get_plugin(run_id, target, chunk_number=chunk_number)
+        _dependencies = [plugin.deps.items()]
         _dependencies += [
-            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugins.deps
+            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugin.deps
         ]
         dependencies = dict(itertools.chain.from_iterable(_dependencies))
         return dependencies
 
     def get_dependencies(self, data_type):
         """Get the dependencies of a data_type."""
-        return set(self.get_dependency_plugins(data_type, "0").keys())
+        plugin = self._plugin_class_registry[data_type]()
+        dependencies = plugin.depends_on
+        dependencies += tuple(
+            itertools.chain.from_iterable(self.get_dependencies(d) for d in plugin.depends_on)
+        )
+        return set(dependencies)
 
     @property
     def root_data_types(self):
