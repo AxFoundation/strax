@@ -640,12 +640,17 @@ class Context:
                     self.register(cut)
             self.register(cut_list)
 
-    def data_info(self, data_name: str) -> pd.DataFrame:
-        """Return pandas DataFrame describing fields in data_name."""
-        p = self._get_plugins((data_name,), run_id="0")[data_name]
+    def data_itemsize(self, data_type: str) -> int:
+        """Return size of a single item of data_type in bytes."""
+        p = self._get_plugins((data_type,), run_id="0")[data_type]
+        return p.dtype_for(data_type).itemsize
+
+    def data_info(self, data_type: str) -> pd.DataFrame:
+        """Return pandas DataFrame describing fields in data_type."""
+        p = self._get_plugins((data_type,), run_id="0")[data_type]
         display_headers = ["Field name", "Data type", "Comment"]
         result = []
-        for name, dtype in strax.utils.unpack_dtype(p.dtype_for(data_name)):
+        for name, dtype in strax.utils.unpack_dtype(p.dtype_for(data_type)):
             if isinstance(name, tuple):
                 title, name = name
             else:
@@ -653,13 +658,13 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get_single_plugin(self, run_id, data_name, chunk_number=None):
-        """Return a single fully initialized plugin that produces data_name for run_id.
+    def get_single_plugin(self, run_id, data_type, chunk_number=None):
+        """Return a single fully initialized plugin that produces data_type for run_id.
 
         For use in custom processing.
 
         """
-        plugin = self._get_plugins((data_name,), run_id, chunk_number=chunk_number)[data_name]
+        plugin = self._get_plugins((data_type,), run_id, chunk_number=chunk_number)[data_type]
         self._set_plugin_config(plugin, run_id, tolerant=False)
         plugin.setup()
         return plugin
