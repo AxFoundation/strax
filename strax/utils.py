@@ -675,6 +675,27 @@ def parse_selection(x, selection):
 
 
 @export
+def apply_keep_columns(x, keep_columns):
+    # Construct the new dtype
+    new_dtype = []
+    fields_to_copy = []
+    for unpacked_dtype in strax.unpack_dtype(x.dtype):
+        field_name = unpacked_dtype[0]
+        if isinstance(field_name, tuple):
+            field_name = field_name[1]
+
+        if field_name in keep_columns:
+            new_dtype.append(unpacked_dtype)
+            fields_to_copy.append(field_name)
+
+    # Copy over the data
+    x2 = np.zeros(len(x), dtype=new_dtype)
+    for field_name in keep_columns:
+        x2[field_name] = x[field_name]
+    return x2
+
+
+@export
 def apply_selection(
     x,
     selection=None,
@@ -737,22 +758,7 @@ def apply_selection(
     if keep_columns:
         # We check before if keep and drop are specified both,
         # if so we raise an error.
-        # Construct the new dtype
-        new_dtype = []
-        fields_to_copy = []
-        for unpacked_dtype in strax.unpack_dtype(x.dtype):
-            field_name = unpacked_dtype[0]
-            if isinstance(field_name, tuple):
-                field_name = field_name[1]
-
-            if field_name in keep_columns:
-                new_dtype.append(unpacked_dtype)
-                fields_to_copy.append(field_name)
-
-        # Copy over the data
-        x2 = np.zeros(len(x), dtype=new_dtype)
-        for field_name in keep_columns:
-            x2[field_name] = x[field_name]
+        x2 = apply_keep_columns(x, keep_columns)
         x = x2
         del x2
 
