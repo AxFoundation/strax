@@ -1,8 +1,8 @@
 import unittest
 import numpy as np
 import warnings
-from hypothesis import given, strategies, settings, assume
-from hypothesis.extra.numpy import arrays, integer_dtypes, unicode_string_dtypes
+from hypothesis import given, strategies
+from hypothesis.extra.numpy import arrays, integer_dtypes
 from strax.sort_enforcement import SortingError, stable_sort, stable_argsort
 
 
