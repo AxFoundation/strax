@@ -93,7 +93,7 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     return hits
 
 
-@strax.utils.growing_result(strax.hit_dtype, chunk_size=int(1e4))
+@strax.growing_result(strax.hit_dtype, chunk_size=int(1e4))
 @numba.njit(nogil=True, cache=True)
 def _concat_overlapping_hits(
     hits,
