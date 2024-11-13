@@ -499,10 +499,6 @@ def _conditional_entropy(hitlets, template, flat=False, square_data=False):
     return res
 
 
-import numpy as np
-import numba
-import strax
-
 @export
 @numba.njit(cache=True)
 def _compute_simple_edges(interval_indices, dt):
@@ -510,6 +506,7 @@ def _compute_simple_edges(interval_indices, dt):
     left = interval_indices[0, 0] * dt
     right = interval_indices[1, np.argmax(interval_indices[1, :])] * dt
     return left, right
+
 
 @export
 @numba.njit(cache=True)
@@ -534,6 +531,7 @@ def _compute_fractional_edges(interval_indices, data, area_fraction_amplitude, d
     left_edge = (left + 0.5 - fl) * dt
     right_edge = (right + 0.5 + fr) * dt
     return left_edge, right_edge
+
 
 @export
 def highest_density_region_width(
@@ -581,7 +579,8 @@ def highest_density_region_width(
             res[index_area_fraction, 1] = right
         else:
             left, right = _compute_fractional_edges(
-                interval_indices, data, area_fraction_amplitude, dt)
+                interval_indices, data, area_fraction_amplitude, dt
+            )
             res[index_area_fraction, 0] = left
             res[index_area_fraction, 1] = right
 
