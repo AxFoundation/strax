@@ -549,6 +549,7 @@ def highest_density_region_width(
 
     Returns:
         np.ndarray: Array of shape (len(fractions_desired), 2) containing left and right edges
+
     """
     res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
     data = np.maximum(data, 0)
