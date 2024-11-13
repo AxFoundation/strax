@@ -503,6 +503,7 @@ import numpy as np
 import numba
 import strax
 
+
 @export
 @numba.njit(cache=True)
 def _compute_simple_edges(interval_indices, dt):
@@ -510,6 +511,7 @@ def _compute_simple_edges(interval_indices, dt):
     left = interval_indices[0, 0] * dt
     right = interval_indices[1, np.argmax(interval_indices[1, :])] * dt
     return left, right
+
 
 @export
 @numba.njit(cache=True)
@@ -535,6 +537,7 @@ def _compute_fractional_edges(interval_indices, data, area_fraction_amplitude, d
     right_edge = (right + 0.5 + fr) * dt
     return left_edge, right_edge
 
+
 @export
 def highest_density_region_width(
     data, fractions_desired, dt=1, fractional_edges=False, _buffer_size=100
@@ -551,6 +554,7 @@ def highest_density_region_width(
 
     Returns:
         np.ndarray: Array of shape (len(fractions_desired), 2) containing left and right edges
+
     """
     res = np.zeros((len(fractions_desired), 2), dtype=np.float32)
     data = np.maximum(data, 0)
@@ -581,7 +585,8 @@ def highest_density_region_width(
             res[index_area_fraction, 1] = right
         else:
             left, right = _compute_fractional_edges(
-                interval_indices, data, area_fraction_amplitude, dt)
+                interval_indices, data, area_fraction_amplitude, dt
+            )
             res[index_area_fraction, 0] = left
             res[index_area_fraction, 1] = right
 
