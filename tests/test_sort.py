@@ -19,8 +19,8 @@ class TestSortEnforcement(unittest.TestCase):
             sorted_arr = stable_sort(self.arr)
             np.testing.assert_array_equal(sorted_arr, self.expected_sorted)
 
-    def test_explicit_stable_sort_argsort(self):
-        """Test explicit stable_sort_argsort function (should not warn)"""
+    def test_explicit_stable_argsort(self):
+        """Test explicit stable_argsort function (should not warn)"""
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # Turn warnings into errors
             sorted_indices = stable_argsort(self.arr)
@@ -34,7 +34,7 @@ class TestSortEnforcement(unittest.TestCase):
         with self.assertRaises(SortingError):
             stable_sort(self.arr, kind="heapsort")
 
-        # Test stable_sort_argsort wrapper
+        # Test stable_argsort wrapper
         with self.assertRaises(SortingError):
             stable_argsort(self.arr, kind="quicksort")
         with self.assertRaises(SortingError):
