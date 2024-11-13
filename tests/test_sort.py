@@ -86,7 +86,8 @@ class TestSortEnforcement(unittest.TestCase):
                 self.assertTrue(
                     final_sort[i]["letter"] <= final_sort[i + 1]["letter"],
                     f"Stability violated: for equal numbers {final_sort[i]['num']}, "
-                    f"letter {final_sort[i]['letter']} should come before or equal to {final_sort[i + 1]['letter']}",
+                    f"letter {final_sort[i]['letter']} should come "
+                    f"before or equal to {final_sort[i + 1]['letter']}",
                 )
 
 
