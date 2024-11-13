@@ -1,76 +1,98 @@
 import unittest
 import numpy as np
 import warnings
+from hypothesis import given, strategies, settings, assume
+from hypothesis.extra.numpy import arrays, integer_dtypes, unicode_string_dtypes
 from strax.sort_enforcement import SortingError, stable_sort, stable_argsort
 
-
 class TestSortEnforcement(unittest.TestCase):
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.arr = np.array([3, 1, 4, 1, 5, 9, 2, 6])
-        # Store expected sorted array and indices for comparison
-        self.expected_sorted = np.array([1, 1, 2, 3, 4, 5, 6, 9])
-        self.expected_argsort = np.array([1, 3, 6, 0, 2, 4, 7, 5])
-
-    def test_explicit_stable_sort(self):
-        """Test explicit stable_sort function (should not warn)"""
+    @given(arrays(integer_dtypes(), strategies.integers(1, 100)))
+    def test_explicit_stable_sort(self, arr):
+        """Test explicit stable_sort function with generated arrays"""
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # Turn warnings into errors
-            sorted_arr = stable_sort(self.arr)
-            np.testing.assert_array_equal(sorted_arr, self.expected_sorted)
+            sorted_arr = stable_sort(arr)
+            np.testing.assert_array_equal(sorted_arr, np.sort(arr, kind='mergesort'))
+            # Verify the array is actually sorted
+            self.assertTrue(np.all(sorted_arr[:-1] <= sorted_arr[1:]))
 
-    def test_explicit_stable_argsort(self):
-        """Test explicit stable_argsort function (should not warn)"""
+    @given(arrays(integer_dtypes(), strategies.integers(1, 100)))
+    def test_explicit_stable_argsort(self, arr):
+        """Test explicit stable_argsort function with generated arrays"""
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # Turn warnings into errors
-            sorted_indices = stable_argsort(self.arr)
-            np.testing.assert_array_equal(sorted_indices, self.expected_argsort)
+            sorted_indices = stable_argsort(arr)
+            np.testing.assert_array_equal(
+                sorted_indices, 
+                np.argsort(arr, kind='mergesort')
+            )
+            # Verify the indices actually sort the array
+            sorted_arr = arr[sorted_indices]
+            self.assertTrue(np.all(sorted_arr[:-1] <= sorted_arr[1:]))
 
-    def test_wrapped_quicksort_rejection(self):
-        """Test that quicksort and heapsort raise errors in wrapped functions."""
-        # Test stable_sort wrapper
+    @given(
+        arrays(integer_dtypes(), strategies.integers(1, 100)),
+        strategies.sampled_from(['quicksort', 'heapsort'])
+    )
+    def test_wrapped_quicksort_rejection(self, arr, sort_kind):
+        """Test that quicksort and heapsort raise errors in wrapped functions"""
         with self.assertRaises(SortingError):
-            stable_sort(self.arr, kind="quicksort")
+            stable_sort(arr, kind=sort_kind)
         with self.assertRaises(SortingError):
-            stable_sort(self.arr, kind="heapsort")
+            stable_argsort(arr, kind=sort_kind)
 
-        # Test stable_argsort wrapper
-        with self.assertRaises(SortingError):
-            stable_argsort(self.arr, kind="quicksort")
-        with self.assertRaises(SortingError):
-            stable_argsort(self.arr, kind="heapsort")
-
-    def test_original_numpy_unaffected(self):
-        """Test that original numpy sort functions still work with quicksort."""
-        # Test np.sort with quicksort
+    @given(arrays(integer_dtypes(), strategies.integers(1, 100)))
+    def test_original_numpy_unaffected(self, arr):
+        """Test that original numpy sort functions still work with quicksort"""
         try:
-            quicksort_result = np.sort(self.arr, kind="quicksort")
-            np.testing.assert_array_equal(quicksort_result, self.expected_sorted)
+            quicksort_result = np.sort(arr, kind="quicksort")
+            self.assertTrue(np.all(quicksort_result[:-1] <= quicksort_result[1:]))
+            
+            quicksort_indices = np.argsort(arr, kind="quicksort")
+            sorted_arr = arr[quicksort_indices]
+            self.assertTrue(np.all(sorted_arr[:-1] <= sorted_arr[1:]))
         except Exception as e:
-            self.fail(f"np.sort with quicksort raised an unexpected exception: {e}")
+            self.fail(f"numpy sort with quicksort raised an unexpected exception: {e}")
 
-        # Test np.argsort with quicksort
-        try:
-            quicksort_indices = np.argsort(self.arr, kind="quicksort")
-            # Note: We don't check exact equality because quicksort might give different
-            # but valid ordering for equal elements
-            self.assertTrue(np.all(self.arr[quicksort_indices] == self.expected_sorted))
-        except Exception as e:
-            self.fail(f"np.argsort with quicksort raised an unexpected exception: {e}")
-
-    def test_sort_stability(self):
-        """Test that wrapped sorting is stable (stable_sort property)"""
-        # Create array with duplicate values
-        arr = np.array(
-            [(1, "a"), (2, "b"), (1, "c"), (2, "d")], dtype=[("num", int), ("letter", "U1")]
+    @given(
+        strategies.lists(
+            strategies.tuples(
+                strategies.integers(1, 10),  # num field
+                strategies.text(min_size=1, max_size=1)  # letter field
+            ),
+            min_size=1,
+            max_size=100
         )
-        sorted_arr = stable_sort(arr, order="num")
-        # Check that relative order of equal elements is preserved
-        self.assertEqual(sorted_arr[0]["letter"], "a")
-        self.assertEqual(sorted_arr[1]["letter"], "c")
-        self.assertEqual(sorted_arr[2]["letter"], "b")
-        self.assertEqual(sorted_arr[3]["letter"], "d")
-
+    )
+    def test_sort_stability(self, data):
+        """Test that wrapped sorting is stable using generated structured arrays"""
+        # Convert list of tuples to structured array
+        arr = np.array(
+            data,
+            dtype=[('num', int), ('letter', 'U1')]
+        )
+        
+        # First sort by letter to establish initial order
+        arr_by_letter = stable_sort(arr, order='letter')
+        # Then sort by number - if sort is stable, items with same number
+        # should maintain their relative order from the letter sort
+        final_sort = stable_sort(arr_by_letter, order='num')
+        
+        # Verify sorting works correctly
+        for i in range(len(final_sort) - 1):
+            # Check primary sort key (number)
+            self.assertTrue(
+                final_sort[i]['num'] <= final_sort[i + 1]['num'],
+                f"Primary sort failed: {final_sort[i]} should come before {final_sort[i + 1]}"
+            )
+            
+            # If numbers are equal, check that letter order is preserved
+            if final_sort[i]['num'] == final_sort[i + 1]['num']:
+                self.assertTrue(
+                    final_sort[i]['letter'] <= final_sort[i + 1]['letter'],
+                    f"Stability violated: for equal numbers {final_sort[i]['num']}, "
+                    f"letter {final_sort[i]['letter']} should come before or equal to {final_sort[i + 1]['letter']}"
+                )
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
