@@ -109,7 +109,7 @@ COMPRESSORS["blosc"]["compress"] = _compress_blosc
 
 
 @export
-def dry_load_files(dirname, chunk_number=None):
+def dry_load_files(dirname, chunk_numbers=None, **kwargs):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
     metadata_json = RUN_METADATA_PATTERN % prefix
     md_path = os.path.join(dirname, metadata_json)
@@ -133,19 +133,25 @@ def dry_load_files(dirname, chunk_number=None):
                 )
         return data if len(data) else np.empty(0, dtype)
 
-    # Load all chunks if chunk_number is None, otherwise load the specified chunk
-    if chunk_number is None:
+    # Load all chunks if chunk_numbers is None, otherwise load the specified chunk
+    if chunk_numbers is None:
         chunk_numbers = list(range(len(metadata["chunks"])))
     else:
-        if not isinstance(chunk_number, int):
-            raise ValueError(f"Chunk number must be an integer, not {chunk_number}.")
-        if chunk_number >= len(metadata["chunks"]):
-            raise ValueError(f"Chunk {chunk_number:06d} does not exist in {dirname}.")
-        chunk_numbers = [chunk_number]
+        if not isinstance(chunk_numbers, (int, list, tuple)):
+            raise ValueError(
+                f"Chunk number must be int, list, or tuple, not {type(chunk_numbers)}."
+            )
+        chunk_numbers = (
+            chunk_numbers if isinstance(chunk_numbers, (list, tuple)) else [chunk_numbers]
+        )
+        if max(chunk_numbers) >= len(metadata["chunks"]):
+            raise ValueError(f"Chunk {max(chunk_numbers):06d} does not exist in {dirname}.")
 
     results = []
     for c in chunk_numbers:
         chunk_info = metadata["chunks"][c]
-        results.append(load_chunk(chunk_info))
+        x = load_chunk(chunk_info)
+        x = strax.apply_selection(x, **kwargs)
+        results.append(x)
     results = np.hstack(results)
     return results if len(results) else np.empty(0, dtype)

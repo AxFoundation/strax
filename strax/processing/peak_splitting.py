@@ -168,6 +168,7 @@ class PeakSplitter:
                 do_iterations=do_iterations - 1,
                 min_area=min_area,
                 n_top_channels=n_top_channels,
+                store_data_start=store_data_start,
                 **kwargs,
             )
             if np.any(new_peaks["length"] == 0):

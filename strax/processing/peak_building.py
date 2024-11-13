@@ -161,6 +161,8 @@ def store_downsampled_waveform(
 
     n_samples = len(p["data"])
 
+    p_length = p["length"]
+
     downsample_factor = int(np.ceil(p["length"] / n_samples))
     if downsample_factor > 1:
         # Compute peak length after downsampling.
@@ -185,10 +187,10 @@ def store_downsampled_waveform(
 
     # If the waveform is downsampled, we can store the first samples of the waveform
     if store_data_start:
-        if p["length"] > len(p["data_start"]):
+        if p_length > len(p["data_start"]):
             p["data_start"] = waveform_buffer[: len(p["data_start"])]
         else:
-            p["data_start"][: p["length"]] = waveform_buffer[: p["length"]]
+            p["data_start"][:p_length] = waveform_buffer[:p_length]
 
 
 @export
