@@ -42,6 +42,7 @@ def _process_intervals_numba(ind, gaps, fi, res, g0, _buffer_size):
 
     Returns:
         tuple: (fi + 1, res) Updated fraction index and result buffer
+
     """
     if len(gaps) > _buffer_size:
         res[fi, 0, :] = -1
@@ -76,6 +77,7 @@ def _compute_fraction_seen(data, max_to_min, j, lowest_sample_seen, area_tot, on
 
     Returns:
         tuple: (fraction_seen, sorted_data_max_to_j, actual_lowest)
+
     """
     lowest_sample_seen *= int(only_upper_part)
     sorted_data_max_to_j = data[max_to_min[:j]]
@@ -99,6 +101,7 @@ def _compute_true_height(sorted_data_sum, j, g, lowest_sample_seen):
 
     Returns:
         float: True height value
+
     """
     return (1 - g) * sorted_data_sum / j + g * lowest_sample_seen
 
@@ -119,6 +122,7 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
     Returns:
         tuple: (res, res_amp) where res contains interval indices and res_amp contains
                amplitudes for desired fractions
+
     """
     # Initialize using numba
     max_to_min, area_tot, res, res_amp, fi = _compute_hdr_core(
