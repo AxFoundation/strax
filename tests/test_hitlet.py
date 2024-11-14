@@ -290,14 +290,14 @@ def test_highest_density_region_width():
 
     # Check that negative data does not raise:
     res = strax.processing.hitlets.highest_density_region_width(
-        np.array([0, -1, -2]), np.array([0.5]), fractionl_edges=True
+        np.array([0, -1, -2]), np.array([0.5]), fractional_edges=True
     )
     assert np.all(np.isnan(res)), "For empty data HDR is not defined, should return np.nan!"
 
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(
-        distribution, np.array(list(truth_dict.keys())), fractionl_edges=True
+        distribution, np.array(list(truth_dict.keys())), fractional_edges=True
     )
 
     for ind, (fraction, truth) in enumerate(truth_dict.items()):
@@ -390,7 +390,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
 
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
-    ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
+    ind_max_template, size_template = strax.stable_sort(size_template_and_ind_max_template)
 
     # Make dummy hitlet:
     data = data.astype(np.float32)
