@@ -162,8 +162,9 @@ def highest_density_region(data, fractions_desired, only_upper_part=False, _buff
 
             # Process intervals with numba
             fi, res = _process_intervals_numba(ind, gaps, fi, res, 0, _buffer_size)
-            if fi == len(fractions_desired):
-                return res, res_amp
+
+        if fi == len(fractions_desired):
+            return res, res_amp
 
     # Handle remaining fractions (in numba)
     res[fi:, 0, 0] = 0
