@@ -2,14 +2,13 @@ import numpy as np
 import numba
 
 import strax
-from strax import utils
-from strax.dtypes import peak_dtype, DIGITAL_SUM_WAVEFORM_CHANNEL
+from strax.dtypes import DIGITAL_SUM_WAVEFORM_CHANNEL
 
 export, __all__ = strax.exporter()
 
 
 @export
-@utils.growing_result(dtype=peak_dtype(), chunk_size=int(1e4))
+@strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
 @numba.jit(nopython=True, nogil=True, cache=True)
 def find_peaks(
     hits,

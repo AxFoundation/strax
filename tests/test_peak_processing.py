@@ -41,7 +41,7 @@ def test_find_peaks(hits, min_channels, min_area):
     ends = peaks["time"] + peaks["length"] * peaks["dt"]
     assert np.all(ends[:-1] + gap_threshold <= starts[1:])
 
-    assert np.all(starts == np.sort(starts)), "Not sorted"
+    assert np.all(starts == strax.stable_sort(starts)), "Not sorted"
 
     assert np.all(peaks["time"] < strax.endtime(peaks)), "Non+ peak length"
 

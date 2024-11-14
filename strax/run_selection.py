@@ -10,6 +10,7 @@ import pandas as pd
 import pytz
 import datetime
 import strax
+from strax import stable_argsort
 
 # use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
 tqdm = strax.utils.tqdm
@@ -441,7 +442,7 @@ def define_run(
     run_md["comments"] = [{"comment": comment} for comment in comments]
 
     # Make sure subruns are sorted in time
-    sort_index = np.argsort(starts)
+    sort_index = stable_argsort(starts)
     data = {keys[i]: data[keys[i]] for i in sort_index}
 
     # Superrun names must start with an underscore
