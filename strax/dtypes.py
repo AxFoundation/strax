@@ -216,7 +216,7 @@ def peak_dtype(
     if store_data_start:
         start_field = (
             (
-                "Waveform data in PE/sample (not PE/ns!), first 200 not downsampled samples",
+                "Waveform data in PE/sample (not PE/ns!), starting not downsampled samples",
                 "data_start",
             ),
             np.float32,

@@ -96,7 +96,7 @@ def compute_widths(peaks, select_peaks_indices=None):
     desired_fr = np.concatenate([0.5 - desired_widths / 2, 0.5 + desired_widths / 2])
 
     # We lose the 50% fraction with this operation, let's add it back
-    desired_fr = np.sort(np.unique(np.append(desired_fr, [0.5])))
+    desired_fr = strax.stable_sort(np.unique(np.append(desired_fr, [0.5])))
 
     fr_times = index_of_fraction(peaks[select_peaks_indices], desired_fr)
     fr_times *= peaks["dt"][select_peaks_indices].reshape(-1, 1)

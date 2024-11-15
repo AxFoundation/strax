@@ -11,6 +11,7 @@ import traceback
 import typing as ty
 from hashlib import sha1
 import strax
+from strax import stable_argsort, stable_sort
 import numexpr
 import dill
 import numba
@@ -523,7 +524,7 @@ def multi_run(
 
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
-    run_id_numpy = np.sort(run_id_numpy)
+    run_id_numpy = stable_sort(run_id_numpy)
     _is_superrun = np.any([r.startswith("_") for r in run_id_numpy])
 
     # Get from kwargs whether output should contain a run_id field.
@@ -612,7 +613,7 @@ def multi_run(
             pbar.close()
             return None
 
-        final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
+        final_result = [final_result[ind] for ind in stable_argsort(run_id_output)]
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(
@@ -672,6 +673,27 @@ def parse_selection(x, selection):
 
         mask = numexpr.evaluate(selection, local_dict={fn: x[fn] for fn in x.dtype.names})
     return mask
+
+
+@export
+def apply_keep_columns(x, keep_columns):
+    # Construct the new dtype
+    new_dtype = []
+    fields_to_copy = []
+    for unpacked_dtype in strax.unpack_dtype(x.dtype):
+        field_name = unpacked_dtype[0]
+        if isinstance(field_name, tuple):
+            field_name = field_name[1]
+
+        if field_name in keep_columns:
+            new_dtype.append(unpacked_dtype)
+            fields_to_copy.append(field_name)
+
+    # Copy over the data
+    x2 = np.zeros(len(x), dtype=new_dtype)
+    for field_name in keep_columns:
+        x2[field_name] = x[field_name]
+    return x2
 
 
 @export
@@ -737,22 +759,7 @@ def apply_selection(
     if keep_columns:
         # We check before if keep and drop are specified both,
         # if so we raise an error.
-        # Construct the new dtype
-        new_dtype = []
-        fields_to_copy = []
-        for unpacked_dtype in strax.unpack_dtype(x.dtype):
-            field_name = unpacked_dtype[0]
-            if isinstance(field_name, tuple):
-                field_name = field_name[1]
-
-            if field_name in keep_columns:
-                new_dtype.append(unpacked_dtype)
-                fields_to_copy.append(field_name)
-
-        # Copy over the data
-        x2 = np.zeros(len(x), dtype=new_dtype)
-        for field_name in keep_columns:
-            x2[field_name] = x[field_name]
+        x2 = apply_keep_columns(x, keep_columns)
         x = x2
         del x2
 

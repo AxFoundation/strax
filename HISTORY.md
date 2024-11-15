@@ -1,3 +1,72 @@
+2.0.1 / 2024-11-14
+---------------------
+* Allow `chunk_number` to be list or tuple in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/921
+* Fixing store_data_start in recursive peak splitter calls and peaklet["length'] fix in store_downsampled_waveform by @HenningSE in https://github.com/AxFoundation/strax/pull/920
+* Run garbage collection after yield result in `Plugin.iter` by @dachengx in https://github.com/AxFoundation/strax/pull/922
+* Add a function to get size of a single item of data_type in bytes by @dachengx in https://github.com/AxFoundation/strax/pull/923
+* Speed up `get_dependencies` by @dachengx in https://github.com/AxFoundation/strax/pull/924
+* Add more kwargs to `dry_load_files` by @dachengx in https://github.com/AxFoundation/strax/pull/925
+* Add enforcement for `np.sort` and `np.argsort` by @yuema137 in https://github.com/AxFoundation/strax/pull/918
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.0...v2.0.1
+
+
+2.0.0 / 2024-10-18
+---------------------
+* Allow `_chunk_number` to be list or tuple by @dachengx in https://github.com/AxFoundation/strax/pull/856
+* Filter out duplicated targets in function `get_iter` by @dachengx in https://github.com/AxFoundation/strax/pull/860
+* Check duplicate `depends_on` of `Plugin` by @yuema137 in https://github.com/AxFoundation/strax/pull/859
+* Set `lineage` and `lineage_hash` simultaneously by @dachengx in https://github.com/AxFoundation/strax/pull/861
+* Save run metadata in better format by @dachengx in https://github.com/AxFoundation/strax/pull/868
+* Include `chunk_number` in lineage: Per chunk storage by @dachengx in https://github.com/AxFoundation/strax/pull/863
+* Allow splitting in rechunking by @dachengx in https://github.com/AxFoundation/strax/pull/865
+* Add subruns information in `DataKey` of superruns to track metadata by @dachengx in https://github.com/AxFoundation/strax/pull/866
+* Use `pyproject.toml` to install strax by @dachengx in https://github.com/AxFoundation/strax/pull/870
+* Save subruns information of hyperrun by @dachengx in https://github.com/AxFoundation/strax/pull/869
+* Unify functionality of super and hyperrun by @dachengx in https://github.com/AxFoundation/strax/pull/871
+* Add more tests about `PostOffice` and `get_components` by @dachengx in https://github.com/AxFoundation/strax/pull/872
+* Prohibit `chunk_number` for `LoopPlugin` and `OverlapWindowPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/877
+* Only save combined `data_type` in only-combining mode by @dachengx in https://github.com/AxFoundation/strax/pull/878
+* Remove `get_meta` function from Context by @dachengx in https://github.com/AxFoundation/strax/pull/879
+* Remove redundant spaces by @dachengx in https://github.com/AxFoundation/strax/pull/881
+* No `run_id` dependent plugin version by @dachengx in https://github.com/AxFoundation/strax/pull/880
+* Show warning when the `chunk_number` is not needed by @dachengx in https://github.com/AxFoundation/strax/pull/883
+* Refactor nv plugins by @WenzDaniel in https://github.com/AxFoundation/strax/pull/744
+* Use `run_id_output` sorting `final_result` in `multi_run` by @dachengx in https://github.com/AxFoundation/strax/pull/885
+* `_base_hash_on_config` should not be an attribute by @dachengx in https://github.com/AxFoundation/strax/pull/882
+* Add `combining` into the `DataKey` by @dachengx in https://github.com/AxFoundation/strax/pull/886
+* Minor debug for the `pyproject.toml` by @dachengx in https://github.com/AxFoundation/strax/pull/888
+* Fix the usage of scripts by @dachengx in https://github.com/AxFoundation/strax/pull/890
+* Deprecate `selection_str` by @dachengx in https://github.com/AxFoundation/strax/pull/891
+* Add `run_id`  independent function to get the dependencies `datat_type` by @dachengx in https://github.com/AxFoundation/strax/pull/892
+* Allow get_df on all data_types by @lorenzomag in https://github.com/AxFoundation/strax/pull/887
+* Select targeted software frontend in a clever way by @dachengx in https://github.com/AxFoundation/strax/pull/893
+* Cancel usage of `chunk_number` if loading the whole dependency by @dachengx in https://github.com/AxFoundation/strax/pull/894
+* Add function of dependency level of `data_types` by @dachengx in https://github.com/AxFoundation/strax/pull/896
+* Add option to save first samples of peak(lets) waveform by @HenningSE in https://github.com/AxFoundation/strax/pull/867
+* Set single thread of zstd and blosc by @dachengx in https://github.com/AxFoundation/strax/pull/899
+* Set default `max_downsample_factor_waveform_start` as not `None` by @dachengx in https://github.com/AxFoundation/strax/pull/900
+* Turn back to `zstd` because `zstandard` raise errors by @dachengx in https://github.com/AxFoundation/strax/pull/902
+* Do not add producer that has been added by saver by @dachengx in https://github.com/AxFoundation/strax/pull/901
+* Propagate n_top_channels to _add_lone_hits by @HenningSE in https://github.com/AxFoundation/strax/pull/907
+* Add option to merge `lone_hits` into `data_start` by @HenningSE in https://github.com/AxFoundation/strax/pull/908
+* Save `data_start` even there is no downsampling by @dachengx in https://github.com/AxFoundation/strax/pull/909
+* Remove `max_downsample_factor_waveform_start`, simplify the saving of `data_start` by @dachengx in https://github.com/AxFoundation/strax/pull/910
+* Make variables names more robust in `peak_dtype` by @dachengx in https://github.com/AxFoundation/strax/pull/911
+* Set `SingleThreadProcessor` as the default processor by @dachengx in https://github.com/AxFoundation/strax/pull/904
+* Switch to master for docformatter by @dachengx in https://github.com/AxFoundation/strax/pull/912
+* Add `max_time` which is the time when hit reaches its maximum by @dachengx in https://github.com/AxFoundation/strax/pull/913
+* Small fix of dtype description by @dachengx in https://github.com/AxFoundation/strax/pull/914
+* Exclude git repo from the package metadata for PyPI by @dachengx in https://github.com/AxFoundation/strax/pull/915
+
+New Contributors
+* @yuema137 made their first contribution in https://github.com/AxFoundation/strax/pull/859
+* @lorenzomag made their first contribution in https://github.com/AxFoundation/strax/pull/887
+* @HenningSE made their first contribution in https://github.com/AxFoundation/strax/pull/867
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v1.6.5...v2.0.0
+
+
 1.6.5 / 2024-07-10
 ---------------------
 * Single threaded alternative processor by @JelleAalbers in https://github.com/AxFoundation/strax/pull/773
