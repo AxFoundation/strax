@@ -1,3 +1,16 @@
+2.0.1 / 2024-11-14
+---------------------
+* Allow `chunk_number` to be list or tuple in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/921
+* Fixing store_data_start in recursive peak splitter calls and peaklet["length'] fix in store_downsampled_waveform by @HenningSE in https://github.com/AxFoundation/strax/pull/920
+* Run garbage collection after yield result in `Plugin.iter` by @dachengx in https://github.com/AxFoundation/strax/pull/922
+* Add a function to get size of a single item of data_type in bytes by @dachengx in https://github.com/AxFoundation/strax/pull/923
+* Speed up `get_dependencies` by @dachengx in https://github.com/AxFoundation/strax/pull/924
+* Add more kwargs to `dry_load_files` by @dachengx in https://github.com/AxFoundation/strax/pull/925
+* Add enforcement for `np.sort` and `np.argsort` by @yuema137 in https://github.com/AxFoundation/strax/pull/918
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.0...v2.0.1
+
+
 2.0.0 / 2024-10-18
 ---------------------
 * Allow `_chunk_number` to be list or tuple by @dachengx in https://github.com/AxFoundation/strax/pull/856
