@@ -640,12 +640,17 @@ class Context:
                     self.register(cut)
             self.register(cut_list)
 
-    def data_info(self, data_name: str) -> pd.DataFrame:
-        """Return pandas DataFrame describing fields in data_name."""
-        p = self._get_plugins((data_name,), run_id="0")[data_name]
+    def data_itemsize(self, data_type: str) -> int:
+        """Return size of a single item of data_type in bytes."""
+        p = self._get_plugins((data_type,), run_id="0")[data_type]
+        return p.dtype_for(data_type).itemsize
+
+    def data_info(self, data_type: str) -> pd.DataFrame:
+        """Return pandas DataFrame describing fields in data_type."""
+        p = self._get_plugins((data_type,), run_id="0")[data_type]
         display_headers = ["Field name", "Data type", "Comment"]
         result = []
-        for name, dtype in strax.utils.unpack_dtype(p.dtype_for(data_name)):
+        for name, dtype in strax.utils.unpack_dtype(p.dtype_for(data_type)):
             if isinstance(name, tuple):
                 title, name = name
             else:
@@ -653,13 +658,13 @@ class Context:
             result.append([name, dtype, title])
         return pd.DataFrame(result, columns=display_headers)
 
-    def get_single_plugin(self, run_id, data_name, chunk_number=None):
-        """Return a single fully initialized plugin that produces data_name for run_id.
+    def get_single_plugin(self, run_id, data_type, chunk_number=None):
+        """Return a single fully initialized plugin that produces data_type for run_id.
 
         For use in custom processing.
 
         """
-        plugin = self._get_plugins((data_name,), run_id, chunk_number=chunk_number)[data_name]
+        plugin = self._get_plugins((data_type,), run_id, chunk_number=chunk_number)[data_type]
         self._set_plugin_config(plugin, run_id, tolerant=False)
         plugin.setup()
         return plugin
@@ -1545,6 +1550,15 @@ class Context:
         # (otherwise potentially overwritten in temp-plugin)
         targets_list = targets
 
+        if processor is None:
+            processor = list(self.processors)[0]
+
+        if isinstance(processor, str):
+            processor = self.processors[processor]
+
+        if not hasattr(processor, "iter"):
+            raise ValueError("Processors must implement a iter methed.")
+
         is_superrun = run_id.startswith("_")
 
         # If multiple targets of the same kind, create a MergeOnlyPlugin
@@ -1557,7 +1571,7 @@ class Context:
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 self.register(p)
                 targets = (temp_name,)
-            elif not allow_multiple:
+            elif not allow_multiple or processor is strax.SingleThreadProcessor:
                 raise RuntimeError("Cannot automerge different data kinds!")
             elif self.context_config["timeout"] > 7200 or (
                 self.context_config["allow_lazy"] and not self.context_config["allow_multiprocess"]
@@ -1581,15 +1595,6 @@ class Context:
         for k in list(self._plugin_class_registry.keys()):
             if k.startswith("_temp"):
                 del self._plugin_class_registry[k]
-
-        if processor is None:
-            processor = list(self.processors)[0]
-
-        if isinstance(processor, str):
-            processor = self.processors[processor]
-
-        if not hasattr(processor, "iter"):
-            raise ValueError("Processors must implement a iter methed.")
 
         seen_a_chunk = False
         generator = processor(
@@ -2673,17 +2678,22 @@ class Context:
 
         """
         # Get all plugins required to produce targets
-        plugins = self._get_plugins((target,), run_id, chunk_number=chunk_number)[target]
-        _dependencies = [plugins.deps.items()]
+        plugin = self.__get_plugin(run_id, target, chunk_number=chunk_number)
+        _dependencies = [plugin.deps.items()]
         _dependencies += [
-            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugins.deps
+            self.get_dependency_plugins(d, run_id, chunk_number).items() for d in plugin.deps
         ]
         dependencies = dict(itertools.chain.from_iterable(_dependencies))
         return dependencies
 
     def get_dependencies(self, data_type):
         """Get the dependencies of a data_type."""
-        return set(self.get_dependency_plugins(data_type, "0").keys())
+        plugin = self._plugin_class_registry[data_type]()
+        dependencies = plugin.depends_on
+        dependencies += tuple(
+            itertools.chain.from_iterable(self.get_dependencies(d) for d in plugin.depends_on)
+        )
+        return set(dependencies)
 
     @property
     def root_data_types(self):
