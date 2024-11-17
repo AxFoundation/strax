@@ -25,6 +25,8 @@ def merge_peaks(
 
     """
     assert len(start_merge_at) == len(end_merge_at)
+    if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
+        raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
 
     # Do the merging. Could numbafy this to optimize, probably...
