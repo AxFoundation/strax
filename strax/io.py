@@ -15,9 +15,11 @@ from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 
+# use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
+tqdm = strax.utils.tqdm
+
 blosc.set_releasegil(True)
 blosc.set_nthreads(1)
-
 
 # zstd's default compression level is 3:
 # https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L53
@@ -109,7 +111,7 @@ COMPRESSORS["blosc"]["compress"] = _compress_blosc
 
 
 @export
-def dry_load_files(dirname, chunk_numbers=None, **kwargs):
+def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
     metadata_json = RUN_METADATA_PATTERN % prefix
     md_path = os.path.join(dirname, metadata_json)
@@ -148,7 +150,7 @@ def dry_load_files(dirname, chunk_numbers=None, **kwargs):
             raise ValueError(f"Chunk {max(chunk_numbers):06d} does not exist in {dirname}.")
 
     results = []
-    for c in chunk_numbers:
+    for c in tqdm(chunk_numbers, disable=disable):
         chunk_info = metadata["chunks"][c]
         x = load_chunk(chunk_info)
         x = strax.apply_selection(x, **kwargs)
