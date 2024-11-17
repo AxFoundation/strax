@@ -12,7 +12,7 @@ import datetime
 import strax
 from strax import stable_argsort
 
-# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+# use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
 tqdm = strax.utils.tqdm
 
 export, __all__ = strax.exporter()
