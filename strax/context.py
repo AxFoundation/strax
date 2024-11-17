@@ -25,7 +25,7 @@ __all__.extend(["RUN_DEFAULTS_KEY"])
 RUN_DEFAULTS_KEY = "strax_defaults"
 TEMP_DATA_TYPE_PREFIX = "_temp_"
 
-# use tqdm as loaded in utils (from tqdm.notebook when in a juypyter env)
+# use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
 tqdm = strax.utils.tqdm
 
 
