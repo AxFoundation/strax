@@ -45,32 +45,11 @@ def merge_peaks(
 
         # re-zero relevant part of buffers (overkill? not sure if
         # this saves much time)
-        buffer[
-            : min(
-                int(
-                    (
-                        last_peak["time"]
-                        - first_peak["time"]
-                        + (last_peak["length"] * old_peaks["dt"].max())
-                    )
-                    / common_dt
-                ),
-                len(buffer),
-            )
-        ] = 0
-        buffer_top[
-            : min(
-                int(
-                    (
-                        last_peak["time"]
-                        - first_peak["time"]
-                        + (last_peak["length"] * old_peaks["dt"].max())
-                    )
-                    / common_dt
-                ),
-                len(buffer_top),
-            )
-        ] = 0
+        bl = last_peak["time"] - first_peak["time"]
+        bl += last_peak["length"] * old_peaks["dt"].max()
+        bl = min(int(bl / common_dt), max_buffer)
+        buffer[:bl] = 0
+        buffer_top[:bl] = 0
 
         for p in old_peaks:
             # Upsample the sum and top/bottom array waveforms into their buffers
