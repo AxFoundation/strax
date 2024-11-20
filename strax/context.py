@@ -1132,6 +1132,20 @@ class Context:
                 )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
+        # Safeguard for Super and Hyperruns
+        if is_superrun:
+            sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
+            for target_i in targets:
+                if (
+                    self.check_superrun_config(
+                        self, sub_run_spec, target_i, chunk_number=chunk_number
+                    )
+                    == False
+                ):
+                    raise ValueError(
+                        f"Cannot do superruns with {sub_run_spec} that take different configs"
+                    )
+
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
@@ -1337,6 +1351,30 @@ class Context:
             savers=savers,
             targets=strax.to_str_tuple(final_plugin),
         )
+    
+    def check_superrun_config(
+            self, 
+            subruns: dict, 
+            target: str,
+            chunk_number=None
+    ) -> bool:
+            
+        plugin_configs =  []
+        for subrun in subruns:
+            plugins = self._get_plugins(subrun, target, chunk_number=chunk_number)
+            plugin_configs.append([plugins[target].takes_config])
+        config_keys = [list(config.keys()) for config in plugin_configs]
+        keys = [key for key_list in config_keys for key in key_list]
+
+        for key in keys:
+            config_list = []
+            for config in plugin_configs:
+                value = config.get(key, None)
+                if config.get(key) != None:
+                    config_list.append(value)
+            if len(set(config_list)) > 1:
+                return False
+        return True
 
     def get_data_key(self, run_id, target, lineage, combining=False):
         """Get datakey for a given run_id, target and lineage.
