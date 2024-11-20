@@ -175,9 +175,11 @@ def merged_dtype(dtypes):
 
 
 @export
-def merge_arrs(arrs, dtype=None):
+def merge_arrs(arrs, dtype=None, replacing=False):
     """Merge structured arrays of equal length. On field name collisions, data from later arrays is
     kept.
+
+    replacing=True is usually used when you want to convert arrs into a new dtype
 
     If you pass one array, it is returned without copying.
     TODO: hmm... inconsistent
@@ -187,7 +189,7 @@ def merge_arrs(arrs, dtype=None):
     """
     if not len(arrs):
         raise RuntimeError("Cannot merge 0 arrays")
-    if len(arrs) == 1:
+    if len(arrs) == 1 and not replacing:
         return arrs[0]
 
     n = len(arrs[0])
@@ -204,7 +206,8 @@ def merge_arrs(arrs, dtype=None):
     result = np.zeros(n, dtype=dtype)
     for arr in arrs:
         for fn in arr.dtype.names:
-            result[fn] = arr[fn]
+            if fn in result.dtype.names:
+                result[fn] = arr[fn]
     return result
 
 

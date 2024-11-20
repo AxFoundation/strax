@@ -1,3 +1,12 @@
+2.0.2 / 2024-11-19
+---------------------
+* Raise error when peaks overlapping in `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/927
+* Print progress bar in `dry_load_files` by @dachengx in https://github.com/AxFoundation/strax/pull/928
+* Fix a small bug in `merge_arrs` by @dachengx in https://github.com/AxFoundation/strax/pull/930
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.1...v2.0.2
+
+
 2.0.1 / 2024-11-14
 ---------------------
 * Allow `chunk_number` to be list or tuple in `dry_load_files` function by @dachengx in https://github.com/AxFoundation/strax/pull/921
