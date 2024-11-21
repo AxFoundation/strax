@@ -1355,13 +1355,12 @@ class Context:
     def check_superrun_config(
             self, 
             subruns: dict, 
-            target: str,
-            chunk_number=None
+            target: str
     ) -> bool:
             
         plugin_configs =  []
         for subrun in subruns:
-            plugins = self._get_plugins(subrun, target, chunk_number=chunk_number)
+            plugins = self._get_plugins(subrun, target)
             plugin_configs.append([plugins[target].takes_config])
         config_keys = [list(config.keys()) for config in plugin_configs]
         keys = [key for key_list in config_keys for key in key_list]
