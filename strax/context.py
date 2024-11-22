@@ -1135,16 +1135,19 @@ class Context:
         # Safeguard for Super and Hyperruns
         if is_superrun:
             sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
-            for target_i in targets:
-                if (
-                    self.check_superrun_config(
-                        self, sub_run_spec, target_i, chunk_number=chunk_number
-                    )
-                    == False
-                ):
-                    raise ValueError(
-                        f"Cannot do superruns with {sub_run_spec} that take different configs"
-                    )
+            for subrun in sub_run_spec:
+                plugins_to_test = self._get_plugins(targets, subrun, chunk_number=chunk_number)
+                plugin_configs = [plugins_to_test[target].takes_config for target in targets]
+            #plugin_configs2 = [self._get_plugins(targets,subrun,chunk_number=chunk_number)[target].takes_config for subrun in sub_run_spec for target in targets]
+            if (
+                self.check_superrun_config(
+                    plugin_configs
+                )
+                == False
+            ):
+                raise ValueError(
+                    f"Cannot do superruns with {sub_run_spec} that take different configs"
+                )
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
@@ -1354,14 +1357,9 @@ class Context:
     
     def check_superrun_config(
             self, 
-            subruns: dict, 
-            target: str
+            plugin_configs
     ) -> bool:
-            
-        plugin_configs =  []
-        for subrun in subruns:
-            plugins = self._get_plugins(subrun, target)
-            plugin_configs.append([plugins[target].takes_config])
+        print(plugin_configs)
         config_keys = [list(config.keys()) for config in plugin_configs]
         keys = [key for key_list in config_keys for key in key_list]
 
