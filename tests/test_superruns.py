@@ -348,6 +348,14 @@ class TestSuperRuns(unittest.TestCase):
         # superruns in only-combining mode will load and make subruns separately
         assert np.unique(_sum_super["sum"]).size != 1
 
+    def test_only_combining_subruns_with_same_config(self):
+        """Test that superrun does not work if combined subruns and
+          
+        plugins have different configs.
+        
+        """
+        pass
+
     def tearDown(self):
         if os.path.exists(self.tempdir):
             shutil.rmtree(self.tempdir)
