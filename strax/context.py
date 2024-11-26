@@ -164,6 +164,12 @@ tqdm = strax.utils.tqdm
         type=bool,
         help='If True, save superruns as rechunked "new" data.',
     ),
+    strax.Option(
+        name="superrun_subruns_config_check",
+        default=True,
+        type=bool,
+        help='Enable or disable the check for superruns if subruns use different configs',
+    ),
 )
 @export
 class Context:
@@ -1133,7 +1139,7 @@ class Context:
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Safeguard for Super and Hyperruns
-        if is_superrun:
+        if is_superrun and self.context_config["superrun_subruns_config_check"]:
             sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
             for subrun in sub_run_spec:
                 plugins_to_test = self._get_plugins(targets, subrun, chunk_number=chunk_number)
@@ -1359,7 +1365,6 @@ class Context:
             self, 
             plugin_configs
     ) -> bool:
-        print(plugin_configs)
         config_keys = [list(config.keys()) for config in plugin_configs]
         keys = [key for key_list in config_keys for key in key_list]
 
