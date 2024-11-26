@@ -349,18 +349,17 @@ class TestSuperRuns(unittest.TestCase):
         assert np.unique(_sum_super["sum"]).size != 1
 
     def test_only_combining_subruns_with_same_config(self):
-        """Test that superrun does not work if combined subruns and
-          
+        """Test that superrun does not work if combined subruns and.
+
         plugins have different configs.
 
         """
         superrun_meta = self.context.run_metadata(self.superrun_name)
         for subrun_id in superrun_meta["sub_run_spec"]:
-            self.context.set_config({"some_additional_peak_value":42+int(subrun_id)})
-            self.context.make(subrun_id,"peaks_extension",save="peaks_extension")
+            self.context.set_config({"some_additional_peak_value": 42 + int(subrun_id)})
+            self.context.make(subrun_id, "peaks_extension", save="peaks_extension")
         with self.assertRaises(ValueError):
-            self.context.get_array(self.superrun_name,"peaks_extension")
-        
+            self.context.get_array(self.superrun_name, "peaks_extension")
 
     def tearDown(self):
         if os.path.exists(self.tempdir):
