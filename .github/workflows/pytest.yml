@@ -15,7 +15,7 @@ on:
       - master
 
 jobs:
-  update:
+  test:
     name: "${{ matrix.test }}_py${{ matrix.python-version }}"
     runs-on: ubuntu-latest
     strategy:
@@ -34,14 +34,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: 'extra_requirements/requirements-tests.txt'
       - name: Install dependencies
         run: sudo apt-get install -y graphviz
       - name: Install requirements
-        run: pip install -r extra_requirements/requirements-tests.txt
+        run: pip install git+https://github.com/XENONnT/base_environment.git --force-reinstall
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.10.0
+        uses: supercharge/mongodb-github-action@1.11.0
         with:
           mongodb-version: 4.2
       # Perform coveralls (if coverage is set to True) or pytest
@@ -57,7 +55,7 @@ jobs:
           NUMBA_DISABLE_JIT: 1
           TEST_MONGO_URI: 'mongodb://localhost:27017/'
         run: |
-          coverage run --source=strax setup.py test -v
+          coverage run --source=strax -m pytest --durations 0 -v
       - name: Coverage run - backward compatibility check with straxen
         if: matrix.test == 'coveralls'
         env:

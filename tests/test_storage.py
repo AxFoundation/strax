@@ -139,6 +139,7 @@ class TestStorageType(TestCase):
             dirname = os.path.join(sf.path, str(key))
             strax.io.dry_load_files(dirname)
             strax.io.dry_load_files(dirname, 0)
+            strax.io.dry_load_files(dirname, [0])
             with self.assertRaises(ValueError):
                 strax.io.dry_load_files(dirname, 99)
 
@@ -187,7 +188,7 @@ class TestStorageType(TestCase):
         prefix = strax.storage.files.dirname_to_prefix(backend_key)
         md = st_new.get_metadata(self.run_id, self.target)
         md["chunks"][0]["n"] += 1
-        md_path = os.path.join(backend_key, f"{prefix}-metadata.json")
+        md_path = os.path.join(backend_key, strax.RUN_METADATA_PATTERN % prefix)
         with open(md_path, "w") as file:
             json.dump(md, file, indent=4)
 
@@ -298,7 +299,7 @@ class TestRechunking(TestCase):
             dest_directory=target_path.name if not replace else None,
             replace=True,
             compressor=compressor,
-            target_size_mb=strax.default_chunk_size_mb * 2,
+            target_size_mb=strax.DEFAULT_CHUNK_SIZE_MB * 2,
             parallel=parallel,
             max_workers=4,
             _timeout=5,

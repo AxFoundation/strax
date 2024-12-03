@@ -5,6 +5,7 @@ A 'plugin' is something that outputs an array and gets arrays from one or more o
 """
 
 from enum import IntEnum
+from collections import Counter
 import inspect
 import itertools
 import logging
@@ -12,6 +13,7 @@ import time
 import typing
 from warnings import warn
 from immutabledict import immutabledict
+import gc
 import numpy as np
 from copy import copy, deepcopy
 import strax
@@ -70,7 +72,7 @@ class Plugin:
     rechunk_on_save = True  # Saver is allowed to rechunk
     # How large (uncompressed) should re-chunked chunks be?
     # Meaningless if rechunk_on_save is False
-    chunk_target_size_mb = strax.default_chunk_size_mb
+    chunk_target_size_mb = strax.DEFAULT_CHUNK_SIZE_MB
 
     # For a source with online input (e.g. DAQ readers), crash if no new input
     # has appeared for this many seconds
@@ -95,21 +97,32 @@ class Plugin:
     takes_config = immutabledict()
 
     # These are set on plugin initialization, which is done in the core
-    run_id: str
-    run_i: int
     config: typing.Dict
     deps: typing.Dict  # Dictionary of dependency plugin instances
 
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
-    allow_hyperrun = False
+    allow_superrun = False
+
+    gc_collect_after_compute = False
 
     def __init__(self):
         if not hasattr(self, "depends_on"):
             raise ValueError(f"depends_on not provided for {self.__class__.__name__}")
 
         self.depends_on = strax.to_str_tuple(self.depends_on)
+        # Remove duplicates
+        counter = Counter(self.depends_on)
+        duplicates = {item: count for item, count in counter.items() if count > 1}
+        if duplicates:
+            raise ValueError(f"Duplicate dependencies in {self.__class__.__name__}: {duplicates}")
+
+        if len(self.depends_on) == 0 and self.allow_superrun:
+            raise RuntimeError(
+                f"{self.__class__.__name__} does not depend on anything, "
+                "so can not set allow_superrun to True!"
+            )
 
         # Store compute parameter names, see if we take chunk_i too
         compute_pars = list(inspect.signature(self.compute).parameters.keys())
@@ -190,6 +203,19 @@ class Plugin:
 
         raise AttributeError(f"{self.__class__.__name__} instance has no attribute {name}")
 
+    @property
+    def run_id(self):
+        return self.__run_id
+
+    @run_id.setter
+    def run_id(self, run_id):
+        self._run_id = run_id
+        self.__run_id = strax.Context._process_superrun_id(run_id)
+
+    @property
+    def is_superrun(self):
+        return self._run_id.startswith("_")
+
     def fix_dtype(self):
         try:
             # Infer dtype should always precede self.dtype (e.g. due to
@@ -248,21 +274,23 @@ class Plugin:
         # implementing all abstract methods...
         raise RuntimeError("No infer dtype method defined")
 
-    @property
-    def _auto_version(self):
+    @classmethod
+    def _auto_version(cls) -> str:
         """Generate some auto-incremented version for the context hashing system, see
         github.com/AxFoundation/strax/issues/217.
 
         Activate with setting __version__ to None
 
         """
-        attributes = [attr for attr in self.__dir__() if not attr.startswith("__")]
+        attributes = [
+            attr for attr in dir(cls) if not attr.startswith("__") and attr not in cls.takes_config
+        ]
 
         def _return_hashable(attr):
-            if attr in ["takes_config", "_auto_version"]:
+            if attr in ["takes_config", "version", "_auto_version"]:
                 # handled by context (or not worth tracking)
                 return
-            obj = getattr(self, attr)
+            obj = getattr(cls, attr)
             try:
                 return strax.deterministic_hash(inspect.getsource(obj))
             except TypeError:
@@ -275,16 +303,12 @@ class Plugin:
         res = {attr: _return_hashable(attr) for attr in attributes}
         return "auto_" + strax.deterministic_hash(res)
 
-    def version(self, run_id=None):
-        """Return version number applicable to the run_id.
-
-        Most plugins just have a single version (in .__version__) but some may be at different
-        versions for different runs (e.g. time-dependent corrections).
-
-        """
-        if self.__version__ is None:
-            return self._auto_version
-        return self.__version__
+    @classmethod
+    def version(cls) -> str:
+        """Return version number of the plugin."""
+        if cls.__version__ is None:
+            return cls._auto_version()
+        return cls.__version__
 
     def __repr__(self):
         return self.__class__.__name__
@@ -333,7 +357,7 @@ class Plugin:
             data_type=data_type,
             data_kind=self.data_kind_for(data_type),
             dtype=self.dtype_for(data_type),
-            lineage_hash=strax.DataKey(run_id, data_type, self.lineage).lineage_hash,
+            lineage_hash=strax.deterministic_hash(self.lineage),
             compressor=self.compressor,
             lineage=self.lineage,
             chunk_target_size_mb=self.chunk_target_size_mb,
@@ -379,7 +403,7 @@ class Plugin:
         try:
             # print(f"Fetching {d} in {self}, hope to see {hope_to_see}")
             self.input_buffer[d] = strax.Chunk.concatenate(
-                [self.input_buffer[d], next(iters[d])], self.allow_hyperrun
+                [self.input_buffer[d], next(iters[d])], self.allow_superrun
             )
             # print(f"Fetched {d} in {self}, "
             #      f"now have {self.input_buffer[d]}")
@@ -473,8 +497,9 @@ class Plugin:
                     # can we optimize this, or code it more elegantly?
                     max_passes_left = 10
                     while max_passes_left > 0:
-                        this_chunk_end = min([x.end for x in inputs.values()] + [this_chunk_end])
-                        if len(set([x.end for x in inputs.values()])) <= 1:
+                        all_ends = [x.end for x in inputs.values()]
+                        this_chunk_end = min(all_ends + [this_chunk_end])
+                        if len(set(all_ends)) <= 1:
                             break
                         for d in self.depends_on:
                             inputs[d], back_to_buffer = inputs[d].split(
@@ -482,7 +507,7 @@ class Plugin:
                             )
                             self.input_buffer[d] = strax.Chunk.concatenate(
                                 [back_to_buffer, self.input_buffer[d]],
-                                self.allow_hyperrun,
+                                self.allow_superrun,
                             )
                         max_passes_left -= 1
                     else:
@@ -507,6 +532,8 @@ class Plugin:
                     yield new_future
                 else:
                     yield from self._iter_compute(chunk_i=chunk_i, **inputs_merged)
+                if self.gc_collect_after_compute:
+                    gc.collect()
 
         except IterDone:
             # Check all sources are exhausted.
@@ -527,9 +554,13 @@ class Plugin:
                     # Check the input buffer is empty
                     if buffer is not None and len(buffer):
                         raise RuntimeError(f"Plugin {d} terminated with leftover {d}: {buffer}")
+            if self.gc_collect_after_compute:
+                gc.collect()
 
         finally:
             self.cleanup(wait_for=pending_futures)
+            if self.gc_collect_after_compute:
+                gc.collect()
 
     def _iter_compute(self, chunk_i, **inputs_merged):
         """Either yields or returns strax chunks from the input."""
@@ -560,9 +591,25 @@ class Plugin:
             raise strax.PluginGaveWrongOutput(
                 f"Plugin {pname} did not deliver "
                 f"data type {d} as promised.\n"
-                f"Promised:  {expect}\n"
+                f"Promised: {expect}\n"
                 f"Delivered: {got}."
             )
+
+    @staticmethod
+    def _check_subruns_uniqueness(kwargs, subrunses):
+        """Check if the subruns of the all inputs are the same."""
+        _subrunses = list(subrunses.values())
+        if not all(_subruns == _subrunses[0] for _subruns in _subrunses):
+            raise ValueError(
+                "Computing inputs' superruns or subrunses of "
+                f"{kwargs} are different: {subrunses}."
+            )
+        if len(subrunses) == 0:
+            # The plugin depends on nothing
+            subruns = None
+        else:
+            subruns = _subrunses[0]
+        return subruns
 
     def do_compute(self, chunk_i=None, **kwargs):
         """Wrapper for the user-defined compute method.
@@ -594,7 +641,7 @@ class Plugin:
                 # </start>This warning/check will be deleted, see UserWarning
                 if len(set(tranges.values())) != 1:
                     start = min([v.start for v in kwargs.values()])
-                    end = max([v.end for v in kwargs.values()])  # Don't delete
+                    end = max([v.end for v in kwargs.values()])
                     message = (
                         "New feature, we are ignoring inconsistent the "
                         "possible ValueError in time ranges for "
@@ -614,6 +661,12 @@ class Plugin:
             # This plugin starts from scratch
             start, end = None, None
 
+        # Save superrun and subruns of chunks in kwargs for further usage
+        superrun = self._check_subruns_uniqueness(
+            kwargs, {k: v.superrun for k, v in kwargs.items()}
+        )
+        subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
+
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             kwargs["chunk_i"] = chunk_i
@@ -621,17 +674,57 @@ class Plugin:
             kwargs["start"] = start
             kwargs["end"] = end
         result = self.compute(**kwargs)
+        return self._fix_output(result, start, end, superrun, subruns)
 
-        return self._fix_output(result, start, end)
+    @staticmethod
+    def _update_superrun(item, superrun):
+        if isinstance(item, strax.Chunk):
+            item.superrun = superrun
+        else:
+            for d in item:
+                item[d].superrun = superrun
 
-    def _fix_output(self, result, start, end, _dtype=None):
+    @staticmethod
+    def _update_subruns(item, subruns):
+        if isinstance(item, strax.Chunk):
+            item.subruns = subruns
+        else:
+            for d in item:
+                item[d].subruns = subruns
+
+    def superrun_transformation(self, result, superrun, subruns):
+        """Transform the combination of subruns into superrun."""
+        # If processing superrun, set subruns to the result.
+        # If there is already _run_id in superrun,
+        # this means we are processing higher data_types
+        # after we done the merging of subruns' chunks.
+        # These lines of codes transfer chunks of normal subruns into superrun.
+        if self.is_superrun and self._run_id not in superrun:
+            # Assign superrun as subruns when combining and processing superrun
+            self._update_subruns(result, superrun)
+        else:
+            if isinstance(superrun, dict) and len(set(superrun.keys())) > 1:
+                raise ValueError(
+                    "Weird! You did not assign superrun "
+                    f"but the chunks have from different run_id: {superrun}."
+                )
+            # Here we need to set subruns because the subruns information
+            # need to be inherited when only processing superrun (not combining)
+            self._update_subruns(result, subruns)
+            self._update_superrun(result, superrun)
+        return result
+
+    def _fix_output(self, result, start, end, superrun, subruns, _dtype=None):
         if self.multi_output and _dtype is None:
             if not isinstance(result, dict):
                 raise ValueError(
                     f"{self.__class__.__name__} is multi-output and should "
                     "provide a dict output."
                 )
-            return {d: self._fix_output(result[d], start, end, _dtype=d) for d in self.provides}
+            return {
+                d: self._fix_output(result[d], start, end, superrun, subruns, _dtype=d)
+                for d in self.provides
+            }
 
         if _dtype is None:
             assert not self.multi_output
@@ -655,7 +748,7 @@ class Plugin:
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
             self._check_dtype(result, _dtype)
             result = self.chunk(start=start, end=end, data_type=_dtype, data=result)
-        return result
+        return self.superrun_transformation(result, superrun, subruns)
 
     def chunk(self, *, start, end, data, data_type=None, run_id=None):
         if data_type is None:
@@ -665,7 +758,7 @@ class Plugin:
                 )
             data_type = self.provides[0]
         if run_id is None:
-            run_id = self.run_id
+            run_id = self._run_id
         return strax.Chunk(
             start=start,
             end=end,

@@ -8,7 +8,12 @@ export, __all__ = strax.exporter()
 
 
 @export
-def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
+def merge_peaks(
+    peaks,
+    start_merge_at,
+    end_merge_at,
+    max_buffer=int(1e5),
+):
     """Merge specified peaks with their neighbors, return merged peaks.
 
     :param peaks: Record array of strax peak dtype.
@@ -20,6 +25,8 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
 
     """
     assert len(start_merge_at) == len(end_merge_at)
+    if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
+        raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
 
     # Do the merging. Could numbafy this to optimize, probably...
@@ -40,32 +47,11 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
 
         # re-zero relevant part of buffers (overkill? not sure if
         # this saves much time)
-        buffer[
-            : min(
-                int(
-                    (
-                        last_peak["time"]
-                        - first_peak["time"]
-                        + (last_peak["length"] * old_peaks["dt"].max())
-                    )
-                    / common_dt
-                ),
-                len(buffer),
-            )
-        ] = 0
-        buffer_top[
-            : min(
-                int(
-                    (
-                        last_peak["time"]
-                        - first_peak["time"]
-                        + (last_peak["length"] * old_peaks["dt"].max())
-                    )
-                    / common_dt
-                ),
-                len(buffer_top),
-            )
-        ] = 0
+        bl = last_peak["time"] - first_peak["time"]
+        bl += last_peak["length"] * old_peaks["dt"].max()
+        bl = min(int(bl / common_dt), max_buffer)
+        buffer[:bl] = 0
+        buffer_top[:bl] = 0
 
         for p in old_peaks:
             # Upsample the sum and top/bottom array waveforms into their buffers
@@ -83,9 +69,15 @@ def merge_peaks(peaks, start_merge_at, end_merge_at, max_buffer=int(1e5)):
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
 
-        # Downsample the buffers into new_p['data'], new_p['data_top'],
-        # and new_p['data_bot']
-        strax.store_downsampled_waveform(new_p, buffer, True, buffer_top)
+        # Downsample the buffers into
+        # new_p['data'], new_p['data_top'], and new_p['data_bot']
+        strax.store_downsampled_waveform(
+            new_p,
+            buffer,
+            True,
+            True,
+            buffer_top,
+        )
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
@@ -163,7 +155,7 @@ def _replace_merged(result, orig, merge, skip_windows):
 
 
 @export
-def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
+def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_data_start=False):
     """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
     after merging.). Modifies peak area and data inplace.
 
@@ -171,14 +163,22 @@ def add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
     :param lone_hits: Numpy array of lone_hits
     :param to_pe: Gain values to convert lone hit area into PE.
     :param n_top_channels: Number of top array channels.
+    :param store_data_start: Boolean which indicates whether to store the first samples of the
+        waveform in the peak.
 
     """
     _fully_contained_in_sanity(lone_hits, peaks)
-    _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0)
+    _add_lone_hits(
+        peaks,
+        lone_hits,
+        to_pe,
+        n_top_channels=n_top_channels,
+        store_data_start=store_data_start,
+    )
 
 
 @numba.njit(cache=True, nogil=True)
-def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
+def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0, store_data_start=False):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
 
@@ -199,3 +199,13 @@ def _add_lone_hits(peaks, lone_hits, to_pe, n_top_channels=0):
         if n_top_channels > 0:
             if lh_i["channel"] < n_top_channels:
                 p["data_top"][index] += lh_area
+
+        if store_data_start:
+            # Non-downsampled waveforms have a fixed dt of 10 ns
+            index_wf_start = (lh_i["time"] - p["time"]) // 10
+
+            if index_wf_start < 0:
+                raise ValueError("Hit outside of full containment!")
+
+            if index_wf_start < len(p["data_start"]):
+                p["data_start"][index_wf_start] += lh_area

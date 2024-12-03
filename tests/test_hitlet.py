@@ -290,14 +290,14 @@ def test_highest_density_region_width():
 
     # Check that negative data does not raise:
     res = strax.processing.hitlets.highest_density_region_width(
-        np.array([0, -1, -2]), np.array([0.5]), fractionl_edges=True
+        np.array([0, -1, -2]), np.array([0.5]), fractional_edges=True
     )
     assert np.all(np.isnan(res)), "For empty data HDR is not defined, should return np.nan!"
 
 
 def _test_highest_density_region_width(distribution, truth_dict):
     res = strax.processing.hitlets.highest_density_region_width(
-        distribution, np.array(list(truth_dict.keys())), fractionl_edges=True
+        distribution, np.array(list(truth_dict.keys())), fractional_edges=True
     )
 
     for ind, (fraction, truth) in enumerate(truth_dict.items()):
@@ -363,70 +363,6 @@ def test_hitlet_properties(hits_n_data):
         assert pos_max == h["time_amplitude"], "Wrong amplitude position found!"
         assert d[pos_max] == h["amplitude"], "Wrong amplitude value found!"
 
-        # Checking FHWM and FWTM:
-        fractions = [0.1, 0.5]
-        for f in fractions:
-            # Get field names for the correct test:
-            if f == 0.5:
-                left = "left"
-                fwxm = "fwhm"
-            else:
-                left = "low_left"
-                fwxm = "fwtm"
-
-            amplitude = np.max(d)
-            if np.all(d[0] == d) or np.all(d > amplitude * f):
-                # If all samples are either the same or greater than
-                # required height FWXM is not defined:
-                mes = "All samples are the same or larger than require height."
-                assert np.isnan(h[left]), mes + f" Left edge for {f} should have been np.nan."
-                assert np.isnan(h[left]), mes + f" FWXM for X={f} should have been np.nan."
-            else:
-                le = np.argwhere(d[:pos_max] <= amplitude * f)
-                if len(le):
-                    le = le[-1, 0]
-                    m = d[le + 1] - d[le]
-                    le = le + 0.5 + (amplitude * f - d[le]) / m
-                else:
-                    le = 0
-
-                re = np.argwhere(d[pos_max:] <= amplitude * f)
-
-                if len(re) and re[0, 0] != 0:
-                    re = re[0, 0] + pos_max
-                    m = d[re] - d[re - 1]
-                    re = re + 0.5 + (amplitude * f - d[re]) / m
-                else:
-                    re = len(d)
-
-                assert math.isclose(
-                    le, h[left], rel_tol=10**-4, abs_tol=10**-4
-                ), f"Left edge does not match for fraction {f}"
-                assert math.isclose(
-                    re - le, h[fwxm], rel_tol=10**-4, abs_tol=10**-4
-                ), f"FWHM does not match for {f}"
-
-
-def test_not_defined_get_fhwm():
-    # This is a specific unity test for some edge-cases in which the full
-    # width half maximum is not defined.
-    odd_hitlets = np.zeros(4, dtype=strax.hitlet_with_data_dtype(10))
-    odd_hitlets[0]["data"][:5] = [2, 2, 3, 2, 2]
-    odd_hitlets[0]["length"] = 5
-    odd_hitlets[1]["data"][:2] = [5, 5]
-    odd_hitlets[1]["length"] = 2
-    odd_hitlets[2]["length"] = 3
-    odd_hitlets[3]["data"][:3] = [-1, -2, 0]
-    odd_hitlets[3]["length"] = 3
-
-    for oh in odd_hitlets:
-        res = strax.get_fwxm(oh)
-        mes = (
-            f'get_fxhm returned {res} for {oh["data"][:oh["length"]]}!'
-            "However, the FWHM is not defined and the return should be nan!"
-        )
-        assert np.all(np.isnan(res)), mes
-
 
 # ------------------------
 # Entropy test
@@ -454,7 +390,7 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     """
 
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
-    ind_max_template, size_template = np.sort(size_template_and_ind_max_template)
+    ind_max_template, size_template = strax.stable_sort(size_template_and_ind_max_template)
 
     # Make dummy hitlet:
     data = data.astype(np.float32)

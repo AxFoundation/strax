@@ -1,2 +1,0 @@
-# File for the requirements of strax with the automated tests
-git+https://github.com/XENONnT/base_environment

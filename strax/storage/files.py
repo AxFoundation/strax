@@ -10,6 +10,7 @@ import strax
 from .common import StorageFrontend
 
 export, __all__ = strax.exporter()
+__all__.extend(["RUN_METADATA_PATTERN"])
 
 RUN_METADATA_PATTERN = "%s-metadata.json"
 
@@ -62,7 +63,7 @@ class DataDirectory(StorageFrontend):
         with open(self._run_meta_path(run_id), mode="w") as f:
             if "name" not in metadata:
                 metadata["name"] = run_id
-            f.write(json.dumps(metadata, default=json_util.default))
+            f.write(json.dumps(metadata, sort_keys=True, indent=4, default=json_util.default))
 
     def _scan_runs(self, store_fields):
         """Iterable of run document dictionaries.
@@ -166,7 +167,7 @@ class DataDirectory(StorageFrontend):
         # Check exact match
         if _data_type != key.data_type:
             return False
-        if not ignore_name and _run_id != key.run_id:
+        if not ignore_name and _run_id != key._run_id:
             return False
 
         # Check fuzzy match
@@ -230,7 +231,7 @@ class FileSytemBackend(strax.StorageBackend):
 
     def _get_metadata(self, dirname):
         prefix = dirname_to_prefix(dirname)
-        metadata_json = f"{prefix}-metadata.json"
+        metadata_json = RUN_METADATA_PATTERN % prefix
         md_path = osp.join(dirname, metadata_json)
 
         if not osp.exists(md_path):
@@ -300,13 +301,13 @@ class FileSaver(strax.Saver):
         self.dirname = dirname
         self.tempdirname = dirname + "_temp"
         self.prefix = dirname_to_prefix(dirname)
-        self.metadata_json = f"{self.prefix}-metadata.json"
+        self.metadata_json = RUN_METADATA_PATTERN % self.prefix
 
         if os.path.exists(dirname):
             print(f"Removing data in {dirname} to overwrite")
             shutil.rmtree(dirname)
         if os.path.exists(self.tempdirname):
-            print(f"Removing old incomplete data in {dirname}")
+            print(f"Removing old incomplete data in {self.tempdirname}")
             shutil.rmtree(self.tempdirname)
         os.makedirs(self.tempdirname)
         self._flush_metadata()

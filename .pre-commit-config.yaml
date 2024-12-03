@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
@@ -10,21 +10,21 @@ repos:
     -   id: check-added-large-files
 
 -   repo: https://github.com/psf/black
-    rev: 24.4.2
+    rev: 24.10.0
     hooks:
     -   id: black
         args: [--safe, --line-length=100, --preview]
-    -   id: black-jupyter
-        args: [--safe, --line-length=100, --preview]
-        language_version: python3.9
+        language_version: python3
 
 -   repo: https://github.com/pycqa/docformatter
-    rev: v1.7.5
+    rev: master
     hooks:
     -   id: docformatter
+        additional_dependencies: [tomli]
+        args: [--config, pyproject.toml]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.11.2
     hooks:
     -   id: mypy
         additional_dependencies: [
@@ -33,7 +33,7 @@ repos:
         ]
 
 -   repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+    rev: 7.1.1
     hooks:
     -   id: flake8
 

@@ -107,7 +107,7 @@ class Mailbox:
         # Do NOT call notify_all when the condition is False!
         # We use wait_for, which also returns False when the timeout is broken
         # (Is this an odd design decision in the standard library
-        #  or am I misunderstanding something?)
+        # or am I misunderstanding something?)
         class Condition:
             """Small helper class which wraps "threading.Condition" to get some useful logging
             information for debugging."""
@@ -244,8 +244,11 @@ class Mailbox:
 
         # Everyone is waiting for the new chunk or not at all.
         # Fetch only if a driver is waiting.
-        for _i, waiting_for in enumerate(self._subscriber_waiting_for):
-            if self._subscriber_can_drive[_i] and waiting_for is not None:
+        for can_drive, waiting_for in zip(
+            self._subscriber_can_drive,
+            self._subscriber_waiting_for,
+        ):
+            if can_drive and waiting_for is not None:
                 return True
         return False
 

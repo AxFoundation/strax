@@ -11,6 +11,7 @@ import traceback
 import typing as ty
 from hashlib import sha1
 import strax
+from strax import stable_argsort, stable_sort
 import numexpr
 import dill
 import numba
@@ -39,15 +40,6 @@ if any("jupyter" in arg for arg in sys.argv):
     from tqdm.notebook import tqdm
 else:
     from tqdm import tqdm  # type: ignore
-
-# Throw a warning on import for python3.6
-if sys.version_info.major == 3 and sys.version_info.minor in [6, 7]:
-    warn(
-        "Using strax in python 3.6-3.7 is deprecated since 2022/01 consider "
-        "upgrading to python 3.8, 3.9 or 3.10. This will result in an error"
-        " in strax 1.2",
-        DeprecationWarning,
-    )
 
 
 def exporter(export_self=False):
@@ -183,9 +175,11 @@ def merged_dtype(dtypes):
 
 
 @export
-def merge_arrs(arrs, dtype=None):
+def merge_arrs(arrs, dtype=None, replacing=False):
     """Merge structured arrays of equal length. On field name collisions, data from later arrays is
     kept.
+
+    replacing=True is usually used when you want to convert arrs into a new dtype
 
     If you pass one array, it is returned without copying.
     TODO: hmm... inconsistent
@@ -195,7 +189,7 @@ def merge_arrs(arrs, dtype=None):
     """
     if not len(arrs):
         raise RuntimeError("Cannot merge 0 arrays")
-    if len(arrs) == 1:
+    if len(arrs) == 1 and not replacing:
         return arrs[0]
 
     n = len(arrs[0])
@@ -212,7 +206,8 @@ def merge_arrs(arrs, dtype=None):
     result = np.zeros(n, dtype=dtype)
     for arr in arrs:
         for fn in arr.dtype.names:
-            result[fn] = arr[fn]
+            if fn in result.dtype.names:
+                result[fn] = arr[fn]
     return result
 
 
@@ -532,7 +527,7 @@ def multi_run(
 
     # This will autocast all run ids to Unicode fixed-width
     run_id_numpy = np.array(run_ids)
-    run_id_numpy = np.sort(run_id_numpy)
+    run_id_numpy = stable_sort(run_id_numpy)
     _is_superrun = np.any([r.startswith("_") for r in run_id_numpy])
 
     # Get from kwargs whether output should contain a run_id field.
@@ -621,12 +616,7 @@ def multi_run(
             pbar.close()
             return None
 
-        if add_run_id_field:
-            final_result = [final_result[ind] for ind in np.argsort(run_id_output)]
-        else:
-            # In case we do not have any run_id sort according to time:
-            start_of_runs = [np.min(res["time"]) for res in final_result]
-            final_result = [final_result[ind] for ind in np.argsort(start_of_runs)]
+        final_result = [final_result[ind] for ind in stable_argsort(run_id_output)]
         pbar.close()
         if ignore_errors and len(failures):
             log.warning(
@@ -689,10 +679,30 @@ def parse_selection(x, selection):
 
 
 @export
+def apply_keep_columns(x, keep_columns):
+    # Construct the new dtype
+    new_dtype = []
+    fields_to_copy = []
+    for unpacked_dtype in strax.unpack_dtype(x.dtype):
+        field_name = unpacked_dtype[0]
+        if isinstance(field_name, tuple):
+            field_name = field_name[1]
+
+        if field_name in keep_columns:
+            new_dtype.append(unpacked_dtype)
+            fields_to_copy.append(field_name)
+
+    # Copy over the data
+    x2 = np.zeros(len(x), dtype=new_dtype)
+    for field_name in keep_columns:
+        x2[field_name] = x[field_name]
+    return x2
+
+
+@export
 def apply_selection(
     x,
     selection=None,
-    selection_str=None,
     keep_columns=None,
     drop_columns=None,
     time_range=None,
@@ -702,7 +712,6 @@ def apply_selection(
 
     :param x: Numpy structured array
     :param selection: Query string, sequence of strings, or simple function to apply.
-    :param selection_str: Same as selection (deprecated)
     :param time_range: (start, stop) range to load, in ns since the epoch
     :param keep_columns: Field names of the columns to keep.
     :param drop_columns: Field names of the columns to drop.
@@ -732,13 +741,6 @@ def apply_selection(
     else:
         raise ValueError(f"Unknown time_selection {time_selection}")
 
-    if selection_str:
-        warn(
-            'The option "selection_str" is depricated and will be removed in a future release. '
-            'Please use "selection" instead.'
-        )
-        selection = selection_str
-
     if selection:
         x = x[parse_selection(x, selection)]
 
@@ -760,22 +762,7 @@ def apply_selection(
     if keep_columns:
         # We check before if keep and drop are specified both,
         # if so we raise an error.
-        # Construct the new dtype
-        new_dtype = []
-        fields_to_copy = []
-        for unpacked_dtype in strax.unpack_dtype(x.dtype):
-            field_name = unpacked_dtype[0]
-            if isinstance(field_name, tuple):
-                field_name = field_name[1]
-
-            if field_name in keep_columns:
-                new_dtype.append(unpacked_dtype)
-                fields_to_copy.append(field_name)
-
-        # Copy over the data
-        x2 = np.zeros(len(x), dtype=new_dtype)
-        for field_name in keep_columns:
-            x2[field_name] = x[field_name]
+        x2 = apply_keep_columns(x, keep_columns)
         x = x2
         del x2
 
@@ -827,3 +814,40 @@ def convert_tuple_to_list(init_func_input):
     else:
         # if not a container, return. i.e. int, float, bytes, str etc.
         return func_input
+
+
+@export
+def convert_structured_array_to_df(structured_array, log=None):
+    """Convert a structured numpy array to a pandas DataFrame.
+
+    Parameters:
+    structured_array (numpy.ndarray): The structured array to be converted.
+    Returns:
+    pandas.DataFrame: The converted DataFrame.
+
+    """
+
+    if log is None:
+        import logging
+
+        log = logging.getLogger("strax_array_to_df")
+
+    data_dict = {}
+    converted_cols = []
+    for name in structured_array.dtype.names:
+        col = structured_array[name]
+        if col.ndim > 1:
+            # Convert n-dimensional columns to lists of ndarrays
+            data_dict[name] = [np.array(row) for row in col]
+            converted_cols.append(name)
+        else:
+            data_dict[name] = col
+
+    if converted_cols:
+        log.warning(
+            f"Columns {converted_cols} contain non-scalar entries. "
+            "Some pandas functions (e.g., groupby, apply) might "
+            "not perform as expected on these columns."
+        )
+
+    return pd.DataFrame(data_dict)

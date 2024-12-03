@@ -18,14 +18,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Install dependencies
-        run: pip install wheel
+        run: pip install build
       - name: Build package
-        run: python setup.py sdist bdist_wheel
+        run: python -m build
       # Do the publish
       - name: Publish a Python distribution to PyPI
         # Might want to add but does not work on workflow_dispatch :
         # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@master
         with:
-          user:  ${{ secrets.pipy_token }}
+          user: ${{ secrets.pipy_token }}
           password: ${{ secrets.pypi_password }}

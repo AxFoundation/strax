@@ -111,7 +111,7 @@ def test_get_empty_container_ids(full_container_ids):
     :return:
 
     """
-    full_container_ids = np.sort(full_container_ids)
+    full_container_ids = strax.stable_sort(full_container_ids)
 
     if len(full_container_ids):
         n_containers = np.max(full_container_ids)
@@ -155,7 +155,7 @@ def test_split(things, split_indices):
     :param split_indices: Indices at which things should be split.
 
     """
-    split_indices = np.sort(split_indices)
+    split_indices = strax.stable_sort(split_indices)
 
     split_things = strax.processing.general._split(things, split_indices)
     split_things_np = np.split(things, split_indices)
@@ -284,14 +284,14 @@ def test_raw_to_records(r):
 def test_dtype_change_copy_to_buffer():
     """Tests if dtype change does not let copy to buffer fail, even if copy function name stays the
     same."""
-    peaks = np.ones(1, dtype=strax.peak_dtype(digitize_top=True))
-    buffer = np.zeros(1, dtype=strax.peak_dtype(digitize_top=True))
+    peaks = np.ones(1, dtype=strax.peak_dtype(store_data_top=True))
+    buffer = np.zeros(1, dtype=strax.peak_dtype(store_data_top=True))
 
     strax.copy_to_buffer(peaks, buffer, "_test_copy_to_buffer")
     assert np.all(peaks == buffer)
 
-    peaks = np.ones(1, dtype=strax.peak_dtype(digitize_top=False))
-    buffer = np.zeros(1, dtype=strax.peak_dtype(digitize_top=False))
+    peaks = np.ones(1, dtype=strax.peak_dtype(store_data_top=False))
+    buffer = np.zeros(1, dtype=strax.peak_dtype(store_data_top=False))
 
     strax.copy_to_buffer(peaks, buffer, "_test_copy_to_buffer")
     assert np.all(peaks == buffer)
@@ -312,18 +312,18 @@ def test_sort_by_time(time, channel):
     dummy_array2["time"] = time
 
     res1 = strax.sort_by_time(dummy_array)
-    res2 = np.sort(dummy_array, order="time")
+    res2 = strax.stable_sort(dummy_array, order="time")
     assert np.all(res1 == res2)
 
     res1 = strax.sort_by_time(dummy_array2)
-    res2 = np.sort(dummy_array2, order="time")
+    res2 = strax.stable_sort(dummy_array2, order="time")
     assert np.all(res1 == res2)
 
     # Test again with random channels
     dummy_array3 = dummy_array2.copy()
     dummy_array3["channel"] = channel
     res1 = strax.sort_by_time(dummy_array3)
-    res2 = np.sort(dummy_array3, order=("time", "channel"))
+    res2 = strax.stable_sort(dummy_array3, order=("time", "channel"))
     assert np.all(res1 == res2)
 
     # Create some large time difference that would cause
@@ -332,7 +332,7 @@ def test_sort_by_time(time, channel):
     dummy_array3["time"][0] = np.iinfo(np.int64).min // 2 + 1
     dummy_array3["time"][-1] = np.iinfo(np.int64).max // 2 - 1
     res1 = strax.sort_by_time(dummy_array3)
-    res2 = np.sort(dummy_array3, order=("time", "channel"))
+    res2 = strax.stable_sort(dummy_array3, order=("time", "channel"))
     assert np.all(res1 == res2)
 
     _test_sort_by_time_peaks(time)
@@ -347,7 +347,7 @@ def _test_sort_by_time_peaks(time):
     dummy_array["channel"] = -1
 
     res1 = strax.sort_by_time(dummy_array)
-    res2 = np.sort(dummy_array, order="time")
+    res2 = strax.stable_sort(dummy_array, order="time")
     assert np.all(res1 == res2)
 
 

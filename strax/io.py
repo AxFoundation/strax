@@ -11,15 +11,26 @@ import lz4.frame as lz4
 from ast import literal_eval
 
 import strax
+from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 
+# use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
+tqdm = strax.utils.tqdm
+
 blosc.set_releasegil(True)
+blosc.set_nthreads(1)
+
+# zstd's default compression level is 3:
+# https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L53
+# we also need to constraint the number of worker threads to 1
+# https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L98
+zstd_compress = lambda data: zstd.compress(data, 3, 1)
 
 
 COMPRESSORS = dict(
     bz2=dict(compress=bz2.compress, decompress=bz2.decompress),
-    zstd=dict(compress=zstd.compress, decompress=zstd.decompress),
+    zstd=dict(compress=zstd_compress, decompress=zstd.decompress),
     blosc=dict(
         compress=None,  # add special function to prevent overflow at bottom module
         decompress=blosc.decompress,
@@ -100,9 +111,9 @@ COMPRESSORS["blosc"]["compress"] = _compress_blosc
 
 
 @export
-def dry_load_files(dirname, chunk_number=None):
+def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
-    metadata_json = f"{prefix}-metadata.json"
+    metadata_json = RUN_METADATA_PATTERN % prefix
     md_path = os.path.join(dirname, metadata_json)
 
     with open(md_path, mode="r") as f:
@@ -124,19 +135,25 @@ def dry_load_files(dirname, chunk_number=None):
                 )
         return data if len(data) else np.empty(0, dtype)
 
-    # Load all chunks if chunk_number is None, otherwise load the specified chunk
-    if chunk_number is None:
+    # Load all chunks if chunk_numbers is None, otherwise load the specified chunk
+    if chunk_numbers is None:
         chunk_numbers = list(range(len(metadata["chunks"])))
     else:
-        if not isinstance(chunk_number, int):
-            raise ValueError(f"Chunk number must be an integer, not {chunk_number}.")
-        if chunk_number >= len(metadata["chunks"]):
-            raise ValueError(f"Chunk {chunk_number:06d} does not exist in {dirname}.")
-        chunk_numbers = [chunk_number]
+        if not isinstance(chunk_numbers, (int, list, tuple)):
+            raise ValueError(
+                f"Chunk number must be int, list, or tuple, not {type(chunk_numbers)}."
+            )
+        chunk_numbers = (
+            chunk_numbers if isinstance(chunk_numbers, (list, tuple)) else [chunk_numbers]
+        )
+        if max(chunk_numbers) >= len(metadata["chunks"]):
+            raise ValueError(f"Chunk {max(chunk_numbers):06d} does not exist in {dirname}.")
 
     results = []
-    for c in chunk_numbers:
+    for c in tqdm(chunk_numbers, disable=disable):
         chunk_info = metadata["chunks"][c]
-        results.append(load_chunk(chunk_info))
+        x = load_chunk(chunk_info)
+        x = strax.apply_selection(x, **kwargs)
+        results.append(x)
     results = np.hstack(results)
     return results if len(results) else np.empty(0, dtype)

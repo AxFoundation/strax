@@ -129,7 +129,7 @@ def test_accumulate():
         )
         channels_from_array = np.sum(context.get_array(run_id, "records")["channel"])
         channels_accumulate = context.accumulate(run_id, "records", fields="channel")
-        n_chunks = len(context.get_meta(run_id, "records")["chunks"])
+        n_chunks = len(context.get_metadata(run_id, "records")["chunks"])
     channels = channels_accumulate["channel"]
     assert n_chunks == channels_accumulate["n_chunks"]
     assert channels_from_array == channels
@@ -156,6 +156,12 @@ def test_show_config():
     context = _get_context()
     df = context.show_config("peaks")
     assert len(df)
+
+
+def test_data_itemsize():
+    """Test data itemsize in the context."""
+    context = _get_context()
+    context.data_itemsize("peaks")
 
 
 def test_data_info():
@@ -185,9 +191,9 @@ def test_copy_to_frontend():
             # Make sure both frontends have the same data.
             assert os.listdir(temp_dir) == os.listdir(temp_dir)
             rec_folder = os.listdir(temp_dir)[0]
-            assert os.listdir(os.path.join(temp_dir, rec_folder)) == os.listdir(
-                os.path.join(temp_dir_2, rec_folder)
-            )
+            list_temp_dir = sorted(os.listdir(os.path.join(temp_dir, rec_folder)))
+            list_temp_dir_2 = sorted(os.listdir(os.path.join(temp_dir_2, rec_folder)))
+            assert list_temp_dir == list_temp_dir_2
 
             # Clear the temp dir
             shutil.rmtree(temp_dir_2)
@@ -444,7 +450,7 @@ class TestContext(unittest.TestCase):
         Set auto-inferring version by setting __version__ = None for a plugin.
 
         """
-        st = self.get_context(True)
+        st = self.get_context(False)
 
         class DevelopRecords(Records):
             __version__ = None
@@ -481,6 +487,10 @@ class TestContext(unittest.TestCase):
         st3 = st.new_context(register=DevelopRecords)
         assert key.lineage != st3.key_for(run_id, "records").lineage
 
+        st.set_context_config(dict(allow_multiprocess=True, forbid_creation_of=tuple()))
+        # Test that multithreaded processing works when the __version__ is None
+        st.get_array([str(r) for r in range(10)], "records", max_workers=10)
+
     @staticmethod
     def get_dummy_peaks_dependency():
         class DummyDependsOnPeaks(strax.CutPlugin):
@@ -499,3 +509,27 @@ class TestContext(unittest.TestCase):
         )
         comparison_dict["metadata2"].pop("strax_version")
         assert comparison_dict["metadata2"] == old_metadata, "metadata comparison failed"
+
+    def test_get_data_kinds(self):
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(self.get_dummy_peaks_dependency())
+        data_kind_collection, data_type_collection = st.get_data_kinds()
+        # Assert the expected data kinds and their corresponding data types
+        expected_data_kind_collection = {"records": ["records"], "peaks": ["peaks", "cut_peaks"]}
+        assert data_kind_collection == expected_data_kind_collection
+        # Assert the expected data types and their corresponding data kinds
+        expected_data_type_collection = {
+            "records": "records",
+            "peaks": "peaks",
+            "cut_peaks": "peaks",
+        }
+        assert data_type_collection == expected_data_type_collection
+
+    def test_get_dependencies(self):
+        st = self.get_context(True)
+        st.register(Records)
+        st.register(Peaks)
+        st.register(self.get_dummy_peaks_dependency())
+        assert "records" in st.get_dependencies("cut_peaks")

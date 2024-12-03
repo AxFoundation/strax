@@ -115,6 +115,7 @@ hit_dtype = interval_dtype + [
     (("Internal (temporary) index of fragment in which hit was found", "record_i"), np.int32),
     (("ADC threshold applied in order to find hits", "threshold"), np.float32),
     (("Maximum amplitude above baseline [ADC counts]", "height"), np.float32),
+    (("Time when hit reach maximum amplitude [ns]", "max_time"), np.int64),
 ]
 
 
@@ -124,31 +125,10 @@ def hitlet_dtype():
         (("Total hit area in pe", "area"), np.float32),
         (("Maximum of the PMT pulse in pe/sample", "amplitude"), np.float32),
         (('Position of the Amplitude in ns (minus "time")', "time_amplitude"), np.int16),
-        (("Hit entropy", "entropy"), np.float32),
         (("Width (in ns) of the central 50% area of the hitlet", "range_50p_area"), np.float32),
         (("Width (in ns) of the central 80% area of the hitlet", "range_80p_area"), np.float32),
         (("Position of the 25% area decile [ns]", "left_area"), np.float32),
         (("Position of the 10% area decile [ns]", "low_left_area"), np.float32),
-        (
-            (
-                "Width (in ns) of the highest density region covering a 50% area of the hitlet",
-                "range_hdr_50p_area",
-            ),
-            np.float32,
-        ),
-        (
-            (
-                "Width (in ns) of the highest density region covering a 80% area of the hitlet",
-                "range_hdr_80p_area",
-            ),
-            np.float32,
-        ),
-        (("Left edge of the 50% highest density region  [ns]", "left_hdr"), np.float32),
-        (("Left edge of the 80% highest density region  [ns]", "low_left_hdr"), np.float32),
-        (("FWHM of the PMT pulse [ns]", "fwhm"), np.float32),
-        (('Left edge of the FWHM [ns] (minus "time")', "left"), np.float32),
-        (("FWTM of the PMT pulse [ns]", "fwtm"), np.float32),
-        (('Left edge of the FWTM [ns] (minus "time")', "low_left"), np.float32),
     ]
     return dtype
 
@@ -182,7 +162,12 @@ def hitlet_with_data_dtype(n_samples=2):
 
 
 def peak_dtype(
-    n_channels=100, n_sum_wv_samples=200, n_widths=11, digitize_top=True, hits_timing=True
+    n_channels=100,
+    n_sum_wv_samples=200,
+    n_widths=11,
+    hits_timing=True,
+    store_data_top=True,
+    store_data_start=True,
 ):
     """Data type for peaks - ranges across all channels in a detector
     Remember to set channel to -1 (todo: make enum)
@@ -220,13 +205,25 @@ def peak_dtype(
                 np.int32,
             ),
         ]
-    if digitize_top:
+    if store_data_top:
         top_field = (
             ("Waveform data in PE/sample (not PE/ns!), top array", "data_top"),
             np.float32,
             n_sum_wv_samples,
         )
         dtype.insert(9, top_field)
+
+    if store_data_start:
+        start_field = (
+            (
+                "Waveform data in PE/sample (not PE/ns!), starting not downsampled samples",
+                "data_start",
+            ),
+            np.float32,
+            n_sum_wv_samples,
+        )
+        dtype.insert(10, start_field)
+
     return dtype
 
 
