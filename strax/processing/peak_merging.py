@@ -28,6 +28,7 @@ def merge_peaks(
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
+    new_peaks["min_diff"] = 2147483647  # inf of int32
 
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
@@ -69,6 +70,14 @@ def merge_peaks(
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
 
+            # Propagate min/max diff for sub-peaklets, for max diff this
+            # is just an approximation since peaklets can be farther apart.
+            # However, the value of the individual peaklets might os more
+            # informative
+            # For min diff the value is correct.
+            new_p["max_diff"] = max(new_p["max_diff"], p["max_diff"])
+            new_p["min_diff"] = min(new_p["min_diff"], p["min_diff"])
+
         # Downsample the buffers into
         # new_p['data'], new_p['data_top'], and new_p['data_bot']
         strax.store_downsampled_waveform(
@@ -86,7 +95,7 @@ def merge_peaks(
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][i_max_subpeak]
 
         # Too lazy to compute these
-        for p in "max_gap max_diff min_diff".split():
+        for p in "max_gap".split():
             new_p[p] = -1
         new_p["max_goodness_of_split"] = np.nan
 
