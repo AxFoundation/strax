@@ -274,7 +274,7 @@ def select_runs(
         requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
-        mask = np.zeros(len(values), dtype=np.bool_)
+        mask = np.zeros(len(values), dtype=bool)
 
         if pattern_type == "fnmatch":
             for i, x in enumerate(values):
@@ -539,7 +539,7 @@ def _include_exclude_tags(
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
-    result = np.zeros(len(dsets), dtype=np.bool_)
+    result = np.zeros(len(dsets), dtype=bool)
 
     if isinstance(patterns, str):
         patterns = [patterns]
