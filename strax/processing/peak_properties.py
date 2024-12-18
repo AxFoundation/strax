@@ -78,9 +78,8 @@ def compute_center_time(peaks):
         t = 0
         for t_i, weight in enumerate(p["data"]):
             t += t_i * p["dt"] * weight
-        result[p_i] = (
-            t / p["area"] + p["dt"] / 2 + p["time"]
-        )  # converting from float to int, implicit floor
+        result[p_i] = t / p["area"] + p["dt"] / 2
+        result[p_i] += p["time"]  # converting from float to int, implicit floor
     return result
 
 
