@@ -72,7 +72,7 @@ def compute_index_of_fraction(peak, fractions_desired, result):
 
 @export
 @numba.njit(cache=True, nogil=True)
-def compute_center_times(peaks):
+def compute_center_time(peaks):
     result = np.zeros(len(peaks), dtype=np.int64)
     for p_i, p in enumerate(peaks):
         t = 0
