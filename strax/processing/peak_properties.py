@@ -75,10 +75,9 @@ def compute_index_of_fraction(peak, fractions_desired, result):
 def compute_center_time(peaks):
     result = np.zeros(len(peaks), dtype=np.int64)
     for p_i, p in enumerate(peaks):
-        t = 0
-        for t_i, weight in enumerate(p["data"]):
-            t += t_i * p["dt"] * weight
-        result[p_i] = t / p["area"] + p["dt"] / 2
+        data = p["data"][: p["length"]]
+        t = np.average(np.arange(p["length"]), weights=data)
+        result[p_i] = (t + 1 / 2) * p["dt"]
         result[p_i] += p["time"]  # converting from float to int, implicit floor
     return result
 
