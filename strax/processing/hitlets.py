@@ -81,8 +81,7 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     last_hit_in_channel = np.zeros(
         nchannels,
         dtype=(
-            strax.hit_dtype
-            + [(("End time of the interval (ns since unix epoch)", "endtime"), np.int64)]
+            strax.hit_dtype + [(("Exclusive end time since unix epoch [ns]", "endtime"), np.int64)]
         ),
     )
 
