@@ -125,7 +125,7 @@ class PeakSplitter:
             if k not in argnames:
                 raise TypeError(f"Unknown argument {k} for {self.__class__}")
 
-        is_split = np.zeros(len(peaks), dtype=np.bool_)
+        is_split = np.zeros(len(peaks), dtype=bool)
 
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...

@@ -42,7 +42,7 @@ class CutPlugin(Plugin):
             self.cut_description = _description
 
     def infer_dtype(self):
-        dtype = [(self.cut_name, np.bool_, self.cut_description)]
+        dtype = [(self.cut_name, bool, self.cut_description)]
         # Alternatively one could use time_dt_fields for low level plugins.
         dtype = strax.time_fields + dtype
         return dtype
@@ -90,7 +90,7 @@ class CutList(MergeOnlyPlugin):
                     f"Boolean AND of all cuts in {self.accumulated_cuts_string}",
                     self.accumulated_cuts_string,
                 ),
-                np.bool_,
+                bool,
             )
         ]
         return dtype
@@ -128,7 +128,7 @@ def get_accumulated_bool(array):
     fields = array.dtype.names
     fields = np.array([f for f in fields if f not in ("time", "endtime")])
 
-    res = np.ones(len(array), np.bool_)
+    res = np.ones(len(array), bool)
     for field in fields:
         res &= array[field]
     return res
