@@ -71,6 +71,20 @@ def compute_index_of_fraction(peak, fractions_desired, result):
 
 
 @export
+@numba.njit(cache=True, nogil=True)
+def compute_center_time(peaks):
+    result = np.zeros(len(peaks), dtype=np.int64)
+    for p_i, p in enumerate(peaks):
+        t = 0
+        for t_i, weight in enumerate(p["data"]):
+            t += t_i * p["dt"] * weight
+        result[p_i] = (
+            t / p["area"] + p["dt"] / 2 + p["time"]
+        )  # converting from float to int, implicit floor
+    return result
+
+
+@export
 def compute_widths(peaks, select_peaks_indices=None):
     """Compute widths in ns at desired area fractions for peaks.
 
