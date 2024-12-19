@@ -13,6 +13,7 @@ def get_filled_peaks(peak_length, data_length, n_widths):
     ]
     if n_widths is not None:
         dtype += [
+            (("center_time of p", "center_time"), np.int64),
             (("median_time of p", "median_time"), np.float64),
             (("width of p", "width"), (np.float64, n_widths)),
             (
