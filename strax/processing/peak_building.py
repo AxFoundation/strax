@@ -399,7 +399,7 @@ def sum_waveform(
         p["area_per_channel"][:] = area_per_channel
 
         if n_top_channels > 0:
-            area_top = area_per_channel[:n_top_channels]
+            area_top = area_per_channel[:n_top_channels].sum()
             # Negative-area peaks get NaN AFT
             if p["area"] > 0:
                 p["area_fraction_top"] = area_top / p["area"]
