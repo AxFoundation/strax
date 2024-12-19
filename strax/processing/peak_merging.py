@@ -188,6 +188,7 @@ def _add_lone_hits(
 ):
     """The core function of add_lone_hits."""
     fully_contained_index = _fully_contained_in(lone_hits, peaks)
+    unique_index = np.unique(fully_contained_index[fully_contained_index != -1])
 
     for fc_i, lh_i in zip(fully_contained_index, lone_hits):
         if fc_i == -1:
@@ -216,3 +217,13 @@ def _add_lone_hits(
 
             if index_wf_start < len(p["data_start"]):
                 p["data_start"][index_wf_start] += lh_area
+
+    if n_top_channels > 0:
+        for fc_i in unique_index:
+            p = peaks[fc_i]
+            area_top = p["area_per_channel"][:n_top_channels].sum()
+            # Negative-area peaks get NaN AFT
+            if p["area"] > 0:
+                p["area_fraction_top"] = area_top / p["area"]
+            else:
+                p["area_fraction_top"] = np.nan
