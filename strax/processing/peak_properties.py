@@ -136,9 +136,9 @@ def compute_center_time_widths(peaks, select_peaks_indices=None):
         _peaks = peaks[select_peaks_indices]
 
     median_time, width, area_decile_from_midpoint = compute_widths(_peaks)
-    peaks["median_time"][select_peaks_indices] = median_time
-    peaks["width"][select_peaks_indices] = width
-    peaks["area_decile_from_midpoint"][select_peaks_indices] = area_decile_from_midpoint
+    _peaks["median_time"] = median_time
+    _peaks["width"] = width
+    _peaks["area_decile_from_midpoint"] = area_decile_from_midpoint
 
     center_time = compute_center_time(_peaks)
-    peaks["center_time"][select_peaks_indices] = center_time
+    _peaks["center_time"] = center_time
