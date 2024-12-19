@@ -126,7 +126,7 @@ def compute_center_time_widths(peaks, select_peaks_indices=None):
         in which case compute for all peaks
 
     """
-    if not len(peaks) or not len(select_peaks_indices):
+    if not len(peaks) or (not select_peaks_indices and select_peaks_indices is not None):
         return
 
     if select_peaks_indices is None:
