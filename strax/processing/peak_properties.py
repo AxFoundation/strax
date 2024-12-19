@@ -131,14 +131,12 @@ def compute_center_time_widths(peaks, select_peaks_indices=None):
         return
 
     if select_peaks_indices is None:
-        _peaks = peaks
-    if isinstance(select_peaks_indices, list):
-        _peaks = peaks[select_peaks_indices]
+        select_peaks_indices = slice(None)
 
-    median_time, width, area_decile_from_midpoint = compute_widths(_peaks)
-    _peaks["median_time"] = median_time
-    _peaks["width"] = width
-    _peaks["area_decile_from_midpoint"] = area_decile_from_midpoint
+    median_time, width, area_decile_from_midpoint = compute_widths(peaks[select_peaks_indices])
+    peaks["median_time"][select_peaks_indices] = median_time
+    peaks["width"][select_peaks_indices] = width
+    peaks["area_decile_from_midpoint"][select_peaks_indices] = area_decile_from_midpoint
 
-    center_time = compute_center_time(_peaks)
-    _peaks["center_time"] = center_time
+    center_time = compute_center_time(peaks[select_peaks_indices])
+    peaks["center_time"][select_peaks_indices] = center_time
