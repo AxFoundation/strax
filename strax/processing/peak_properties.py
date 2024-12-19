@@ -140,3 +140,16 @@ def compute_center_time_widths(peaks, select_peaks_indices=None):
 
     center_time = compute_center_time(peaks[select_peaks_indices])
     peaks["center_time"][select_peaks_indices] = center_time
+
+
+@export
+@numba.njit(cache=True, nogil=True)
+def compute_area_fraction_top(peaks, n_top_channels):
+    for peak_i in range(len(peaks)):
+        p = peaks[peak_i]
+        area_top = p["area_per_channel"][:n_top_channels].sum()
+        # Non-positive-area peaks get NaN AFT
+        if p["area"] > 0:
+            p["area_fraction_top"] = area_top / p["area"]
+        else:
+            p["area_fraction_top"] = np.nan
