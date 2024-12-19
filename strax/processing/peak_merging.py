@@ -3,7 +3,6 @@ import numpy as np
 
 import strax
 from strax.processing.general import _fully_contained_in, _fully_contained_in_sanity
-from strax.processing.peak_properties import compute_area_fraction_top
 
 export, __all__ = strax.exporter()
 
@@ -217,6 +216,3 @@ def _add_lone_hits(
 
             if index_wf_start < len(p["data_start"]):
                 p["data_start"][index_wf_start] += lh_area
-
-    if n_top_channels > 0:
-        compute_area_fraction_top(peaks, n_top_channels)

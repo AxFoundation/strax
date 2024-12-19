@@ -158,7 +158,7 @@ class PeakSplitter:
                     store_data_top=store_data_top,
                     store_data_start=store_data_start,
                 )
-                strax.compute_center_time_widths(new_peaks)
+                strax.compute_properties(new_peaks, n_top_channels=n_top_channels)
             elif data_type == "hitlets":
                 # Add record fields here
                 new_peaks = strax.sort_by_time(

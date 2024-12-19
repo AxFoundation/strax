@@ -66,12 +66,12 @@ def test_index_of_fraction(peak_length, data_length):
     strategies.integers(min_value=2, max_value=10),
 )
 def test_compute_center_time_widths(peak_length, data_length, n_widths):
-    """Test strax.compute_center_time_widths."""
+    """Test strax.compute_properties."""
     peaks = get_filled_peaks(peak_length, data_length, n_widths)
 
     # Make a copy of peaks to test that they don't remain the same later
     pre_peaks = peaks.copy()
-    strax.compute_center_time_widths(peaks)
+    strax.compute_properties(peaks)
 
     assert len(pre_peaks) == len(peaks), "Lost peaks"
     if np.sum(peaks["area"] > 0) > 10:

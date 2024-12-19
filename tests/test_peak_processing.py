@@ -277,7 +277,7 @@ def test_peak_overflow(
     hits["right_integration"] = hits["right"]
     rlinks = strax.record_links(r)
     strax.sum_waveform(p, hits, r, rlinks, to_pe)
-    strax.compute_center_time_widths(p)
+    strax.compute_properties(p)
 
     try:
         print("Split peaks")

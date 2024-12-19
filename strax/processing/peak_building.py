@@ -3,7 +3,6 @@ import numba
 
 import strax
 from strax.dtypes import DIGITAL_SUM_WAVEFORM_CHANNEL
-from strax.processing.peak_properties import compute_area_fraction_top
 
 export, __all__ = strax.exporter()
 
@@ -279,7 +278,7 @@ def sum_waveform(
     if not len(peaks):
         return
     if select_peaks_indices is None:
-        select_peaks_indices = range(len(peaks))
+        select_peaks_indices = np.arange(len(peaks))
     if not len(select_peaks_indices):
         return
     dt = records[0]["dt"]
@@ -398,9 +397,6 @@ def sum_waveform(
 
         p["n_saturated_channels"] = p["saturated_channel"].sum()
         p["area_per_channel"][:] = area_per_channel
-
-    if n_top_channels > 0:
-        compute_area_fraction_top(peaks, n_top_channels)
 
 
 @numba.njit(cache=True, nogil=True)
