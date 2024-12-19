@@ -88,7 +88,8 @@ def compute_widths(peaks):
     # We lose the 50% fraction with this operation, let's add it back
     desired_fr = strax.stable_sort(np.unique(np.append(desired_fr, [0.5])))
 
-    fr_times = index_of_fraction(peaks, desired_fr) * peaks["dt"].reshape(-1, 1)
+    fr_times = index_of_fraction(peaks, desired_fr)
+    fr_times *= peaks["dt"].reshape(-1, 1)
 
     i = len(desired_fr) // 2
     median_time = fr_times[:, i]
