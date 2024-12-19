@@ -13,6 +13,7 @@ def get_filled_peaks(peak_length, data_length, n_widths):
     ]
     if n_widths is not None:
         dtype += [
+            (("median_time of p", "median_time"), np.float64),
             (("width of p", "width"), (np.float64, n_widths)),
             (
                 ("area_decile_from_midpoint of p", "area_decile_from_midpoint"),
@@ -63,13 +64,13 @@ def test_index_of_fraction(peak_length, data_length):
     # Number of widths to compute
     strategies.integers(min_value=2, max_value=10),
 )
-def test_compute_widths(peak_length, data_length, n_widths):
-    """Test strax.compute_widths."""
+def test_compute_center_time_widths(peak_length, data_length, n_widths):
+    """Test strax.compute_center_time_widths."""
     peaks = get_filled_peaks(peak_length, data_length, n_widths)
 
     # Make a copy of peaks to test that they don't remain the same later
     pre_peaks = peaks.copy()
-    strax.compute_widths(peaks)
+    strax.compute_center_time_widths(peaks)
 
     assert len(pre_peaks) == len(peaks), "Lost peaks"
     if np.sum(peaks["area"] > 0) > 10:
