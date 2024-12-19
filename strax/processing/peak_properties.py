@@ -122,14 +122,16 @@ def compute_center_time(peaks):
 @numba.njit(cache=True, nogil=True)
 def compute_area_fraction_top(peaks, n_top_channels):
     """Compute the area fraction top for peaks."""
+    area_fraction_top = np.zeros(len(peaks), dtype=np.float32)
     for peak_i in range(len(peaks)):
         p = peaks[peak_i]
         area_top = p["area_per_channel"][:n_top_channels].sum()
         # Non-positive-area peaks get NaN AFT
         if p["area"] > 0:
-            p["area_fraction_top"] = area_top / p["area"]
+            area_fraction_top[peak_i] = area_top / p["area"]
         else:
-            p["area_fraction_top"] = np.nan
+            area_fraction_top[peak_i] = np.nan
+    return area_fraction_top
 
 
 @export
