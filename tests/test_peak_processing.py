@@ -88,7 +88,15 @@ def test_sum_waveform(records):
         min_channels=1,
         max_duration=10_000_000,
     )
-    strax.sum_waveform(peaks, hits, records, rlinks, np.ones(n_ch), n_top_channels=n_top_channels)
+    strax.sum_waveform(
+        peaks,
+        hits,
+        records,
+        rlinks,
+        np.ones(n_ch),
+        n_top_channels=n_top_channels,
+        store_data_top=True,
+    )
 
     for p in peaks:
         # Area measures must be consistent
@@ -118,6 +126,7 @@ def test_sum_waveform(records):
             rlinks,
             np.ones(n_ch),
             n_top_channels=n_top_channels,
+            store_data_top=True,
             select_peaks_indices=np.array([0]),
         )
 
@@ -268,7 +277,7 @@ def test_peak_overflow(
     hits["right_integration"] = hits["right"]
     rlinks = strax.record_links(r)
     strax.sum_waveform(p, hits, r, rlinks, to_pe)
-    strax.compute_widths(p)
+    strax.compute_properties(p)
 
     try:
         print("Split peaks")

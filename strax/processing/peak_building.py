@@ -251,6 +251,7 @@ def sum_waveform(
     record_links,
     adc_to_pe,
     n_top_channels=0,
+    store_data_top=False,
     store_data_start=False,
     select_peaks_indices=None,
 ):
@@ -263,6 +264,8 @@ def sum_waveform(
     :param records: Records to be used to build peaks.
     :param record_links: Tuple of previous and next records.
     :param n_top_channels: Number of top array channels.
+    :param store_data_top: Boolean which indicates whether to store the top array waveform in the
+        peak.
     :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
     :param select_peaks_indices: Indices of the peaks for partial processing. In the form of
@@ -286,7 +289,7 @@ def sum_waveform(
     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks["length"].max() * 2, dtype=np.float32)
 
-    if n_top_channels > 0:
+    if store_data_top:
         twv_buffer = np.zeros(peaks["length"].max() * 2, dtype=np.float32)
 
     n_channels = len(peaks[0]["area_per_channel"])
@@ -304,7 +307,7 @@ def sum_waveform(
         p_length = p["length"]
         swv_buffer[: min(2 * p_length, len(swv_buffer))] = 0
 
-        if n_top_channels > 0:
+        if store_data_top:
             twv_buffer[: min(2 * p_length, len(twv_buffer))] = 0
 
         # Clear area and area per channel
@@ -373,7 +376,7 @@ def sum_waveform(
             hit_data *= adc_to_pe[ch]
             swv_buffer[p_start:p_end] += hit_data
 
-            if n_top_channels > 0:
+            if store_data_top:
                 if ch < n_top_channels:
                     twv_buffer[p_start:p_end] += hit_data
 
@@ -381,7 +384,7 @@ def sum_waveform(
             area_per_channel[ch] += area_pe
             p["area"] += area_pe
 
-        if n_top_channels > 0:
+        if store_data_top:
             store_downsampled_waveform(
                 p,
                 swv_buffer,
