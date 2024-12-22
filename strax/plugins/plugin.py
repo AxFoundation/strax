@@ -667,6 +667,8 @@ class Plugin:
         )
         subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
+        chunks = list(kwargs.items())
+
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
             kwargs["chunk_i"] = chunk_i
@@ -674,6 +676,10 @@ class Plugin:
             kwargs["start"] = start
             kwargs["end"] = end
         result = self.compute(**kwargs)
+
+        # Free memory by deleting the input chunks
+        for c in chunks:
+            del c
         return self._fix_output(result, start, end, superrun, subruns)
 
     @staticmethod

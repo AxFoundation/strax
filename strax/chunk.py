@@ -250,6 +250,9 @@ class Chunk:
         )
         return c1, c2
 
+    def __del__(self):
+        del self.data
+
     @classmethod
     def merge(cls, chunks, data_type="<UNKNOWN>"):
         """Create chunk by merging columns of chunks of same data kind.
