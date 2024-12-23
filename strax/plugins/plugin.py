@@ -105,7 +105,7 @@ class Plugin:
     compute_takes_start_end = False
 
     allow_superrun = False
-    clean_chunk_after_compute = True
+    clean_chunk_after_compute = False
     gc_collect_after_compute = False
 
     def __init__(self):
