@@ -667,7 +667,7 @@ class Plugin:
         )
         subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
-        chunks = list(kwargs.items())
+        chunks = list(kwargs.values())
 
         kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
