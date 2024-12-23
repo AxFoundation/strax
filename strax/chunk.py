@@ -206,9 +206,9 @@ class Chunk:
         """
         t = max(min(t, self.end), self.start)  # type: ignore
         if t == self.end:
-            data1, data2 = self.data, self.data[:0]
+            data1, data2 = self.data, self.data[:0].copy()
         elif t == self.start:
-            data1, data2 = self.data[:0], self.data
+            data1, data2 = self.data[:0].copy(), self.data
         else:
             data1, data2, t = split_array(data=self.data, t=t, allow_early_split=allow_early_split)
 
@@ -249,9 +249,6 @@ class Chunk:
             **{**common_kwargs, "run_id": run_id_second_chunk},
         )
         return c1, c2
-
-    def __del__(self):
-        del self.data
 
     @classmethod
     def merge(cls, chunks, data_type="<UNKNOWN>"):
