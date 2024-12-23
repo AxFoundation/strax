@@ -105,7 +105,7 @@ class Plugin:
     compute_takes_start_end = False
 
     allow_superrun = False
-
+    clean_chunk_after_compute = True
     gc_collect_after_compute = False
 
     def __init__(self):
@@ -677,17 +677,18 @@ class Plugin:
         result = self.compute(**_kwargs)
         del _kwargs
 
-        # Free memory by deleting the input chunks
-        keys = list(kwargs.keys())
-        for k in keys:
-            # Minus one accounts for reference created by sys.getrefcount itself
-            n = sys.getrefcount(kwargs[k].data) - 1
-            if n != 1:
-                raise ValueError(
-                    f"Reference count of input {k} is {n} "
-                    "and should be 1. This is a memory leak."
-                )
-            del kwargs[k].data
+        if self.clean_chunk_after_compute:
+            # Free memory by deleting the input chunks
+            keys = list(kwargs.keys())
+            for k in keys:
+                # Minus one accounts for reference created by sys.getrefcount itself
+                n = sys.getrefcount(kwargs[k].data) - 1
+                if n != 1:
+                    raise ValueError(
+                        f"Reference count of input {k} is {n} "
+                        "and should be 1. This is a memory leak."
+                    )
+                del kwargs[k].data
         return self._fix_output(result, start, end, superrun, subruns)
 
     @staticmethod

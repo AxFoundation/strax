@@ -17,6 +17,7 @@ class OverlapWindowPlugin(Plugin):
     """
 
     parallel = False
+    clean_chunk_after_compute = False
 
     def __init__(self):
         super().__init__()
