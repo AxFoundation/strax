@@ -4,6 +4,7 @@ A 'plugin' is something that outputs an array and gets arrays from one or more o
 
 """
 
+import sys
 from enum import IntEnum
 from collections import Counter
 import inspect
@@ -103,6 +104,7 @@ class Plugin:
     compute_takes_start_end = False
 
     allow_superrun = False
+    clean_chunk_after_compute = False
 
     def __init__(self):
         if not hasattr(self, "depends_on"):
@@ -658,13 +660,27 @@ class Plugin:
         )
         subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
-        kwargs = {k: v.data for k, v in kwargs.items()}
+        _kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
-            kwargs["chunk_i"] = chunk_i
+            _kwargs["chunk_i"] = chunk_i
         if self.compute_takes_start_end:
-            kwargs["start"] = start
-            kwargs["end"] = end
-        result = self.compute(**kwargs)
+            _kwargs["start"] = start
+            _kwargs["end"] = end
+        result = self.compute(**_kwargs)
+        del _kwargs
+
+        if self.clean_chunk_after_compute:
+            # Free memory by deleting the input chunks
+            keys = list(kwargs.keys())
+            for k in keys:
+                # Minus one accounts for reference created by sys.getrefcount itself
+                n = sys.getrefcount(kwargs[k].data) - 1
+                if n != 1:
+                    raise ValueError(
+                        f"Reference count of input {k} is {n} "
+                        "and should be 1. This is a memory leak."
+                    )
+                del kwargs[k].data
         return self._fix_output(result, start, end, superrun, subruns)
 
     @staticmethod
