@@ -164,6 +164,12 @@ tqdm = strax.utils.tqdm
         type=bool,
         help='If True, save superruns as rechunked "new" data.',
     ),
+    strax.Option(
+        name="superrun_subruns_config_check",
+        default=True,
+        type=bool,
+        help="Enable or disable the check for superruns if subruns use different configs",
+    ),
 )
 @export
 class Context:
@@ -1132,6 +1138,18 @@ class Context:
                 )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
+        # Safeguard for Super and Hyperruns
+        if is_superrun and self.context_config["superrun_subruns_config_check"]:
+            sub_run_spec = self.run_metadata(run_id, projection="sub_run_spec")["sub_run_spec"]
+            for subrun in sub_run_spec:
+                plugins_to_test = self._get_plugins(targets, subrun, chunk_number=chunk_number)
+                plugin_configs = [plugins_to_test[target].takes_config for target in targets]
+            # plugin_configs2 = [self._get_plugins(targets,subrun,chunk_number=chunk_number)[target].takes_config for subrun in sub_run_spec for target in targets]
+            if self.check_superrun_config(plugin_configs) == False:
+                raise ValueError(
+                    f"Cannot do superruns with {sub_run_spec} that take different configs"
+                )
+
         # Get savers/loaders, and meanwhile filter out plugins that do not
         # have to do computation. (their instances will stick around
         # though the .deps attribute of plugins that do)
@@ -1337,6 +1355,20 @@ class Context:
             savers=savers,
             targets=strax.to_str_tuple(final_plugin),
         )
+
+    def check_superrun_config(self, plugin_configs) -> bool:
+        config_keys = [list(config.keys()) for config in plugin_configs]
+        keys = [key for key_list in config_keys for key in key_list]
+
+        for key in keys:
+            config_list = []
+            for config in plugin_configs:
+                value = config.get(key, None)
+                if config.get(key) != None:
+                    config_list.append(value)
+            if len(set(config_list)) > 1:
+                return False
+        return True
 
     def get_data_key(self, run_id, target, lineage, combining=False):
         """Get datakey for a given run_id, target and lineage.
