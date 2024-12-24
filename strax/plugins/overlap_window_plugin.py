@@ -23,6 +23,10 @@ class OverlapWindowPlugin(Plugin):
         self.cached_input = {}
         self.cached_results = None
         self.sent_until = 0
+        if self.clean_chunk_after_compute:
+            raise ValueError(
+                "OverlapWindowPlugin cannot clean chunks after compute because you need them later."
+            )
         # This guy can have a logger, it's not parallelized anyway
 
     def get_window_size(self):
