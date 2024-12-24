@@ -490,9 +490,10 @@ def find_hit_integration_bounds(
         boundaries. E.g. to negative samples for left side.
 
     """
-    result = np.zeros((len(hits), 2), dtype=np.int64)
     if not len(hits):
-        return result
+        return
+
+    result = np.zeros((len(hits), 2), dtype=np.int64)
 
     # By default, use save_outside_hits to determine bounds
     result[:, 0] = hits["time"] - save_outside_hits[0]
