@@ -543,11 +543,11 @@ def find_hit_integration_bounds(
         last_hit_index[ch] = hit_i
 
     # Convert to index in record and store
-    t0 = records[hits["record_i"]]["time"]
-    dt = records[hits["record_i"]]["dt"]
     for hit_i, h in enumerate(hits):
-        h["left_integration"] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
-        h["right_integration"] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
+        t0 = records["time"][hits["record_i"][hit_i]]
+        dt = records["dt"][hits["record_i"][hit_i]]
+        h["left_integration"] = (result[hit_i, 0] - t0) // dt
+        h["right_integration"] = (result[hit_i, 1] - t0) // dt
 
 
 @export

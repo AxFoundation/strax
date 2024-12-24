@@ -208,7 +208,7 @@ def _add_lone_hits(
                 p["data_top"][index] += lh_area
 
         if store_data_start:
-            # Non-downsampled waveforms have a fixed dt of 10 ns
+            # Non-downsampled waveforms have a fixed minimum dt
             index_wf_start = (lh_i["time"] - p["time"]) // 10
 
             if index_wf_start < 0:
