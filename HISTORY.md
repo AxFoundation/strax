@@ -1,3 +1,16 @@
+2.0.3 / 2024-12-27
+---------------------
+* Move `set_nan_defaults` from straxen to strax by @dachengx in https://github.com/AxFoundation/strax/pull/936
+* Move `compute_center_times` from straxen to strax by @dachengx in https://github.com/AxFoundation/strax/pull/938
+* First convert to int then add float to keep precision by @dachengx in https://github.com/AxFoundation/strax/pull/939
+* Use `bool` instead of `np.bool_` by @dachengx in https://github.com/AxFoundation/strax/pull/940
+* Calculate `area_fraction_top`, `center_time` and `median_time` at peaklet level by @dachengx in https://github.com/AxFoundation/strax/pull/941
+* Delete input chunks after compute method to save memory by @dachengx in https://github.com/AxFoundation/strax/pull/942
+* Reduce RAM usage of `find_hit_integration_bounds` by @dachengx in https://github.com/AxFoundation/strax/pull/943
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.2...v2.0.3
+
+
 2.0.2 / 2024-11-19
 ---------------------
 * Raise error when peaks overlapping in `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/927
