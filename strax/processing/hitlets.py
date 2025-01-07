@@ -223,7 +223,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
     return hitlets_with_data_field
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _get_hitlets_data(hitlets, records, to_pe):
     rranges = _touching_windows(
         records["time"], strax.endtime(records), hitlets["time"], strax.endtime(hitlets)

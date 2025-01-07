@@ -1,3 +1,4 @@
+import math
 import numba
 import numpy as np
 
@@ -8,10 +9,21 @@ export, __all__ = strax.exporter()
 
 
 @export
+@numba.njit(cache=True, nogil=True)
+def gcd_of_array(values):
+    """Return the GCD of all elements in the array."""
+    result = values[0]
+    for i in range(1, len(values)):
+        result = math.gcd(result, values[i])
+    return result
+
+
+@export
 def merge_peaks(
     peaks,
     start_merge_at,
     end_merge_at,
+    merged=None,
     max_buffer=int(1e5),
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
@@ -24,7 +36,46 @@ def merge_peaks(
         constituent peaks, it being too time-consuming to revert to records/hits.
 
     """
+
+    new_peaks = _merge_peaks(
+        peaks,
+        start_merge_at,
+        end_merge_at,
+        merged=None,
+        max_buffer=int(1e5),
+        endtime="endtime" in peaks.dtype.names,
+    )
+
+    # Too lazy to compute these
+    for p in "max_gap max_diff min_diff".split():
+        new_peaks[p] = -1
+    new_peaks["max_goodness_of_split"] = np.nan
+    return new_peaks
+
+
+@numba.njit(cache=True, nogil=True)
+def _merge_peaks(
+    peaks,
+    start_merge_at,
+    end_merge_at,
+    merged=None,
+    max_buffer=int(1e5),
+    endtime=True,
+):
+    """Merge specified peaks with their neighbors, return merged peaks.
+
+    :param peaks: Record array of strax peak dtype.
+    :param start_merge_at: Indices to start merge at
+    :param end_merge_at: EXCLUSIVE indices to end merge at
+    :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
+        resulting peaks (after merging). Peaks must be constructed based on the properties of
+        constituent peaks, it being too time-consuming to revert to records/hits.
+    :param endtime: Boolean which indicates whether to compute the endtime of the merged peak.
+
+    """
     assert len(start_merge_at) == len(end_merge_at)
+    if merged is not None and len(start_merge_at):
+        assert len(merged) >= end_merge_at.max()
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
@@ -34,8 +85,11 @@ def merge_peaks(
     buffer_top = np.zeros(max_buffer, dtype=np.float32)
 
     for new_i, new_p in enumerate(new_peaks):
-        old_peaks = peaks[start_merge_at[new_i] : end_merge_at[new_i]]
-        common_dt = np.gcd.reduce(old_peaks["dt"])
+        sl = slice(start_merge_at[new_i], end_merge_at[new_i])
+        old_peaks = peaks[sl]
+        if merged is not None:
+            old_peaks = old_peaks[merged[sl]]
+        common_dt = gcd_of_array(old_peaks["dt"])
         first_peak, last_peak = old_peaks[0], old_peaks[-1]
         new_p["channel"] = first_peak["channel"]
 
@@ -53,6 +107,7 @@ def merge_peaks(
         buffer[:bl] = 0
         buffer_top[:bl] = 0
 
+        max_data = []
         for p in old_peaks:
             # Upsample the sum and top/bottom array waveforms into their buffers
             upsample = p["dt"] // common_dt
@@ -68,6 +123,8 @@ def merge_peaks(
             new_p["area_per_channel"] += p["area_per_channel"]
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
+            max_data.append(p["data"][: p["length"]].max())
+        max_data = np.array(max_data)
 
         # Downsample the buffers into
         # new_p['data'], new_p['data_top'], and new_p['data_bot']
@@ -82,17 +139,11 @@ def merge_peaks(
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
         # Use tight_coincidence of the peak with the highest amplitude
-        i_max_subpeak = old_peaks["data"].max(axis=1).argmax()
-        new_p["tight_coincidence"] = old_peaks["tight_coincidence"][i_max_subpeak]
-
-        # Too lazy to compute these
-        for p in "max_gap max_diff min_diff".split():
-            new_p[p] = -1
-        new_p["max_goodness_of_split"] = np.nan
+        new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
 
         # If the endtime was in the peaks we have to recompute it here
         # because otherwise it will stay set to zero due to the buffer
-        if "endtime" in new_p.dtype.names:
+        if endtime:
             new_p["endtime"] = strax.endtime(last_peak)
     return new_peaks
 

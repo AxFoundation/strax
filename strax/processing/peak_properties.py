@@ -26,7 +26,7 @@ def index_of_fraction(peaks, fractions_desired):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def compute_index_of_fraction(peak, fractions_desired, result):
     """Store the (fractional) indices at which peak reaches fractions_desired of their area in
     result.

@@ -27,7 +27,7 @@ class ReductionLevel(IntEnum):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def cut_baseline(records, n_before=48, n_after=30):
     """Replace first n_before and last n_after samples of pulses by 0."""
     # records.data.shape[1] gives a numba error (file issue?)
@@ -79,7 +79,7 @@ def cut_outside_hits(records, hits, left_extension=2, right_extension=15):
     return new_recs
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _cut_outside_hits(records, hits, new_recs, left_extension=2, right_extension=15):
     if not len(records):
         return
