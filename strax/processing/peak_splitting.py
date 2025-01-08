@@ -187,9 +187,11 @@ class PeakSplitter:
 
         return peaks
 
+    # this function can not be cached due to some unknown reasons
+    # maybe because the split_finder is a function and numba does not like it
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-    @numba.jit(nopython=True, nogil=True)
+    @numba.njit(nogil=True)
     def _split_peaks(
         split_finder,
         peaks,
@@ -265,7 +267,7 @@ class LocalMinimumSplitter(PeakSplitter):
     find_split_args_defaults = (("min_height", 0), ("min_ratio", 0))
 
     @staticmethod
-    @numba.jit(nopython=True, nogil=True)
+    @numba.njit(nogil=True, cache=True)
     def find_split_points(w, dt, peak_i, min_height, min_ratio):
         """Yields indices of prominent local minima in w If there was at least one index, yields
         len(w)-1 at the end."""

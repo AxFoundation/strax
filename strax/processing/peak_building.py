@@ -9,7 +9,7 @@ export, __all__ = strax.exporter()
 
 @export
 @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def find_peaks(
     hits,
     adc_to_pe,
@@ -135,7 +135,7 @@ def find_peaks(
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def store_downsampled_waveform(
     p,
     waveform_buffer,
@@ -243,7 +243,7 @@ def _simple_summed_waveform(records, containers, touching_windows, to_pe):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def sum_waveform(
     peaks,
     hits,
