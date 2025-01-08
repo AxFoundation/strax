@@ -187,9 +187,11 @@ class PeakSplitter:
 
         return peaks
 
+    # this function can not be cached due to some unknown reasons
+    # maybe because the split_finder is a function and numba does not like it
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-    @numba.njit(nogil=True, cache=True)
+    @numba.njit(nogil=True)
     def _split_peaks(
         split_finder,
         peaks,

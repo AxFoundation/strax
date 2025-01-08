@@ -75,6 +75,7 @@ def _merge_peaks(
     """
     assert len(start_merge_at) == len(end_merge_at)
     if merged is not None and len(start_merge_at):
+        assert len(merged) == len(peaks)
         assert len(merged) >= end_merge_at.max()
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
