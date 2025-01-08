@@ -75,13 +75,14 @@ def _merge_peaks(
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
-    new_peaks["min_diff"] = 2147483647  # inf of int32
 
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
     buffer_top = np.zeros(max_buffer, dtype=np.float32)
 
     for new_i, new_p in enumerate(new_peaks):
+        new_p["min_diff"] = 2147483647  # inf of int32
+
         sl = slice(start_merge_at[new_i], end_merge_at[new_i])
         old_peaks = peaks[sl]
         # if merged is not None, we have to only take the merged peaks
@@ -146,8 +147,8 @@ def _merge_peaks(
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
         # too lazy to compute these
-        new_peaks["max_gap"] = -1
-        new_peaks["max_goodness_of_split"] = np.nan
+        new_p["max_gap"] = -1
+        new_p["max_goodness_of_split"] = np.nan
 
         # Use tight_coincidence of the peak with the highest amplitude
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
