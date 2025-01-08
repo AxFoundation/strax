@@ -179,9 +179,12 @@ def peak_dtype(
         # For peaklets this is likely to be overwritten:
         (("Classification of the peak(let)", "type"), np.int8),
         (("Integral across channels [PE]", "area"), np.float32),
+        (("Fraction of area seen by the top array", "area_fraction_top"), np.float32),
         (("Integral per channel [PE]", "area_per_channel"), np.float32, n_channels),
         (("Number of hits contributing at least one sample to the peak ", "n_hits"), np.int32),
         (("Waveform data in PE/sample (not PE/ns!)", "data"), np.float32, n_sum_wv_samples),
+        (("Weighted average center time of the peak [ns]", "center_time"), np.int64),
+        (("Weighted relative median time of the peak [ns]", "median_time"), np.float32),
         (("Peak widths in range of central area fraction [ns]", "width"), np.float32, n_widths),
         (
             ("Peak widths: time between nth and 5th area decile [ns]", "area_decile_from_midpoint"),

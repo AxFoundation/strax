@@ -206,9 +206,9 @@ class Chunk:
         """
         t = max(min(t, self.end), self.start)  # type: ignore
         if t == self.end:
-            data1, data2 = self.data, self.data[:0]
+            data1, data2 = self.data, self.data[:0].copy()
         elif t == self.start:
-            data1, data2 = self.data[:0], self.data
+            data1, data2 = self.data[:0].copy(), self.data
         else:
             data1, data2, t = split_array(data=self.data, t=t, allow_early_split=allow_early_split)
 
