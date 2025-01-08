@@ -147,7 +147,7 @@ def _merge_peaks(
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
 
         # too lazy to compute these
-        # new_p["max_gap"] = -1
+        new_p["max_gap"] = -1
         new_p["max_goodness_of_split"] = np.nan
 
         # Use tight_coincidence of the peak with the highest amplitude
