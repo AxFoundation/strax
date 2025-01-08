@@ -45,12 +45,6 @@ def merge_peaks(
         max_buffer=max_buffer,
         endtime="endtime" in peaks.dtype.names,
     )
-
-    # too lazy to compute these
-    # these two lines can not be easily numba-fied
-    for p in "max_gap max_diff min_diff".split():
-        new_peaks[p] = -1
-    new_peaks["max_goodness_of_split"] = np.nan
     return new_peaks
 
 
@@ -81,6 +75,7 @@ def _merge_peaks(
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
+    new_peaks["min_diff"] = 2147483647  # inf of int32
 
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
@@ -129,6 +124,13 @@ def _merge_peaks(
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
             max_data.append(p["data"][: p["length"]].max())
+
+            # Propagate min/max diff for sub-peaklets, for max diff this
+            # is just an approximation since peaklets can be farther apart.
+            # The value of the individual peaklet is more informative.
+            # For min diff the value is correct.
+            new_p["max_diff"] = max(new_p["max_diff"], p["max_diff"])
+            new_p["min_diff"] = min(new_p["min_diff"], p["min_diff"])
         max_data = np.array(max_data)
 
         # Downsample the buffers into
@@ -142,6 +144,10 @@ def _merge_peaks(
         )
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
+
+        # too lazy to compute these
+        new_peaks["max_gap"] = -1
+        new_peaks["max_goodness_of_split"] = np.nan
 
         # Use tight_coincidence of the peak with the highest amplitude
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
