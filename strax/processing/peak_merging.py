@@ -144,7 +144,7 @@ def _merge_peaks(
         )
 
         new_p["n_saturated_channels"] = new_p["saturated_channel"].sum()
-        
+
         # too lazy to compute these
         new_peaks["max_gap"] = -1
         new_peaks["max_goodness_of_split"] = np.nan
