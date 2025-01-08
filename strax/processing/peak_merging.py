@@ -46,7 +46,8 @@ def merge_peaks(
         endtime="endtime" in peaks.dtype.names,
     )
 
-    # Too lazy to compute these
+    # too lazy to compute these
+    # these two lines can not be easily numba-fied
     for p in "max_gap max_diff min_diff".split():
         new_peaks[p] = -1
     new_peaks["max_goodness_of_split"] = np.nan
