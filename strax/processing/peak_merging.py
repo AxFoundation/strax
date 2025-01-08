@@ -41,8 +41,8 @@ def merge_peaks(
         peaks,
         start_merge_at,
         end_merge_at,
-        merged=None,
-        max_buffer=int(1e5),
+        merged=merged,
+        max_buffer=max_buffer,
         endtime="endtime" in peaks.dtype.names,
     )
 
@@ -88,7 +88,10 @@ def _merge_peaks(
     for new_i, new_p in enumerate(new_peaks):
         sl = slice(start_merge_at[new_i], end_merge_at[new_i])
         old_peaks = peaks[sl]
+        # if merged is not None, we have to only take the merged peaks
         if merged is not None:
+            if not np.any(merged[sl]):
+                raise ValueError("Trying to merge zero peaks!")
             old_peaks = old_peaks[merged[sl]]
         common_dt = gcd_of_array(old_peaks["dt"])
         first_peak, last_peak = old_peaks[0], old_peaks[-1]
@@ -210,8 +213,8 @@ def _replace_merged(result, orig, merge, skip_windows):
 def add_lone_hits(
     peaks, lone_hits, to_pe, n_top_channels=0, store_data_top=False, store_data_start=False
 ):
-    """Function which adds information from lone hits to peaks if lone hit is inside a peak (e.g.
-    after merging.). Modifies peak area and data inplace.
+    """Function which adds information from lone hits to peaks if lone hit is (fully) inside a peak
+    (e.g. after merging.). Modifies peak area and data inplace.
 
     :param peaks: Numpy array of peaks
     :param lone_hits: Numpy array of lone_hits
