@@ -124,7 +124,6 @@ def _merge_peaks(
             new_p["n_hits"] += p["n_hits"]
             new_p["saturated_channel"][p["saturated_channel"] == 1] = 1
             max_data.append(p["data"][: p["length"]].max())
-        max_data = np.array(max_data)
 
             # Propagate min/max diff for sub-peaklets, for max diff this
             # is just an approximation since peaklets can be farther apart.
@@ -132,6 +131,7 @@ def _merge_peaks(
             # For min diff the value is correct.
             new_p["max_diff"] = max(new_p["max_diff"], p["max_diff"])
             new_p["min_diff"] = min(new_p["min_diff"], p["min_diff"])
+        max_data = np.array(max_data)
 
         # Downsample the buffers into
         # new_p['data'], new_p['data_top'], and new_p['data_bot']
