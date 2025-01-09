@@ -32,6 +32,12 @@ class TestPerRunDefaults(TestCase):
         self.st.make(run_id, self.target)
         assert self.st.is_stored(run_id, self.target)
 
+    def test_write_data_s3(self):
+        self.st.storage = [strax.S3Frontend(self.path)]
+        run_id = "0"
+        self.st.make(run_id, self.target)
+        assert self.st.is_stored(run_id, self.target)
+
     def test_complain_run_id(self):
         self.st.storage = [strax.DataDirectory(self.path)]
         run_id = "run-0"
