@@ -9,7 +9,7 @@ export, __all__ = strax.exporter()
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _compute_hdr_core(data, fractions_desired, only_upper_part=False, _buffer_size=10):
     """Core computation for highest density region initialization."""
     fi = 0
@@ -28,7 +28,7 @@ def _compute_hdr_core(data, fractions_desired, only_upper_part=False, _buffer_si
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _process_intervals_numba(ind, gaps, fi, res, g0, _buffer_size):
     """Process intervals using numba.
 
@@ -63,7 +63,7 @@ def _process_intervals_numba(ind, gaps, fi, res, g0, _buffer_size):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _compute_fraction_seen(data, max_to_min, j, lowest_sample_seen, area_tot, only_upper_part):
     """Compute fraction seen (numba-compilable part).
 
@@ -89,7 +89,7 @@ def _compute_fraction_seen(data, max_to_min, j, lowest_sample_seen, area_tot, on
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _compute_true_height(sorted_data_sum, j, g, lowest_sample_seen):
     """Compute true height (numba-compilable part).
 

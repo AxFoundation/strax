@@ -100,7 +100,7 @@ def test_apply_drop_data():
             """Drop a random portion of the data."""
             # I was too lazy to write a strategy to get the right number
             # of random drops based on the input records.
-            keep = np.random.randint(0, 2, len(data)).astype(np.bool_)
+            keep = np.random.randint(0, 2, len(data)).astype(bool)
 
             # Keep in mind that we do this on a per chunk basis!
             self.kept += [keep]

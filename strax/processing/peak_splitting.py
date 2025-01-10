@@ -15,6 +15,7 @@ def split_peaks(
     algorithm="local_minimum",
     data_type="peaks",
     n_top_channels=0,
+    store_data_top=False,
     store_data_start=False,
     **kwargs,
 ):
@@ -38,6 +39,8 @@ def split_peaks(
         the new split peaks/hitlets.
     :param n_top_channels: Number of top array channels.
     :param result_dtype: dtype of the result.
+    :param store_data_top: Boolean which indicates whether to store the top array
+        waveform in the peak.
     :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
@@ -59,6 +62,7 @@ def split_peaks(
         to_pe,
         data_type,
         n_top_channels=n_top_channels,
+        store_data_top=store_data_top,
         store_data_start=store_data_start,
         **kwargs,
     )
@@ -83,6 +87,8 @@ class PeakSplitter:
         implemented in each subclass defines the algorithm, which takes in a peak's waveform and
         returns the index to split the peak at, if a split point is found. Otherwise NO_MORE_SPLITS
         is returned and the peak is left as is.
+    :param store_data_top: Boolean which indicates whether to store the top array waveform in the
+        peak.
     :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
 
@@ -101,6 +107,7 @@ class PeakSplitter:
         do_iterations=1,
         min_area=0,
         n_top_channels=0,
+        store_data_top=False,
         store_data_start=False,
         **kwargs,
     ):
@@ -125,7 +132,7 @@ class PeakSplitter:
             if k not in argnames:
                 raise TypeError(f"Unknown argument {k} for {self.__class__}")
 
-        is_split = np.zeros(len(peaks), dtype=np.bool_)
+        is_split = np.zeros(len(peaks), dtype=bool)
 
         new_peaks = self._split_peaks(
             # Numba doesn't like self as argument, but it's ok with functions...
@@ -148,9 +155,10 @@ class PeakSplitter:
                     rlinks,
                     to_pe,
                     n_top_channels=n_top_channels,
+                    store_data_top=store_data_top,
                     store_data_start=store_data_start,
                 )
-                strax.compute_widths(new_peaks)
+                strax.compute_properties(new_peaks, n_top_channels=n_top_channels)
             elif data_type == "hitlets":
                 # Add record fields here
                 new_peaks = strax.sort_by_time(
@@ -168,6 +176,7 @@ class PeakSplitter:
                 do_iterations=do_iterations - 1,
                 min_area=min_area,
                 n_top_channels=n_top_channels,
+                store_data_top=store_data_top,
                 store_data_start=store_data_start,
                 **kwargs,
             )
@@ -178,9 +187,11 @@ class PeakSplitter:
 
         return peaks
 
+    # this function can not be cached due to some unknown reasons
+    # maybe because the split_finder is a function and numba does not like it
     @staticmethod
     @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-    @numba.jit(nopython=True, nogil=True)
+    @numba.njit(nogil=True)
     def _split_peaks(
         split_finder,
         peaks,
@@ -256,7 +267,7 @@ class LocalMinimumSplitter(PeakSplitter):
     find_split_args_defaults = (("min_height", 0), ("min_ratio", 0))
 
     @staticmethod
-    @numba.jit(nopython=True, nogil=True)
+    @numba.njit(nogil=True, cache=True)
     def find_split_points(w, dt, peak_i, min_height, min_ratio):
         """Yields indices of prominent local minima in w If there was at least one index, yields
         len(w)-1 at the end."""
