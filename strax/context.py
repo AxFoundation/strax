@@ -1128,7 +1128,7 @@ class Context:
             if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
                 raise ValueError(
                     "When only combining subruns, you can only assign one target, "
-                    f"but got{plugins[targets[0]].depends_on}!"
+                    f"but got {plugins[targets[0]].depends_on}!"
                 )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
