@@ -43,8 +43,11 @@ def merge_peaks(
         end_merge_at,
         merged=merged,
         max_buffer=max_buffer,
-        endtime="endtime" in peaks.dtype.names,
     )
+    # If the endtime was in the peaks we have to recompute it here
+    # because otherwise it will stay set to zero due to the buffer
+    if "endtime" in peaks.dtype.names:
+        new_peaks["endtime"] = new_peaks["time"] + new_peaks["length"] * new_peaks["dt"]
     return new_peaks
 
 
@@ -55,7 +58,6 @@ def _merge_peaks(
     end_merge_at,
     merged=None,
     max_buffer=int(1e5),
-    endtime=True,
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
 
@@ -65,7 +67,6 @@ def _merge_peaks(
     :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
         resulting peaks (after merging). Peaks must be constructed based on the properties of
         constituent peaks, it being too time-consuming to revert to records/hits.
-    :param endtime: Boolean which indicates whether to compute the endtime of the merged peak.
 
     """
     assert len(start_merge_at) == len(end_merge_at)
@@ -152,11 +153,6 @@ def _merge_peaks(
 
         # Use tight_coincidence of the peak with the highest amplitude
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
-
-        # If the endtime was in the peaks we have to recompute it here
-        # because otherwise it will stay set to zero due to the buffer
-        if endtime:
-            new_p["endtime"] = strax.endtime(last_peak)
     return new_peaks
 
 
