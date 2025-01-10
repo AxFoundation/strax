@@ -193,8 +193,10 @@ def scan_runs(
             docs = new_docs
         else:
             # Keep only new runs (not found by earlier frontends)
-            docs = pd.concat([docs, new_docs[~np.in1d(new_docs["name"], docs["name"])]], sort=False)
-            docs.reset_index(drop=True, inplace=True)
+            mask = ~np.in1d(new_docs["name"], docs["name"])
+            if np.any(mask):
+                docs = pd.concat([docs, new_docs[mask]], sort=False)
+                docs.reset_index(drop=True, inplace=True)
 
     # Rearrange columns
     if not self.context_config["use_per_run_defaults"] and strax.RUN_DEFAULTS_KEY in docs.columns:
