@@ -37,7 +37,7 @@ def merge_peaks(
 
     """
 
-    new_peaks = _merge_peaks(
+    new_peaks, endtime = _merge_peaks(
         peaks,
         start_merge_at,
         end_merge_at,
@@ -47,7 +47,9 @@ def merge_peaks(
     # If the endtime was in the peaks we have to recompute it here
     # because otherwise it will stay set to zero due to the buffer
     if "endtime" in peaks.dtype.names:
-        new_peaks["endtime"] = new_peaks["time"] + new_peaks["length"] * new_peaks["dt"]
+        # here endtime != time + length * dt because of the downsampling
+        # so we have to collect the endtime in _merge_peaks
+        new_peaks["endtime"] = endtime
     return new_peaks
 
 
@@ -76,6 +78,7 @@ def _merge_peaks(
     if np.min(peaks["time"][1:] - strax.endtime(peaks)[:-1]) < 0:
         raise ValueError("Peaks not disjoint! You have to rewrite this function to handle this.")
     new_peaks = np.zeros(len(start_merge_at), dtype=peaks.dtype)
+    endtime = np.zeros(len(start_merge_at), dtype=np.int64)
 
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
@@ -153,7 +156,10 @@ def _merge_peaks(
 
         # Use tight_coincidence of the peak with the highest amplitude
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
-    return new_peaks
+
+        # collect the endtime
+        endtime[new_i] = strax.endtime(last_peak)
+    return new_peaks, endtime
 
 
 @export
