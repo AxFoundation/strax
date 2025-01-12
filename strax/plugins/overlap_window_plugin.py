@@ -63,7 +63,7 @@ class OverlapWindowPlugin(Plugin):
         # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
-        invalid_beyond = int(end - self.get_window_size() - 1)
+        invalid_beyond = int(end - 2 * self.get_window_size() - 1)
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
