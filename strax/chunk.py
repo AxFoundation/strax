@@ -417,8 +417,10 @@ def split_array(data, t, allow_early_split=False):
     splittable_i = 0
     i_first_beyond = -1
     for i, d in enumerate(data):
+        # only non-overlapping data can be split
         if d["time"] >= latest_end_seen:
             splittable_i = i
+        # can not split beyond t
         if d["time"] >= t:
             i_first_beyond = i
             break
