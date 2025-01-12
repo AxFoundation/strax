@@ -139,7 +139,7 @@ def _merge_peaks(
         max_data = np.array(max_data)
 
         # Downsample the buffers into
-        # new_p['data'], new_p['data_top'], and new_p['data_bot']
+        # new_p['data'], new_p['data_top'], and new_p['data_start']
         strax.store_downsampled_waveform(
             new_p,
             buffer,

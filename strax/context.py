@@ -979,7 +979,7 @@ class Context:
                     if issubclass(plugin.__class__, not_allowed_plugins):
                         raise ValueError(
                             f"Can not assign chunk_number for {plugin.__class__} "
-                            f"because it is subclass of {not_allowed_plugins}!"
+                            f"because it is subclass of one of {not_allowed_plugins}!"
                         )
                     configs.setdefault("chunk_number", {})
                     if d_depends in configs["chunk_number"]:
