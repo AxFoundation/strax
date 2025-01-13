@@ -1,3 +1,16 @@
+2.0.4 / 2025-01-13
+---------------------
+* Numbafy `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/946
+* Propagate min/max diff in merged S2s by @WenzDaniel in https://github.com/AxFoundation/strax/pull/937
+* Fix bug of numbafied `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/947
+* Fix `merge_peaks` by removing `endtime` assignment by @dachengx in https://github.com/AxFoundation/strax/pull/948
+* Do not concatenate empty dataframes by @dachengx in https://github.com/AxFoundation/strax/pull/949
+* Collect `endtime` from `_merge_peaks` function by @dachengx in https://github.com/AxFoundation/strax/pull/950
+* `OverlapWindowPlugin` support multiple outputs by @dachengx in https://github.com/AxFoundation/strax/pull/951
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.3...v2.0.4
+
+
 2.0.3 / 2024-12-27
 ---------------------
 * Move `set_nan_defaults` from straxen to strax by @dachengx in https://github.com/AxFoundation/strax/pull/936
