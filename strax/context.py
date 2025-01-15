@@ -1158,6 +1158,7 @@ class Context:
             loader = self._get_partial_loader_for(
                 key, time_range=time_range, chunk_number=_chunk_number
             )
+            loadable = loader is not False
 
             allow_superrun = plugins[target_i].allow_superrun
             if not loader and (is_superrun and not allow_superrun or combining):
@@ -1249,8 +1250,8 @@ class Context:
                     check_cache(dep_d)
 
             # In case the target is already loaded we do not have to save it.
-            # Except for the case of combining mode.
-            if loader and not combining:
+            # Except when the target is originally not loadable (in combining mode).
+            if loader and ((combining and loadable) or not combining):
                 return
 
             # In case wrinting superruns is disabled we do not have to save it.
