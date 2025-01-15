@@ -1125,11 +1125,6 @@ class Context:
                 f"Cannot mix plugins {targets} that allow superruns with those that do not."
             )
         if not sum(allow_superruns) and is_superrun:
-            if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
-                raise ValueError(
-                    "When only combining subruns, you can only assign one target, "
-                    f"but got {plugins[targets[0]].depends_on}!"
-                )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
@@ -1161,7 +1156,11 @@ class Context:
             loadable = loader is not False
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and (is_superrun and not allow_superrun or combining):
+            if (
+                not loader
+                and (is_superrun and not allow_superrun or combining)
+                and not target_i.startswith(TEMP_DATA_TYPE_PREFIX)
+            ):
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1248,6 +1247,10 @@ class Context:
                 to_compute[target_i] = target_plugin
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
+
+            # We are in a temporary data type, we should not save it.
+            if target_i.startswith(TEMP_DATA_TYPE_PREFIX):
+                return
 
             # In case the target is already loaded we do not have to save it.
             # Except when the target is originally not loadable (in combining mode).
@@ -1575,6 +1578,8 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+                if is_superrun:
+                    p.allow_superrun = True
                 self.register(p)
                 targets = (temp_name,)
             elif not allow_multiple or processor is strax.SingleThreadProcessor:
