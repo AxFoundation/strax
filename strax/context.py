@@ -711,10 +711,10 @@ class Context:
                     parent_name = opt.parent_option_name
 
                     mes = (
-                        f'Cannot find "{parent_name}" among the options of the parent.'
-                        f" Either you specified by accident {option_name} as child option"
-                        " or you specified the wrong parent_option_name. Have you specified "
-                        "the correct parent option name?"
+                        f'Cannot find "{parent_name}" among the options of the parent. '
+                        f"Either you specified by accident {option_name} as child option "
+                        "or you specified the wrong parent_option_name. Have you specified "
+                        "the correct parent_option_name?"
                     )
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
@@ -1160,7 +1160,7 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and is_superrun and not allow_superrun or combining:
+            if not loader and (is_superrun and not allow_superrun or combining):
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1248,8 +1248,13 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            # In case we can load the data already we want make a new superrun.
-            if loader and not (is_superrun and self.context_config["write_superruns"]):
+            # In case the target is already loaded we do not have to save it.
+            # Except for the case of combining mode.
+            if loader and not combining:
+                return
+
+            # In case wrinting superruns is disabled we do not have to save it.
+            if is_superrun and not self.context_config["write_superruns"]:
                 return
 
             # Now we should check whether we meet the saving requirements.

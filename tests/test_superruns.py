@@ -160,7 +160,6 @@ class TestSuperRuns(unittest.TestCase):
         assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
 
         # Check if subruns and superrun have the same time stamps
-        self.context.set_context_config({"write_superruns": False})
         subrun_data = self.context.get_array(self.subrun_ids, "peaks", progress_bar=False)
         superrun_data = self.context.get_array(self.superrun_name, "peaks")
         assert np.all(subrun_data["time"] == superrun_data["time"])
