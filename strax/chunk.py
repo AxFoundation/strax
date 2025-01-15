@@ -220,7 +220,11 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        if self.first_subrun["start"] != self.start or self.last_subrun["end"] != self.end:
+        if (
+            self.is_superrun
+            and self.first_subrun["start"] != self.start
+            or self.last_subrun["end"] != self.end
+        ):
             # TODO: be more clever on this?
             # Subruns start and end does not match with chunk start and end.
             # This might mean that you are using ExhaustPlugin.
