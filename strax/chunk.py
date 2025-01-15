@@ -1,4 +1,5 @@
 import typing as ty
+from warnings import warn
 
 import numpy as np
 import numba
@@ -330,7 +331,11 @@ class Chunk:
         else:
             run_id = None
             superrun = _merge_superrun_in_chunk(chunks)
-        subruns = _merge_subruns_in_chunk(chunks)
+        try:
+            subruns = _merge_subruns_in_chunk(chunks, merge=False)
+        except ValueError:
+            warn("The subruns are not continuous, try merge mode.")
+            subruns = _merge_subruns_in_chunk(chunks, merge=True)
 
         prev_end = 0
         for c in chunks:
