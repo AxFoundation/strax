@@ -222,27 +222,24 @@ class Chunk:
 
         if self.first_subrun["start"] != self.start or self.last_subrun["end"] != self.end:
             # TODO: be more clever on this?
-            warn(
-                "Subruns start and end does not match with chunk start and end. "
-                "This might mean that you are using ExhaustPlugin. "
-                "So the split will not update the subruns or superrun."
-            )
+            # Subruns start and end does not match with chunk start and end.
+            # This might mean that you are using ExhaustPlugin.
+            # So the split will not update the subruns or superrun.
             subruns_first_chunk = subruns_second_chunk = self.subruns
-            superrun_first_chunk = superrun_second_chunk = self.superrun
-            run_id_first_chunk = run_id_second_chunk = self.run_id
         else:
             subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
-            superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
-            # If the superrun is split and the fragment cover only one run,
-            # you need to recover the run_id
-            if superrun_first_chunk is None or len(superrun_first_chunk) == 1:
-                run_id_first_chunk = list(self.superrun.keys())[0]
-            else:
-                run_id_first_chunk = self.run_id
-            if superrun_second_chunk is None or len(superrun_second_chunk) == 1:
-                run_id_second_chunk = list(self.superrun.keys())[-1]
-            else:
-                run_id_second_chunk = self.run_id
+
+        superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
+        # If the superrun is split and the fragment cover only one run,
+        # you need to recover the run_id
+        if superrun_first_chunk is None or len(superrun_first_chunk) == 1:
+            run_id_first_chunk = list(self.superrun.keys())[0]
+        else:
+            run_id_first_chunk = self.run_id
+        if superrun_second_chunk is None or len(superrun_second_chunk) == 1:
+            run_id_second_chunk = list(self.superrun.keys())[-1]
+        else:
+            run_id_second_chunk = self.run_id
 
         c1 = strax.Chunk(
             start=self.start,
