@@ -297,6 +297,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            subruns=_merge_subruns_in_chunk(chunks, merge=True),
             superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -487,7 +488,7 @@ def _mergable_check(merged_runs, merge=False):
         }
 
 
-def _merge_subruns_in_chunk(chunks):
+def _merge_subruns_in_chunk(chunks, merge=False):
     """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
@@ -496,7 +497,7 @@ def _merge_subruns_in_chunk(chunks):
     subruns = dict()
     for c_i, c in enumerate(chunks):
         _merge_runs_in_chunk(c.subruns, subruns)
-    _mergable_check(subruns)
+    _mergable_check(subruns, merge)
     if subruns:
         return subruns
     else:
