@@ -155,8 +155,8 @@ def hitlet_with_data_dtype(n_samples=2):
         (("Dummy max_gap required for splitting", "max_gap"), np.int32),
         (("Dummy max_diff required for splitting", "max_diff"), np.int32),
         (("Dummy min_diff required for splitting", "min_diff"), np.int32),
-        (("Dummy first_channel required for splitting", "first_channel"), np.int32),
-        (("Dummy last_channel required for splitting", "last_channel"), np.int32),
+        (("Dummy first_channel required for splitting", "first_channel"), np.int16),
+        (("Dummy last_channel required for splitting", "last_channel"), np.int16),
         (("Maximum interior goodness of split", "max_goodness_of_split"), np.float32),
     ]
 
