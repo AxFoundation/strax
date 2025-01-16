@@ -711,10 +711,10 @@ class Context:
                     parent_name = opt.parent_option_name
 
                     mes = (
-                        f'Cannot find "{parent_name}" among the options of the parent.'
-                        f" Either you specified by accident {option_name} as child option"
-                        " or you specified the wrong parent_option_name. Have you specified "
-                        "the correct parent option name?"
+                        f'Cannot find "{parent_name}" among the options of the parent. '
+                        f"Either you specified by accident {option_name} as child option "
+                        "or you specified the wrong parent_option_name. Have you specified "
+                        "the correct parent_option_name?"
                     )
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
@@ -1090,16 +1090,17 @@ class Context:
         {get_docs}
 
         """
-        save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
+        save = strax.to_str_tuple(save)
+
+        if save and combining:
+            raise ValueError("You can not save data when combining subruns.")
 
         for t in targets:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         is_superrun = run_id.startswith("_")
-        if len(targets) > 1 and combining:
-            raise ValueError("Combining subruns is only supported for a single target")
         if is_superrun and chunk_number is not None:
             raise ValueError("Per chunk processing is only allowed when not processing superrun.")
         if not is_superrun and combining:
@@ -1125,11 +1126,6 @@ class Context:
                 f"Cannot mix plugins {targets} that allow superruns with those that do not."
             )
         if not sum(allow_superruns) and is_superrun:
-            if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
-                raise ValueError(
-                    "When only combining subruns, you can only assign one target, "
-                    f"but got {plugins[targets[0]].depends_on}!"
-                )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Get savers/loaders, and meanwhile filter out plugins that do not
@@ -1160,7 +1156,11 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and is_superrun and not allow_superrun or combining:
+            if (
+                not loader
+                and (is_superrun and not allow_superrun or combining)
+                and not target_i.startswith(TEMP_DATA_TYPE_PREFIX)
+            ):
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1248,8 +1248,16 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            # In case we can load the data already we want make a new superrun.
-            if loader and not (is_superrun and self.context_config["write_superruns"]):
+            # We are in a temporary data type, we should not save it.
+            if target_i.startswith(TEMP_DATA_TYPE_PREFIX):
+                return
+
+            # In case the target is already loaded we do not have to save it.
+            if loader:
+                return
+
+            # In case wrinting superruns is disabled we do not have to save it.
+            if is_superrun and not self.context_config["write_superruns"]:
                 return
 
             # Now we should check whether we meet the saving requirements.
@@ -1569,6 +1577,9 @@ class Context:
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+                if is_superrun:
+                    # In case the checking about allow_superrun shows error
+                    p.allow_superrun = True
                 self.register(p)
                 targets = (temp_name,)
             elif not allow_multiple or processor is strax.SingleThreadProcessor:
