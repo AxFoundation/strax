@@ -154,6 +154,10 @@ def _merge_peaks(
         new_p["max_gap"] = -1
         new_p["max_goodness_of_split"] = np.nan
 
+        # since the peaks are sorted, we can just take the first and last channel
+        new_p["first_channel"] = old_peaks[0]["first_channel"]
+        new_p["last_channel"] = old_peaks[-1]["last_channel"]
+
         # Use tight_coincidence of the peak with the highest amplitude
         new_p["tight_coincidence"] = old_peaks["tight_coincidence"][np.argmax(max_data)]
 
