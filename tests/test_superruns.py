@@ -126,14 +126,9 @@ class TestSuperRuns(unittest.TestCase):
             self.superrun_name, "peak_classification", combining=True
         )
         assert len(components.loaders) == 1
-        assert len(components.savers) == 1
+        # no savers in combining mode
+        assert len(components.savers) == 0
         assert "peak_classification" in components.loaders
-        assert "peak_classification" in components.savers
-
-        with self.assertRaises(ValueError):
-            self.context.get_components(
-                self.superrun_name, ("peaks", "peak_classification"), combining=True
-            )
 
     def test_create_and_load_superruns(self):
         """Creates "new" superrun data from already existing data.
@@ -335,7 +330,7 @@ class TestSuperRuns(unittest.TestCase):
         sum_super = self.context.get_array(self.superrun_name, "sum", save="sum")
         assert self.context.is_stored(self.superrun_name, "sum")
         assert not self.context.is_stored(self.superrun_name, "sum", combining=True)
-        _sum_super = self.context.get_array(self.superrun_name, "sum", save="sum", combining=True)
+        _sum_super = self.context.get_array(self.superrun_name, "sum", combining=True)
 
         # superruns will still load and make subruns together
         assert np.unique(sum_super["sum"]).size == 1

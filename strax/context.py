@@ -1101,8 +1101,6 @@ class Context:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         is_superrun = run_id.startswith("_")
-        if len(targets) > 1 and combining:
-            raise ValueError("Combining subruns is only supported for a single target")
         if is_superrun and chunk_number is not None:
             raise ValueError("Per chunk processing is only allowed when not processing superrun.")
         if not is_superrun and combining:
