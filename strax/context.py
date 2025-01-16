@@ -1090,8 +1090,11 @@ class Context:
         {get_docs}
 
         """
-        save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
+        save = strax.to_str_tuple(save)
+
+        if save and combining:
+            raise ValueError("You can not save data when combining subruns.")
 
         for t in targets:
             if len(t) == 1:
@@ -1153,7 +1156,6 @@ class Context:
             loader = self._get_partial_loader_for(
                 key, time_range=time_range, chunk_number=_chunk_number
             )
-            loadable = loader is not False
 
             allow_superrun = plugins[target_i].allow_superrun
             if (
@@ -1253,8 +1255,7 @@ class Context:
                 return
 
             # In case the target is already loaded we do not have to save it.
-            # Except when the target is originally not loadable (in combining mode).
-            if loader and ((combining and loadable) or not combining):
+            if loader:
                 return
 
             # In case wrinting superruns is disabled we do not have to save it.
@@ -1579,6 +1580,7 @@ class Context:
                 temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
                 if is_superrun:
+                    # In case the checking about allow_superrun shows error
                     p.allow_superrun = True
                 self.register(p)
                 targets = (temp_name,)
