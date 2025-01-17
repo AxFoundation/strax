@@ -232,6 +232,8 @@ class PeakSplitter:
                 r["max_gap"] = -1
                 r["max_diff"] = -1
                 r["min_diff"] = -1
+                r["first_channel"] = -1
+                r["last_channel"] = -1
                 if r["length"] <= 0:
                     print(p["data"])
                     print(prev_split_i, split_i)
