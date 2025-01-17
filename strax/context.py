@@ -886,6 +886,11 @@ class Context:
             d_depends: self.__get_plugin(run_id, d_depends, chunk_number=chunk_number)
             for d_depends in plugin.depends_on
         }
+        if plugin.compute_takes_chunk_i and len(plugin.dependencies_by_kind()) > 1:
+            raise ValueError(
+                f"Plugin {plugin.__class__} has multiple dependencies and takes chunk_i as input, "
+                "which is not supported."
+            )
 
         self.__add_lineage_to_plugin(run_id, plugin, chunk_number=chunk_number)
 
@@ -975,6 +980,11 @@ class Context:
         if chunk_number is not None:
             for d_depends in plugin.depends_on:
                 if d_depends in chunk_number:
+                    if len(plugin.depends_on) > 1:
+                        raise ValueError(
+                            "Can not assign chunk_number for multi-dependencies plugins "
+                            "because it is not clear which input should be assigned."
+                        )
                     not_allowed_plugins = (strax.LoopPlugin, strax.OverlapWindowPlugin)
                     if issubclass(plugin.__class__, not_allowed_plugins):
                         raise ValueError(
@@ -987,6 +997,7 @@ class Context:
                             f"Chunk number for {d_depends} is already set in the lineage"
                         )
                     self._check_chunk_number(chunk_number[d_depends])
+                    plugin.chunk_number = chunk_number[d_depends]
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}

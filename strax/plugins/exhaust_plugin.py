@@ -10,7 +10,7 @@ class ExhaustPlugin(Plugin):
         return False
 
     def do_compute(self, chunk_i=None, **kwargs):
-        if chunk_i != 0:
+        if chunk_i != self.first_chunk:
             raise RuntimeError(
                 f"{self.__class__.__name__} is an ExhaustPlugin. "
                 "It should read all chunks together can process them together."

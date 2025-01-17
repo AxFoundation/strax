@@ -104,6 +104,7 @@ class Plugin:
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
+    chunk_number = None
     allow_superrun = False
     clean_chunk_after_compute = False
     gc_collect_after_compute = False
@@ -212,6 +213,12 @@ class Plugin:
     def run_id(self, run_id):
         self._run_id = run_id
         self.__run_id = strax.Context._process_superrun_id(run_id)
+
+    @property
+    def first_chunk(self):
+        if self.chunk_number is None:
+            return 0
+        return self.chunk_number[0]
 
     @property
     def is_superrun(self):
@@ -447,7 +454,7 @@ class Plugin:
             pass
 
         try:
-            for chunk_i in itertools.count():
+            for chunk_i in itertools.count() if self.chunk_number is None else self.chunk_number:
                 # Online input support
                 while not self.is_ready(chunk_i):
                     if self.source_finished():
@@ -472,7 +479,7 @@ class Plugin:
                 if pacemaker is None:
                     inputs_merged = dict()
                 else:
-                    if chunk_i != 0:
+                    if chunk_i != self.first_chunk:
                         # Fetch the pacemaker, to figure out when this chunk ends
                         # (don't do it for chunk 0, for which we already fetched)
                         if not self._fetch_chunk(pacemaker, iters):
