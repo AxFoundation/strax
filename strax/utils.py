@@ -216,7 +216,8 @@ def merge_arrs(arrs, dtype=None, replacing=False):
     for arr in arrs:
         for fn in arr.dtype.names:
             if fn in result.dtype.names:
-                result[fn] = arr[fn]
+                # the copy here is needed to avoid cross-talk between memory of arrays
+                result[fn] = np.copy(arr[fn])
     return result
 
 
