@@ -104,7 +104,7 @@ class Plugin:
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
-    chunk_numbers = None
+    chunk_number = None
     allow_superrun = False
     clean_chunk_after_compute = False
     gc_collect_after_compute = False
@@ -216,9 +216,9 @@ class Plugin:
 
     @property
     def first_chunk(self):
-        if self.chunk_numbers is None:
+        if self.chunk_number is None:
             return 0
-        return self.chunk_numbers[0]
+        return self.chunk_number[0]
 
     @property
     def is_superrun(self):
@@ -454,7 +454,7 @@ class Plugin:
             pass
 
         try:
-            for chunk_i in itertools.count() if self.chunk_numbers is None else self.chunk_numbers:
+            for chunk_i in itertools.count() if self.chunk_number is None else self.chunk_number:
                 # Online input support
                 while not self.is_ready(chunk_i):
                     if self.source_finished():

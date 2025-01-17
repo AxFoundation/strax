@@ -997,7 +997,7 @@ class Context:
                             f"Chunk number for {d_depends} is already set in the lineage"
                         )
                     self._check_chunk_number(chunk_number[d_depends])
-                    plugin.chunk_numbers = chunk_number[d_depends]
+                    plugin.chunk_number = chunk_number[d_depends]
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
