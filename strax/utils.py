@@ -216,8 +216,7 @@ def merge_arrs(arrs, dtype=None, replacing=False):
     for arr in arrs:
         for fn in arr.dtype.names:
             if fn in result.dtype.names:
-                # the copy here is needed to avoid cross-talk between memory of arrays
-                result[fn] = np.copy(arr[fn])
+                result[fn] = arr[fn]
     return result
 
 
@@ -256,6 +255,13 @@ def profile_threaded(filename):
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)
     yappi.clear_stats()
+
+
+@export
+def set_keep_order(x):
+    """Return sorted set of x."""
+    seen = set()
+    return [i for i in x if not (i in seen or seen.add(i))]
 
 
 @export
