@@ -1583,7 +1583,7 @@ class Context:
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            targets = tuple(set(strax.to_str_tuple(targets)))
+            targets = tuple(strax.set_keep_order(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
