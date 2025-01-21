@@ -192,8 +192,7 @@ def merge_arrs(arrs, dtype=None, replacing=False):
 
     replacing=True is usually used when you want to convert arrs into a new dtype
 
-    If you pass one array, it is returned without copying.
-    TODO: hmm... inconsistent
+    If you pass one array, it is returned without copying unless replacing=True.
 
     Much faster than the similar function in numpy.lib.recfunctions.
 
@@ -205,7 +204,6 @@ def merge_arrs(arrs, dtype=None, replacing=False):
 
     n = len(arrs[0])
     if not all([len(x) == n for x in arrs]):
-        print([(len(x), x.dtype) for x in arrs])
         raise ValueError(
             "Arrays to merge must have the same length, got lengths "
             + ", ".join([str(len(x)) for x in arrs])
@@ -257,6 +255,13 @@ def profile_threaded(filename):
     p = yappi.convert2pstats(p)
     p.dump_stats(filename)
     yappi.clear_stats()
+
+
+@export
+def set_keep_order(x):
+    """Return sorted set of x."""
+    seen = set()
+    return [i for i in x if not (i in seen or seen.add(i))]
 
 
 @export

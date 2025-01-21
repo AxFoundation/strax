@@ -717,10 +717,10 @@ class Context:
                     parent_name = opt.parent_option_name
 
                     mes = (
-                        f'Cannot find "{parent_name}" among the options of the parent.'
-                        f" Either you specified by accident {option_name} as child option"
-                        " or you specified the wrong parent_option_name. Have you specified "
-                        "the correct parent option name?"
+                        f'Cannot find "{parent_name}" among the options of the parent. '
+                        f"Either you specified by accident {option_name} as child option "
+                        "or you specified the wrong parent_option_name. Have you specified "
+                        "the correct parent_option_name?"
                     )
                     assert parent_name in p.config, mes
                     p.config[parent_name] = option_value
@@ -892,6 +892,11 @@ class Context:
             d_depends: self.__get_plugin(run_id, d_depends, chunk_number=chunk_number)
             for d_depends in plugin.depends_on
         }
+        if plugin.compute_takes_chunk_i and len(plugin.dependencies_by_kind()) > 1:
+            raise ValueError(
+                f"Plugin {plugin.__class__} has multiple dependencies and takes chunk_i as input, "
+                "which is not supported."
+            )
 
         self.__add_lineage_to_plugin(run_id, plugin, chunk_number=chunk_number)
 
@@ -981,11 +986,16 @@ class Context:
         if chunk_number is not None:
             for d_depends in plugin.depends_on:
                 if d_depends in chunk_number:
+                    if len(plugin.depends_on) > 1:
+                        raise ValueError(
+                            "Can not assign chunk_number for multi-dependencies plugins "
+                            "because it is not clear which input should be assigned."
+                        )
                     not_allowed_plugins = (strax.LoopPlugin, strax.OverlapWindowPlugin)
                     if issubclass(plugin.__class__, not_allowed_plugins):
                         raise ValueError(
                             f"Can not assign chunk_number for {plugin.__class__} "
-                            f"because it is subclass of {not_allowed_plugins}!"
+                            f"because it is subclass of one of {not_allowed_plugins}!"
                         )
                     configs.setdefault("chunk_number", {})
                     if d_depends in configs["chunk_number"]:
@@ -993,6 +1003,7 @@ class Context:
                             f"Chunk number for {d_depends} is already set in the lineage"
                         )
                     self._check_chunk_number(chunk_number[d_depends])
+                    plugin.chunk_number = chunk_number[d_depends]
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
@@ -1096,16 +1107,17 @@ class Context:
         {get_docs}
 
         """
-        save = strax.to_str_tuple(save)
         targets = strax.to_str_tuple(targets)
+        save = strax.to_str_tuple(save)
+
+        if save and combining:
+            raise ValueError("You can not save data when combining subruns.")
 
         for t in targets:
             if len(t) == 1:
                 raise ValueError(f"Plugin names must be more than one letter, not {t}")
 
         is_superrun = run_id.startswith("_")
-        if len(targets) > 1 and combining:
-            raise ValueError("Combining subruns is only supported for a single target")
         if is_superrun and chunk_number is not None:
             raise ValueError("Per chunk processing is only allowed when not processing superrun.")
         if not is_superrun and combining:
@@ -1131,11 +1143,6 @@ class Context:
                 f"Cannot mix plugins {targets} that allow superruns with those that do not."
             )
         if not sum(allow_superruns) and is_superrun:
-            if targets[0].startswith(TEMP_DATA_TYPE_PREFIX):
-                raise ValueError(
-                    "When only combining subruns, you can only assign one target, "
-                    f"but got{plugins[targets[0]].depends_on}!"
-                )
             raise ValueError(f"Plugin {targets} does not allowed superrun!")
 
         # Safeguard for Super and Hyperruns
@@ -1178,7 +1185,11 @@ class Context:
             )
 
             allow_superrun = plugins[target_i].allow_superrun
-            if not loader and is_superrun and not allow_superrun or combining:
+            if (
+                not loader
+                and (is_superrun and not allow_superrun or combining)
+                and not target_i.startswith(TEMP_DATA_TYPE_PREFIX)
+            ):
                 # allow_superrun is False so we start to collect the subruns' data_types,
                 # which are the depends_on of the superrun's data_type.
                 if time_range is not None:
@@ -1266,8 +1277,16 @@ class Context:
                 for dep_d in target_plugin.depends_on:
                     check_cache(dep_d)
 
-            # In case we can load the data already we want make a new superrun.
-            if loader and not (is_superrun and self.context_config["write_superruns"]):
+            # We are in a temporary data type, we should not save it.
+            if target_i.startswith(TEMP_DATA_TYPE_PREFIX):
+                return
+
+            # In case the target is already loaded we do not have to save it.
+            if loader:
+                return
+
+            # In case wrinting superruns is disabled we do not have to save it.
+            if is_superrun and not self.context_config["write_superruns"]:
                 return
 
             # Now we should check whether we meet the saving requirements.
@@ -1596,11 +1615,14 @@ class Context:
         # If multiple targets of the same kind, create a MergeOnlyPlugin
         # to merge the results automatically.
         if isinstance(targets, (list, tuple)) and len(targets) > 1:
-            targets = tuple(set(strax.to_str_tuple(targets)))
+            targets = tuple(strax.set_keep_order(strax.to_str_tuple(targets)))
             plugins = self._get_plugins(targets=targets, run_id=run_id, chunk_number=chunk_number)
             if len(set(plugins[d].data_kind_for(d) for d in targets)) == 1:
                 temp_name = TEMP_DATA_TYPE_PREFIX + strax.deterministic_hash(targets)
                 p = type(temp_name, (strax.MergeOnlyPlugin,), dict(depends_on=tuple(targets)))
+                if is_superrun:
+                    # In case the checking about allow_superrun shows error
+                    p.allow_superrun = True
                 self.register(p)
                 targets = (temp_name,)
             elif not allow_multiple or processor is strax.SingleThreadProcessor:

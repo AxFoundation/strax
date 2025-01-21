@@ -1,4 +1,5 @@
 import typing as ty
+from warnings import warn
 
 import numpy as np
 import numba
@@ -219,7 +220,17 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        if self.is_superrun and (
+            self.first_subrun["start"] != self.start or self.last_subrun["end"] != self.end
+        ):
+            # TODO: be more clever on this?
+            # Subruns start and end does not match with chunk start and end.
+            # This might mean that you are using ExhaustPlugin.
+            # So the split will not update the subruns or superrun.
+            subruns_first_chunk = subruns_second_chunk = self.subruns
+        else:
+            subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+
         superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
         # If the superrun is split and the fragment cover only one run,
         # you need to recover the run_id
@@ -297,6 +308,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            subruns=_merge_subruns_in_chunk(chunks, merge=True),
             superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -329,7 +341,11 @@ class Chunk:
         else:
             run_id = None
             superrun = _merge_superrun_in_chunk(chunks)
-        subruns = _merge_subruns_in_chunk(chunks)
+        try:
+            subruns = _merge_subruns_in_chunk(chunks, merge=False)
+        except ValueError:
+            warn("The subruns are not continuous, try merge mode.")
+            subruns = _merge_subruns_in_chunk(chunks, merge=True)
 
         prev_end = 0
         for c in chunks:
@@ -417,8 +433,10 @@ def split_array(data, t, allow_early_split=False):
     splittable_i = 0
     i_first_beyond = -1
     for i, d in enumerate(data):
+        # only non-overlapping data can be split
         if d["time"] >= latest_end_seen:
             splittable_i = i
+        # can not split beyond t
         if d["time"] >= t:
             i_first_beyond = i
             break
@@ -485,7 +503,7 @@ def _mergable_check(merged_runs, merge=False):
         }
 
 
-def _merge_subruns_in_chunk(chunks):
+def _merge_subruns_in_chunk(chunks, merge=False):
     """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
@@ -494,7 +512,7 @@ def _merge_subruns_in_chunk(chunks):
     subruns = dict()
     for c_i, c in enumerate(chunks):
         _merge_runs_in_chunk(c.subruns, subruns)
-    _mergable_check(subruns)
+    _mergable_check(subruns, merge)
     if subruns:
         return subruns
     else:

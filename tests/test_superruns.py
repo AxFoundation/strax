@@ -126,14 +126,9 @@ class TestSuperRuns(unittest.TestCase):
             self.superrun_name, "peak_classification", combining=True
         )
         assert len(components.loaders) == 1
-        assert len(components.savers) == 1
+        # no savers in combining mode
+        assert len(components.savers) == 0
         assert "peak_classification" in components.loaders
-        assert "peak_classification" in components.savers
-
-        with self.assertRaises(ValueError):
-            self.context.get_components(
-                self.superrun_name, ("peaks", "peak_classification"), combining=True
-            )
 
     def test_create_and_load_superruns(self):
         """Creates "new" superrun data from already existing data.
@@ -160,7 +155,6 @@ class TestSuperRuns(unittest.TestCase):
         assert chunk["last_endtime"] == np.max(strax.endtime(subrun_data))
 
         # Check if subruns and superrun have the same time stamps
-        self.context.set_context_config({"write_superruns": False})
         subrun_data = self.context.get_array(self.subrun_ids, "peaks", progress_bar=False)
         superrun_data = self.context.get_array(self.superrun_name, "peaks")
         assert np.all(subrun_data["time"] == superrun_data["time"])
@@ -326,11 +320,6 @@ class TestSuperRuns(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.context.get_array(self.subrun_ids[0], "peaks", combining=True)
 
-    def test_superrun_mutiple_targets(self):
-        """Test that multiple targets does not work with superrun."""
-        with self.assertRaises(ValueError):
-            self.context.get_array(self.superrun_name, ("peaks", "peak_classification"))
-
     def test_only_combining_superruns(self):
         """Test loading superruns when only combining subruns.
 
@@ -341,7 +330,7 @@ class TestSuperRuns(unittest.TestCase):
         sum_super = self.context.get_array(self.superrun_name, "sum", save="sum")
         assert self.context.is_stored(self.superrun_name, "sum")
         assert not self.context.is_stored(self.superrun_name, "sum", combining=True)
-        _sum_super = self.context.get_array(self.superrun_name, "sum", save="sum", combining=True)
+        _sum_super = self.context.get_array(self.superrun_name, "sum", combining=True)
 
         # superruns will still load and make subruns together
         assert np.unique(sum_super["sum"]).size == 1
