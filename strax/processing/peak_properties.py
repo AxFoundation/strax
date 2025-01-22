@@ -108,7 +108,7 @@ def compute_center_time(peaks):
     center_time = np.zeros(len(peaks), dtype=np.int64)
     for p_i, p in enumerate(peaks):
         data = p["data"][: p["length"]]
-        if p["area"] <= 0:
+        if data.sum() <= 0:
             # Negative or zero-area peaks have centertime at startime
             center_time[p_i] = p["time"]
         else:
