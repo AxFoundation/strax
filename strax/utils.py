@@ -129,7 +129,7 @@ def set_nan_defaults(buffer):
     """When constructing the dtype, take extra care to set values to np.Nan / -1 (for ints) as 0
     might have a meaning."""
     for field in buffer.dtype.names:
-        if np.issubdtype(buffer.dtype[field], np.integer):
+        if np.issubdtype(buffer.dtype[field].base, np.integer):
             buffer[field][:] = -1
         else:
             buffer[field][:] = np.nan
