@@ -1,3 +1,18 @@
+2.0.5 / 2025-01-24
+---------------------
+* When loader is available, do not save anything by @dachengx in https://github.com/AxFoundation/strax/pull/953
+* Do not cache `find_split_points` by @dachengx in https://github.com/AxFoundation/strax/pull/955
+* Set `chunk_number` as attribute of `Plugin` to pass `chunk_i` by @dachengx in https://github.com/AxFoundation/strax/pull/956
+* First and last channel inside peak(let)s by @dachengx in https://github.com/AxFoundation/strax/pull/954
+* Temporary plugin should keep order of targets by @dachengx in https://github.com/AxFoundation/strax/pull/958
+* Some times the sum of data is zero due to numerical inaccuracy by @dachengx in https://github.com/AxFoundation/strax/pull/959
+* Use `base` of dtype in `set_nan_defaults` by @dachengx in https://github.com/AxFoundation/strax/pull/960
+* Remove `CorrectionsInterface` by @dachengx in https://github.com/AxFoundation/strax/pull/961
+* Drop python 3.9 and loosen requirement of `numpy` by @dachengx in https://github.com/AxFoundation/strax/pull/962
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.4...v2.0.5
+
+
 2.0.4 / 2025-01-13
 ---------------------
 * Numbafy `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/946
