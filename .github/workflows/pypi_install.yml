@@ -23,8 +23,6 @@ jobs:
         run: python -m build
       # Do the publish
       - name: Publish a Python distribution to PyPI
-        # Might want to add but does not work on workflow_dispatch :
-        # if: github.event_name == "push" && startsWith(github.ref, "refs/tags")
         uses: pypa/gh-action-pypi-publish@master
         with:
           user: ${{ secrets.pipy_token }}
