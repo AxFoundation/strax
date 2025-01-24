@@ -11,6 +11,7 @@ classifiers = [
   "Development Status :: 5 - Production/Stable",
   "License :: OSI Approved :: BSD License",
   "Natural Language :: English",
+  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -24,7 +25,7 @@ repository = "https://github.com/AxFoundation/strax"
 rechunker = "strax.scripts.rechunker:main"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.9,<3.13"
 blosc = "*"
 click = "*"
 deepdiff = "*"
@@ -34,7 +35,7 @@ immutabledict = "*"
 lz4 = "*"
 numba = ">=0.43.1"
 numexpr = "*"
-numpy = ">=1.18.5"
+numpy = ">=1.18.5,<2.0.0"
 packaging = "*"
 pandas = "*"
 psutil = "*"
