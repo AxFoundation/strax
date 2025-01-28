@@ -164,12 +164,6 @@ tqdm = strax.utils.tqdm
         type=bool,
         help='If True, save superruns as rechunked "new" data.',
     ),
-    strax.Option(
-        name="check_superrun_configs",
-        default=True,
-        type=bool,
-        help="If True, check whether all subruns' config are the same.",
-    ),
 )
 @export
 class Context:
