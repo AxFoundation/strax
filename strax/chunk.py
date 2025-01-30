@@ -150,6 +150,15 @@ class Chunk:
             _subrun = self._get_subrun(-1)
         return _subrun
 
+    @property
+    def promised_continuity(self):
+        if not self.is_superrun:
+            return True
+        # TODO: be more clever on this?
+        # Subruns start and end does not match with chunk start and end.
+        # This might mean that you are using ExhaustPlugin.
+        return self.first_subrun["start"] == self.start and self.last_subrun["end"] == self.end
+
     def _get_subrun(self, index):
         """Returns subrun according to position in chunk."""
         run_id = list(self.subruns.keys())[index]
@@ -220,16 +229,11 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        if self.is_superrun and (
-            self.first_subrun["start"] != self.start or self.last_subrun["end"] != self.end
-        ):
-            # TODO: be more clever on this?
-            # Subruns start and end does not match with chunk start and end.
-            # This might mean that you are using ExhaustPlugin.
-            # So the split will not update the subruns or superrun.
-            subruns_first_chunk = subruns_second_chunk = self.subruns
-        else:
+        if self.promised_continuity:
             subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        else:
+            # The split will not update the subruns or superrun.
+            subruns_first_chunk = subruns_second_chunk = self.subruns
 
         superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
         # If the superrun is split and the fragment cover only one run,
@@ -382,13 +386,12 @@ def continuity_check(chunk_iter):
             last_subrun = {"run_id": None}
 
         if chunk.is_superrun:
-            _subrun = chunk.first_subrun
-            if _subrun["run_id"] != last_subrun["run_id"]:
+            if chunk.first_subrun["run_id"] != last_subrun["run_id"]:
                 last_end = None
             else:
                 last_end = last_subrun["end"]
 
-        if last_end is not None:
+        if last_end is not None and chunk.promised_continuity:
             if chunk.start != last_end:
                 raise ValueError(
                     f"Data is not continuous. Chunk {chunk} should have started at {last_end}"
