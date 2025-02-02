@@ -37,7 +37,7 @@ class OverlapWindowPlugin(Plugin):
     def _get_window_size(self):
         window_size = self.get_window_size()
         if isinstance(window_size, (int, float)):
-            return window_size, 0
+            return window_size, window_size
         elif isinstance(window_size, (list, tuple)) and len(window_size) == 2:
             if window_size[0] < 0 or window_size[1] < 0:
                 raise ValueError("Window size elements must be non-negative")
