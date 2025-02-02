@@ -57,8 +57,7 @@ class OverlapWindowPlugin(Plugin):
         yield from super().iter(iters, executor=executor)
 
         # Yield final results, kept at bay in fear of a new chunk
-        if self.cached_results:
-            yield self.cached_results
+        yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
