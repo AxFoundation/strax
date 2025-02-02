@@ -43,7 +43,9 @@ class OverlapWindowPlugin(Plugin):
                 raise ValueError("Window size elements must be non-negative")
             return window_size
         else:
-            raise ValueError("Window size must be an integer or a tuple of two integers")
+            raise ValueError(
+                "Window size must be an integer(float) or a tuple of two integer(float)s"
+            )
 
     def init_cached_results(self):
         if self.multi_output:
@@ -55,8 +57,7 @@ class OverlapWindowPlugin(Plugin):
         yield from super().iter(iters, executor=executor)
 
         # Yield final results, kept at bay in fear of a new chunk
-        if self.cached_results:
-            yield self.cached_results
+        yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
@@ -79,11 +80,7 @@ class OverlapWindowPlugin(Plugin):
         # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
-        if window_size[1] == 0:
-            # DO not have to invalidate anything
-            invalid_beyond = end
-        else:
-            invalid_beyond = int(end - 2 * window_size[1] - 1)
+        invalid_beyond = int(end - 2 * window_size[1] - 1)
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -118,19 +115,10 @@ class OverlapWindowPlugin(Plugin):
             result, self.cached_results = result.split(t=invalid_beyond, allow_early_split=True)
             self.sent_until = self.cached_results.start
 
-        if window_size[1] == 0:
-            # Set cached results to empty dict
-            # otherwise, the higher plugin might still assume there are more cached results
-            self.init_cached_results()
-
         # Cache a necessary amount of input for next time
         # Again, take a bit of overkill for good measure
         # cache_inputs_beyond is smaller than sent_until
-        if window_size[0] == 0:
-            # DO not have to invalidate anything
-            cache_inputs_beyond = self.sent_until
-        else:
-            cache_inputs_beyond = int(self.sent_until - 2 * window_size[0] - 1)
+        cache_inputs_beyond = int(self.sent_until - 2 * window_size[0] - 1)
 
         # Cache inputs, make sure that the chunks start at the same time to
         # prevent issues in input buffers later on
