@@ -22,10 +22,7 @@ class OverlapWindowPlugin(Plugin):
     def __init__(self):
         super().__init__()
         self.cached_input = {}
-        if self.multi_output:
-            self.cached_results = {}
-        else:
-            self.cached_results = None
+        self.init_cached_results()
         self.sent_until = 0
         if self.clean_chunk_after_compute:
             raise ValueError(
@@ -37,11 +34,29 @@ class OverlapWindowPlugin(Plugin):
         """Return the required window size in nanoseconds."""
         raise NotImplementedError
 
+    def _get_window_size(self):
+        window_size = self.get_window_size()
+        if isinstance(window_size, (int, float)):
+            return window_size, window_size
+        elif isinstance(window_size, (list, tuple)) and len(window_size) == 2:
+            if window_size[0] < 0 or window_size[1] < 0:
+                raise ValueError("Window size elements must be non-negative")
+            return window_size
+        else:
+            raise ValueError("Window size must be an integer or a tuple of two integers")
+
+    def init_cached_results(self):
+        if self.multi_output:
+            self.cached_results = {}
+        else:
+            self.cached_results = None
+
     def iter(self, iters, executor=None):
         yield from super().iter(iters, executor=executor)
 
         # Yield final results, kept at bay in fear of a new chunk
-        yield self.cached_results
+        if self.cached_results:
+            yield self.cached_results
 
     def do_compute(self, chunk_i=None, **kwargs):
         if not len(kwargs):
@@ -60,10 +75,15 @@ class OverlapWindowPlugin(Plugin):
             raise RuntimeError(f"OverlapWindowPlugin got incongruent inputs: {kwargs}")
         end = ends[0]
 
+        window_size = self._get_window_size()
         # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
-        invalid_beyond = int(end - 2 * self.get_window_size() - 1)
+        if window_size[1] == 0:
+            # DO not have to invalidate anything
+            invalid_beyond = end
+        else:
+            invalid_beyond = int(end - 2 * window_size[1] - 1)
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -98,10 +118,19 @@ class OverlapWindowPlugin(Plugin):
             result, self.cached_results = result.split(t=invalid_beyond, allow_early_split=True)
             self.sent_until = self.cached_results.start
 
+        if window_size[1] == 0:
+            # Set cached results to empty dict
+            # otherwise, the higher plugin might still assume there are more cached results
+            self.init_cached_results()
+
         # Cache a necessary amount of input for next time
         # Again, take a bit of overkill for good measure
         # cache_inputs_beyond is smaller than sent_until
-        cache_inputs_beyond = int(self.sent_until - 2 * self.get_window_size() - 1)
+        if window_size[0] == 0:
+            # DO not have to invalidate anything
+            cache_inputs_beyond = self.sent_until
+        else:
+            cache_inputs_beyond = int(self.sent_until - 2 * window_size[0] - 1)
 
         # Cache inputs, make sure that the chunks start at the same time to
         # prevent issues in input buffers later on
