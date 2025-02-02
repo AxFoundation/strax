@@ -63,7 +63,19 @@ class OverlapWindowPlugin(Plugin):
         # When can we no longer trust our results?
         # Take slightly larger windows for safety: it is very easy for me
         # (or the user) to have made an off-by-one error
-        invalid_beyond = int(end - 2 * self.get_window_size() - 1)
+        window_size = self.get_window_size()
+        if isinstance(window_size, (int, float)):
+            invalid_beyond = int(end - 2 * window_size - 1)
+        elif isinstance(window_size, (list, tuple)) and len(window_size) == 2:
+            if window_size[1] == 0:
+                # DO not have to invalidate anything
+                invalid_beyond = end
+            else:
+                if window_size[1] < 0:
+                    raise ValueError("The second element of window_size must be non-negative")
+                invalid_beyond = int(end - 2 * window_size[1] - 1)
+        else:
+            raise ValueError("Window size must be an integer or a tuple of two integers")
 
         # Compute new results
         result = super().do_compute(chunk_i=chunk_i, **kwargs)
@@ -101,7 +113,18 @@ class OverlapWindowPlugin(Plugin):
         # Cache a necessary amount of input for next time
         # Again, take a bit of overkill for good measure
         # cache_inputs_beyond is smaller than sent_until
-        cache_inputs_beyond = int(self.sent_until - 2 * self.get_window_size() - 1)
+        if isinstance(window_size, (int, float)):
+            cache_inputs_beyond = int(self.sent_until - 2 * window_size - 1)
+        elif isinstance(window_size, (list, tuple)) and len(window_size) == 2:
+            if window_size[0] == 0:
+                # DO not have to invalidate anything
+                cache_inputs_beyond = self.sent_until
+            else:
+                if window_size[0] < 0:
+                    raise ValueError("The first element of window_size must be non-negative")
+                cache_inputs_beyond = int(self.sent_until - 2 * window_size[0] - 1)
+        else:
+            raise ValueError("Window size must be an integer or a tuple of two integers")
 
         # Cache inputs, make sure that the chunks start at the same time to
         # prevent issues in input buffers later on
