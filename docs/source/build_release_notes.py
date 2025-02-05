@@ -1,4 +1,4 @@
-from m2r import convert
+from m2r2 import convert
 import os
 
 header = """
