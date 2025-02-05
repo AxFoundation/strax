@@ -1,3 +1,14 @@
+2.1.0 / 2025-02-03
+---------------------
+* Add a flag indicating whether check subruns' configs by @dachengx in https://github.com/AxFoundation/strax/pull/964
+* Revert "Add a flag indicating whether check subruns' configs" by @dachengx in https://github.com/AxFoundation/strax/pull/965
+* Skip continuity check when using `ExhaustPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/966
+* Allow two-sided overlapping window by @dachengx in https://github.com/AxFoundation/strax/pull/970
+* Push the latest change by @dachengx in https://github.com/AxFoundation/strax/pull/971
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.5...v2.1.0
+
+
 2.0.5 / 2025-01-24
 ---------------------
 * When loader is available, do not save anything by @dachengx in https://github.com/AxFoundation/strax/pull/953
