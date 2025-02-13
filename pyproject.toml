@@ -41,7 +41,7 @@ psutil = "*"
 pymongo = "*"
 scipy = "*"
 tqdm = ">=4.46.0"
-zarr = "*"
+zarr = "<3.0.0"
 zstd = "*"
 sphinx = { version = "*", optional = true }
 sphinx_rtd_theme = { version = "*", optional = true }
