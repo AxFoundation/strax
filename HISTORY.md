@@ -1,3 +1,10 @@
+2.1.1 / 2025-02-13
+---------------------
+* Clip `center_time` to be within the `time` and `endtime` by @dachengx in https://github.com/AxFoundation/strax/pull/973
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.0...v2.1.1
+
+
 2.1.0 / 2025-02-03
 ---------------------
 * Add a flag indicating whether check subruns' configs by @dachengx in https://github.com/AxFoundation/strax/pull/964
