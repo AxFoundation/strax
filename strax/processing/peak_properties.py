@@ -108,6 +108,10 @@ def compute_center_time(peaks):
     center_time = np.zeros(len(peaks), dtype=np.int64)
     for p_i, p in enumerate(peaks):
         data = p["data"][: p["length"]]
+        if data.sum() == 0.0:
+            # Zero-area peaks have centertime at startime
+            center_time[p_i] = p["time"]
+            continue
         t = np.average(np.arange(p["length"]), weights=data)
         center_time[p_i] = (t + 1 / 2) * p["dt"]
         center_time[p_i] += p["time"]  # converting from float to int, implicit floor
