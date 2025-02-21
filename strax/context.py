@@ -886,6 +886,13 @@ class Context:
             d_depends: self.__get_plugin(run_id, d_depends, chunk_number=chunk_number)
             for d_depends in plugin.depends_on
         }
+        if plugin.compute_takes_chunk_i:
+            for k, v in plugin.deps.items():
+                if v.rechunk_on_load:
+                    raise ValueError(
+                        "Can not use a plugin that takes chunk_i as input when "
+                        "dependency's rechunk_on_load is True."
+                    )
         if plugin.compute_takes_chunk_i and len(plugin.dependencies_by_kind()) > 1:
             raise ValueError(
                 f"Plugin {plugin.__class__} has multiple dependencies and takes chunk_i as input, "
@@ -998,6 +1005,11 @@ class Context:
                         )
                     self._check_chunk_number(chunk_number[d_depends])
                     plugin.chunk_number = chunk_number[d_depends]
+                    if plugin.compute_takes_chunk_i and plugin.deps[d_depends].rechunk_on_load:
+                        raise ValueError(
+                            "Can not assign chunk_number for a plugin that takes chunk_i as input "
+                            "when dependency's rechunk_on_load is True."
+                        )
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
@@ -1058,7 +1070,14 @@ class Context:
         """Return list of writable storage frontends."""
         return [s for s in self.storage if not s.readonly]
 
-    def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
+    def _get_partial_loader_for(
+        self,
+        key,
+        time_range=None,
+        chunk_number=None,
+        rechunk=False,
+        source_size_mb=strax.DEFAULT_CHUNK_SIZE_MB,
+    ):
         """Get partial loaders to allow loading data later.
 
         :param key: strax.DataKey
@@ -1080,6 +1099,8 @@ class Context:
                     key,
                     time_range=time_range,
                     chunk_number=chunk_number,
+                    rechunk=rechunk,
+                    source_size_mb=source_size_mb,
                     **self._find_options,
                 )
             except strax.DataNotAvailable:
@@ -1163,10 +1184,14 @@ class Context:
             else:
                 _chunk_number = None
             loader = self._get_partial_loader_for(
-                key, time_range=time_range, chunk_number=_chunk_number
+                key,
+                time_range=time_range,
+                chunk_number=_chunk_number,
+                rechunk=target_plugin.rechunk_on_load,
+                source_size_mb=target_plugin.chunk_source_size_mb,
             )
 
-            allow_superrun = plugins[target_i].allow_superrun
+            allow_superrun = target_plugin.allow_superrun
             if (
                 not loader
                 and (is_superrun and not allow_superrun or combining)
@@ -1203,7 +1228,11 @@ class Context:
                     else:
                         _chunk_number = None
                     _loader = self._get_partial_loader_for(
-                        sub_key, time_range=_subrun_time_range, chunk_number=_chunk_number
+                        sub_key,
+                        time_range=_subrun_time_range,
+                        chunk_number=_chunk_number,
+                        rechunk=target_plugin.rechunk_on_load,
+                        source_size_mb=target_plugin.chunk_source_size_mb,
                     )
                     if not _loader:
                         raise RuntimeError(
@@ -1310,7 +1339,7 @@ class Context:
                     run_id, d_to_save, chunk_number=chunk_number, combining=combining
                 )
                 # Here we just check the availability of key,
-                # chunk_number for _get_partial_loader_for can be None
+                # chunk_number, rechunk and source_size_mb for _get_partial_loader_for can be None
                 if self._get_partial_loader_for(key, time_range=time_range):
                     continue
 

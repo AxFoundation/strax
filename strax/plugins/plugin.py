@@ -70,8 +70,13 @@ class Plugin:
 
     compressor = "blosc"
 
+    rechunk_on_load = False  # Loader is allowed to rechunk
+    # How large (uncompressed) should re-chunked source be?
+    # Meaningless if rechunk_on_load is False
+    chunk_source_size_mb = strax.DEFAULT_CHUNK_SIZE_MB
+
     rechunk_on_save = True  # Saver is allowed to rechunk
-    # How large (uncompressed) should re-chunked chunks be?
+    # How large (uncompressed) should re-chunked target be?
     # Meaningless if rechunk_on_save is False
     chunk_target_size_mb = strax.DEFAULT_CHUNK_SIZE_MB
 
@@ -153,6 +158,12 @@ class Plugin:
         if getattr(self, "provides", None):
             self.provides = strax.to_str_tuple(self.provides)
         self.compute_pars = compute_pars
+
+        if self.rechunk_on_load and self.clean_chunk_after_compute:
+            raise ValueError(
+                f"{self.__class__.__name__} has rechunk_on_load and clean_chunk_after_compute "
+                "set to True. This is not allowed."
+            )
         self.input_buffer = dict()
 
     def __copy__(self, _deep_copy=False):
@@ -216,9 +227,10 @@ class Plugin:
 
     @property
     def first_chunk(self):
-        if self.chunk_number is None:
+        if self.compute_takes_chunk_i and self.chunk_number:
+            return self.chunk_number[0]
+        else:
             return 0
-        return self.chunk_number[0]
 
     @property
     def is_superrun(self):
@@ -454,7 +466,11 @@ class Plugin:
             pass
 
         try:
-            for chunk_i in itertools.count() if self.chunk_number is None else self.chunk_number:
+            if self.compute_takes_chunk_i and self.chunk_number:
+                chunk_i_generator = self.chunk_number
+            else:
+                chunk_i_generator = itertools.count()
+            for chunk_i in chunk_i_generator:
                 # Online input support
                 while not self.is_ready(chunk_i):
                     if self.source_finished():
