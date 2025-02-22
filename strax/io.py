@@ -22,7 +22,7 @@ blosc.set_releasegil(True)
 blosc.set_nthreads(1)
 
 
-def _bz2_decompress(f, chunk_size=16 * 1024 * 1024):
+def _bz2_decompress(f, chunk_size=64 * 1024 * 1024):
     decompressor = bz2.BZ2Decompressor()
     data = bytearray()  # Efficient mutable storage
     for d in iter(lambda: f.read(chunk_size), b""):
@@ -55,7 +55,7 @@ def _blosc_decompress(f):
     return data
 
 
-def _lz4_decompress(f, chunk_size=16 * 1024 * 1024):
+def _lz4_decompress(f, chunk_size=64 * 1024 * 1024):
     decompressor = lz4.LZ4FrameDecompressor()
     data = bytearray()  # Efficient mutable storage
     for d in iter(lambda: f.read(chunk_size), b""):
@@ -64,10 +64,12 @@ def _lz4_decompress(f, chunk_size=16 * 1024 * 1024):
 
 
 COMPRESSORS = dict(
-    bz2=dict(compress=bz2.compress, decompress=_bz2_decompress),
-    zstd=dict(compress=_zstd_compress, decompress=_zstd_decompress),
-    blosc=dict(compress=_blosc_compress, decompress=_blosc_decompress),
-    lz4=dict(compress=lz4.compress, decompress=_lz4_decompress),
+    bz2=dict(compress=bz2.compress, decompress=bz2.decompress, _decompress=_bz2_decompress),
+    zstd=dict(compress=_zstd_compress, decompress=zstd.decompress, _decompress=_zstd_decompress),
+    blosc=dict(
+        compress=_blosc_compress, decompress=blosc.decompress, _decompress=_blosc_decompress
+    ),
+    lz4=dict(compress=lz4.compress, decompress=lz4.decompress, _decompress=_lz4_decompress),
 )
 
 
@@ -90,7 +92,7 @@ def load_file(f, compressor, dtype):
 
 def _load_file(f, compressor, dtype):
     try:
-        data = COMPRESSORS[compressor]["decompress"](f)
+        data = COMPRESSORS[compressor]["_decompress"](f)
         if not len(data):
             return np.zeros(0, dtype=dtype)
         try:
