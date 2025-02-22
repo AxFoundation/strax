@@ -252,10 +252,10 @@ class FileSytemBackend(strax.StorageBackend):
             return json.loads(f.read())
 
     def _read_and_format_chunk(self, *args, **kwargs):
-        for chunk in super()._read_and_format_chunk(*args, **kwargs):
-            if self.set_chunk_size_mb:
-                chunk.target_size_mb = self.set_chunk_size_mb
-            yield chunk
+        chunk = super()._read_and_format_chunk(*args, **kwargs)
+        if self.set_chunk_size_mb:
+            chunk.target_size_mb = self.set_chunk_size_mb
+        return chunk
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = osp.join(dirname, chunk_info["filename"])

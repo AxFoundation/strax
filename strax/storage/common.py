@@ -577,10 +577,25 @@ class StorageBackend:
                 source_size_mb=source_size_mb,
                 chunk_construction_kwargs=chunk_kwargs,
             )
+
             if executor is None:
-                yield from self._read_and_format_chunk(**read_chunk_kwargs)
+                chunk = self._read_and_format_chunk(**read_chunk_kwargs)
             else:
-                yield from executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+                chunk = executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+
+            if not rechunk:
+                yield chunk
+            else:
+                split_indices = strax.Rechunker.get_splits(
+                    chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
+                )
+                for index in split_indices:
+                    _chunk, chunk = chunk.split(
+                        t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
+                        allow_early_split=False,
+                    )
+                    yield _chunk
+                yield chunk
 
     def _read_and_format_chunk(
         self,
@@ -621,28 +636,10 @@ class StorageBackend:
             **chunk_construction_kwargs,
         )
 
-        if not rechunk:
-            if time_range:
-                yield self.apply_time_range(chunk, time_range)
-            else:
-                yield chunk
+        if time_range:
+            return self.apply_time_range(chunk, time_range)
         else:
-            split_indices = strax.Rechunker.get_splits(
-                chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
-            )
-            for index in split_indices:
-                _chunk, chunk = chunk.split(
-                    t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
-                    allow_early_split=False,
-                )
-                if time_range:
-                    yield self.apply_time_range(_chunk, time_range)
-                else:
-                    yield _chunk
-            if time_range:
-                yield self.apply_time_range(chunk, time_range)
-            else:
-                yield chunk
+            return chunk
 
     @staticmethod
     def apply_time_range(chunk, time_range):
