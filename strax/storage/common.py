@@ -573,29 +573,42 @@ class StorageBackend:
                 metadata=metadata,
                 chunk_info=chunk_info,
                 time_range=time_range,
-                rechunk=rechunk,
-                source_size_mb=source_size_mb,
                 chunk_construction_kwargs=chunk_kwargs,
             )
 
-            if executor is None:
-                chunk = self._read_and_format_chunk(**read_chunk_kwargs)
-            else:
-                chunk = executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+            yield from self._read_format_split_chunk(
+                read_chunk_kwargs=read_chunk_kwargs,
+                rechunk=rechunk,
+                source_size_mb=source_size_mb,
+                executor=executor,
+            )
 
-            if not rechunk:
-                yield chunk
-            else:
-                split_indices = strax.Rechunker.get_splits(
-                    chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
+    def _read_format_split_chunk(
+        self,
+        read_chunk_kwargs,
+        rechunk,
+        source_size_mb,
+        executor=None,
+    ):
+        """Read and format a chunk, possibly splitting it into smaller chunks."""
+        if executor is None:
+            chunk = self._read_and_format_chunk(**read_chunk_kwargs)
+        else:
+            chunk = executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+
+        if not rechunk:
+            yield chunk
+        else:
+            split_indices = strax.Rechunker.get_splits(
+                chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
+            )
+            for index in split_indices:
+                _chunk, chunk = chunk.split(
+                    t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
+                    allow_early_split=False,
                 )
-                for index in split_indices:
-                    _chunk, chunk = chunk.split(
-                        t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
-                        allow_early_split=False,
-                    )
-                    yield _chunk
-                yield chunk
+                yield _chunk
+            yield chunk
 
     def _read_and_format_chunk(
         self,
@@ -605,8 +618,6 @@ class StorageBackend:
         metadata,
         chunk_info,
         time_range,
-        rechunk,
-        source_size_mb,
         chunk_construction_kwargs,
     ) -> strax.Chunk:
         if chunk_info["n"] == 0:
