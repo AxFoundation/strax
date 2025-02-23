@@ -43,6 +43,7 @@ scipy = "*"
 tqdm = ">=4.46.0"
 zarr = "<3.0.0"
 zstd = "*"
+zstandard = "*"
 sphinx = { version = "*", optional = true }
 sphinx_rtd_theme = { version = "*", optional = true }
 nbsphinx = { version = "*", optional = true }
