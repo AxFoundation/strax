@@ -1,3 +1,14 @@
+2.1.2 / 2025-02-24
+---------------------
+* Allow `depends_on` rechunking by @dachengx in https://github.com/AxFoundation/strax/pull/975
+* Save memory when decompressing data by @dachengx in https://github.com/AxFoundation/strax/pull/976
+* Use `zstandard` to decompress chunks to save memory by @dachengx in https://github.com/AxFoundation/strax/pull/977
+* Prevent unnecessary reference to chunks by @dachengx in https://github.com/AxFoundation/strax/pull/979
+* Add `DECOMPRESS_BUFFER_SIZE` by @dachengx in https://github.com/AxFoundation/strax/pull/980
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.1...v2.1.2
+
+
 2.1.1 / 2025-02-13
 ---------------------
 * Clip `center_time` to be within the `time` and `endtime` by @dachengx in https://github.com/AxFoundation/strax/pull/973
