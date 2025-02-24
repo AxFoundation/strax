@@ -7,6 +7,7 @@ import json
 import numpy as np
 import blosc
 import zstd
+import zstandard
 import lz4.frame as lz4
 from ast import literal_eval
 
@@ -40,9 +41,11 @@ def _bz2_decompress(f, buffer_size=DECOMPRESS_BUFFER_SIZE):
 _zstd_compress = lambda data: zstd.compress(data, 3, 1)
 
 
-def _zstd_decompress(f):
-    data = f.read()
-    data = zstd.decompress(data)
+def _zstd_decompress(f, chunk_size=64 * 1024 * 1024):
+    decompressor = zstandard.ZstdDecompressor().decompressobj()
+    data = bytearray()  # Efficient mutable storage
+    for d in iter(lambda: f.read(chunk_size), b""):
+        data.extend(decompressor.decompress(d))
     return data
 
 
@@ -181,5 +184,10 @@ def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
         x = load_chunk(chunk_info)
         x = strax.apply_selection(x, **kwargs)
         results.append(x)
-    results = np.hstack(results)
+
+    # No need to hstack if only one chunk is loaded
+    if len(results) == 1:
+        results = results[0]
+    else:
+        results = np.hstack(results)
     return results if len(results) else np.empty(0, dtype)
