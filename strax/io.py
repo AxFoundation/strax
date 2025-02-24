@@ -14,6 +14,9 @@ import strax
 from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
+__all__.extend(["DECOMPRESS_BUFFER_SIZE"])
+
+DECOMPRESS_BUFFER_SIZE = 64 * 1024 * 1024  # 64 MB
 
 # use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
 tqdm = strax.utils.tqdm
@@ -22,10 +25,10 @@ blosc.set_releasegil(True)
 blosc.set_nthreads(1)
 
 
-def _bz2_decompress(f, chunk_size=64 * 1024 * 1024):
+def _bz2_decompress(f, buffer_size=DECOMPRESS_BUFFER_SIZE):
     decompressor = bz2.BZ2Decompressor()
     data = bytearray()  # Efficient mutable storage
-    for d in iter(lambda: f.read(chunk_size), b""):
+    for d in iter(lambda: f.read(buffer_size), b""):
         data.extend(decompressor.decompress(d))
     return data
 
@@ -55,10 +58,10 @@ def _blosc_decompress(f):
     return data
 
 
-def _lz4_decompress(f, chunk_size=64 * 1024 * 1024):
+def _lz4_decompress(f, buffer_size=DECOMPRESS_BUFFER_SIZE):
     decompressor = lz4.LZ4FrameDecompressor()
     data = bytearray()  # Efficient mutable storage
-    for d in iter(lambda: f.read(chunk_size), b""):
+    for d in iter(lambda: f.read(buffer_size), b""):
         data.extend(decompressor.decompress(d))
     return data
 
