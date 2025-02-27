@@ -602,7 +602,7 @@ class StorageBackend:
             split_indices = strax.Rechunker.get_splits(
                 chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
             )
-            for index in split_indices:
+            for index in np.diff(split_indices):
                 _chunk, chunk = chunk.split(
                     t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
                     allow_early_split=False,
