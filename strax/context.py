@@ -2472,15 +2472,6 @@ class Context:
                 run_id, target, chunk_number={per_chunked_dependency: chunk_number}
             )
 
-        # Usually we want to save in the same storage frontend
-        # Here we assume that the target is stored chunk by chunk of the dependency
-        source_sf = self.get_source_sf(
-            run_id,
-            target,
-            chunk_number={per_chunked_dependency: chunk_number},
-            should_exist=True,
-        )[0]
-
         # Get the target storage frontends
         target_sf = self._get_target_sf(run_id, target, target_frontend_id)
 
@@ -2490,6 +2481,13 @@ class Context:
                 # Mostly revised from self.copy_to_frontend
                 # Get the info from the source backend (s_be) that we need to fill
                 # the target backend (t_be) with
+                # Here we assume that the target is stored chunk by chunk of the dependency
+                source_sf = self.get_source_sf(
+                    run_id,
+                    target,
+                    chunk_number={per_chunked_dependency: chunk_number},
+                    should_exist=True,
+                )[0]
                 data_key = self.key_for(
                     run_id, target, chunk_number={per_chunked_dependency: chunk_number}
                 )
