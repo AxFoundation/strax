@@ -1,3 +1,11 @@
+2.1.3 / 2025-03-02
+---------------------
+* Prevent infinite loop in `get_splits` by @dachengx in https://github.com/AxFoundation/strax/pull/983
+* All copy data from multiple per-chunk storage by @dachengx in https://github.com/AxFoundation/strax/pull/984
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.2...v2.1.3
+
+
 2.1.2 / 2025-02-24
 ---------------------
 * Allow `depends_on` rechunking by @dachengx in https://github.com/AxFoundation/strax/pull/975
