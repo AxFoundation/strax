@@ -16,7 +16,7 @@ NO_RECORD_LINK = -1
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def baseline(
     records, baseline_samples=40, flip=True, allow_sloppy_chunking=False, fallback_baseline=16000
 ):
@@ -81,7 +81,7 @@ def record_length_from_dtype(dtype):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def zero_out_of_bounds(records):
     """Set waveforms to zero out of pulse bounds."""
     if not len(records):
@@ -94,7 +94,7 @@ def zero_out_of_bounds(records):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def integrate(records):
     """Integrate records in-place."""
     if not len(records):
@@ -109,7 +109,7 @@ def integrate(records):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def record_links(records):
     """Return (prev_r, next_r), each arrays of indices of previous/next record in the same pulse, or
     -1 if this is not applicable."""
@@ -373,7 +373,7 @@ def filter_waveforms(ws, ir, prev_r, next_r):
     return result
 
 
-@numba.jit(nopython=True, cache=True, nogil=True)
+@numba.njit(cache=True, nogil=True)
 def _combine_filter_results(result, to_next, to_prev, next_r, prev_r, maxi, n):
     seen_that_have_next = 0
     seen_that_have_prev = 0

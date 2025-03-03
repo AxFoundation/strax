@@ -4,6 +4,7 @@ A 'plugin' is something that outputs an array and gets arrays from one or more o
 
 """
 
+import sys
 from enum import IntEnum
 from collections import Counter
 import inspect
@@ -69,8 +70,13 @@ class Plugin:
 
     compressor = "blosc"
 
+    rechunk_on_load = False  # Loader is allowed to rechunk
+    # How large (uncompressed) should re-chunked source be?
+    # Meaningless if rechunk_on_load is False
+    chunk_source_size_mb = strax.DEFAULT_CHUNK_SIZE_MB
+
     rechunk_on_save = True  # Saver is allowed to rechunk
-    # How large (uncompressed) should re-chunked chunks be?
+    # How large (uncompressed) should re-chunked target be?
     # Meaningless if rechunk_on_save is False
     chunk_target_size_mb = strax.DEFAULT_CHUNK_SIZE_MB
 
@@ -103,8 +109,9 @@ class Plugin:
     compute_takes_chunk_i = False  # Autoinferred, no need to set yourself
     compute_takes_start_end = False
 
+    chunk_number = None
     allow_superrun = False
-
+    clean_chunk_after_compute = False
     gc_collect_after_compute = False
 
     def __init__(self):
@@ -151,6 +158,12 @@ class Plugin:
         if getattr(self, "provides", None):
             self.provides = strax.to_str_tuple(self.provides)
         self.compute_pars = compute_pars
+
+        if self.rechunk_on_load and self.clean_chunk_after_compute:
+            raise ValueError(
+                f"{self.__class__.__name__} has rechunk_on_load and clean_chunk_after_compute "
+                "set to True. This is not allowed."
+            )
         self.input_buffer = dict()
 
     def __copy__(self, _deep_copy=False):
@@ -211,6 +224,13 @@ class Plugin:
     def run_id(self, run_id):
         self._run_id = run_id
         self.__run_id = strax.Context._process_superrun_id(run_id)
+
+    @property
+    def first_chunk(self):
+        if self.compute_takes_chunk_i and self.chunk_number:
+            return self.chunk_number[0]
+        else:
+            return 0
 
     @property
     def is_superrun(self):
@@ -446,7 +466,11 @@ class Plugin:
             pass
 
         try:
-            for chunk_i in itertools.count():
+            if self.compute_takes_chunk_i and self.chunk_number:
+                chunk_i_generator = self.chunk_number
+            else:
+                chunk_i_generator = itertools.count()
+            for chunk_i in chunk_i_generator:
                 # Online input support
                 while not self.is_ready(chunk_i):
                     if self.source_finished():
@@ -471,7 +495,7 @@ class Plugin:
                 if pacemaker is None:
                     inputs_merged = dict()
                 else:
-                    if chunk_i != 0:
+                    if chunk_i != self.first_chunk:
                         # Fetch the pacemaker, to figure out when this chunk ends
                         # (don't do it for chunk 0, for which we already fetched)
                         if not self._fetch_chunk(pacemaker, iters):
@@ -667,13 +691,27 @@ class Plugin:
         )
         subruns = self._check_subruns_uniqueness(kwargs, {k: v.subruns for k, v in kwargs.items()})
 
-        kwargs = {k: v.data for k, v in kwargs.items()}
+        _kwargs = {k: v.data for k, v in kwargs.items()}
         if self.compute_takes_chunk_i:
-            kwargs["chunk_i"] = chunk_i
+            _kwargs["chunk_i"] = chunk_i
         if self.compute_takes_start_end:
-            kwargs["start"] = start
-            kwargs["end"] = end
-        result = self.compute(**kwargs)
+            _kwargs["start"] = start
+            _kwargs["end"] = end
+        result = self.compute(**_kwargs)
+        del _kwargs
+
+        if self.clean_chunk_after_compute:
+            # Free memory by deleting the input chunks
+            keys = list(kwargs.keys())
+            for k in keys:
+                # Minus one accounts for reference created by sys.getrefcount itself
+                n = sys.getrefcount(kwargs[k].data) - 1
+                if n != 1:
+                    raise ValueError(
+                        f"Reference count of input {k} is {n} "
+                        "and should be 1. This is a memory leak."
+                    )
+                del kwargs[k].data
         return self._fix_output(result, start, end, superrun, subruns)
 
     @staticmethod

@@ -81,8 +81,7 @@ def concat_overlapping_hits(hits, extensions, pmt_channels, start, end):
     last_hit_in_channel = np.zeros(
         nchannels,
         dtype=(
-            strax.hit_dtype
-            + [(("End time of the interval (ns since unix epoch)", "endtime"), np.int64)]
+            strax.hit_dtype + [(("Exclusive end time since unix epoch [ns]", "endtime"), np.int64)]
         ),
     )
 
@@ -224,7 +223,7 @@ def get_hitlets_data(hitlets, records, to_pe, min_hitlet_sample=200):
     return hitlets_with_data_field
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _get_hitlets_data(hitlets, records, to_pe):
     rranges = _touching_windows(
         records["time"], strax.endtime(records), hitlets["time"], strax.endtime(hitlets)

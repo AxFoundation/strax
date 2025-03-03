@@ -1,3 +1,81 @@
+2.1.3 / 2025-03-02
+---------------------
+* Prevent infinite loop in `get_splits` by @dachengx in https://github.com/AxFoundation/strax/pull/983
+* All copy data from multiple per-chunk storage by @dachengx in https://github.com/AxFoundation/strax/pull/984
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.2...v2.1.3
+
+
+2.1.2 / 2025-02-24
+---------------------
+* Allow `depends_on` rechunking by @dachengx in https://github.com/AxFoundation/strax/pull/975
+* Save memory when decompressing data by @dachengx in https://github.com/AxFoundation/strax/pull/976
+* Use `zstandard` to decompress chunks to save memory by @dachengx in https://github.com/AxFoundation/strax/pull/977
+* Prevent unnecessary reference to chunks by @dachengx in https://github.com/AxFoundation/strax/pull/979
+* Add `DECOMPRESS_BUFFER_SIZE` by @dachengx in https://github.com/AxFoundation/strax/pull/980
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.1...v2.1.2
+
+
+2.1.1 / 2025-02-13
+---------------------
+* Clip `center_time` to be within the `time` and `endtime` by @dachengx in https://github.com/AxFoundation/strax/pull/973
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.0...v2.1.1
+
+
+2.1.0 / 2025-02-03
+---------------------
+* Add a flag indicating whether check subruns' configs by @dachengx in https://github.com/AxFoundation/strax/pull/964
+* Revert "Add a flag indicating whether check subruns' configs" by @dachengx in https://github.com/AxFoundation/strax/pull/965
+* Skip continuity check when using `ExhaustPlugin` by @dachengx in https://github.com/AxFoundation/strax/pull/966
+* Allow two-sided overlapping window by @dachengx in https://github.com/AxFoundation/strax/pull/970
+* Push the latest change by @dachengx in https://github.com/AxFoundation/strax/pull/971
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.5...v2.1.0
+
+
+2.0.5 / 2025-01-24
+---------------------
+* When loader is available, do not save anything by @dachengx in https://github.com/AxFoundation/strax/pull/953
+* Do not cache `find_split_points` by @dachengx in https://github.com/AxFoundation/strax/pull/955
+* Set `chunk_number` as attribute of `Plugin` to pass `chunk_i` by @dachengx in https://github.com/AxFoundation/strax/pull/956
+* First and last channel inside peak(let)s by @dachengx in https://github.com/AxFoundation/strax/pull/954
+* Temporary plugin should keep order of targets by @dachengx in https://github.com/AxFoundation/strax/pull/958
+* Some times the sum of data is zero due to numerical inaccuracy by @dachengx in https://github.com/AxFoundation/strax/pull/959
+* Use `base` of dtype in `set_nan_defaults` by @dachengx in https://github.com/AxFoundation/strax/pull/960
+* Remove `CorrectionsInterface` by @dachengx in https://github.com/AxFoundation/strax/pull/961
+* Drop python 3.9 and loosen requirement of `numpy` by @dachengx in https://github.com/AxFoundation/strax/pull/962
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.4...v2.0.5
+
+
+2.0.4 / 2025-01-13
+---------------------
+* Numbafy `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/946
+* Propagate min/max diff in merged S2s by @WenzDaniel in https://github.com/AxFoundation/strax/pull/937
+* Fix bug of numbafied `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/947
+* Fix `merge_peaks` by removing `endtime` assignment by @dachengx in https://github.com/AxFoundation/strax/pull/948
+* Do not concatenate empty dataframes by @dachengx in https://github.com/AxFoundation/strax/pull/949
+* Collect `endtime` from `_merge_peaks` function by @dachengx in https://github.com/AxFoundation/strax/pull/950
+* `OverlapWindowPlugin` support multiple outputs by @dachengx in https://github.com/AxFoundation/strax/pull/951
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.3...v2.0.4
+
+
+2.0.3 / 2024-12-27
+---------------------
+* Move `set_nan_defaults` from straxen to strax by @dachengx in https://github.com/AxFoundation/strax/pull/936
+* Move `compute_center_times` from straxen to strax by @dachengx in https://github.com/AxFoundation/strax/pull/938
+* First convert to int then add float to keep precision by @dachengx in https://github.com/AxFoundation/strax/pull/939
+* Use `bool` instead of `np.bool_` by @dachengx in https://github.com/AxFoundation/strax/pull/940
+* Calculate `area_fraction_top`, `center_time` and `median_time` at peaklet level by @dachengx in https://github.com/AxFoundation/strax/pull/941
+* Delete input chunks after compute method to save memory by @dachengx in https://github.com/AxFoundation/strax/pull/942
+* Reduce RAM usage of `find_hit_integration_bounds` by @dachengx in https://github.com/AxFoundation/strax/pull/943
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.0.2...v2.0.3
+
+
 2.0.2 / 2024-11-19
 ---------------------
 * Raise error when peaks overlapping in `merge_peaks` by @dachengx in https://github.com/AxFoundation/strax/pull/927

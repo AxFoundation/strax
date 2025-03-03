@@ -193,8 +193,10 @@ def scan_runs(
             docs = new_docs
         else:
             # Keep only new runs (not found by earlier frontends)
-            docs = pd.concat([docs, new_docs[~np.in1d(new_docs["name"], docs["name"])]], sort=False)
-            docs.reset_index(drop=True, inplace=True)
+            mask = ~np.in1d(new_docs["name"], docs["name"])
+            if np.any(mask):
+                docs = pd.concat([docs, new_docs[mask]], sort=False)
+                docs.reset_index(drop=True, inplace=True)
 
     # Rearrange columns
     if not self.context_config["use_per_run_defaults"] and strax.RUN_DEFAULTS_KEY in docs.columns:
@@ -274,7 +276,7 @@ def select_runs(
         requested_value = strax.to_str_tuple(requested_value)
 
         values = dsets[field_name].values
-        mask = np.zeros(len(values), dtype=np.bool_)
+        mask = np.zeros(len(values), dtype=bool)
 
         if pattern_type == "fnmatch":
             for i, x in enumerate(values):
@@ -539,7 +541,7 @@ def _include_exclude_tags(
 
 
 def _tags_match(dsets, patterns, pattern_type, ignore_underscore):
-    result = np.zeros(len(dsets), dtype=np.bool_)
+    result = np.zeros(len(dsets), dtype=bool)
 
     if isinstance(patterns, str):
         patterns = [patterns]

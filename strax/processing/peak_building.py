@@ -9,7 +9,7 @@ export, __all__ = strax.exporter()
 
 @export
 @strax.growing_result(dtype=strax.peak_dtype(), chunk_size=int(1e4))
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def find_peaks(
     hits,
     adc_to_pe,
@@ -135,7 +135,7 @@ def find_peaks(
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def store_downsampled_waveform(
     p,
     waveform_buffer,
@@ -243,7 +243,7 @@ def _simple_summed_waveform(records, containers, touching_windows, to_pe):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def sum_waveform(
     peaks,
     hits,
@@ -251,6 +251,7 @@ def sum_waveform(
     record_links,
     adc_to_pe,
     n_top_channels=0,
+    store_data_top=False,
     store_data_start=False,
     select_peaks_indices=None,
 ):
@@ -263,6 +264,8 @@ def sum_waveform(
     :param records: Records to be used to build peaks.
     :param record_links: Tuple of previous and next records.
     :param n_top_channels: Number of top array channels.
+    :param store_data_top: Boolean which indicates whether to store the top array waveform in the
+        peak.
     :param store_data_start: Boolean which indicates whether to store the first samples of the
         waveform in the peak.
     :param select_peaks_indices: Indices of the peaks for partial processing. In the form of
@@ -286,7 +289,7 @@ def sum_waveform(
     # Need a little more even for downsampling..
     swv_buffer = np.zeros(peaks["length"].max() * 2, dtype=np.float32)
 
-    if n_top_channels > 0:
+    if store_data_top:
         twv_buffer = np.zeros(peaks["length"].max() * 2, dtype=np.float32)
 
     n_channels = len(peaks[0]["area_per_channel"])
@@ -304,7 +307,7 @@ def sum_waveform(
         p_length = p["length"]
         swv_buffer[: min(2 * p_length, len(swv_buffer))] = 0
 
-        if n_top_channels > 0:
+        if store_data_top:
             twv_buffer[: min(2 * p_length, len(twv_buffer))] = 0
 
         # Clear area and area per channel
@@ -373,7 +376,7 @@ def sum_waveform(
             hit_data *= adc_to_pe[ch]
             swv_buffer[p_start:p_end] += hit_data
 
-            if n_top_channels > 0:
+            if store_data_top:
                 if ch < n_top_channels:
                     twv_buffer[p_start:p_end] += hit_data
 
@@ -381,7 +384,7 @@ def sum_waveform(
             area_per_channel[ch] += area_pe
             p["area"] += area_pe
 
-        if n_top_channels > 0:
+        if store_data_top:
             store_downsampled_waveform(
                 p,
                 swv_buffer,
@@ -487,9 +490,10 @@ def find_hit_integration_bounds(
         boundaries. E.g. to negative samples for left side.
 
     """
-    result = np.zeros((len(hits), 2), dtype=np.int64)
     if not len(hits):
-        return result
+        return
+
+    result = np.zeros((len(hits), 2), dtype=np.int64)
 
     # By default, use save_outside_hits to determine bounds
     result[:, 0] = hits["time"] - save_outside_hits[0]
@@ -540,11 +544,11 @@ def find_hit_integration_bounds(
         last_hit_index[ch] = hit_i
 
     # Convert to index in record and store
-    t0 = records[hits["record_i"]]["time"]
-    dt = records[hits["record_i"]]["dt"]
     for hit_i, h in enumerate(hits):
-        h["left_integration"] = (result[hit_i, 0] - t0[hit_i]) // dt[hit_i]
-        h["right_integration"] = (result[hit_i, 1] - t0[hit_i]) // dt[hit_i]
+        t0 = records["time"][hits["record_i"][hit_i]]
+        dt = records["dt"][hits["record_i"][hit_i]]
+        h["left_integration"] = (result[hit_i, 0] - t0) // dt
+        h["right_integration"] = (result[hit_i, 1] - t0) // dt
 
 
 @export

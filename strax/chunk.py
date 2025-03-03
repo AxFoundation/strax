@@ -1,4 +1,5 @@
 import typing as ty
+from warnings import warn
 
 import numpy as np
 import numba
@@ -149,6 +150,15 @@ class Chunk:
             _subrun = self._get_subrun(-1)
         return _subrun
 
+    @property
+    def promised_continuity(self):
+        if not self.is_superrun:
+            return True
+        # TODO: be more clever on this?
+        # Subruns start and end does not match with chunk start and end.
+        # This might mean that you are using ExhaustPlugin.
+        return self.first_subrun["start"] == self.start and self.last_subrun["end"] == self.end
+
     def _get_subrun(self, index):
         """Returns subrun according to position in chunk."""
         run_id = list(self.subruns.keys())[index]
@@ -206,9 +216,9 @@ class Chunk:
         """
         t = max(min(t, self.end), self.start)  # type: ignore
         if t == self.end:
-            data1, data2 = self.data, self.data[:0]
+            data1, data2 = self.data, self.data[:0].copy()
         elif t == self.start:
-            data1, data2 = self.data[:0], self.data
+            data1, data2 = self.data[:0].copy(), self.data
         else:
             data1, data2, t = split_array(data=self.data, t=t, allow_early_split=allow_early_split)
 
@@ -219,7 +229,12 @@ class Chunk:
             target_size_mb=self.target_size_mb,
         )
 
-        subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        if self.promised_continuity:
+            subruns_first_chunk, subruns_second_chunk = _split_runs_in_chunk(self.subruns, t)
+        else:
+            # The split will not update the subruns or superrun.
+            subruns_first_chunk = subruns_second_chunk = self.subruns
+
         superrun_first_chunk, superrun_second_chunk = _split_runs_in_chunk(self.superrun, t)
         # If the superrun is split and the fragment cover only one run,
         # you need to recover the run_id
@@ -297,6 +312,7 @@ class Chunk:
             data_kind=data_kind,
             run_id=run_id,
             data=data,
+            subruns=_merge_subruns_in_chunk(chunks, merge=True),
             superrun=_merge_superrun_in_chunk(chunks, merge=True),
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
@@ -329,7 +345,11 @@ class Chunk:
         else:
             run_id = None
             superrun = _merge_superrun_in_chunk(chunks)
-        subruns = _merge_subruns_in_chunk(chunks)
+        try:
+            subruns = _merge_subruns_in_chunk(chunks, merge=False)
+        except ValueError:
+            warn("The subruns are not continuous, try merge mode.")
+            subruns = _merge_subruns_in_chunk(chunks, merge=True)
 
         prev_end = 0
         for c in chunks:
@@ -366,13 +386,12 @@ def continuity_check(chunk_iter):
             last_subrun = {"run_id": None}
 
         if chunk.is_superrun:
-            _subrun = chunk.first_subrun
-            if _subrun["run_id"] != last_subrun["run_id"]:
+            if chunk.first_subrun["run_id"] != last_subrun["run_id"]:
                 last_end = None
             else:
                 last_end = last_subrun["end"]
 
-        if last_end is not None:
+        if last_end is not None and chunk.promised_continuity:
             if chunk.start != last_end:
                 raise ValueError(
                     f"Data is not continuous. Chunk {chunk} should have started at {last_end}"
@@ -417,8 +436,10 @@ def split_array(data, t, allow_early_split=False):
     splittable_i = 0
     i_first_beyond = -1
     for i, d in enumerate(data):
+        # only non-overlapping data can be split
         if d["time"] >= latest_end_seen:
             splittable_i = i
+        # can not split beyond t
         if d["time"] >= t:
             i_first_beyond = i
             break
@@ -485,7 +506,7 @@ def _mergable_check(merged_runs, merge=False):
         }
 
 
-def _merge_subruns_in_chunk(chunks):
+def _merge_subruns_in_chunk(chunks, merge=False):
     """Merge list of subruns in a superrun chunk during concatenation.
 
     Updates also their start/ends too.
@@ -494,7 +515,7 @@ def _merge_subruns_in_chunk(chunks):
     subruns = dict()
     for c_i, c in enumerate(chunks):
         _merge_runs_in_chunk(c.subruns, subruns)
-    _mergable_check(subruns)
+    _mergable_check(subruns, merge)
     if subruns:
         return subruns
     else:
@@ -585,7 +606,7 @@ class Rechunker:
         split_indices = self.get_splits(chunk.data, target_size_b, DEFAULT_CHUNK_SPLIT_NS)
         # Split the cache into chunks and return list of chunks
         chunks = []
-        for index in split_indices:
+        for index in np.diff(split_indices):
             _chunk, chunk = chunk.split(
                 t=chunk.data["time"][index] - int(DEFAULT_CHUNK_SPLIT_NS // 2),
                 allow_early_split=False,
@@ -607,12 +628,19 @@ class Rechunker:
     def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT_NS):
         """Get indices where to split the data into chunks of approximately target_size."""
         assumed_i = int(target_size // data.itemsize)
+        if assumed_i == 0:
+            raise ValueError("Target size is too small.")
         gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
         split_indices = [0]
+        argmin = 0
         if len(gap_indices) != 0:
+            n = 0
             while split_indices[-1] + assumed_i < gap_indices[-1]:
-                split_indices.append(
-                    gap_indices[np.abs(gap_indices - assumed_i - split_indices[-1]).argmin()]
-                )
-        split_indices = np.diff(split_indices)
+                if n > len(data):
+                    raise ValueError("Trapped in infinite loop!")
+                _argmin = np.abs(gap_indices[argmin + 1 :] - assumed_i - split_indices[-1]).argmin()
+                split_indices.append(gap_indices[argmin + 1 :][_argmin])
+                argmin += _argmin + 1
+                n += 1
+        split_indices = np.array(split_indices)
         return split_indices

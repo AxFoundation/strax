@@ -44,7 +44,7 @@ def sort_by_time(x):
     return x
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _sort_by_time_and_channel(x, channel, max_channel_plus_one, sort_kind="mergesort"):
     """Assumes you have no more than 10k channels, and records don't span more than 11 days.
 
@@ -80,7 +80,7 @@ def _overload_endtime(x):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def diff(data):
     """Return time differences between items in data."""
     # we are sure that time is np.int64
@@ -95,7 +95,7 @@ def diff(data):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def from_break(x, safe_break, not_before=0, left=True, tolerant=False):
     """Return records on side of a break at least safe_break long If there is no such break, return
     the best break found."""
@@ -121,7 +121,7 @@ class NoBreakFound(Exception):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _find_break_i(data, safe_break, not_before):
     """Return first index of element right of the first gap larger than safe_break in data. Assumes
     all x have the same length and are sorted!
@@ -180,7 +180,7 @@ def fully_contained_in(things, containers):
     return _fully_contained_in(things, containers)
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _fully_contained_in(things, containers):
     """Core function of fully_contained_in."""
     result = np.ones(len(things), dtype=np.int32) * -1
@@ -192,7 +192,7 @@ def _fully_contained_in(things, containers):
     return result
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
     b_i = 0
     for a_i in range(len(a_starts)):
@@ -230,7 +230,7 @@ def split_by_containment(things, containers):
     return _split_by_containment(things, containers)
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _split_by_containment(things, containers):
     # Index of which container each thing belongs to, or -1
     which_container = _fully_contained_in(things, containers)
@@ -308,7 +308,7 @@ def _get_empty_container_ids(n_containers, full_container_ids):
 
 
 @export
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def overlap_indices(a1, n_a, b1, n_b):
     """Given interval [a1, a1 + n_a), and [b1, b1 + n_b) of integers, return indices [a_start,
     a_end), [b_start, b_end) of overlapping region."""
@@ -455,21 +455,21 @@ def _touching_windows(
     return result
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _check_time_is_sorted(time):
     """Check if times are sorted."""
     mask = np.all((time[1:] - time[:-1]) >= 0)
     assert mask
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _check_objects_non_negative_length(objects):
     """Checks if objects have non-negative length."""
     mask = np.all(strax.endtime(objects) >= objects["time"])
     assert mask
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@numba.njit(nogil=True, cache=True)
 def _check_objects_are_not_overlapping(objects):
     """Checks if objects overlap in time."""
     mask = np.all(objects["time"][1:] - strax.endtime(objects)[:-1] >= 0)
