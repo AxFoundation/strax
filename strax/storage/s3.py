@@ -1,14 +1,11 @@
-import glob
 import json
 import os
 import os.path as osp
 from typing import Optional
 from bson import json_util
-import shutil
 import boto3
 from botocore.exceptions import ClientError
 from botocore.client import Config
-import configparser
 
 import strax
 from .common import StorageFrontend
@@ -447,7 +444,7 @@ class S3Backend(strax.StorageBackend):
 
         parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
 
-        return S3Saver(dirname, self.s3, self.bucket_name, metadata=metadata, **kwargs)
+        return S3Saver(parent_dir, self.s3, self.bucket_name, metadata=metadata, **kwargs)
 
 
 @export
@@ -498,7 +495,7 @@ class S3Saver(strax.Saver):
         # Convert the metadata dictionary to a JSON string
         metadata_content = json.dumps(self.md, **self.json_options)
 
-        # Define the S3 key for the metadata file (similar to a file path in a traditional file system)
+        # Define the S3 key for the metadata file 
         metadata_key = f"{self.tempdirname}/{self.metadata_json}"
 
         # Upload the metadata to S3
@@ -590,7 +587,7 @@ class S3Saver(strax.Saver):
             # Flush metadata (this would be another method to handle your metadata saving logic)
             self._flush_metadata()
 
-            # Rename the directory by copying all files from tempdirname to dirname and deleting from tempdirname
+            # Rename directory by copying all files from tempdirname to dirname
             self._rename_s3_folder(self.tempdirname, self.dirname)
 
         except ClientError as e:

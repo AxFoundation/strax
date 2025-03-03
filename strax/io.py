@@ -109,7 +109,7 @@ def load_file_from_s3(key, compressor, dtype, bucket_name):
     s3 = strax.S3Frontend().s3
 
     try:
-        data = COMPRESSORS[compressor]["_decompress"](f)
+        data = COMPRESSORS[compressor]["_decompress"](key)
         if not len(data):
             return np.zeros(0, dtype=dtype)
 
