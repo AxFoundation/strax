@@ -202,12 +202,15 @@ class S3Frontend(StorageFrontend):
 
     def s3_object_exists(self, bucket_name, key):
         try:
-            response = self.s3.list_objects_v2(Bucket=bucket_name, Prefix=key)
+            response = self.s3.list_objects_v2(Bucket=bucket_name, 
+                                               Prefix=key,
+                                               Delimiter='/')
 
             # Check if any objects were returned, and if the key exactly matches
-            if "Contents" in response:
-                for obj in response["Contents"]:
-                    if obj["Key"] == key:
+            if "CommonPrefixes" in response:
+                for prefix in response["CommonPrefixes"]:
+                    new_key = key + "/"
+                    if prefix["Prefix"].startswith(new_key):
                         return True  # Object exists
 
             return False  # Object does not exist
@@ -350,7 +353,11 @@ class S3Backend(strax.StorageBackend):
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
         fn = osp.join(dirname, chunk_info["filename"])
-        return strax.load_file(fn, dtype=dtype, compressor=compressor)
+        return strax.load_file(fn, dtype=dtype, 
+                               compressor=compressor, 
+                               S3_client=self.s3, 
+                               bucket_name = self.BUCKET,
+                               is_s3_path=True)
 
     def _saver(self, dirname, metadata, **kwargs):
         # Test if the parent directory is writeable.
