@@ -495,7 +495,7 @@ class S3Saver(strax.Saver):
         # Convert the metadata dictionary to a JSON string
         metadata_content = json.dumps(self.md, **self.json_options)
 
-        # Define the S3 key for the metadata file 
+        # Define the S3 key for the metadata file
         metadata_key = f"{self.tempdirname}/{self.metadata_json}"
 
         # Upload the metadata to S3
