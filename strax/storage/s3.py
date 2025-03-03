@@ -21,10 +21,10 @@ BUCKET_NAME = "mlrice"
 
 @export
 class S3Frontend(StorageFrontend):
-    """Simplest registry: single directory with FileStore data
-    sitting in subdirectories.
-
-    Run-level metadata is stored in loose json files in the directory.
+    """
+    A storage frontend that interacts with an S3-compatible object storage.
+    This class handles run-level metadata storage and retrieval, as well as 
+    scanning for available runs.
     """
 
     can_define_runs = True
@@ -38,15 +38,22 @@ class S3Frontend(StorageFrontend):
         s3_secret_access_key: str = None,
         endpoint_url: str = "https://rice1.osn.mghpcc.org/",
         path: str = "",
+        bucket_name: str = "",
         deep_scan: bool = False,
         *args,
         **kwargs,
     ):
         """
-        :param path: Path to folder with data subfolders.
-        :param deep_scan: Let scan_runs scan over folders,
-        so even data for which no run-level metadata is available
-        is reported.
+        Initialize S3Frontend with given storage parameters
+
+        :param s3_access_key_id: AWS access key for authentication.
+        :param s3_secret_access_key: AWS secret key for authentication.
+        :param endpoint_url: URL of the S3-compatible object storage.
+        :param path: Base path for storing data.
+        :param bucket_name: Name of the S3 bucket to use.
+        :param deep_scan: If True, scans for runs even without explicit metadata.
+        :param args: Additional arguments passed to the superclass.
+        :param kwargs: Additional keyword arguments passed to the superclass.
 
         For other arguments, see DataRegistry base class.
         """
@@ -54,23 +61,7 @@ class S3Frontend(StorageFrontend):
         self.path = path
         self.deep_scan = deep_scan
 
-        # Might need to reimplement this at some later time
-        # if not self.readonly and not osp.exists(self.path):
-        #    os.makedirs(self.path)
-
-        self.config_path = os.getenv("XENON_CONFIG")
-        if self.config_path is None:
-            raise EnvironmentError("XENON_CONFIG file not found")
-        else:
-            self.config = configparser.ConfigParser()
-            self.config.read(self.config_path)
-
-            s3_access_key_id = self._get_config_value(s3_access_key_id, "aws_access_key_id")
-            s3_secret_access_key = self._get_config_value(
-                s3_secret_access_key, "aws_secret_access_key"
-            )
-            endpoint_url = self._get_config_value(endpoint_url, "endpoint_url")
-
+        # Configure S3 client
         self.boto3_client_kwargs = {
             "aws_access_key_id": s3_access_key_id,
             "aws_secret_access_key": s3_secret_access_key,
@@ -79,130 +70,82 @@ class S3Frontend(StorageFrontend):
             "config": Config(connect_timeout=5, retries={"max_attempts": 10}),
         }
 
-        #  Initialized connection to S3-protocol storage
+        if bucket_name != "":
+            self.bucket_name = bucket_name
+
+        #  Initialized connection to S3 storage
         self.s3 = boto3.client(**self.boto3_client_kwargs)
+        self.backends = [S3Backend(self.bucket_name, **self.boto3_client_kwargs)]
 
-        self.backends = [S3Backend(**self.boto3_client_kwargs)]
+    def _run_meta_path(self, run_id: str) -> str:
+        """
+        Generate the metadata file path for a given run ID.
 
-    def _run_meta_path(self, run_id):
+        :param run_id: The identifier of the run.
+
+
+        :return: The path where the metadata is stored.
+        """
         return osp.join(self.path, RUN_METADATA_PATTERN % run_id)
 
-    def run_metadata(self, run_id, projection=None):
+    def run_metadata(self, run_id: str, projection=None) -> dict:
+        """
+        Retrieve metadata for a given run from S3.
+
+        Parameters
+        ----------
+
+        run_id : (str)
+            The identifier of the run.
+        projection : 
+            Fields to extract from metadata (optional).
+        :return: Run metadata as a dictionary.
+        """
         path = self._run_meta_path(run_id)
-        # Changed ops. to self.s3 implementation
-        if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=path)["KeyCount"] == 0:
+        
+        # Checks if metadata exists
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, 
+                                   Prefix=path)["KeyCount"] == 0:
             raise strax.RunMetadataNotAvailable(
                 f"No file at {path}, cannot find run metadata for {run_id}"
             )
-        response = self.s3.get_object(Bucket=self.BUCKET, Key=path)
+
+        # Retrieve metadata
+        response = self.s3.get_object(Bucket=self.bucket_name, Key=path)
         metadata_content = response["Body"].read().decode("utf-8")
         md = json.loads(metadata_content, object_hook=json_util.object_hook)
-        # with open(path, mode="r") as f:
-        #    md = json.loads(f.read(), object_hook=json_util.object_hook)
         md = strax.flatten_run_metadata(md)
+
         if projection is not None:
             md = {key: value for key, value in md.items() if key in projection}
         return md
 
-    def write_run_metadata(self, run_id, metadata):
-        # response = self.s3.get_object(Bucket=self.BUCKET, Key=self._run_meta_path(run_id))
-        # metadata_content = response['Body'].read().decode('utf-8')
+    def write_run_metadata(self, run_id: str, metadata: dict):
+        """
+        Write metadata for a specific run to S3.
+
+        :param run_id: The identifier of the run.
+        :param metadata: The metadata dictionary to store.
+        """
         if "name" not in metadata:
             metadata["name"] = run_id
 
         self.s3.put_object(
-            Bucket=self.BUCKET,
+            Bucket=self.bucket_name,
             Key=self._run_meta_path(run_id),
-            Body=json.dumps(metadata, sort_keys=True, indent=4, default=json_util.default),
+            Body=json.dumps(metadata, sort_keys=True, 
+                            indent=4, default=json_util.default),
         )
-        # with open(self._run_meta_path(run_id), mode="w") as f:
-        #    if "name" not in metadata:
-        #        metadata["name"] = run_id
-        #    f.write(json.dumps(metadata, sort_keys=True, indent=4, default=json_util.default))
 
-    def _scan_runs(self, store_fields):
-        """Iterable of run document dictionaries.
-
-        These should be directly convertable to a pandas DataFrame.
-
+    def s3_object_exists(self, key) -> bool:
         """
-        found = set()
+        Check if a given object exists in the S3 bucket.
 
-        # Yield metadata for runs for which we actually have it
-        for md_path in sorted(
-            self.s3.list_objects_v2(
-                Bucket=self.BUCKET,
-                Prefix=osp.join(self.path, RUN_METADATA_PATTERN.replace("%s", "*")),
-            )
-        ):
-            # Parse the run metadata filename pattern.
-            # (different from the folder pattern)
-            run_id = osp.basename(md_path).split("-")[0]
-            found.add(run_id)
-            yield self.run_metadata(run_id, projection=store_fields)
-
-        if self.deep_scan:
-            # Yield runs for which no metadata exists
-            # we'll make "metadata" that consist only of the run name
-            for fn in self._subfolders():
-                run_id = self._parse_folder_name(fn)[0]
-                if run_id not in found:
-                    found.add(run_id)
-                    yield dict(name=run_id)
-
-    def _find(self, key, write, allow_incomplete, fuzzy_for, fuzzy_for_options):
-        self.raise_if_non_compatible_run_id(key.run_id)
-        dirname = osp.join(self.path, str(key))
-        exists = self.s3_object_exists(self.BUCKET, dirname)
-        bk = self.backend_key(dirname)
-
-        if write:
-            if exists and not self._can_overwrite(key):
-                raise strax.DataExistsError(at=dirname)
-            return bk
-
-        if allow_incomplete and not exists:
-            # Check for incomplete data (only exact matching for now)
-            if fuzzy_for or fuzzy_for_options:
-                raise NotImplementedError(
-                    "Mixing of fuzzy matching and allow_incomplete not supported by DataDirectory."
-                )
-            tempdirname = dirname + "_temp"
-            bk = self.backend_key(tempdirname)
-            if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=tempdirname)["KeyCount"] >= 0:
-                return bk
-
-        # Check exact match
-        if exists and self._folder_matches(dirname, key, None, None):
-            return bk
-
-        # Check metadata of all potentially matching data dirs for
-        # matches. This only makes sense for fuzzy searches since
-        # otherwise we should have had an exact match already. (Also
-        # really slows down st.select runs otherwise because we doing an
-        # entire search over all the files in self._subfolders for all
-        # non-available keys).
-        if fuzzy_for or fuzzy_for_options:
-            for fn in self._subfolders():
-                if self._folder_matches(fn, key, fuzzy_for, fuzzy_for_options):
-                    return self.backend_key(fn)
-
-        raise strax.DataNotAvailable
-
-    def _get_config_value(self, variable, option_name):
-        if variable is None:
-            if "s3" not in self.config:
-                raise EnvironmentError("S3 access point not spesified")
-            if not self.config.has_option("s3", option_name):
-                raise EnvironmentError(f"S3 access point lacks a {option_name}")
-            return self.config.get("s3", option_name)
-
-        else:
-            return variable
-
-    def s3_object_exists(self, bucket_name, key):
+        :param key: The object key to check.
+        :return: True if the object exists, otherwise False.
+        """
         try:
-            response = self.s3.list_objects_v2(Bucket=bucket_name, 
+            response = self.s3.list_objects_v2(Bucket=self.bucket_name, 
                                                Prefix=key,
                                                Delimiter='/')
 
@@ -215,13 +158,106 @@ class S3Frontend(StorageFrontend):
 
             return False  # Object does not exist
         except ClientError as e:
-            # Handle any other error as needed
             raise e
+
+    def _scan_runs(self, store_fields):
+        """
+        Scan for available runs stored in S3.
+
+        :param store_fields: List of metadata fields to return.
+        :return: Yields dictionaries of run metadata.
+        """
+        found = set()
+
+        # Retrieve stored runs from S3
+        for md_path in sorted(
+            self.s3.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=osp.join(self.path, RUN_METADATA_PATTERN.replace("%s", "*")),
+            )
+        ):
+            run_id = osp.basename(md_path).split("-")[0]
+            found.add(run_id)
+            yield self.run_metadata(run_id, projection=store_fields)
+
+        # Preform deepscan if enabled
+        if self.deep_scan:
+            for fn in self._subfolders():
+                run_id = self._parse_folder_name(fn)[0]
+                if run_id not in found:
+                    found.add(run_id)
+                    yield dict(name=run_id)
+
+    def _find(self, key, write, allow_incomplete, fuzzy_for, fuzzy_for_options):
+        """
+        Find the appropriate storage key for a given dataset.
+
+        :param key: The dataset key.
+        :param write: Whether to check for writable access.
+        :param allow_incomplete: Allow incomplete datasets.
+        :param fuzzy_for: Parameters for fuzzy search.
+        :param fuzzy_for_options: Additional fuzzy search options.
+        :return: The backend key if found, otherwise raises DataNotAvailable.
+        """
+
+        self.raise_if_non_compatible_run_id(key.run_id)
+        dirname = osp.join(self.path, str(key))
+        exists = self.s3_object_exists(self.bucket_name, dirname)
+        bk = self.backend_key(dirname)
+
+        if write:
+            if exists and not self._can_overwrite(key):
+                raise strax.DataExistsError(at=dirname)
+            return bk
+
+        if allow_incomplete and not exists:
+            # Check for incomplete data (only exact matching for now)
+            if fuzzy_for or fuzzy_for_options:
+                raise NotImplementedError(
+                    "Mixing of fuzzy matching and allow_incomplete not", 
+                    " supported by DataDirectory."
+                )
+            tempdirname = dirname + "_temp"
+            bk = self.backend_key(tempdirname)
+            if self.s3.list_objects_v2(Bucket=self.bucket_name, 
+                                       Prefix=tempdirname)["KeyCount"] >= 0:
+                return bk
+
+        # Check exact match
+        if exists and self._folder_matches(dirname, key, None, None):
+            return bk
+
+        # If fuzzy search is enabled find fuzzy file names
+        if fuzzy_for or fuzzy_for_options:
+            for fn in self._subfolders():
+                if self._folder_matches(fn, key, fuzzy_for, fuzzy_for_options):
+                    return self.backend_key(fn)
+
+        raise strax.DataNotAvailable
+
+    def _get_config_value(self, variable, option_name):
+        """
+        Retrieve a configuration value from the environment or config file.
+
+        :param variable: The variable to check.
+        :param option_name: The option name in the config file.
+        :return: The retrieved configuration value.
+        """
+        if variable is None:
+            if "s3" not in self.config:
+                raise EnvironmentError("S3 access point not spesified")
+            if not self.config.has_option("s3", option_name):
+                raise EnvironmentError(f"S3 access point lacks a {option_name}")
+            return self.config.get("s3", option_name)
+
+        else:
+            return variable
 
     def _subfolders(self):
         """Loop over subfolders of self.path that match our folder format."""
         # Trigger if statement if path doesnt exist
-        if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=self.path)["KeyCount"] == 0:
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, 
+                                   Prefix=self.path)["KeyCount"] == 0:
             return
         for dirname in os.listdir(self.path):
             try:
@@ -230,20 +266,16 @@ class S3Frontend(StorageFrontend):
                 continue
             yield osp.join(self.path, dirname)
 
-    @staticmethod
-    def _parse_folder_name(fn):
-        """Return (run_id, data_type, hash) if folder name matches DataDirectory convention, raise
-        InvalidFolderNameFormat otherwise."""
-        stuff = osp.normpath(fn).split(os.sep)[-1].split("-")
-        if len(stuff) != 3:
-            # This is not a folder with strax data
-            raise InvalidFolderNameFormat(fn)
-        return stuff
-
     def _folder_matches(self, fn, key, fuzzy_for, fuzzy_for_options, ignore_name=False):
-        """Return the run_id of folder fn if it matches key, or False if it does not.
+        """
+        Check if a folder matches the required data key.
 
-        :param name: Ignore the run name part of the key. Useful for listing availability.
+        :param fn: Folder name.
+        :param key: Data key to match against.
+        :param fuzzy_for: Parameters for fuzzy search.
+        :param fuzzy_for_options: Additional fuzzy search options.
+        :param ignore_name: If True, ignores run name while matching.
+        :return: The run_id if it matches, otherwise False.
 
         """
         # Parse the folder name
@@ -269,15 +301,37 @@ class S3Frontend(StorageFrontend):
         return False
 
     def backend_key(self, dirname):
+        """
+        Return the backend key representation.
+
+        :param dirname: The directory name.
+        :return: Backend key tuple.
+        """
         return self.backends[0].__class__.__name__, dirname
 
     def remove(self, key):
-        # There is no database, so removing the folder from the filesystem
-        # (which FileStore should do) is sufficient.
-        pass
+        # Remove a data entery from storage
+        NotImplementedError
+
+    @staticmethod
+    def _parse_folder_name(fn):
+        """
+        Return (run_id, data_type, hash) if folder name matches 
+        DataDirectory convention, raise InvalidFolderNameFormat otherwise.
+        """
+        stuff = osp.normpath(fn).split(os.sep)[-1].split("-")
+        if len(stuff) != 3:
+            # This is not a folder with strax data
+            raise InvalidFolderNameFormat(fn)
+        return stuff
 
     @staticmethod
     def raise_if_non_compatible_run_id(run_id):
+        """
+        Raise an error if the run ID contains invalid characters.
+
+        :param run_id: The run identifier.
+        """
         if "-" in str(run_id):
             raise ValueError(
                 "The filesystem frontend does not understand"
@@ -294,126 +348,149 @@ def dirname_to_prefix(dirname):
 
 @export
 class S3Backend(strax.StorageBackend):
-    """Store data locally in a directory of binary files.
-
-    Files are named after the chunk number (without extension). Metadata is stored in a file called
-    metadata.json.
-
+    """
+    A storage backend that stores data in an S3-compatible object storage.
+    Data is stored in binary files, named based on the chunk number.
+    Metadata is stored separately as a JSON file.
     """
 
     BUCKET = "mlrice"
 
     def __init__(
         self,
-        *args,
+        bucket_name,
         set_target_chunk_mb: Optional[int] = None,
+        *args,
         **kwargs,
     ):
-        """Add set_chunk_size_mb to strax.StorageBackend to allow changing the chunk.target_size_mb
-        returned from the loader, any args or kwargs are passed to the strax.StorageBackend.
+        """Add set_chunk_size_mb to strax.StorageBackend 
+        to allow changing the chunk.target_size_mb
+        returned from the loader, any args or kwargs 
+        are passed to the strax.StorageBackend.
 
-        :param set_target_chunk_mb: Prior to returning the loaders' chunks, return the chunk with an
-            updated target size
+        :param bucket_name: Name of the bucket used as storage
+        :param set_target_chunk_mb: Prior to returning the loaders' chunks, 
+            return the chunk with an updated target size
 
         """
         super().__init__()
         self.s3 = boto3.client(**kwargs)
         self.set_chunk_size_mb = set_target_chunk_mb
+        self.bucket_name = bucket_name
 
     def _get_metadata(self, dirname):
+        """
+        Retrieve metadata for a given directory in S3.
+
+        :param dirname: The directory name in S3 where metadata is stored.
+        :return: Dictionary containing metadata information.
+        :raises strax.DataCorrupted: If metadata is missing or corrupted.
+        """
         prefix = dirname_to_prefix(dirname)
         metadata_json = f"{prefix}-metadata.json"
         md_path = osp.join(dirname, metadata_json)
 
-        if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=md_path)["KeyCount"] == 0:
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=md_path)["KeyCount"] == 0:
             # Try to see if we are so fast that there exists a temp folder
             # with the metadata we need.
             md_path = osp.join(dirname + "_temp", metadata_json)
 
-        if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=md_path)["KeyCount"] == 0:
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=md_path)["KeyCount"] == 0:
             # Try old-format metadata
             # (if it's not there, just let it raise FileNotFound
             # with the usual message in the next stage)
             old_md_path = osp.join(dirname, "metadata.json")
-            if self.s3.list_objects_v2(Bucket=self.BUCKET, Prefix=old_md_path)["KeyCount"] == 0:
+            if self.s3.list_objects_v2(Bucket=self.bucket_name, 
+                                       Prefix=old_md_path)["KeyCount"] == 0:
                 raise strax.DataCorrupted(f"Data in {dirname} has no metadata")
             md_path = old_md_path
 
-        response = self.s3.get_object(Bucket=self.BUCKET, Key=md_path)
+        response = self.s3.get_object(Bucket=self.bucket_name, Key=md_path)
         metadata_content = response["Body"].read().decode("utf-8")
         return json.loads(metadata_content)
         # with open(md_path, mode="r") as f:
         #    return json.loads(f.read())
 
     def _read_and_format_chunk(self, *args, **kwargs):
+        """
+        Read a data chunk and optionally update its target size.
+
+        :return: Formatted data chunk.
+        """
         chunk = super()._read_and_format_chunk(*args, **kwargs)
         if self.set_chunk_size_mb:
             chunk.target_size_mb = self.set_chunk_size_mb
         return chunk
 
     def _read_chunk(self, dirname, chunk_info, dtype, compressor):
+        """
+        Read a chunk of data from S3.
+
+        :param dirname: Directory in S3 containing the chunk.
+        :param chunk_info: Dictionary containing chunk metadata.
+        :param dtype: Data type of the chunk.
+        :param compressor: Compression format used for the chunk.
+        :return: Loaded data chunk.
+        """
         fn = osp.join(dirname, chunk_info["filename"])
         return strax.load_file(fn, dtype=dtype, 
                                compressor=compressor, 
                                S3_client=self.s3, 
-                               bucket_name = self.BUCKET,
+                               bucket_name = self.bucket_name,
                                is_s3_path=True)
 
     def _saver(self, dirname, metadata, **kwargs):
-        # Test if the parent directory is writeable.
-        # We need abspath since the dir itself may not exist,
-        # even though its parent-to-be does
-        parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))  # This might need some work
+        """
+        Create a saver object for writing data to S3.
 
-        # In case the parent dir also doesn't exist, we have to create is
-        # otherwise the write permission check below will certainly fail
-        # I dont think this is needed for S3 so we can delete it
-        # try:
-        #    os.makedirs(parent_dir, exist_ok=True)
-        # except OSError as e:
-        #    raise strax.DataNotAvailable(
-        #        f"Can't write data to {dirname}, "
-        #        f"{parent_dir} does not exist and we could not create it."
-        #        f"Original error: {e}"
-        #    )
+        :param dirname: Directory in S3 where data will be stored.
+        :param metadata: Metadata dictionary associated with the data.
+        :param kwargs: Additional keyword arguments for the saver.
+        :return: An instance of `S3Saver`.
+        """
 
-        # Finally, check if we have permission to create the new subdirectory
-        # (which the Saver will do)
-        # Also dont think its needed
-        # if not os.access(parent_dir, os.W_OK):
-        #    raise strax.DataNotAvailable(
-        #        f"Can't write data to {dirname}, no write permissions in {parent_dir}."
-        #    )
+        parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
 
-        return S3Saver(dirname, self.s3, metadata=metadata, **kwargs)
+        return S3Saver(dirname, self.s3, self.bucket_name, metadata=metadata, **kwargs)
 
 
 @export
 class S3Saver(strax.Saver):
-    """Saves data to compressed binary files."""
+    """
+    A saver class that writes data chunks to an S3-compatible storage backend.
+    Supports metadata management and chunked data saving.
+    """
 
     json_options = dict(sort_keys=True, indent=4)
     # When writing chunks, rewrite the json file every time we write a chunk
     _flush_md_for_every_chunk = True
 
-    def __init__(self, dirname, s3, metadata, **kwargs):
+    def __init__(self, dirname, s3, bucket_name, metadata, **kwargs):
+        """
+        Initialize the S3Saver instance.
+
+        :param dirname: Directory path (prefix) in S3 where data is stored.
+        :param s3: Boto3 S3 client instance.
+        :param metadata: Metadata dictionary associated with the data.
+        :param kwargs: Additional keyword arguments for the saver.
+        """
         super().__init__(metadata=metadata)
         self.dirname = dirname
+        self.s3 = s3
+        self.bucket_name = bucket_name
+
         self.tempdirname = dirname + "_temp"
         self.prefix = dirname_to_prefix(dirname)
         self.metadata_json = f"{self.prefix}-metadata.json"
 
-        self.s3 = s3
-        self.bucket_name = "mlrice"
-
         self.config = boto3.s3.transfer.TransferConfig(max_concurrency=40, num_download_attempts=30)
 
-        if self.s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=dirname)["KeyCount"] == 1:
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=dirname)["KeyCount"] == 1:
             print(f"Removing data in {dirname} to overwrite")
-            self.s3.delete_object(Bucket=BUCKET_NAME, Key=dirname)
-        if self.s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=self.tempdirname)["KeyCount"] == 1:
+            self.s3.delete_object(Bucket=self.bucket_name, Key=dirname)
+        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.tempdirname)["KeyCount"] == 1:
             print(f"Removing old incomplete data in {self.tempdirname}")
-            self.s3.delete_object(Bucket=BUCKET_NAME, Key=dirname)
+            self.s3.delete_object(Bucket=self.bucket_name, Key=dirname)
         # os.makedirs(self.tempdirname)
         self._flush_metadata()
 
@@ -428,24 +505,32 @@ class S3Saver(strax.Saver):
         self.s3.put_object(Bucket=self.bucket_name, Key=metadata_key, Body=metadata_content)
 
     def _chunk_filename(self, chunk_info):
+        """
+        Generate a filename for a given chunk.
+
+        :param chunk_info: Dictionary containing chunk metadata.
+        :return: Filename string.
+        """
         if "filename" in chunk_info:
             return chunk_info["filename"]
         ichunk = "%06d" % chunk_info["chunk_i"]
         return f"{self.prefix}-{ichunk}"
 
     def _save_chunk(self, data, chunk_info, executor=None):
+        """
+        Save a chunk of data to S3.
+
+        :param data: Data chunk to be saved.
+        :param chunk_info: Metadata dictionary for the chunk.
+        :param executor: Optional executor for parallel writes.
+        :return: Chunk metadata dictionary.
+        """
         filename = self._chunk_filename(chunk_info)
 
         fn = os.path.join(self.tempdirname, filename)
         kwargs = dict(data=data, compressor=self.md["compressor"])
         if executor is None:
             filesize = strax.save_file(fn, is_s3_path=True, **kwargs)
-            # fn.seek(0)
-            # Giving just the filename wont work, needs to be the full path
-            # self.s3.upload_fileobj(fn,
-            #                       BUCKET_NAME,
-            #                       filename,
-            #                       Config=self.config,)
             return dict(filename=filename, filesize=filesize), None
         else:
             # Might need to add some s3 stuff here
@@ -454,42 +539,34 @@ class S3Saver(strax.Saver):
             )
 
     def _save_chunk_metadata(self, chunk_info):
+        """
+        Save metadata associated with a data chunk.
+
+        :param chunk_info: Dictionary containing chunk metadata.
+        """
         is_first = chunk_info["chunk_i"] == 0
         if is_first:
             self.md["start"] = chunk_info["start"]
 
         if self.is_forked:
             # Do not write to the main metadata file to avoid race conditions
-            # Instead, write a separate metadata.json file for this chunk,
-            # to be collected later.
 
-            # We might not have a filename yet:
-            # the chunk is not saved when it is empty
             filename = self._chunk_filename(chunk_info)
-
             fn = f"{self.tempdirname}/metadata_{filename}.json"
             metadata_content = json.dump(chunk_info, **self.json_options)
-            self.s3.put_object(Bucket=self.bucket_name, Key=fn, Body=metadata_content)
-            # with open(fn, mode="w") as f:
-            #    f.write(json.dumps(chunk_info, **self.json_options))
-
-        # To ensure we have some metadata to load with allow_incomplete,
-        # modify the metadata immediately for the first chunk.
-        # If we are forked, modifying self.md is harmless since
-        # we're in a different process.
+            self.s3.put_object(Bucket=self.s3.bucket_name, Key=fn, Body=metadata_content)
 
         if not self.is_forked or is_first:
-            # Just append and flush the metadata
-            # (maybe not super-efficient to write the json every time...
-            # just don't use thousands of chunks)
             self.md["chunks"].append(chunk_info)
             if self._flush_md_for_every_chunk:
                 self._flush_metadata()
 
     def _close(self):
-        # Check if temp directory exists in the S3 bucket by listing objects with the tempdirname prefix
+        """
+        Finalize the saving process by merging temp data and flushing metadata.
+        """
         try:
-            response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.tempdirname)
+            response = self.s3.list_objects_v2(Bucket=self.s3.bucket_name, Prefix=self.tempdirname)
             if "Contents" not in response or len(response["Contents"]) == 0:
                 raise RuntimeError(
                     f"{self.tempdirname} was already renamed to {self.dirname}. "
@@ -500,17 +577,17 @@ class S3Saver(strax.Saver):
 
             # List the files in the temporary directory matching metadata_*.json
             response = self.s3.list_objects_v2(
-                Bucket=self.bucket_name, Prefix=f"{self.tempdirname}/metadata_"
+                Bucket=self.s3.bucket_name, Prefix=f"{self.tempdirname}/metadata_"
             )
             for obj in response.get("Contents", []):
                 key = obj["Key"]
                 # Download each metadata file, process, and delete from tempdirname
-                metadata_object = self.s3.get_object(Bucket=self.bucket_name, Key=key)
+                metadata_object = self.s3.get_object(Bucket=self.s3.bucket_name, Key=key)
                 metadata_content = metadata_object["Body"].read().decode("utf-8")
                 self.md["chunks"].append(json.loads(metadata_content))
 
                 # Optionally, delete the metadata file after processing
-                self.s3.delete_object(Bucket=self.bucket_name, Key=key)
+                self.s3.delete_object(Bucket=self.s3.bucket_name, Key=key)
 
             # Flush metadata (this would be another method to handle your metadata saving logic)
             self._flush_metadata()
@@ -523,22 +600,27 @@ class S3Saver(strax.Saver):
             raise
 
     def _rename_s3_folder(self, tempdirname, dirname):
-        # List the files in the temporary directory
-        response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=tempdirname)
+        """
+        Rename the temporary directory to the final storage location in S3.
+
+        :param tempdirname: Temporary directory path in S3.
+        :param dirname: Final directory path in S3.
+        """
+        response = self.s3.list_objects_v2(Bucket=self.s3.bucket_name, Prefix=tempdirname)
         for obj in response.get("Contents", []):
             key = obj["Key"]
             # Copy each file from the temporary directory to the final directory
             new_key = key.replace(tempdirname, dirname)
             self.s3.copy_object(
-                Bucket=self.bucket_name,
-                CopySource={"Bucket": self.bucket_name, "Key": key},
+                Bucket=self.s3.bucket_name,
+                CopySource={"Bucket": self.s3.bucket_name, "Key": key},
                 Key=new_key,
             )
             # Delete the file from the temporary directory
-            self.s3.delete_object(Bucket=self.bucket_name, Key=key)
+            self.s3.delete_object(Bucket=self.s3.bucket_name, Key=key)
 
         # Delete the temporary directory
-        self.s3.delete_object(Bucket=self.bucket_name, Key=tempdirname)
+        self.s3.delete_object(Bucket=self.s3.bucket_name, Key=tempdirname)
 
 
 @export
