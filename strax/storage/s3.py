@@ -32,8 +32,8 @@ class S3Frontend(StorageFrontend):
 
     def __init__(
         self,
-        s3_access_key_id: str = None,
-        s3_secret_access_key: str = None,
+        s3_access_key_id: str = "",
+        s3_secret_access_key: str = "",
         endpoint_url: str = "https://rice1.osn.mghpcc.org/",
         path: str = "",
         bucket_name: str = "",
