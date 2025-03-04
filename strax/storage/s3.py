@@ -57,6 +57,7 @@ class S3Frontend(StorageFrontend):
         super().__init__(*args, **kwargs)
         self.path = path
         self.deep_scan = deep_scan
+        self.bucket_name = bucket_name
 
         # Configure S3 client
         self.boto3_client_kwargs = {
@@ -66,9 +67,6 @@ class S3Frontend(StorageFrontend):
             "service_name": "s3",
             "config": Config(connect_timeout=5, retries={"max_attempts": 10}),
         }
-
-        if bucket_name != "":
-            self.bucket_name = bucket_name
 
         #  Initialized connection to S3 storage
         self.s3 = boto3.client(**self.boto3_client_kwargs)
