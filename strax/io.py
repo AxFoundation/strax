@@ -156,7 +156,7 @@ def save_file(f, data, compressor="zstd", is_s3_path=False):
     if isinstance(f, str):
         final_fn = f
         temp_fn = f + "_temp"
-        if is_s3_path is False:
+        if not is_s3_path:
             with open(temp_fn, mode="wb") as write_file:
                 result = _save_file(write_file, data, compressor)
             os.rename(temp_fn, final_fn)
