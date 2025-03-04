@@ -2439,9 +2439,11 @@ class Context:
         run_id: str,
         target: str,
         per_chunked_dependency: str,
-        rechunk=True,
         chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
+        rechunk=True,
+        rechunk_to_mb: int = strax.DEFAULT_CHUNK_SIZE_MB,
         target_frontend_id: ty.Optional[int] = None,
+        target_compressor: ty.Optional[str] = None,
         check_is_stored: bool = True,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
@@ -2495,6 +2497,16 @@ class Context:
                 s_be_str, s_be_key = source_sf.find(data_key)
                 s_be = source_sf._get_backend(s_be_str)
                 md = s_be.get_metadata(s_be_key)
+
+                if target_compressor is not None:
+                    self.log.info(f'Changing compressor {md["compressor"]} -> {target_compressor}.')
+                    md.update({"compressor": target_compressor})
+
+                if rechunk and md["chunk_target_size_mb"] != rechunk_to_mb:
+                    self.log.info(
+                        f'Changing chunk-size: {md["chunk_target_size_mb"]} -> {rechunk_to_mb}.'
+                    )
+                    md.update({"chunk_target_size_mb": rechunk_to_mb})
 
                 loader = s_be.loader(s_be_key)
                 try:
