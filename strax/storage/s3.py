@@ -73,6 +73,11 @@ class S3Frontend(StorageFrontend):
         #  Initialized connection to S3 storage
         self.s3 = boto3.client(**self.boto3_client_kwargs)
         self.backends = [S3Backend(self.bucket_name, **self.boto3_client_kwargs)]
+        
+        if s3_access_key_id != "":
+            self.is_configed = True
+        else:
+            self.is_configed = False
 
     def _run_meta_path(self, run_id: str) -> str:
         """Generate the metadata file path for a given run ID.

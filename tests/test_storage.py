@@ -36,7 +36,7 @@ class TestPerRunDefaults(TestCase):
         self.st.storage = [strax.S3Frontend(self.path)]
         run_id = "0"
         self.st.make(run_id, self.target)
-        if self.st.storage.s3_access_key_id != None:
+        if self.st.storage[0].is_configed != "":
             assert self.st.is_stored(run_id, self.target)
         else:
             pass
