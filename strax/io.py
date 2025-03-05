@@ -81,14 +81,13 @@ COMPRESSORS = dict(
 
 
 @export
-def load_file(f, compressor, dtype, S3_client=None, bucket_name=None, is_s3_path=False):
+def load_file(f, compressor, dtype, bucket_name=None, is_s3_path=False):
     """Read and return data from file or S3.
 
     :param f: file name or handle to read from
     :param compressor: compressor to use for decompressing. If not passed, will try to load it from
         json metadata file.
     :param dtype: numpy dtype of data to load
-    :param S3_client: (optional) S3 client to find and store data
     :param is_s3_path: Boolean indicating if the file is stored in S3.
 
     """
@@ -104,17 +103,20 @@ def load_file(f, compressor, dtype, S3_client=None, bucket_name=None, is_s3_path
         return _load_file(f, compressor, dtype)
 
 
-def load_file_from_s3(key, compressor, dtype, bucket_name):
-    """Helper function to load data from S3."""
+def load_file_from_s3(f, compressor, dtype, bucket_name):
+    """
+    Helper function to load data from S3.
+    Confirm file exists, then try to load and decompress it.
+    """
     s3 = strax.S3Frontend().s3
 
     try:
-        data = COMPRESSORS[compressor]["_decompress"](key)
-        if not len(data):
-            return np.zeros(0, dtype=dtype)
+        #data = COMPRESSORS[compressor]["_decompress"](f)
+        #if not len(data):
+        #    return np.zeros(0, dtype=dtype)
 
         # Retrieve the file from S3 and load into a BytesIO buffer
-        response = s3.get_object(Bucket=bucket_name, Key=key)
+        response = s3.get_object(Bucket=bucket_name, Key=f)
         file_data = response["Body"].read()  # Read the content of the file from S3
 
         # Create a file-like object from the binary data
@@ -122,7 +124,7 @@ def load_file_from_s3(key, compressor, dtype, bucket_name):
         return _load_file(file_buffer, compressor, dtype)
 
     except ClientError as e:
-        raise RuntimeError(f"Failed to load {key} from bucket {bucket_name}: {e}")
+        raise RuntimeError(f"Failed to load {f} from bucket {bucket_name}: {e}")
 
 
 def _load_file(f, compressor, dtype):

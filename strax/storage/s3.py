@@ -37,7 +37,6 @@ class S3Frontend(StorageFrontend):
         endpoint_url: str = "https://rice1.osn.mghpcc.org/",
         path: str = "",
         bucket_name: str = "",
-        deep_scan: bool = False,
         *args,
         **kwargs,
     ):
@@ -56,7 +55,6 @@ class S3Frontend(StorageFrontend):
         """
         super().__init__(*args, **kwargs)
         self.path = path
-        self.deep_scan = deep_scan
         self.bucket_name = bucket_name
 
         # Configure S3 client
@@ -84,9 +82,10 @@ class S3Frontend(StorageFrontend):
         :return: The path where the metadata is stored.
 
         """
+        # Works but not sure if needed
         return osp.join(self.path, RUN_METADATA_PATTERN % run_id)
 
-    def run_metadata(self, run_id: str, projection=None) -> dict:
+    def run_metadata(self, run_id: str = "", data_type=None) -> dict:
         """Retrieve metadata for a given run from S3.
 
         Parameters
@@ -94,28 +93,29 @@ class S3Frontend(StorageFrontend):
 
         run_id : (str)
             The identifier of the run.
-        projection :
+        data_type : (str)
             Fields to extract from metadata (optional).
         :return: Run metadata as a dictionary.
 
         """
-        path = self._run_meta_path(run_id)
+        # Works
 
         # Checks if metadata exists
-        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=path)["KeyCount"] == 0:
+        if self.s3.list_objects_v2(Bucket=self.bucket_name)["KeyCount"] == 0:
             raise strax.RunMetadataNotAvailable(
                 f"No file at {path}, cannot find run metadata for {run_id}"
             )
 
         # Retrieve metadata
-        response = self.s3.get_object(Bucket=self.bucket_name, Key=path)
-        metadata_content = response["Body"].read().decode("utf-8")
-        md = json.loads(metadata_content, object_hook=json_util.object_hook)
-        md = strax.flatten_run_metadata(md)
+        response = self.s3.get_object(Bucket=self.bucket_name)
+        metadata_files = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('metadata.json')]
+
+        if run_id != "":
+            metadata_files = [file for file in metadata_files if run_id in file]
 
         if projection is not None:
-            md = {key: value for key, value in md.items() if key in projection}
-        return md
+            metadata_files = [file for file in metadata_files if data_type in file]
+        return metadata_files
 
     def write_run_metadata(self, run_id: str, metadata: dict):
         """Write metadata for a specific run to S3.
@@ -124,6 +124,8 @@ class S3Frontend(StorageFrontend):
         :param metadata: The metadata dictionary to store.
 
         """
+        # Need to check, is this necessary?
+
         if "name" not in metadata:
             metadata["name"] = run_id
 
@@ -136,10 +138,12 @@ class S3Frontend(StorageFrontend):
     def s3_object_exists(self, key) -> bool:
         """Check if a given object exists in the S3 bucket.
 
-        :param key: The object key to check.
+        :param key: The object key to check. [run_id-data_type-lineage]
         :return: True if the object exists, otherwise False.
 
         """
+        # Works as expected 
+
         try:
             response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=key, Delimiter="/")
 
@@ -174,29 +178,21 @@ class S3Frontend(StorageFrontend):
             found.add(run_id)
             yield self.run_metadata(run_id, projection=store_fields)
 
-        # Preform deepscan if enabled
-        if self.deep_scan:
-            for fn in self._subfolders():
-                run_id = self._parse_folder_name(fn)[0]
-                if run_id not in found:
-                    found.add(run_id)
-                    yield dict(name=run_id)
-
-    def _find(self, key, write, allow_incomplete, fuzzy_for, fuzzy_for_options):
+    def _find(self, key, write, allow_incomplete, fuzzy_for = None, fuzzy_for_options = None, **kwargs):
         """Find the appropriate storage key for a given dataset.
 
         :param key: The dataset key.
         :param write: Whether to check for writable access.
         :param allow_incomplete: Allow incomplete datasets.
-        :param fuzzy_for: Parameters for fuzzy search.
-        :param fuzzy_for_options: Additional fuzzy search options.
+        :parm fuzzy_for: Does nothing be retained for compatibility
+        :parm fuzzy_for_option: does nothing be retained for compatibility
         :return: The backend key if found, otherwise raises DataNotAvailable.
 
         """
 
         self.raise_if_non_compatible_run_id(key.run_id)
         dirname = osp.join(self.path, str(key))
-        exists = self.s3_object_exists(self.bucket_name, dirname)
+        exists = self.s3_object_exists(dirname)
         bk = self.backend_key(dirname)
 
         if write:
@@ -206,11 +202,6 @@ class S3Frontend(StorageFrontend):
 
         if allow_incomplete and not exists:
             # Check for incomplete data (only exact matching for now)
-            if fuzzy_for or fuzzy_for_options:
-                raise NotImplementedError(
-                    "Mixing of fuzzy matching and allow_incomplete not",
-                    " supported by DataDirectory.",
-                )
             tempdirname = dirname + "_temp"
             bk = self.backend_key(tempdirname)
             if (
@@ -220,14 +211,8 @@ class S3Frontend(StorageFrontend):
                 return bk
 
         # Check exact match
-        if exists and self._folder_matches(dirname, key, None, None):
+        if exists:
             return bk
-
-        # If fuzzy search is enabled find fuzzy file names
-        if fuzzy_for or fuzzy_for_options:
-            for fn in self._subfolders():
-                if self._folder_matches(fn, key, fuzzy_for, fuzzy_for_options):
-                    return self.backend_key(fn)
 
         raise strax.DataNotAvailable
 
@@ -249,19 +234,7 @@ class S3Frontend(StorageFrontend):
         else:
             return variable
 
-    def _subfolders(self):
-        """Loop over subfolders of self.path that match our folder format."""
-        # Trigger if statement if path doesnt exist
-        if self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.path)["KeyCount"] == 0:
-            return
-        for dirname in os.listdir(self.path):
-            try:
-                self._parse_folder_name(dirname)
-            except InvalidFolderNameFormat:
-                continue
-            yield osp.join(self.path, dirname)
-
-    def _folder_matches(self, fn, key, fuzzy_for, fuzzy_for_options, ignore_name=False):
+    #def _folder_matches(self, fn, key, fuzzy_for, fuzzy_for_options, ignore_name=False):
         """Check if a folder matches the required data key.
 
         :param fn: Folder name.
@@ -271,8 +244,8 @@ class S3Frontend(StorageFrontend):
         :param ignore_name: If True, ignores run name while matching.
         :return: The run_id if it matches, otherwise False.
 
-        """
-        # Parse the folder name
+        
+        # Parse the folder name, fuzz stuff doesnt make sense here so remove it
         try:
             _run_id, _data_type, _hash = self._parse_folder_name(fn)
         except InvalidFolderNameFormat:
@@ -293,6 +266,7 @@ class S3Frontend(StorageFrontend):
         if self._matches(metadata["lineage"], key.lineage, fuzzy_for, fuzzy_for_options):
             return _run_id
         return False
+    """
 
     def backend_key(self, dirname):
         """Return the backend key representation.
@@ -377,6 +351,7 @@ class S3Backend(strax.StorageBackend):
         :raises strax.DataCorrupted: If metadata is missing or corrupted.
 
         """
+        # Works
         prefix = dirname_to_prefix(dirname)
         metadata_json = f"{prefix}-metadata.json"
         md_path = osp.join(dirname, metadata_json)
@@ -401,8 +376,6 @@ class S3Backend(strax.StorageBackend):
         response = self.s3.get_object(Bucket=self.bucket_name, Key=md_path)
         metadata_content = response["Body"].read().decode("utf-8")
         return json.loads(metadata_content)
-        # with open(md_path, mode="r") as f:
-        #    return json.loads(f.read())
 
     def _read_and_format_chunk(self, *args, **kwargs):
         """Read a data chunk and optionally update its target size.
