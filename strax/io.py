@@ -104,15 +104,16 @@ def load_file(f, compressor, dtype, bucket_name=None, is_s3_path=False):
 
 
 def load_file_from_s3(f, compressor, dtype, bucket_name):
-    """
-    Helper function to load data from S3.
+    """Helper function to load data from S3.
+
     Confirm file exists, then try to load and decompress it.
+
     """
     s3 = strax.S3Frontend().s3
 
     try:
-        #data = COMPRESSORS[compressor]["_decompress"](f)
-        #if not len(data):
+        # data = COMPRESSORS[compressor]["_decompress"](f)
+        # if not len(data):
         #    return np.zeros(0, dtype=dtype)
 
         # Retrieve the file from S3 and load into a BytesIO buffer

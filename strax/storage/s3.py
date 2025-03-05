@@ -108,7 +108,11 @@ class S3Frontend(StorageFrontend):
 
         # Retrieve metadata
         response = self.s3.get_object(Bucket=self.bucket_name)
-        metadata_files = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('metadata.json')]
+        metadata_files = [
+            obj["Key"]
+            for obj in response.get("Contents", [])
+            if obj["Key"].endswith("metadata.json")
+        ]
 
         if run_id != "":
             metadata_files = [file for file in metadata_files if run_id in file]
@@ -142,7 +146,7 @@ class S3Frontend(StorageFrontend):
         :return: True if the object exists, otherwise False.
 
         """
-        # Works as expected 
+        # Works as expected
 
         try:
             response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=key, Delimiter="/")
@@ -178,14 +182,14 @@ class S3Frontend(StorageFrontend):
             found.add(run_id)
             yield self.run_metadata(run_id, projection=store_fields)
 
-    def _find(self, key, write, allow_incomplete, fuzzy_for = None, fuzzy_for_options = None, **kwargs):
+    def _find(self, key, write, allow_incomplete, fuzzy_for=None, fuzzy_for_options=None, **kwargs):
         """Find the appropriate storage key for a given dataset.
 
         :param key: The dataset key.
         :param write: Whether to check for writable access.
-        :param allow_incomplete: Allow incomplete datasets.
-        :parm fuzzy_for: Does nothing be retained for compatibility
-        :parm fuzzy_for_option: does nothing be retained for compatibility
+        :param allow_incomplete: Allow incomplete datasets. :parm fuzzy_for: Does nothing be
+            retained for compatibility :parm fuzzy_for_option: does nothing be retained for
+            compatibility
         :return: The backend key if found, otherwise raises DataNotAvailable.
 
         """
@@ -234,7 +238,7 @@ class S3Frontend(StorageFrontend):
         else:
             return variable
 
-    #def _folder_matches(self, fn, key, fuzzy_for, fuzzy_for_options, ignore_name=False):
+        # def _folder_matches(self, fn, key, fuzzy_for, fuzzy_for_options, ignore_name=False):
         """Check if a folder matches the required data key.
 
         :param fn: Folder name.
@@ -244,7 +248,7 @@ class S3Frontend(StorageFrontend):
         :param ignore_name: If True, ignores run name while matching.
         :return: The run_id if it matches, otherwise False.
 
-        
+
         # Parse the folder name, fuzz stuff doesnt make sense here so remove it
         try:
             _run_id, _data_type, _hash = self._parse_folder_name(fn)
