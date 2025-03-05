@@ -1,7 +1,7 @@
 import json
 import os
 import os.path as osp
-from typing import Optional
+from typing import Optional, List
 from bson import json_util
 import boto3
 from botocore.exceptions import ClientError
@@ -36,7 +36,7 @@ class S3Frontend(StorageFrontend):
         s3_secret_access_key: str = "",
         endpoint_url: str = "https://rice1.osn.mghpcc.org/",
         path: str = "",
-        bucket_name: str = "",
+        bucket_name: str = "mlrice",
         *args,
         **kwargs,
     ):
@@ -85,7 +85,7 @@ class S3Frontend(StorageFrontend):
         # Works but not sure if needed
         return osp.join(self.path, RUN_METADATA_PATTERN % run_id)
 
-    def run_metadata(self, run_id: str = "", data_type=None) -> dict:
+    def run_metadata(self, run_id: str = "", data_type=None) -> List:
         """Retrieve metadata for a given run from S3.
 
         Parameters
@@ -119,6 +119,7 @@ class S3Frontend(StorageFrontend):
 
         if data_type is not None:
             metadata_files = [file for file in metadata_files if data_type in file]
+        # Things here are expected to return a dictionary, maybe I should look into it
         return metadata_files
 
     def write_run_metadata(self, run_id: str, metadata: dict):
