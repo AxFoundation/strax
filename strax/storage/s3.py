@@ -103,7 +103,7 @@ class S3Frontend(StorageFrontend):
         # Checks if metadata exists
         if self.s3.list_objects_v2(Bucket=self.bucket_name)["KeyCount"] == 0:
             raise strax.RunMetadataNotAvailable(
-                f"No file at {path}, cannot find run metadata for {run_id}"
+                f"No file found, cannot find run metadata for {run_id}"
             )
 
         # Retrieve metadata
@@ -117,7 +117,7 @@ class S3Frontend(StorageFrontend):
         if run_id != "":
             metadata_files = [file for file in metadata_files if run_id in file]
 
-        if projection is not None:
+        if data_type is not None:
             metadata_files = [file for file in metadata_files if data_type in file]
         return metadata_files
 
