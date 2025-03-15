@@ -162,7 +162,9 @@ def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
                     f"Chunk {chunk_info['chunk_i']:06d} has {len(data)} "
                     f"items, but metadata says {chunk_info['n']}."
                 )
-        return data if len(data) else np.empty(0, dtype)
+        else:
+            data = np.empty(0, dtype)
+        return data
 
     # Load all chunks if chunk_numbers is None, otherwise load the specified chunk
     if chunk_numbers is None:
