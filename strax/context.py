@@ -1113,6 +1113,9 @@ class Context:
         targets=tuple(),
         save=tuple(),
         time_range=None,
+        selection=None,
+        keep_columns=None,
+        drop_columns=None,
         chunk_number=None,
         multi_run_progress_bar=False,
         combining=False,
@@ -1314,9 +1317,15 @@ class Context:
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
+            # We're not even getting the whole data.
             if time_range is not None:
-                # We're not even getting the whole data.
                 self.log.warning(f"Not saving {target_i} while selecting a time range in the run")
+                return
+            if selection is not None:
+                self.log.warning(f"Not saving {target_i} while applying selections in the run")
+                return
+            if keep_columns is not None or drop_columns is not None:
+                self.log.warning(f"Not saving {target_i} while dropping fields in the run")
                 return
             if any([len(v) > 0 for k, v in self._find_options.items() if "fuzzy" in k]):
                 # In fuzzy matching mode, we cannot (yet) derive the
@@ -1637,6 +1646,9 @@ class Context:
             targets=targets,
             save=save,
             time_range=time_range,
+            selection=selection,
+            keep_columns=keep_columns,
+            drop_columns=drop_columns,
             chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
             combining=combining,
