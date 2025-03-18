@@ -95,6 +95,10 @@ def test_filestore(allow_multiprocess, max_workers, processor):
         mystrax.scan_runs()
         assert mystrax.list_available("peaks") == []
 
+        # Create it with dropping columns
+        mystrax.get_array(run_id=run_id, targets="peaks", keep_columns=["time"])
+        assert not mystrax.is_stored(run_id, "peaks")
+
         # Create it
         peaks_1 = mystrax.get_array(run_id=run_id, targets="peaks")
         p = mystrax.get_single_plugin(run_id, "records")
