@@ -1113,6 +1113,9 @@ class Context:
         targets=tuple(),
         save=tuple(),
         time_range=None,
+        selection=None,
+        keep_columns=None,
+        drop_columns=None,
         chunk_number=None,
         multi_run_progress_bar=False,
         combining=False,
@@ -1314,9 +1317,15 @@ class Context:
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
+            # We're not even getting the whole data.
             if time_range is not None:
-                # We're not even getting the whole data.
                 self.log.warning(f"Not saving {target_i} while selecting a time range in the run")
+                return
+            if selection is not None:
+                self.log.warning(f"Not saving {target_i} while applying selections in the run")
+                return
+            if keep_columns is not None or drop_columns is not None:
+                self.log.warning(f"Not saving {target_i} while dropping fields in the run")
                 return
             if any([len(v) > 0 for k, v in self._find_options.items() if "fuzzy" in k]):
                 # In fuzzy matching mode, we cannot (yet) derive the
@@ -1637,6 +1646,9 @@ class Context:
             targets=targets,
             save=save,
             time_range=time_range,
+            selection=selection,
+            keep_columns=keep_columns,
+            drop_columns=drop_columns,
             chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
             combining=combining,
@@ -2439,9 +2451,11 @@ class Context:
         run_id: str,
         target: str,
         per_chunked_dependency: str,
-        rechunk=True,
         chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
+        rechunk=True,
+        rechunk_to_mb: int = strax.DEFAULT_CHUNK_SIZE_MB,
         target_frontend_id: ty.Optional[int] = None,
+        target_compressor: ty.Optional[str] = None,
         check_is_stored: bool = True,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
@@ -2495,6 +2509,16 @@ class Context:
                 s_be_str, s_be_key = source_sf.find(data_key)
                 s_be = source_sf._get_backend(s_be_str)
                 md = s_be.get_metadata(s_be_key)
+
+                if target_compressor is not None:
+                    self.log.info(f'Changing compressor {md["compressor"]} -> {target_compressor}.')
+                    md.update({"compressor": target_compressor})
+
+                if rechunk and md["chunk_target_size_mb"] != rechunk_to_mb:
+                    self.log.info(
+                        f'Changing chunk-size: {md["chunk_target_size_mb"]} -> {rechunk_to_mb}.'
+                    )
+                    md.update({"chunk_target_size_mb": rechunk_to_mb})
 
                 loader = s_be.loader(s_be_key)
                 try:
