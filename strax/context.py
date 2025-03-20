@@ -886,6 +886,13 @@ class Context:
             d_depends: self.__get_plugin(run_id, d_depends, chunk_number=chunk_number)
             for d_depends in plugin.depends_on
         }
+        if plugin.compute_takes_chunk_i:
+            for k, v in plugin.deps.items():
+                if v.rechunk_on_load:
+                    raise ValueError(
+                        "Can not use a plugin that takes chunk_i as input when "
+                        "dependency's rechunk_on_load is True."
+                    )
         if plugin.compute_takes_chunk_i and len(plugin.dependencies_by_kind()) > 1:
             raise ValueError(
                 f"Plugin {plugin.__class__} has multiple dependencies and takes chunk_i as input, "
@@ -998,6 +1005,11 @@ class Context:
                         )
                     self._check_chunk_number(chunk_number[d_depends])
                     plugin.chunk_number = chunk_number[d_depends]
+                    if plugin.compute_takes_chunk_i and plugin.deps[d_depends].rechunk_on_load:
+                        raise ValueError(
+                            "Can not assign chunk_number for a plugin that takes chunk_i as input "
+                            "when dependency's rechunk_on_load is True."
+                        )
                     configs["chunk_number"][d_depends] = chunk_number[d_depends]
 
         plugin.lineage = {last_provide: (plugin.__class__.__name__, plugin.version(), configs)}
@@ -1058,7 +1070,14 @@ class Context:
         """Return list of writable storage frontends."""
         return [s for s in self.storage if not s.readonly]
 
-    def _get_partial_loader_for(self, key, time_range=None, chunk_number=None):
+    def _get_partial_loader_for(
+        self,
+        key,
+        time_range=None,
+        chunk_number=None,
+        rechunk=False,
+        source_size_mb=strax.DEFAULT_CHUNK_SIZE_MB,
+    ):
         """Get partial loaders to allow loading data later.
 
         :param key: strax.DataKey
@@ -1080,6 +1099,8 @@ class Context:
                     key,
                     time_range=time_range,
                     chunk_number=chunk_number,
+                    rechunk=rechunk,
+                    source_size_mb=source_size_mb,
                     **self._find_options,
                 )
             except strax.DataNotAvailable:
@@ -1092,6 +1113,9 @@ class Context:
         targets=tuple(),
         save=tuple(),
         time_range=None,
+        selection=None,
+        keep_columns=None,
+        drop_columns=None,
         chunk_number=None,
         multi_run_progress_bar=False,
         combining=False,
@@ -1163,10 +1187,14 @@ class Context:
             else:
                 _chunk_number = None
             loader = self._get_partial_loader_for(
-                key, time_range=time_range, chunk_number=_chunk_number
+                key,
+                time_range=time_range,
+                chunk_number=_chunk_number,
+                rechunk=target_plugin.rechunk_on_load,
+                source_size_mb=target_plugin.chunk_source_size_mb,
             )
 
-            allow_superrun = plugins[target_i].allow_superrun
+            allow_superrun = target_plugin.allow_superrun
             if (
                 not loader
                 and (is_superrun and not allow_superrun or combining)
@@ -1203,7 +1231,11 @@ class Context:
                     else:
                         _chunk_number = None
                     _loader = self._get_partial_loader_for(
-                        sub_key, time_range=_subrun_time_range, chunk_number=_chunk_number
+                        sub_key,
+                        time_range=_subrun_time_range,
+                        chunk_number=_chunk_number,
+                        rechunk=target_plugin.rechunk_on_load,
+                        source_size_mb=target_plugin.chunk_source_size_mb,
                     )
                     if not _loader:
                         raise RuntimeError(
@@ -1285,9 +1317,15 @@ class Context:
 
             # Warn about conditions that preclude saving, but the user
             # might not expect.
+            # We're not even getting the whole data.
             if time_range is not None:
-                # We're not even getting the whole data.
                 self.log.warning(f"Not saving {target_i} while selecting a time range in the run")
+                return
+            if selection is not None:
+                self.log.warning(f"Not saving {target_i} while applying selections in the run")
+                return
+            if keep_columns is not None or drop_columns is not None:
+                self.log.warning(f"Not saving {target_i} while dropping fields in the run")
                 return
             if any([len(v) > 0 for k, v in self._find_options.items() if "fuzzy" in k]):
                 # In fuzzy matching mode, we cannot (yet) derive the
@@ -1310,7 +1348,7 @@ class Context:
                     run_id, d_to_save, chunk_number=chunk_number, combining=combining
                 )
                 # Here we just check the availability of key,
-                # chunk_number for _get_partial_loader_for can be None
+                # chunk_number, rechunk and source_size_mb for _get_partial_loader_for can be None
                 if self._get_partial_loader_for(key, time_range=time_range):
                     continue
 
@@ -1608,6 +1646,9 @@ class Context:
             targets=targets,
             save=save,
             time_range=time_range,
+            selection=selection,
+            keep_columns=keep_columns,
+            drop_columns=drop_columns,
             chunk_number=chunk_number,
             multi_run_progress_bar=multi_run_progress_bar,
             combining=combining,
@@ -2410,9 +2451,11 @@ class Context:
         run_id: str,
         target: str,
         per_chunked_dependency: str,
-        rechunk=True,
         chunk_number_group: ty.Optional[ty.List[ty.List[int]]] = None,
+        rechunk=True,
+        rechunk_to_mb: int = strax.DEFAULT_CHUNK_SIZE_MB,
         target_frontend_id: ty.Optional[int] = None,
+        target_compressor: ty.Optional[str] = None,
         check_is_stored: bool = True,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
@@ -2443,15 +2486,6 @@ class Context:
                 run_id, target, chunk_number={per_chunked_dependency: chunk_number}
             )
 
-        # Usually we want to save in the same storage frontend
-        # Here we assume that the target is stored chunk by chunk of the dependency
-        source_sf = self.get_source_sf(
-            run_id,
-            target,
-            chunk_number={per_chunked_dependency: chunk_number},
-            should_exist=True,
-        )[0]
-
         # Get the target storage frontends
         target_sf = self._get_target_sf(run_id, target, target_frontend_id)
 
@@ -2461,6 +2495,13 @@ class Context:
                 # Mostly revised from self.copy_to_frontend
                 # Get the info from the source backend (s_be) that we need to fill
                 # the target backend (t_be) with
+                # Here we assume that the target is stored chunk by chunk of the dependency
+                source_sf = self.get_source_sf(
+                    run_id,
+                    target,
+                    chunk_number={per_chunked_dependency: chunk_number},
+                    should_exist=True,
+                )[0]
                 data_key = self.key_for(
                     run_id, target, chunk_number={per_chunked_dependency: chunk_number}
                 )
@@ -2468,6 +2509,16 @@ class Context:
                 s_be_str, s_be_key = source_sf.find(data_key)
                 s_be = source_sf._get_backend(s_be_str)
                 md = s_be.get_metadata(s_be_key)
+
+                if target_compressor is not None:
+                    self.log.info(f'Changing compressor {md["compressor"]} -> {target_compressor}.')
+                    md.update({"compressor": target_compressor})
+
+                if rechunk and md["chunk_target_size_mb"] != rechunk_to_mb:
+                    self.log.info(
+                        f'Changing chunk-size: {md["chunk_target_size_mb"]} -> {rechunk_to_mb}.'
+                    )
+                    md.update({"chunk_target_size_mb": rechunk_to_mb})
 
                 loader = s_be.loader(s_be_key)
                 try:

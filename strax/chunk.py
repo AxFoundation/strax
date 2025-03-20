@@ -606,7 +606,7 @@ class Rechunker:
         split_indices = self.get_splits(chunk.data, target_size_b, DEFAULT_CHUNK_SPLIT_NS)
         # Split the cache into chunks and return list of chunks
         chunks = []
-        for index in split_indices:
+        for index in np.diff(split_indices):
             _chunk, chunk = chunk.split(
                 t=chunk.data["time"][index] - int(DEFAULT_CHUNK_SPLIT_NS // 2),
                 allow_early_split=False,
@@ -628,12 +628,19 @@ class Rechunker:
     def get_splits(data, target_size, min_gap=DEFAULT_CHUNK_SPLIT_NS):
         """Get indices where to split the data into chunks of approximately target_size."""
         assumed_i = int(target_size // data.itemsize)
+        if assumed_i == 0:
+            raise ValueError("Target size is too small.")
         gap_indices = np.argwhere(strax.diff(data) > min_gap).flatten() + 1
         split_indices = [0]
+        argmin = 0
         if len(gap_indices) != 0:
+            n = 0
             while split_indices[-1] + assumed_i < gap_indices[-1]:
-                split_indices.append(
-                    gap_indices[np.abs(gap_indices - assumed_i - split_indices[-1]).argmin()]
-                )
-        split_indices = np.diff(split_indices)
+                if n > len(data):
+                    raise ValueError("Trapped in infinite loop!")
+                _argmin = np.abs(gap_indices[argmin + 1 :] - assumed_i - split_indices[-1]).argmin()
+                split_indices.append(gap_indices[argmin + 1 :][_argmin])
+                argmin += _argmin + 1
+                n += 1
+        split_indices = np.array(split_indices)
         return split_indices

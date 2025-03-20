@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "strax"
-version = "2.1.0"
+version = "2.1.4"
 description = "Streaming analysis for xenon TPCs"
 readme = "README.md"
 authors = [
@@ -41,8 +41,9 @@ psutil = "*"
 pymongo = "*"
 scipy = "*"
 tqdm = ">=4.46.0"
-zarr = "*"
+zarr = "<3.0.0"
 zstd = "*"
+zstandard = "*"
 sphinx = { version = "*", optional = true }
 sphinx_rtd_theme = { version = "*", optional = true }
 nbsphinx = { version = "*", optional = true }

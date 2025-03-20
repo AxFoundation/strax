@@ -1,3 +1,36 @@
+2.1.4 / 2025-03-09
+---------------------
+* Allow changing chunk size and compressor in `merge_per_chunk_storage` by @dachengx in https://github.com/AxFoundation/strax/pull/986
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.3...v2.1.4
+
+
+2.1.3 / 2025-03-02
+---------------------
+* Prevent infinite loop in `get_splits` by @dachengx in https://github.com/AxFoundation/strax/pull/983
+* All copy data from multiple per-chunk storage by @dachengx in https://github.com/AxFoundation/strax/pull/984
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.2...v2.1.3
+
+
+2.1.2 / 2025-02-24
+---------------------
+* Allow `depends_on` rechunking by @dachengx in https://github.com/AxFoundation/strax/pull/975
+* Save memory when decompressing data by @dachengx in https://github.com/AxFoundation/strax/pull/976
+* Use `zstandard` to decompress chunks to save memory by @dachengx in https://github.com/AxFoundation/strax/pull/977
+* Prevent unnecessary reference to chunks by @dachengx in https://github.com/AxFoundation/strax/pull/979
+* Add `DECOMPRESS_BUFFER_SIZE` by @dachengx in https://github.com/AxFoundation/strax/pull/980
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.1...v2.1.2
+
+
+2.1.1 / 2025-02-13
+---------------------
+* Clip `center_time` to be within the `time` and `endtime` by @dachengx in https://github.com/AxFoundation/strax/pull/973
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.0...v2.1.1
+
+
 2.1.0 / 2025-02-03
 ---------------------
 * Add a flag indicating whether check subruns' configs by @dachengx in https://github.com/AxFoundation/strax/pull/964
