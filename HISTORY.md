@@ -1,3 +1,10 @@
+2.1.4 / 2025-03-09
+---------------------
+* Allow changing chunk size and compressor in `merge_per_chunk_storage` by @dachengx in https://github.com/AxFoundation/strax/pull/986
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.3...v2.1.4
+
+
 2.1.3 / 2025-03-02
 ---------------------
 * Prevent infinite loop in `get_splits` by @dachengx in https://github.com/AxFoundation/strax/pull/983
