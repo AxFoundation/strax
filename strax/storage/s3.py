@@ -508,12 +508,19 @@ class S3Saver(strax.Saver):
         fn = os.path.join(self.tempdirname, filename)
         kwargs = dict(data=data, compressor=self.md["compressor"])
         if executor is None:
-            filesize = strax.save_file(fn, s3_client = self.s3, Bucket = self.bucket_name, is_s3_path=True, **kwargs)
+            filesize = strax.save_file(
+                fn, s3_client=self.s3, Bucket=self.bucket_name, is_s3_path=True, **kwargs
+            )
             return dict(filename=filename, filesize=filesize), None
         else:
             # Might need to add some s3 stuff here
             return dict(filename=filename), executor.submit(
-                strax.save_file, fn, s3_client = self.s3, Bucket = self.bucket_name, is_s3_path=True, **kwargs
+                strax.save_file,
+                fn,
+                s3_client=self.s3,
+                Bucket=self.bucket_name,
+                is_s3_path=True,
+                **kwargs,
             )
 
     def _save_chunk_metadata(self, chunk_info):
@@ -602,4 +609,3 @@ class S3Saver(strax.Saver):
 @export
 class InvalidFolderNameFormat(Exception):
     pass
-

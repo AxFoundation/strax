@@ -147,7 +147,7 @@ def _load_file(f, compressor, dtype):
 
 
 @export
-def save_file(f, data, compressor="zstd", s3_client = None, Bucket = None, is_s3_path=False):
+def save_file(f, data, compressor="zstd", s3_client=None, Bucket=None, is_s3_path=False):
     """Save data to file and return number of bytes written.
 
     :param f: file name or handle to save to
