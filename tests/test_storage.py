@@ -33,7 +33,7 @@ class TestPerRunDefaults(TestCase):
         assert self.st.is_stored(run_id, self.target)
 
     def test_write_data_s3(self):
-        self.st.storage = [strax.S3Frontend(self.path)]
+        self.st.storage = [strax.S3Frontend()]
         run_id = "0"
         self.st.make(run_id, self.target)
         if self.st.storage[0].is_configed != "":

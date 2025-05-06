@@ -13,7 +13,7 @@ from .common import StorageFrontend
 export, __all__ = strax.exporter()
 
 RUN_METADATA_PATTERN = "%s-metadata.json"
-BUCKET_NAME = "mlrice"
+BUCKET_NAME = "cdt6-pub"
 
 
 @export
@@ -28,15 +28,16 @@ class S3Frontend(StorageFrontend):
     can_define_runs = True
     provide_run_metadata = False
     provide_superruns = True
-    BUCKET = "mlrice"
+    BUCKET = "cdt6-pub"
 
     def __init__(
         self,
-        s3_access_key_id: str = "",
-        s3_secret_access_key: str = "",
-        endpoint_url: str = "https://rice1.osn.mghpcc.org/",
-        path: str = "",
-        bucket_name: str = "mlrice",
+        s3_access_key_id: str = "WTELWQ3XIAUGVZ15TGOH",
+        s3_secret_access_key: str = "0Q64rU0pJxDlFX7Bd3LulVwFGQtZtLGRHYPMvCmx",
+        endpoint_url: str = "https://rice1.osn.mghpcc.org",
+        path: str = "/xenonnt",
+        bucket_name: str = "cdt6-pub",
+        deep_scan=False,
         *args,
         **kwargs,
     ):
@@ -68,7 +69,7 @@ class S3Frontend(StorageFrontend):
 
         #  Initialized connection to S3 storage
         self.s3 = boto3.client(**self.boto3_client_kwargs)
-        self.backends = [S3Backend(self.bucket_name, **self.boto3_client_kwargs)]
+        self.backends = [S3Backend(self.bucket_name, self.path, **self.boto3_client_kwargs)]
 
         if s3_access_key_id != "":
             self.is_configed = True
@@ -194,7 +195,6 @@ class S3Frontend(StorageFrontend):
         :return: The backend key if found, otherwise raises DataNotAvailable.
 
         """
-
         self.raise_if_non_compatible_run_id(key.run_id)
         dirname = osp.join(self.path, str(key))
         exists = self.s3_object_exists(dirname)
@@ -290,11 +290,11 @@ class S3Frontend(StorageFrontend):
     def _parse_folder_name(fn):
         """Return (run_id, data_type, hash) if folder name matches DataDirectory convention, raise
         InvalidFolderNameFormat otherwise."""
-        stuff = osp.normpath(fn).split(os.sep)[-1].split("-")
-        if len(stuff) != 3:
+        keys = osp.normpath(fn).split(os.sep)[-1].split("-")
+        if len(keys) != 3:
             # This is not a folder with strax data
             raise InvalidFolderNameFormat(fn)
-        return stuff
+        return keys
 
     @staticmethod
     def raise_if_non_compatible_run_id(run_id):
@@ -326,11 +326,12 @@ class S3Backend(strax.StorageBackend):
 
     """
 
-    BUCKET = "mlrice"
+    BUCKET = "cdt6-pub"
 
     def __init__(
         self,
         bucket_name,
+        path,
         set_target_chunk_mb: Optional[int] = None,
         *args,
         **kwargs,
@@ -344,6 +345,7 @@ class S3Backend(strax.StorageBackend):
 
         """
         super().__init__()
+        self.path = path
         self.s3 = boto3.client(**kwargs)
         self.set_chunk_size_mb = set_target_chunk_mb
         self.bucket_name = bucket_name
@@ -422,9 +424,7 @@ class S3Backend(strax.StorageBackend):
         :return: An instance of `S3Saver`.
 
         """
-
-        parent_dir = os.path.abspath(os.path.join(dirname, os.pardir))
-
+        parent_dir = os.path.join(self.path, dirname)
         return S3Saver(parent_dir, self.s3, self.bucket_name, metadata=metadata, **kwargs)
 
 
@@ -508,12 +508,12 @@ class S3Saver(strax.Saver):
         fn = os.path.join(self.tempdirname, filename)
         kwargs = dict(data=data, compressor=self.md["compressor"])
         if executor is None:
-            filesize = strax.save_file(fn, is_s3_path=True, **kwargs)
+            filesize = strax.save_file(fn, s3_client = self.s3, Bucket = self.bucket_name, is_s3_path=True, **kwargs)
             return dict(filename=filename, filesize=filesize), None
         else:
             # Might need to add some s3 stuff here
             return dict(filename=filename), executor.submit(
-                strax.save_file, fn, is_s3_path=True, **kwargs
+                strax.save_file, fn, s3_client = self.s3, Bucket = self.bucket_name, is_s3_path=True, **kwargs
             )
 
     def _save_chunk_metadata(self, chunk_info):
@@ -532,7 +532,7 @@ class S3Saver(strax.Saver):
             filename = self._chunk_filename(chunk_info)
             fn = f"{self.tempdirname}/metadata_{filename}.json"
             metadata_content = json.dump(chunk_info, **self.json_options)
-            self.s3.put_object(Bucket=self.s3.bucket_name, Key=fn, Body=metadata_content)
+            self.s3.put_object(Bucket=self.bucket_name, Key=fn, Body=metadata_content)
 
         if not self.is_forked or is_first:
             self.md["chunks"].append(chunk_info)
@@ -542,7 +542,7 @@ class S3Saver(strax.Saver):
     def _close(self):
         """Finalize the saving process by merging temp data and flushing metadata."""
         try:
-            response = self.s3.list_objects_v2(Bucket=self.s3.bucket_name, Prefix=self.tempdirname)
+            response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.tempdirname)
             if "Contents" not in response or len(response["Contents"]) == 0:
                 raise RuntimeError(
                     f"{self.tempdirname} was already renamed to {self.dirname}. "
@@ -553,17 +553,17 @@ class S3Saver(strax.Saver):
 
             # List the files in the temporary directory matching metadata_*.json
             response = self.s3.list_objects_v2(
-                Bucket=self.s3.bucket_name, Prefix=f"{self.tempdirname}/metadata_"
+                Bucket=self.bucket_name, Prefix=f"{self.tempdirname}/metadata_"
             )
             for obj in response.get("Contents", []):
                 key = obj["Key"]
                 # Download each metadata file, process, and delete from tempdirname
-                metadata_object = self.s3.get_object(Bucket=self.s3.bucket_name, Key=key)
+                metadata_object = self.s3.get_object(Bucket=self.bucket_name, Key=key)
                 metadata_content = metadata_object["Body"].read().decode("utf-8")
                 self.md["chunks"].append(json.loads(metadata_content))
 
                 # Optionally, delete the metadata file after processing
-                self.s3.delete_object(Bucket=self.s3.bucket_name, Key=key)
+                self.s3.delete_object(Bucket=self.bucket_name, Key=key)
 
             # Flush metadata (this would be another method to handle your metadata saving logic)
             self._flush_metadata()
@@ -582,23 +582,24 @@ class S3Saver(strax.Saver):
         :param dirname: Final directory path in S3.
 
         """
-        response = self.s3.list_objects_v2(Bucket=self.s3.bucket_name, Prefix=tempdirname)
+        response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=tempdirname)
         for obj in response.get("Contents", []):
             key = obj["Key"]
             # Copy each file from the temporary directory to the final directory
             new_key = key.replace(tempdirname, dirname)
             self.s3.copy_object(
-                Bucket=self.s3.bucket_name,
-                CopySource={"Bucket": self.s3.bucket_name, "Key": key},
+                Bucket=self.bucket_name,
+                CopySource={"Bucket": self.bucket_name, "Key": key},
                 Key=new_key,
             )
             # Delete the file from the temporary directory
-            self.s3.delete_object(Bucket=self.s3.bucket_name, Key=key)
+            self.s3.delete_object(Bucket=self.bucket_name, Key=key)
 
         # Delete the temporary directory
-        self.s3.delete_object(Bucket=self.s3.bucket_name, Key=tempdirname)
+        self.s3.delete_object(Bucket=self.bucket_name, Key=tempdirname)
 
 
 @export
 class InvalidFolderNameFormat(Exception):
     pass
+

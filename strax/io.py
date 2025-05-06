@@ -147,7 +147,7 @@ def _load_file(f, compressor, dtype):
 
 
 @export
-def save_file(f, data, compressor="zstd", is_s3_path=False):
+def save_file(f, data, compressor="zstd", s3_client = None, Bucket = None, is_s3_path=False):
     """Save data to file and return number of bytes written.
 
     :param f: file name or handle to save to
@@ -165,22 +165,17 @@ def save_file(f, data, compressor="zstd", is_s3_path=False):
             os.rename(temp_fn, final_fn)
             return result
         else:
-            s3_interface = strax.S3Frontend(
-                s3_access_key_id=None,
-                s3_secret_access_key=None,
-                path="",
-                deep_scan=False,
-            )
+            s3_interface = s3_client
             # Copy temp file to final file
-            result = _save_file_to_s3(s3_interface, temp_fn, data, compressor)
-            s3_interface.s3.copy_object(
-                Bucket=s3_interface.BUCKET,
+            result = _save_file_to_s3(s3_interface, temp_fn, data, Bucket, compressor)
+            s3_interface.copy_object(
+                Bucket=Bucket,
                 Key=final_fn,
-                CopySource={"Bucket": s3_interface.BUCKET, "Key": temp_fn},
+                CopySource={"Bucket": Bucket, "Key": temp_fn},
             )
 
             # Delete the temporary file
-            s3_interface.s3.delete_object(Bucket=s3_interface.BUCKET, Key=temp_fn)
+            s3_interface.delete_object(Bucket=Bucket, Key=temp_fn)
 
             return result
     else:
@@ -194,7 +189,7 @@ def _save_file(f, data, compressor="zstd"):
     return len(d_comp)
 
 
-def _save_file_to_s3(s3_client, key, data, compressor=None):
+def _save_file_to_s3(s3_client, key, data, Bucket, compressor=None):
     # Use this method to save file directly to S3
     # If compression is needed, handle it here
     # Use `BytesIO` to handle binary data in-memory
@@ -210,7 +205,7 @@ def _save_file_to_s3(s3_client, key, data, compressor=None):
     buffer.seek(0)  # Reset the buffer to the beginning
 
     # Upload buffer to S3 under the specified key
-    s3_client.s3.put_object(Bucket=s3_client.BUCKET, Key=key, Body=buffer.getvalue())
+    s3_client.put_object(Bucket=Bucket, Key=key, Body=buffer.getvalue())
 
     return len(data)
 
