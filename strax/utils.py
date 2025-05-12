@@ -24,7 +24,6 @@ import click
 import deepdiff
 import copy
 
-
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
 # Otherwise we get strange errors while caching the @growing_result functions
