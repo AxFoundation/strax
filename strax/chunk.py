@@ -298,6 +298,9 @@ class Chunk:
         start, end = tranges[0]
 
         data = strax.merge_arrs(
+            # The chunks order matters. A specific field in the merged data
+            # takes the LAST chunk's value, even though the dtype is sorted below by data_type.
+            # The order of chunks is defined in depends_on.
             [c.data for c in chunks],
             # Make sure dtype field order is consistent, regardless of the
             # order in which chunks are passed to merge:
