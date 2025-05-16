@@ -50,8 +50,8 @@ sphinx_rtd_theme = { version = "*", optional = true }
 nbsphinx = { version = "*", optional = true }
 recommonmark = { version = "*", optional = true }
 graphviz = { version = "*", optional = true }
-m2r = { version = "*", optional = true }
-mistune = { version = "0.8.4", optional = true }
+m2r2 = { version = "*", optional = true }
+mistune = { version = "3.1.1", optional = true }
 urllib3 = { version = "2.2.2", optional = true }
 lxml_html_clean = { version = "*", optional = true }
 
@@ -62,7 +62,7 @@ docs = [
   "nbsphinx",
   "recommonmark",
   "graphviz",
-  "m2r",
+  "m2r2",
   "mistune",
   "urllib3",
   "lxml_html_clean",
