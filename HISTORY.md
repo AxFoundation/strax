@@ -1,3 +1,14 @@
+2.2.0 / 2025-05-16
+---------------------
+* Fix a corner case where the chunk size is zero by @dachengx in https://github.com/AxFoundation/strax/pull/988
+* Do not initialize any saver when dropping columns by @dachengx in https://github.com/AxFoundation/strax/pull/989
+* Add more comments about `merge_arrs` by @dachengx in https://github.com/AxFoundation/strax/pull/991
+* Use numbered version of `docformatter` by @dachengx in https://github.com/AxFoundation/strax/pull/992
+* Constrain numcodecs to be less than 0.16.0 by @dachengx in https://github.com/AxFoundation/strax/pull/993
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.4...v2.2.0
+
+
 2.1.4 / 2025-03-09
 ---------------------
 * Allow changing chunk size and compressor in `merge_per_chunk_storage` by @dachengx in https://github.com/AxFoundation/strax/pull/986
