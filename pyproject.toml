@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "strax"
-version = "2.1.4"
+version = "2.2.0"
 description = "Streaming analysis for xenon TPCs"
 readme = "README.md"
 authors = [
@@ -36,6 +36,7 @@ lz4 = "*"
 numba = ">=0.43.1"
 numexpr = "*"
 numpy = ">=1.18.5"
+numcodecs = "<0.16.0"
 packaging = "*"
 pandas = "*"
 psutil = "*"
