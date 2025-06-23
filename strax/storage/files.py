@@ -46,7 +46,7 @@ class DataDirectory(StorageFrontend):
     def _run_meta_path(self, run_id):
         return osp.join(self.path, RUN_METADATA_PATTERN % run_id)
 
-    def run_metadata(self, run_id, projection=None):
+    def run_metadata(self, run_id: str = "", projection=None):
         path = self._run_meta_path(run_id)
         if not osp.exists(path):
             raise strax.RunMetadataNotAvailable(

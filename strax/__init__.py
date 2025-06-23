@@ -15,6 +15,7 @@ from .storage.files import *
 from .storage.file_rechunker import *
 from .storage.mongo import *
 from .storage.zipfiles import *
+from .storage.s3 import *
 
 from .config import *
 from .plugins import *
