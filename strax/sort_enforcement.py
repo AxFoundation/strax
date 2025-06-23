@@ -30,7 +30,7 @@ def stable_sort(arr, kind="mergesort", **kwargs):
 
 
 @register_jitable
-def stable_argsort(arr, kind="mergesort"):
+def stable_argsort(arr, kind="mergesort", **kwargs):
     """Numba-optimized stable argsort function using mergesort.
 
     Args:
@@ -43,4 +43,4 @@ def stable_argsort(arr, kind="mergesort"):
     """
     if kind != "mergesort":
         raise SortingError(UNSTABLE_SORT_MESSAGE)
-    return np.argsort(arr, kind="mergesort")
+    return np.argsort(arr, kind="mergesort", **kwargs)
