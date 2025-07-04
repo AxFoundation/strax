@@ -987,7 +987,7 @@ class Context:
         # Set chunk_number in the lineage
         if chunk_number is not None:
             for d_depends in plugin.depends_on:
-                dependencies = self.get_dependencies(d_depends)
+                dependencies = self.get_dependencies(d_depends) | {d_depends}
                 for d in chunk_number.keys():
                     if d not in dependencies:
                         continue
@@ -1026,15 +1026,6 @@ class Context:
                                 )
                             if not mask:
                                 raise ValueError(msg)
-                            for _d in dependencies:
-                                if _d == d_depends:
-                                    continue
-                                if self.is_stored(run_id, _d):
-                                    raise ValueError(
-                                        f"Can not assign chunk_number for {plugin.__class__} "
-                                        "because it has multiple dependencies and one of the "
-                                        f"dependencies {d} will be made from stored {_d}."
-                                    )
                     configs.setdefault("chunk_number", {})
                     if d_depends in configs["chunk_number"]:
                         raise ValueError(
