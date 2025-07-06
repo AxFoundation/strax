@@ -268,7 +268,7 @@ class PostOffice:
             log.debug(f"Got submessage {sub_msg} for sub topic {sub_msg_topic}")
             # sub_msg_topic not in self._multi_output_topics means
             # it already has a loader (as producer)
-            if sub_msg_topic not in self._multi_output_topics:
+            if sub_msg_topic in self._multi_output_topics:
                 self._ack_msg_produced(sub_msg, sub_msg_topic)
         return desired_sub_msg
 
