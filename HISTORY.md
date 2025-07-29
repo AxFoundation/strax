@@ -1,3 +1,13 @@
+2.2.1 / 2025-07-18
+---------------------
+* Check the `data_type` of returned chunk of plugin by @dachengx in https://github.com/AxFoundation/strax/pull/995
+* Topological level and shortest dependency path of dependency tree (directed acyclic graph) by @dachengx in https://github.com/AxFoundation/strax/pull/996
+* Do not assign `_multi_output_topics` when the topic is from a loader by @dachengx in https://github.com/AxFoundation/strax/pull/997
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.0...v2.2.1
+
+
+
 2.2.0 / 2025-05-16
 ---------------------
 * Fix a corner case where the chunk size is zero by @dachengx in https://github.com/AxFoundation/strax/pull/988

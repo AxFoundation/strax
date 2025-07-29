@@ -786,6 +786,11 @@ class Plugin:
             result = strax.dict_to_rec(result, dtype=self.dtype_for(_dtype))
             self._check_dtype(result, _dtype)
             result = self.chunk(start=start, end=end, data_type=_dtype, data=result)
+        if result.data_type != _dtype:
+            raise ValueError(
+                f"{self.__class__.__name__} returned a Chunk with data_type "
+                f"{result.data_type} instead of {_dtype}."
+            )
         return self.superrun_transformation(result, superrun, subruns)
 
     def chunk(self, *, start, end, data, data_type=None, run_id=None):
