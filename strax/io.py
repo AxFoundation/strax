@@ -118,11 +118,12 @@ def load_file_from_s3(f, compressor, dtype, bucket_name):
 
         # Retrieve the file from S3 and load into a BytesIO buffer
         response = s3.get_object(Bucket=bucket_name, Key=f)
-        file_data = response["Body"].read()  # Read the content of the file from S3
+        file_buffer = BytesIO()
 
-        # Create a file-like object from the binary data
-        file_buffer = BytesIO(file_data)
-        return _load_file(file_buffer, compressor, dtype)
+        for chunk in response["Body"].iter_chunks(chunk_size=DECOMPRESS_BUFFER_SIZE):
+            file_beffer.write(chunk)
+
+        file_buffer.seek(0)
 
     except ClientError as e:
         raise RuntimeError(f"Failed to load {f} from bucket {bucket_name}: {e}")
@@ -137,7 +138,7 @@ def _load_file(f, compressor, dtype):
             return np.frombuffer(data, dtype=dtype)
         except ValueError as e:
             raise ValueError(f"ValueError while loading data with dtype =\n\t{dtype}") from e
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         raise RuntimeError(f"Error loading file: {e}")
 
     except Exception:
@@ -165,17 +166,17 @@ def save_file(f, data, compressor="zstd", s3_client=None, Bucket=None, is_s3_pat
             os.rename(temp_fn, final_fn)
             return result
         else:
-            s3_interface = s3_client
+            #s3_interface = s3_client
             # Copy temp file to final file
-            result = _save_file_to_s3(s3_interface, temp_fn, data, Bucket, compressor)
-            s3_interface.copy_object(
+            result = _save_file_to_s3(s3_client, temp_fn, data, Bucket, compressor)
+            s3_client.copy_object(
                 Bucket=Bucket,
                 Key=final_fn,
                 CopySource={"Bucket": Bucket, "Key": temp_fn},
             )
 
             # Delete the temporary file
-            s3_interface.delete_object(Bucket=Bucket, Key=temp_fn)
+            s3_client.delete_object(Bucket=Bucket, Key=temp_fn)
 
             return result
     else:
