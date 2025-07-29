@@ -166,7 +166,7 @@ def save_file(f, data, compressor="zstd", s3_client=None, Bucket=None, is_s3_pat
             os.rename(temp_fn, final_fn)
             return result
         else:
-            #s3_interface = s3_client
+            # s3_interface = s3_client
             # Copy temp file to final file
             result = _save_file_to_s3(s3_client, temp_fn, data, Bucket, compressor)
             s3_client.copy_object(
