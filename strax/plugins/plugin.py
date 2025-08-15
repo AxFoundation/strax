@@ -196,9 +196,6 @@ class Plugin:
                 plugin_copy.__setattr__(attribute, copy(source_value))
         return plugin_copy
 
-    def __deepcopy__(self):
-        return self.__copy__(_deep_copy=True)
-
     def __getattr__(self, name):
         """Allow access to config parameters as attributes this allows backwards compatibility in
         cases where a descriptor style config depends on a non descriptor style config."""

@@ -514,7 +514,7 @@ def test_per_chunk_storage():
         # Per-chunk storage not allowed for some plugins
         p = type("whatever", (strax.OverlapWindowPlugin,), dict(depends_on="records"))
         st.register(p)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotImplementedError):
             st.make(run_id, "whatever", chunk_number={"records": [0]})
 
 
