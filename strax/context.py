@@ -617,7 +617,8 @@ class Context:
             if not isinstance(x, type(type)):
                 continue
             if issubclass(x, strax.Plugin):
-                self.register(x)
+                if x.__module__ == module.__name__:  # Ensure it's defined in the given module
+                    self.register(x)
 
     def register_cut_list(self, cut_list):
         """Register cut lists to strax context.
