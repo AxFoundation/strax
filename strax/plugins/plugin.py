@@ -619,12 +619,8 @@ class Plugin:
     def _check_sorted(self, result):
         # check the result is sorted in time
         if self.multi_output:
-            if not isinstance(result, dict):
-                raise ValueError(
-                    f"{self.__class__.__name__} is multi-output and should "
-                    "provide a dict output."
-                )
-            return {d: self._check_sorted(result[d]) for d in self.provides}
+            for d in self.provides:
+                self._check_sorted(result[d])
 
         if len(result.data) < 2:
             return
