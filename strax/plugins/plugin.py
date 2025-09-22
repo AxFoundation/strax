@@ -616,6 +616,18 @@ class Plugin:
                 f"Delivered: {got}."
             )
 
+    def _check_sorted(self, result):
+        # check the result is sorted in time
+        if self.multi_output:
+            for d in self.provides:
+                self._check_sorted(result[d])
+
+        if len(result.data) < 2:
+            return
+
+        if np.diff(result.data["time"]).min() < 0:
+            raise ValueError(f"Plugin {self.__class__.__name__} did not return sorted time!")
+
     @staticmethod
     def _check_subruns_uniqueness(kwargs, subrunses):
         """Check if the subruns of the all inputs are the same."""
@@ -788,6 +800,7 @@ class Plugin:
                 f"{self.__class__.__name__} returned a Chunk with data_type "
                 f"{result.data_type} instead of {_dtype}."
             )
+        self._check_sorted(result)
         return self.superrun_transformation(result, superrun, subruns)
 
     def chunk(self, *, start, end, data, data_type=None, run_id=None):

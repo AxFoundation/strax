@@ -53,4 +53,5 @@ class DownChunkingPlugin(Plugin):
                     f"Plugin {self.__class__.__name__} should yield (dict of) "
                     "strax.Chunk in compute method."
                 )
+            self._check_sorted(_result)
             yield self.superrun_transformation(_result, superrun, subruns)
