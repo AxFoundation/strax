@@ -12,7 +12,6 @@ import numpy as np
 import numba  # noqa: F401
 import strax
 
-
 __all__ = (
     "interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype "
     "DIGITAL_SUM_WAVEFORM_CHANNEL DEFAULT_RECORD_LENGTH "
