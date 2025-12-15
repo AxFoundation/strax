@@ -18,7 +18,6 @@ import pandas as pd
 import strax
 from strax import CutList
 
-
 export, __all__ = strax.exporter()
 __all__.extend(["RUN_DEFAULTS_KEY"])
 
