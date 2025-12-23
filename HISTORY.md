@@ -1,3 +1,10 @@
+2.2.2 / 2025-12-23
+---------------------
+* Better performance lineage `chunk_number` assignment by @dachengx in https://github.com/AxFoundation/strax/pull/1000
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.1...v2.2.2
+
+
 2.2.1 / 2025-07-18
 ---------------------
 * Check the `data_type` of returned chunk of plugin by @dachengx in https://github.com/AxFoundation/strax/pull/995
