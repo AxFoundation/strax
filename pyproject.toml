@@ -26,6 +26,7 @@ rechunker = "strax.scripts.rechunker:main"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 blosc = "*"
+boto3 = "^1.33.13"
 click = "*"
 deepdiff = "*"
 dill = "*"

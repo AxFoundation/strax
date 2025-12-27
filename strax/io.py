@@ -10,9 +10,10 @@ import zstd
 import zstandard
 import lz4.frame as lz4
 from ast import literal_eval
+from io import BytesIO
+from botocore.exceptions import ClientError
 
 import strax
-from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
 __all__.extend(["DECOMPRESS_BUFFER_SIZE"])
@@ -80,20 +81,52 @@ COMPRESSORS = dict(
 
 
 @export
-def load_file(f, compressor, dtype):
-    """Read and return data from file.
+def load_file(f, compressor, dtype, bucket_name=None, is_s3_path=False):
+    """Read and return data from file or S3.
 
     :param f: file name or handle to read from
     :param compressor: compressor to use for decompressing. If not passed, will try to load it from
         json metadata file.
     :param dtype: numpy dtype of data to load
+    :param is_s3_path: Boolean indicating if the file is stored in S3.
 
     """
-    if isinstance(f, str):
-        with open(f, mode="rb") as write_file:
-            return _load_file(write_file, compressor, dtype)
+    if is_s3_path:
+        # Read from S3
+        return load_file_from_s3(f, compressor, dtype, bucket_name)
+    elif isinstance(f, str):
+        # Read from local file
+        with open(f, mode="rb") as read_file:
+            return _load_file(read_file, compressor, dtype)
     else:
+        # If f is already a file-like object, just use it
         return _load_file(f, compressor, dtype)
+
+
+def load_file_from_s3(f, compressor, dtype, bucket_name):
+    """Helper function to load data from S3.
+
+    Confirm file exists, then try to load and decompress it.
+
+    """
+    s3 = strax.S3Frontend().s3
+
+    try:
+        # data = COMPRESSORS[compressor]["_decompress"](f)
+        # if not len(data):
+        #    return np.zeros(0, dtype=dtype)
+
+        # Retrieve the file from S3 and load into a BytesIO buffer
+        response = s3.get_object(Bucket=bucket_name, Key=f)
+        file_buffer = BytesIO()
+
+        for chunk in response["Body"].iter_chunks(chunk_size=DECOMPRESS_BUFFER_SIZE):
+            file_beffer.write(chunk)
+
+        file_buffer.seek(0)
+
+    except ClientError as e:
+        raise RuntimeError(f"Failed to load {f} from bucket {bucket_name}: {e}")
 
 
 def _load_file(f, compressor, dtype):
@@ -105,6 +138,8 @@ def _load_file(f, compressor, dtype):
             return np.frombuffer(data, dtype=dtype)
         except ValueError as e:
             raise ValueError(f"ValueError while loading data with dtype =\n\t{dtype}") from e
+    except (ValueError, KeyError) as e:
+        raise RuntimeError(f"Error loading file: {e}")
 
     except Exception:
         raise strax.DataCorrupted(
@@ -113,7 +148,7 @@ def _load_file(f, compressor, dtype):
 
 
 @export
-def save_file(f, data, compressor="zstd"):
+def save_file(f, data, compressor="zstd", s3_client=None, Bucket=None, is_s3_path=False):
     """Save data to file and return number of bytes written.
 
     :param f: file name or handle to save to
@@ -121,13 +156,29 @@ def save_file(f, data, compressor="zstd"):
     :param compressor: compressor to use
 
     """
+
     if isinstance(f, str):
         final_fn = f
         temp_fn = f + "_temp"
-        with open(temp_fn, mode="wb") as write_file:
-            result = _save_file(write_file, data, compressor)
-        os.rename(temp_fn, final_fn)
-        return result
+        if not is_s3_path:
+            with open(temp_fn, mode="wb") as write_file:
+                result = _save_file(write_file, data, compressor)
+            os.rename(temp_fn, final_fn)
+            return result
+        else:
+            # s3_interface = s3_client
+            # Copy temp file to final file
+            result = _save_file_to_s3(s3_client, temp_fn, data, Bucket, compressor)
+            s3_client.copy_object(
+                Bucket=Bucket,
+                Key=final_fn,
+                CopySource={"Bucket": Bucket, "Key": temp_fn},
+            )
+
+            # Delete the temporary file
+            s3_client.delete_object(Bucket=Bucket, Key=temp_fn)
+
+            return result
     else:
         return _save_file(f, data, compressor)
 
@@ -139,10 +190,40 @@ def _save_file(f, data, compressor="zstd"):
     return len(d_comp)
 
 
+def _save_file_to_s3(s3_client, key, data, Bucket, compressor=None):
+    # Use this method to save file directly to S3
+    # If compression is needed, handle it here
+    # Use `BytesIO` to handle binary data in-memory
+    assert isinstance(data, np.ndarray), "Please pass a numpy array"
+
+    # Create a binary buffer to simulate writing to a file
+    buffer = BytesIO()
+
+    # Simulate saving file content (you can compress or directly write data here)
+    if compressor:
+        data = COMPRESSORS[compressor]["compress"](data)
+    buffer.write(data)
+    buffer.seek(0)  # Reset the buffer to the beginning
+
+    # Upload buffer to S3 under the specified key
+    s3_client.put_object(Bucket=Bucket, Key=key, Body=buffer.getvalue())
+
+    return len(data)
+
+
+def _compress_blosc(data):
+    if data.nbytes >= blosc.MAX_BUFFERSIZE:
+        raise ValueError("Blosc's input buffer cannot exceed ~2 GB")
+    return blosc.compress(data, shuffle=False)
+
+
+COMPRESSORS["blosc"]["compress"] = _compress_blosc
+
+
 @export
 def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
-    metadata_json = RUN_METADATA_PATTERN % prefix
+    metadata_json = f"{prefix}-metadata.json"
     md_path = os.path.join(dirname, metadata_json)
 
     with open(md_path, mode="r") as f:
