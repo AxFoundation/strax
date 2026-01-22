@@ -550,8 +550,16 @@ class Mailbox:
                         now = time.monotonic()
                         min_r, laggers, lag_amounts = self._lagging_subscribers()
 
-                        msg = f"CANNOT EVICT: {self.name} size={len(self._mailbox)}/{self.max_messages} lowest={lowest} newest={self._newest_msg_number} read={self._subscribers_have_read} waiting_for={self._subscriber_waiting_for} laggers={laggers} lag={lag_amounts}"
-
+                        newest = (max([mn for mn, _ in self._mailbox]) if len(self._mailbox) else None)
+                        msg = (
+                            f"CANNOT EVICT: {self.name} "
+                            f"size={len(self._mailbox)}/{self.max_messages} "
+                            f"lowest={lowest} newest={newest} "
+                            f"read={self._subscribers_have_read} waiting_for={self._subscriber_waiting_for} "
+                            f"laggers={laggers} lag={lag_amounts} "
+                            f"subscribers=({self._subscriber_debug_str()})"
+                        )
+                        
                         if now - self._last_cannot_evict_report >= self._diag_report_interval_s:
                             self._last_cannot_evict_report = now
                             self.log.warning(msg)
