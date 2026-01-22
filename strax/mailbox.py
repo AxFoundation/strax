@@ -242,10 +242,6 @@ class Mailbox:
             subscriber_name = threading.current_thread().name
         self._subscriber_names.append(subscriber_name)
 
-        import traceback
-        if subscriber_name == "MainThread" and self.name == "peaklets_mailbox":
-            self.log.error("MainThread subscribed to peaklets here:\n%s",
-                            "".join(traceback.format_stack(limit=20)))
 
         with self._lock:
             subscriber_i = self._n_subscribers
