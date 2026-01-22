@@ -238,12 +238,14 @@ class Mailbox:
     def subscribe(self, can_drive=True, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
 
-
-
-
         if subscriber_name is None:
             subscriber_name = threading.current_thread().name
         self._subscriber_names.append(subscriber_name)
+
+        import traceback
+        if subscriber_name == "MainThread" and self.name == "peaklets_mailbox":
+            self.log.error("MainThread subscribed to peaklets here:\n%s",
+                            "".join(traceback.format_stack(limit=20)))
 
         with self._lock:
             subscriber_i = self._n_subscribers
@@ -659,7 +661,6 @@ def divide_outputs(
                 m = mailboxes[d]
                 if d in flow_freely_set:
                     # Do not block on account of these guys
-                    m.log.debug(f"Not locking (flow_freely) {d}")
                     continue
                 if lazy:
                     with m._lock:
