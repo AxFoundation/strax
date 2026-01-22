@@ -333,9 +333,49 @@ class Mailbox:
                 return len(self._mailbox) < self.max_messages or self.killed
 
             if not can_write():
-                self.log.debug("Subscribers have read: " + str(self._subscribers_have_read))
+                # Extra diagnostics to identify which subscriber is holding back progress.
+                # A mailbox can only evict old messages once ALL subscribers have advanced.
+                try:
+                    lowest = self._lowest_msg_number if len(self._mailbox) else None
+                except Exception:
+                    lowest = None
+
+                self.log.debug(
+                    "MAILBOX FULL: name=%s trying_send=%s size=%s/%s lowest=%s read=%s waiting_for=%s can_drive=%s",
+                    self.name,
+                    msg_number,
+                    len(self._mailbox),
+                    self.max_messages,
+                    lowest,
+                    list(self._subscribers_have_read),
+                    list(self._subscriber_waiting_for),
+                    list(self._subscriber_can_drive),
+                )
+
+                # Also log a quick view of the actual message numbers present.
+                # This is small (max_messages) so it's safe.
+                self.log.debug(
+                    "MAILBOX CONTENTS: %s",
+                    [mn for mn, _ in self._mailbox],
+                )
+
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
                 if not self._write_condition.wait_for(can_write, timeout=self.timeout):
+                    # Log again at timeout, since state may have changed while waiting
+                    try:
+                        lowest = self._lowest_msg_number if len(self._mailbox) else None
+                    except Exception:
+                        lowest = None
+                    self.log.debug(
+                        "MAILBOX FULL TIMEOUT: name=%s trying_send=%s size=%s/%s lowest=%s read=%s waiting_for=%s",
+                        self.name,
+                        msg_number,
+                        len(self._mailbox),
+                        self.max_messages,
+                        lowest,
+                        list(self._subscribers_have_read),
+                        list(self._subscriber_waiting_for),
+                    )
                     raise MailboxFullTimeout(f"Mailbox buffer for {self.name} emptied too slow.")
 
             if self.killed:
@@ -408,10 +448,36 @@ class Mailbox:
                 self._subscribers_have_read[subscriber_i] = next_number - 1
 
                 # Clean up the mailbox
+                # We can evict only once ALL subscribers have read past the lowest message.
+                if len(self._mailbox):
+                    lowest = self._lowest_msg_number
+                    min_read = min(self._subscribers_have_read)
+                    if min_read < lowest:
+                        # This is the condition that causes backpressure: some subscriber is behind.
+                        self.log.debug(
+                            "CANNOT EVICT: name=%s lowest=%s min_read=%s read=%s waiting_for=%s",
+                            self.name,
+                            lowest,
+                            min_read,
+                            list(self._subscribers_have_read),
+                            list(self._subscriber_waiting_for),
+                        )
+
+                popped_any = False
                 while len(self._mailbox) and (
                     min(self._subscribers_have_read) >= self._lowest_msg_number
                 ):
                     heapq.heappop(self._mailbox)
+                    popped_any = True
+
+                if popped_any:
+                    self.log.debug(
+                        "EVICTED: name=%s new_size=%s lowest_now=%s read=%s",
+                        self.name,
+                        len(self._mailbox),
+                        (self._lowest_msg_number if len(self._mailbox) else None),
+                        list(self._subscribers_have_read),
+                    )
 
                 if self.lazy and self._can_fetch():
                     self._fetch_new_condition.notify_all()
