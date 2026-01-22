@@ -480,6 +480,17 @@ def divide_outputs(
     if outputs is None:
         outputs = mailboxes.keys()
     mbs_to_kill = [mailboxes[d] for d in outputs]
+    # Debug helper: log configuration once
+    try:
+        flow_freely_set = set(flow_freely)
+    except TypeError:
+        flow_freely_set = set()
+    logging.getLogger(__name__).debug(
+        "divide_outputs starting: outputs=%s flow_freely=%s lazy=%s",
+        list(outputs),
+        list(flow_freely_set),
+        lazy,
+    )
     # TODO: this code duplicates exception handling and cleanup
     # from Mailbox.send_from! Can we avoid that somehow?
     i = 0
@@ -487,12 +498,20 @@ def divide_outputs(
         while True:
             for d in outputs:
                 m = mailboxes[d]
-                if d in flow_freely:
+                if d in flow_freely_set:
                     # Do not block on account of these guys
-                    m.log.debug(f"Not locking {d}")
+                    m.log.debug(f"Not locking (flow_freely) {d}")
                     continue
                 if lazy:
                     with m._lock:
+                        m.log.debug(
+                            "divide_outputs prefetch check i=%s d=%s size=%s/%s waiting_for=%s",
+                            i,
+                            d,
+                            len(m._mailbox),
+                            m.max_messages,
+                            m._subscriber_waiting_for,
+                        )
                         if not m._can_fetch():
                             m.log.debug(
                                 f"Waiting to fetch {i}, "
@@ -511,9 +530,27 @@ def divide_outputs(
                 # No need to send this yet, close will do that
                 break
 
+            logging.getLogger(__name__).debug(
+                "divide_outputs got result i=%s keys=%s",
+                i,
+                list(result.keys()) if hasattr(result, "keys") else type(result),
+            )
+
             try:
                 for d, x in result.items():
-                    mailboxes[d].send(x)
+                    m = mailboxes[d]
+                    # If a mailbox is full, sending will block; log this explicitly to identify bottlenecks
+                    if d not in flow_freely_set:
+                        with m._lock:
+                            if len(m._mailbox) >= m.max_messages and not m.killed:
+                                m.log.debug(
+                                    "divide_outputs about to block on FULL mailbox i=%s d=%s size=%s/%s",
+                                    i,
+                                    d,
+                                    len(m._mailbox),
+                                    m.max_messages,
+                                )
+                    m.send(x)
             except Exception as e:
                 # Inform the source we're going down
                 source.throw(e)
