@@ -5,7 +5,10 @@ import sys
 import threading
 import typing
 import logging
-
+import time
+import faulthandler
+import io
+ 
 from strax.utils import exporter
 
 export, __all__ = exporter()
@@ -103,6 +106,11 @@ class Mailbox:
         self._lock = threading.RLock()
         self.log = logging.getLogger(self.name)
 
+        # Rate-limited diagnostics helpers (avoid log spam, keep it readable)
+        self._last_full_report = 0.0
+        self._last_cannot_evict_report = 0.0
+        self._diag_report_interval_s = 5.0
+
         # Conditions to wait on
         # Do NOT call notify_all when the condition is False!
         # We use wait_for, which also returns False when the timeout is broken
@@ -141,6 +149,36 @@ class Mailbox:
         self._fetch_new_condition = Condition("_fetch_new_condition", self.log, lock=self._lock)
 
         self.log.debug("Initialized")
+
+    def _lagging_subscribers(self):
+        """Return (min_read, laggers_indices, lag_amounts_by_index)."""
+        if not self._subscribers_have_read:
+            return -1, [], {}
+        min_read = min(self._subscribers_have_read)
+        laggers = [i for i, r in enumerate(self._subscribers_have_read) if r == min_read]
+        newest = max([mn for mn, _ in self._mailbox], default=-1)
+        lag_amounts = {i: (newest - self._subscribers_have_read[i]) for i in laggers}
+        return min_read, laggers, lag_amounts
+
+    def _state_line(self):
+        """Compact single-line state summary for grepping."""
+        lowest = (self._lowest_msg_number if len(self._mailbox) else None)
+        newest = (max([mn for mn, _ in self._mailbox]) if len(self._mailbox) else None)
+        min_read, laggers, lag_amounts = self._lagging_subscribers()
+        return (
+            f"name={self.name} size={len(self._mailbox)}/{self.max_messages} "
+            f"lowest={lowest} newest={newest} read={list(self._subscribers_have_read)} "
+            f"waiting_for={list(self._subscriber_waiting_for)} laggers={laggers} lag={lag_amounts}"
+        )
+
+    def _dump_all_thread_traces(self):
+        """Dump all thread stack traces into a string for logging."""
+        buf = io.StringIO()
+        try:
+            faulthandler.dump_traceback(file=buf, all_threads=True)
+        except Exception as e:
+            return f"<failed to dump thread traces: {e}>"
+        return buf.getvalue()
 
     def add_sender(self, source, name=None):
         """Configure mailbox to read from an iterable source.
@@ -359,6 +397,11 @@ class Mailbox:
                     [mn for mn, _ in self._mailbox],
                 )
 
+                now = time.monotonic()
+                if now - self._last_full_report >= self._diag_report_interval_s:
+                    self._last_full_report = now
+                    self.log.warning("MAILBOX STILL FULL: %s", self._state_line())
+
                 self.log.debug(f"Mailbox full, wait to send {msg_number}")
                 if not self._write_condition.wait_for(can_write, timeout=self.timeout):
                     # Log again at timeout, since state may have changed while waiting
@@ -376,6 +419,8 @@ class Mailbox:
                         list(self._subscribers_have_read),
                         list(self._subscriber_waiting_for),
                     )
+                    self.log.error("MAILBOX FULL TIMEOUT: %s", self._state_line())
+                    self.log.error("THREAD TRACES (on full timeout)\n%s", self._dump_all_thread_traces())
                     raise MailboxFullTimeout(f"Mailbox buffer for {self.name} emptied too slow.")
 
             if self.killed:
@@ -421,6 +466,13 @@ class Mailbox:
                     if self.lazy and self._can_fetch():
                         self._fetch_new_condition.notify_all()
                     if not self._read_condition.wait_for(next_ready, self.timeout):
+                        self.log.error(
+                            "READ TIMEOUT waiting_for=%s subscriber=%s %s",
+                            next_number,
+                            subscriber_i,
+                            self._state_line(),
+                        )
+                        self.log.error("THREAD TRACES (on read timeout)\n%s", self._dump_all_thread_traces())
                         raise MailboxReadTimeout(f"{self.name} did not get {next_number} in time.")
                 self._subscriber_waiting_for[subscriber_i] = None
 
@@ -454,14 +506,17 @@ class Mailbox:
                     min_read = min(self._subscribers_have_read)
                     if min_read < lowest:
                         # This is the condition that causes backpressure: some subscriber is behind.
-                        self.log.debug(
-                            "CANNOT EVICT: name=%s lowest=%s min_read=%s read=%s waiting_for=%s",
-                            self.name,
-                            lowest,
-                            min_read,
-                            list(self._subscribers_have_read),
-                            list(self._subscriber_waiting_for),
+                        now = time.monotonic()
+                        min_r, laggers, lag_amounts = self._lagging_subscribers()
+                        msg = (
+                            f"CANNOT EVICT: {self._state_line()} "
+                            f"(lowest={lowest} min_read={min_r} laggers={laggers} lag={lag_amounts})"
                         )
+                        if now - self._last_cannot_evict_report >= self._diag_report_interval_s:
+                            self._last_cannot_evict_report = now
+                            self.log.warning(msg)
+                        else:
+                            self.log.debug(msg)
 
                 popped_any = False
                 while len(self._mailbox) and (
