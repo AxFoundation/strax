@@ -243,11 +243,11 @@ class Mailbox:
         if name is None:
             name = f"read_{self._n_subscribers}:{self.name}"
         t = threading.Thread(
-            target=subscriber, name=name, args=(self.subscribe(can_drive=can_drive),), kwargs=kwargs
+            target=subscriber, name=name, args=(self.subscribe(can_drive=can_drive, subscriber_name=name),), kwargs=kwargs
         )
         self._threads.append(t)
 
-    def subscribe(self, subscriber_name=None, **args, **kwargs):
+    def subscribe(self, can_drive=True, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
 
         if subscriber_name is None:
