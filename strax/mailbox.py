@@ -157,32 +157,20 @@ class Mailbox:
     def _subscriber_debug_str(self):
         """Best-effort human-readable subscriber state for debug logs."""
         parts = []
-        try:
-            n = len(self._subscribers_have_read)
-        except Exception:
-            try:
-                n = len(self._subscriber_waiting_for)
-            except Exception:
-                n = len(self._subscriber_names)
-
+        n = max(
+            len(self._subscribers_have_read),
+            len(self._subscriber_waiting_for),
+            len(self._subscriber_names),
+        )
         for i in range(n):
-            name = None
-            if i < len(self._subscriber_names):
-                name = self._subscriber_names[i]
+            name = self._subscriber_names[i] if i < len(self._subscriber_names) else None
             if not name:
                 name = f"sub{i}"
 
-            read_i = None
-            waiting_i = None
-            try:
-                read_i = self._subscribers_have_read[i]
-            except Exception:
-                pass
-            try:
-                waiting_i = self._subscriber_waiting_for[i]
-            except Exception:
-                pass
-
+            read_i = self._subscribers_have_read[i] if i < len(self._subscribers_have_read) else None
+            waiting_i = (
+                self._subscriber_waiting_for[i] if i < len(self._subscriber_waiting_for) else None
+            )
             parts.append(f"{i}:{name} read={read_i} waiting_for={waiting_i}")
         return " | ".join(parts)
 
@@ -250,6 +238,9 @@ class Mailbox:
     def subscribe(self, can_drive=True, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
 
+
+
+
         if subscriber_name is None:
             subscriber_name = threading.current_thread().name
         self._subscriber_names.append(subscriber_name)
@@ -260,6 +251,15 @@ class Mailbox:
             self._subscribers_have_read.append(-1)
             self._subscriber_waiting_for.append(None)
             self.log.debug(f"Added subscriber {subscriber_i}")
+
+            self.log.debug(
+                "Added subscriber i=%s name=%s can_drive=%s",
+                subscriber_i,
+                subscriber_name,
+                can_drive,
+            )
+            self.log.debug("Subscribers: %s", self._subscriber_debug_str())
+
             return self._read(subscriber_i=subscriber_i)
 
     def start(self):
@@ -420,23 +420,15 @@ class Mailbox:
                     lowest = None
 
                 self.log.debug(
-                    "MAILBOX FULL: name=%s trying_send=%s size=%s/%s lowest=%s read=%s waiting_for=%s can_drive=%s",
+                    "MAILBOX FULL: name=%s trying_send=%s size=%s/%s lowest=%s",
                     self.name,
                     msg_number,
                     len(self._mailbox),
                     self.max_messages,
                     lowest,
-                    list(self._subscribers_have_read),
-                    list(self._subscriber_waiting_for),
-                    list(self._subscriber_can_drive),
                 )
-
-                # Also log a quick view of the actual message numbers present.
-                # This is small (max_messages) so it's safe.
-                self.log.debug(
-                    "MAILBOX CONTENTS: %s",
-                    [mn for mn, _ in self._mailbox],
-                )
+                self.log.debug("MAILBOX FULL SUBSCRIBERS: %s", self._subscriber_debug_str())
+                self.log.debug("MAILBOX CONTENTS: %s", [mn for mn, _ in self._mailbox])
 
                 now = time.monotonic()
                 if now - self._last_full_report >= self._diag_report_interval_s:
@@ -450,17 +442,8 @@ class Mailbox:
                         lowest = self._lowest_msg_number if len(self._mailbox) else None
                     except Exception:
                         lowest = None
-                    self.log.debug(
-                        "MAILBOX FULL TIMEOUT: name=%s trying_send=%s size=%s/%s lowest=%s read=%s waiting_for=%s",
-                        self.name,
-                        msg_number,
-                        len(self._mailbox),
-                        self.max_messages,
-                        lowest,
-                        list(self._subscribers_have_read),
-                        list(self._subscriber_waiting_for),
-                    )
                     self.log.error("MAILBOX FULL TIMEOUT: %s", self._state_line())
+                    self.log.error("MAILBOX FULL TIMEOUT SUBSCRIBERS: %s", self._subscriber_debug_str())
                     self.log.error("THREAD TRACES (on full timeout)\n%s", self._dump_all_thread_traces())
                     raise MailboxFullTimeout(f"Mailbox buffer for {self.name} emptied too slow.")
 
@@ -559,7 +542,7 @@ class Mailbox:
                             f"laggers={laggers} lag={lag_amounts} "
                             f"subscribers=({self._subscriber_debug_str()})"
                         )
-                        
+
                         if now - self._last_cannot_evict_report >= self._diag_report_interval_s:
                             self._last_cannot_evict_report = now
                             self.log.warning(msg)
