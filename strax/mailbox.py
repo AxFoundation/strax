@@ -247,10 +247,10 @@ class Mailbox:
         )
         self._threads.append(t)
 
-    def subscribe(self, **args, subscriber_name=None, **kwargs):
+    def subscribe(self, subscriber_name=None, **args, **kwargs):
         """Return generator over messages in the mailbox."""
 
-        if subscriber_name is not None:
+        if subscriber_name is None:
             subscriber_name = threading.current_thread().name
         self._subscriber_names.append(subscriber_name)
 
