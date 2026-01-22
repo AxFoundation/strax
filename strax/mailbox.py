@@ -631,6 +631,13 @@ class Mailbox:
         return self._mailbox[0][0]
 
 
+    @property
+    def _newest_msg_number(self):
+        """Highest message number currently stored in the mailbox heap."""
+        # _mailbox is a heap by msg_number, so the newest is not necessarily at index -1.
+        return max(mn for mn, _ in self._mailbox)
+
+
 @export
 def divide_outputs(
     source, mailboxes: typing.Dict[str, Mailbox], lazy=False, flow_freely=tuple(), outputs=None
