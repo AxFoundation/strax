@@ -8,10 +8,11 @@ import logging
 import time
 import faulthandler
 import io
- 
+import threading
 from strax.utils import exporter
 
 export, __all__ = exporter()
+
 
 
 @export
@@ -106,6 +107,8 @@ class Mailbox:
         self._lock = threading.RLock()
         self.log = logging.getLogger(self.name)
 
+        self._subscriber_names = []
+
         # Rate-limited diagnostics helpers (avoid log spam, keep it readable)
         self._last_full_report = 0.0
         self._last_cannot_evict_report = 0.0
@@ -149,6 +152,39 @@ class Mailbox:
         self._fetch_new_condition = Condition("_fetch_new_condition", self.log, lock=self._lock)
 
         self.log.debug("Initialized")
+
+
+    def _subscriber_debug_str(self):
+        """Best-effort human-readable subscriber state for debug logs."""
+        parts = []
+        try:
+            n = len(self._subscribers_have_read)
+        except Exception:
+            try:
+                n = len(self._subscriber_waiting_for)
+            except Exception:
+                n = len(self._subscriber_names)
+
+        for i in range(n):
+            name = None
+            if i < len(self._subscriber_names):
+                name = self._subscriber_names[i]
+            if not name:
+                name = f"sub{i}"
+
+            read_i = None
+            waiting_i = None
+            try:
+                read_i = self._subscribers_have_read[i]
+            except Exception:
+                pass
+            try:
+                waiting_i = self._subscriber_waiting_for[i]
+            except Exception:
+                pass
+
+            parts.append(f"{i}:{name} read={read_i} waiting_for={waiting_i}")
+        return " | ".join(parts)
 
     def _lagging_subscribers(self):
         """Return (min_read, laggers_indices, lag_amounts_by_index)."""
@@ -211,8 +247,13 @@ class Mailbox:
         )
         self._threads.append(t)
 
-    def subscribe(self, can_drive=True):
+    def subscribe(self, **args, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
+
+        if subscriber_name is not None:
+            subscriber_name = threading.current_thread().name
+        self._subscriber_names.append(subscriber_name)
+
         with self._lock:
             subscriber_i = self._n_subscribers
             self._subscriber_can_drive.append(can_drive)
@@ -508,10 +549,9 @@ class Mailbox:
                         # This is the condition that causes backpressure: some subscriber is behind.
                         now = time.monotonic()
                         min_r, laggers, lag_amounts = self._lagging_subscribers()
-                        msg = (
-                            f"CANNOT EVICT: {self._state_line()} "
-                            f"(lowest={lowest} min_read={min_r} laggers={laggers} lag={lag_amounts})"
-                        )
+
+                        msg = f"CANNOT EVICT: {self.name} size={len(self._mailbox)}/{self.max_messages} lowest={lowest} newest={self._newest_msg_number} read={self._subscribers_have_read} waiting_for={self._subscriber_waiting_for} laggers={laggers} lag={lag_amounts}"
+
                         if now - self._last_cannot_evict_report >= self._diag_report_interval_s:
                             self._last_cannot_evict_report = now
                             self.log.warning(msg)
