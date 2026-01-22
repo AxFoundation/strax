@@ -235,7 +235,7 @@ class Mailbox:
         )
         self._threads.append(t)
 
-    def subscribe(self, can_drive=True, subscriber_name=None, **kwargs):
+    def subscribe(self, can_drive=False, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
 
         if subscriber_name is None:
@@ -249,6 +249,8 @@ class Mailbox:
 
         with self._lock:
             subscriber_i = self._n_subscribers
+            # Default to non-driving subscriptions (e.g. MainThread wiring in processors).
+            # Driving is explicitly enabled for worker reader threads via add_reader(..., can_drive=True).
             self._subscriber_can_drive.append(can_drive)
             self._subscribers_have_read.append(-1)
             self._subscriber_waiting_for.append(None)
