@@ -151,7 +151,13 @@ class ThreadedMailboxProcessor(BaseProcessor):
                 mname = p.__class__.__name__ + "_divide_outputs"
                 self.mailboxes[mname].add_sender(
                     p.iter(
-                        iters={dep: self.mailboxes[dep].subscribe() for dep in p.depends_on},
+                        iters={
+                            dep: self.mailboxes[dep].subscribe(
+                                can_drive=False,
+                                subscriber_name=f"{mname}<-{dep}",
+                            )
+                            for dep in p.depends_on
+                        },
                         executor=executor,
                     ),
                     name=f"divide_outputs:{d}",
