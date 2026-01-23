@@ -180,7 +180,13 @@ class ThreadedMailboxProcessor(BaseProcessor):
             else:
                 self.mailboxes[d].add_sender(
                     p.iter(
-                        iters={dep: self.mailboxes[dep].subscribe() for dep in p.depends_on},
+                        iters={
+                            dep: self.mailboxes[dep].subscribe(
+                                can_drive=False,
+                                subscriber_name=f"{d}<-{dep}",
+                            )
+                            for dep in p.depends_on
+                        },
                         executor=executor,
                     ),
                     name=f"build:{d}",
@@ -243,7 +249,10 @@ class ThreadedMailboxProcessor(BaseProcessor):
 
     def iter(self):
         target = self.components.targets[0]
-        final_generator = self.mailboxes[target].subscribe()
+        final_generator = self.mailboxes[target].subscribe(
+            can_drive=False,
+            subscriber_name=f"FINAL<-{target}",
+        )
 
         self.log.debug("Starting threads")
         for m in self.mailboxes.values():

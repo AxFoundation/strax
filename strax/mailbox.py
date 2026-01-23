@@ -235,7 +235,7 @@ class Mailbox:
         )
         self._threads.append(t)
 
-    def subscribe(self, can_drive=False, subscriber_name=None, **kwargs):
+    def subscribe(self, can_drive=True, subscriber_name=None, **kwargs):
         """Return generator over messages in the mailbox."""
 
         if subscriber_name is None:
