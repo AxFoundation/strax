@@ -135,9 +135,7 @@ class TimeDelayPlugin(Plugin):
             if data_type not in self.output_buffer:
                 self.output_buffer[data_type] = arr
             elif len(arr) > 0:
-                self.output_buffer[data_type] = np.concatenate(
-                    [self.output_buffer[data_type], arr]
-                )
+                self.output_buffer[data_type] = np.concatenate([self.output_buffer[data_type], arr])
 
     def _process_output(self, safe_boundary):
         """Process buffers and return safe portion."""
