@@ -21,7 +21,7 @@ class ChunkedSource(strax.Plugin):
     provides = "source_data"
     dtype = simple_interval_dtype()
     rechunk_on_save = False
-    chunks_data = []
+    chunks_data: list = []
 
     def is_ready(self, chunk_i):
         return chunk_i < len(self.chunks_data)
@@ -237,7 +237,7 @@ def test_chunk_continuity():
     for i in range(1, len(chunks)):
         assert (
             chunks[i].start == chunks[i - 1].end
-        ), f"Chunk {i} start ({chunks[i].start}) != chunk {i-1} end ({chunks[i-1].end})"
+        ), f"Chunk {i} start ({chunks[i].start}) != chunk {i - 1} end ({chunks[i - 1].end})"
 
 
 def test_straddling_data_across_boundary():
