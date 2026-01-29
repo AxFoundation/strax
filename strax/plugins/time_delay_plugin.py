@@ -17,7 +17,6 @@ class TimeDelayPlugin(Plugin):
     multi-output plugins.
 
     Subclasses must implement:
-        get_max_delay(): Return maximum possible delay in nanoseconds
         compute_with_delay(**kwargs): Return delayed output data (arrays, not Chunks)
 
     For multi-output plugins, compute_with_delay should return a dict
@@ -29,20 +28,12 @@ class TimeDelayPlugin(Plugin):
 
     def __init__(self):
         super().__init__()
-        self._init_buffers()
-
-    def _init_buffers(self):
-        """Initialize/reset all buffer state."""
         self.output_buffer = {}
         self.last_output_end = 0
         self.first_output = True
         self._cached_superrun = None
         self._cached_subruns = None
         self._min_buffered_time = float("inf")
-
-    def get_max_delay(self):
-        """Return the maximum possible delay in nanoseconds."""
-        raise NotImplementedError("Subclasses must implement get_max_delay()")
 
     def compute_with_delay(self, **kwargs):
         """Compute output data with time delays already applied.
@@ -62,47 +53,20 @@ class TimeDelayPlugin(Plugin):
 
     def _flush_buffers(self):
         """Flush all remaining data from buffers."""
-        if self.multi_output:
-            return self._flush_multi_output()
-        else:
-            return self._flush_single_output()
-
-    def _flush_single_output(self):
-        """Flush buffer for single-output plugin."""
-        buf = self.output_buffer.get(None)
-        if buf is None or len(buf) == 0:
-            return None
-
-        buf.sort(order="time")
-        data_end = int(strax.endtime(buf).max())
-        chunk_end = max(self.last_output_end, data_end)
-
-        result = self._make_chunk(
-            data=buf,
-            data_type=self.provides[0],
-            start=self.last_output_end,
-            end=chunk_end,
-        )
-        result = self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
-
-        self.output_buffer = {}
-        return result
-
-    def _flush_multi_output(self):
-        """Flush buffers for multi-output plugin."""
         has_data = any(len(self.output_buffer.get(dt, [])) > 0 for dt in self.provides)
         if not has_data:
             return None
 
+        # Sort buffers and compute chunk_end
         chunk_end = self.last_output_end
         for data_type in self.provides:
             buf = self.output_buffer.get(data_type)
             if buf is not None and len(buf) > 0:
                 buf.sort(order="time")
-                self.output_buffer[data_type] = buf
                 data_end = int(strax.endtime(buf).max())
                 chunk_end = max(chunk_end, data_end)
 
+        # Build result dict
         result = {}
         for data_type in self.provides:
             buf = self.output_buffer.get(data_type, np.empty(0, self.dtype_for(data_type)))
@@ -114,13 +78,16 @@ class TimeDelayPlugin(Plugin):
             )
 
         result = self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
-
         self.output_buffer = {}
-        return result
+
+        return self._unwrap_result(result)
 
     def do_compute(self, chunk_i=None, **kwargs):
         """Process input, buffer output, return safe portion."""
-        input_start, input_end = self._get_input_timing(kwargs)
+        if not kwargs:
+            raise RuntimeError("TimeDelayPlugin must have dependencies")
+        first_chunk = next(iter(kwargs.values()))
+        input_end = first_chunk.end
 
         self._cached_superrun = self._check_subruns_uniqueness(
             kwargs, {k: v.superrun for k, v in kwargs.items()}
@@ -134,94 +101,53 @@ class TimeDelayPlugin(Plugin):
 
         self._add_to_buffers(new_output)
 
-        safe_boundary = input_end
+        return self._process_output(safe_boundary=input_end)
 
+    def _unwrap_result(self, result):
+        """Unwrap result dict to single Chunk for single-output plugins."""
         if self.multi_output:
-            return self._process_multi_output(safe_boundary)
-        else:
-            return self._process_single_output(safe_boundary)
-
-    def _get_input_timing(self, kwargs):
-        """Extract input chunk timing."""
-        if not kwargs:
-            raise RuntimeError("TimeDelayPlugin must have dependencies")
-        first_chunk = next(iter(kwargs.values()))
-        return first_chunk.start, first_chunk.end
+            return result
+        return result[self.provides[0]]
 
     def _add_to_buffers(self, new_output):
-        """Add new output to appropriate buffers."""
+        """Add new output to buffers."""
+        # Normalize output to dict format
         if self.multi_output:
-            self._add_to_buffers_multi(new_output)
+            if not isinstance(new_output, dict):
+                raise ValueError(
+                    f"{self.__class__.__name__} is multi-output, "
+                    "compute_with_delay must return a dict"
+                )
+            output_dict = new_output
         else:
-            self._add_to_buffers_single(new_output)
+            if isinstance(new_output, dict):
+                raise ValueError(
+                    f"{self.__class__.__name__} is single-output, "
+                    "compute_with_delay should not return a dict"
+                )
+            output_dict = {self.provides[0]: new_output}
 
-    def _add_to_buffers_single(self, new_output):
-        """Add output to buffer for single-output plugin."""
-        if isinstance(new_output, dict):
-            raise ValueError(
-                f"{self.__class__.__name__} is single-output, "
-                "compute_with_delay should not return a dict"
-            )
-        if not isinstance(new_output, np.ndarray):
-            new_output = strax.dict_to_rec(new_output, dtype=self.dtype)
-
-        if None not in self.output_buffer:
-            self.output_buffer[None] = new_output
-        elif len(new_output) > 0:
-            self.output_buffer[None] = np.concatenate([self.output_buffer[None], new_output])
-
-    def _add_to_buffers_multi(self, new_output):
-        """Add output to buffers for multi-output plugin."""
-        if not isinstance(new_output, dict):
-            raise ValueError(
-                f"{self.__class__.__name__} is multi-output, "
-                "compute_with_delay must return a dict"
-            )
         for data_type in self.provides:
-            arr = new_output.get(data_type, np.empty(0, self.dtype_for(data_type)))
+            arr = output_dict.get(data_type, np.empty(0, self.dtype_for(data_type)))
             if not isinstance(arr, np.ndarray):
                 arr = strax.dict_to_rec(arr, dtype=self.dtype_for(data_type))
 
             if data_type not in self.output_buffer:
                 self.output_buffer[data_type] = arr
             elif len(arr) > 0:
-                self.output_buffer[data_type] = np.concatenate([self.output_buffer[data_type], arr])
+                self.output_buffer[data_type] = np.concatenate(
+                    [self.output_buffer[data_type], arr]
+                )
 
-    def _process_single_output(self, safe_boundary):
-        """Process buffer for single-output plugin."""
-        buf = self.output_buffer.get(None, np.empty(0, self.dtype))
-
-        if len(buf) > 0:
-            buf.sort(order="time")
-            self.output_buffer[None] = buf
-
-        safe_data, remaining = self._split_buffer(buf, safe_boundary)
-        self.output_buffer[None] = remaining
-
-        self._update_min_buffered_time()
-
-        chunk_start, chunk_end = self._get_chunk_boundaries(safe_data, safe_boundary)
-
-        self.last_output_end = chunk_end
-        self.first_output = False
-
-        result = self._make_chunk(
-            data=safe_data,
-            data_type=self.provides[0],
-            start=chunk_start,
-            end=chunk_end,
-        )
-
-        return self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
-
-    def _process_multi_output(self, safe_boundary):
-        """Process buffers for multi-output plugin."""
+    def _process_output(self, safe_boundary):
+        """Process buffers and return safe portion."""
+        # Sort all buffers
         for data_type in self.provides:
             buf = self.output_buffer.get(data_type)
             if buf is not None and len(buf) > 0:
                 buf.sort(order="time")
-                self.output_buffer[data_type] = buf
 
+        # Split buffers into safe and remaining portions
         safe_data_dict = {}
         for data_type in self.provides:
             buf = self.output_buffer.get(data_type, np.empty(0, self.dtype_for(data_type)))
@@ -229,15 +155,19 @@ class TimeDelayPlugin(Plugin):
             self.output_buffer[data_type] = remaining
             safe_data_dict[data_type] = safe_data
 
-        self._update_min_buffered_time()
+        # Update minimum buffered time
+        min_time = float("inf")
+        for buf in self.output_buffer.values():
+            if buf is not None and len(buf) > 0:
+                min_time = min(min_time, buf["time"].min())
+        self._min_buffered_time = min_time
 
+        # Compute unified chunk boundaries across all data types
         chunk_start = None
         chunk_end = None
-
         for data_type in self.provides:
             safe_data = safe_data_dict[data_type]
             dt_start, dt_end = self._get_chunk_boundaries(safe_data, safe_boundary)
-
             if chunk_start is None:
                 chunk_start = dt_start
                 chunk_end = dt_end
@@ -245,6 +175,7 @@ class TimeDelayPlugin(Plugin):
                 chunk_start = min(chunk_start, dt_start)
                 chunk_end = max(chunk_end, dt_end)
 
+        # Build result dict
         result = {}
         for data_type in self.provides:
             result[data_type] = self._make_chunk(
@@ -257,7 +188,9 @@ class TimeDelayPlugin(Plugin):
         self.last_output_end = chunk_end
         self.first_output = False
 
-        return self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
+        result = self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
+
+        return self._unwrap_result(result)
 
     def _split_buffer(self, buf, safe_boundary):
         """Split buffer into safe portion (endtime <= boundary) and remainder."""
@@ -272,14 +205,6 @@ class TimeDelayPlugin(Plugin):
         remaining = buf[~safe_mask].copy()
 
         return safe_data, remaining
-
-    def _update_min_buffered_time(self):
-        """Recalculate minimum time across all buffered data."""
-        min_time = float("inf")
-        for key, buf in self.output_buffer.items():
-            if buf is not None and len(buf) > 0:
-                min_time = min(min_time, buf["time"].min())
-        self._min_buffered_time = min_time
 
     def _get_chunk_boundaries(self, safe_data, safe_boundary):
         """Determine chunk start/end ensuring buffered data fits in next chunk."""

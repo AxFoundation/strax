@@ -43,9 +43,6 @@ class ConstantDelayPlugin(strax.TimeDelayPlugin):
     data_kind = "delayed_data"
     delay = 0
 
-    def get_max_delay(self):
-        return self.delay
-
     def compute_with_delay(self, source_data):
         result = source_data.copy()
         result["time"] = result["time"] + self.delay
@@ -59,11 +56,7 @@ class VariableDelayPlugin(strax.TimeDelayPlugin):
     provides = "variable_delayed_data"
     dtype = simple_interval_dtype()
     data_kind = "variable_delayed_data"
-    max_delay = 100
     delay_pattern = [0]
-
-    def get_max_delay(self):
-        return self.max_delay
 
     def compute_with_delay(self, source_data):
         result = source_data.copy()
@@ -85,16 +78,12 @@ class MultiOutputDelayPlugin(strax.TimeDelayPlugin):
     }
     delay_a = 0
     delay_b = 0
-    max_delay = 100
 
     def infer_dtype(self):
         return {
             "delayed_output_a": simple_interval_dtype(),
             "delayed_output_b": simple_interval_dtype(),
         }
-
-    def get_max_delay(self):
-        return self.max_delay
 
     def compute_with_delay(self, source_data):
         result_a = source_data.copy()
@@ -163,7 +152,6 @@ def test_variable_delay_reorders_and_buffers():
     st = create_context_with_source(chunks_data)
 
     class TestVariableDelay(VariableDelayPlugin):
-        max_delay = 100
         delay_pattern = [0, 80, 20]
 
     st.register(TestVariableDelay)
@@ -204,7 +192,6 @@ def test_multi_output_different_delays():
     class TestMultiOutput(MultiOutputDelayPlugin):
         delay_a = 20
         delay_b = 60
-        max_delay = 60
 
     st.register(TestMultiOutput)
 
