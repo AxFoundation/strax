@@ -235,9 +235,9 @@ def test_chunk_continuity():
     chunks = list(st.get_iter(run_id="test", targets="delayed_data"))
 
     for i in range(1, len(chunks)):
-        assert chunks[i].start == chunks[i - 1].end, (
-            f"Chunk {i} start ({chunks[i].start}) != chunk {i-1} end ({chunks[i-1].end})"
-        )
+        assert (
+            chunks[i].start == chunks[i - 1].end
+        ), f"Chunk {i} start ({chunks[i].start}) != chunk {i-1} end ({chunks[i-1].end})"
 
 
 def test_straddling_data_across_boundary():

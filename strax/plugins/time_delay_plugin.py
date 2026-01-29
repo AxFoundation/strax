@@ -47,9 +47,8 @@ class TimeDelayPlugin(Plugin):
     def compute_with_delay(self, **kwargs):
         """Compute output data with time delays already applied.
 
-        Input arrays are numpy arrays (not Chunks). Output arrays do NOT
-        need to be sorted. For multi-output, return a dict mapping
-        data_type to arrays.
+        Input arrays are numpy arrays (not Chunks). Output arrays do NOT need to be sorted. For
+        multi-output, return a dict mapping data_type to arrays.
 
         """
         raise NotImplementedError("Subclasses must implement compute_with_delay()")
@@ -84,18 +83,14 @@ class TimeDelayPlugin(Plugin):
             start=self.last_output_end,
             end=chunk_end,
         )
-        result = self.superrun_transformation(
-            result, self._cached_superrun, self._cached_subruns
-        )
+        result = self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
 
         self.output_buffer = {}
         return result
 
     def _flush_multi_output(self):
         """Flush buffers for multi-output plugin."""
-        has_data = any(
-            len(self.output_buffer.get(dt, [])) > 0 for dt in self.provides
-        )
+        has_data = any(len(self.output_buffer.get(dt, [])) > 0 for dt in self.provides)
         if not has_data:
             return None
 
@@ -110,9 +105,7 @@ class TimeDelayPlugin(Plugin):
 
         result = {}
         for data_type in self.provides:
-            buf = self.output_buffer.get(
-                data_type, np.empty(0, self.dtype_for(data_type))
-            )
+            buf = self.output_buffer.get(data_type, np.empty(0, self.dtype_for(data_type)))
             result[data_type] = self._make_chunk(
                 data=buf,
                 data_type=data_type,
@@ -120,9 +113,7 @@ class TimeDelayPlugin(Plugin):
                 end=chunk_end,
             )
 
-        result = self.superrun_transformation(
-            result, self._cached_superrun, self._cached_subruns
-        )
+        result = self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
 
         self.output_buffer = {}
         return result
@@ -177,9 +168,7 @@ class TimeDelayPlugin(Plugin):
         if None not in self.output_buffer:
             self.output_buffer[None] = new_output
         elif len(new_output) > 0:
-            self.output_buffer[None] = np.concatenate(
-                [self.output_buffer[None], new_output]
-            )
+            self.output_buffer[None] = np.concatenate([self.output_buffer[None], new_output])
 
     def _add_to_buffers_multi(self, new_output):
         """Add output to buffers for multi-output plugin."""
@@ -196,9 +185,7 @@ class TimeDelayPlugin(Plugin):
             if data_type not in self.output_buffer:
                 self.output_buffer[data_type] = arr
             elif len(arr) > 0:
-                self.output_buffer[data_type] = np.concatenate(
-                    [self.output_buffer[data_type], arr]
-                )
+                self.output_buffer[data_type] = np.concatenate([self.output_buffer[data_type], arr])
 
     def _process_single_output(self, safe_boundary):
         """Process buffer for single-output plugin."""
@@ -225,9 +212,7 @@ class TimeDelayPlugin(Plugin):
             end=chunk_end,
         )
 
-        return self.superrun_transformation(
-            result, self._cached_superrun, self._cached_subruns
-        )
+        return self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
 
     def _process_multi_output(self, safe_boundary):
         """Process buffers for multi-output plugin."""
@@ -239,9 +224,7 @@ class TimeDelayPlugin(Plugin):
 
         safe_data_dict = {}
         for data_type in self.provides:
-            buf = self.output_buffer.get(
-                data_type, np.empty(0, self.dtype_for(data_type))
-            )
+            buf = self.output_buffer.get(data_type, np.empty(0, self.dtype_for(data_type)))
             safe_data, remaining = self._split_buffer(buf, safe_boundary)
             self.output_buffer[data_type] = remaining
             safe_data_dict[data_type] = safe_data
@@ -274,9 +257,7 @@ class TimeDelayPlugin(Plugin):
         self.last_output_end = chunk_end
         self.first_output = False
 
-        return self.superrun_transformation(
-            result, self._cached_superrun, self._cached_subruns
-        )
+        return self.superrun_transformation(result, self._cached_superrun, self._cached_subruns)
 
     def _split_buffer(self, buf, safe_boundary):
         """Split buffer into safe portion (endtime <= boundary) and remainder."""
