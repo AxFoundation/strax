@@ -35,6 +35,7 @@ There are several plugin types:
    * ``CutPlugin``: Plugin type where using ``def cut_by(self, <datakind>)`` inside the plugin a user can return a boolean array that can be used to select data.
    * ``MergeOnlyPlugin``: This is for internal use and only merges two plugins into a new one. See as an example in straxen the ``EventInfo`` plugin where the following datatypes are merged ``'events', 'event_basics', 'event_positions', 'corrected_areas', 'energy_estimates'``.
    * ``ParallelSourcePlugin``: For internal use only to parallelize the processing of low level plugins. This can be activated using stating ``parallel = 'process'`` in a plugin.
+   * ``TimeDelayPlugin``: For plugins that add variable time delays to output data, causing output timestamps to potentially exceed input chunk boundaries. Useful for simulation plugins (e.g., adding electron drift time). The user must define ``get_max_delay(self)`` returning the maximum possible delay in nanoseconds, and ``compute_with_delay(self, <datakind>)`` returning the delayed output arrays.
 
 
 Minimal examples
@@ -176,6 +177,36 @@ ________
 
     st.register(MergeData)
     st.get_array(run_id, 'merged_data')
+
+
+strax.TimeDelayPlugin
+_________________________
+.. code-block:: python
+
+    class VariableDelayPlugin(strax.TimeDelayPlugin):
+        """
+        Plugin that adds random delays, simulating e.g. drift time.
+        Output timestamps may exceed input chunk boundaries.
+        """
+        depends_on = 'records'
+        provides = 'delayed_records'
+        data_kind = 'delayed_records'
+        dtype = strax.record_dtype()
+        max_delay = 100
+
+        def get_max_delay(self):
+            # Return maximum possible delay in nanoseconds
+            return self.max_delay
+
+        def compute_with_delay(self, records):
+            result = records.copy()
+            # Simulate variable drift time
+            delays = np.random.randint(0, self.max_delay, size=len(result))
+            result['time'] = result['time'] + delays
+            return result
+
+    st.register(VariableDelayPlugin)
+    st.get_array(run_id, 'delayed_records')
 
 
 Plugin inheritance
