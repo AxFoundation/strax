@@ -83,6 +83,10 @@ def _merge_peaks(
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
     buffer_top = np.zeros(max_buffer, dtype=np.float32)
+    
+    # Check which optional waveform fields exist in the dtype
+    has_data_top = "data_top" in peaks.dtype.names
+    has_data_start = "data_start" in peaks.dtype.names
 
     for new_i, new_p in enumerate(new_peaks):
         new_p["min_diff"] = 2147483647  # inf of int32
@@ -119,9 +123,10 @@ def _merge_peaks(
             n_after = p["length"] * upsample
             i0 = (p["time"] - new_p["time"]) // common_dt
             buffer[i0 : i0 + n_after] = np.repeat(p["data"][: p["length"]], upsample) / upsample
-            buffer_top[i0 : i0 + n_after] = (
-                np.repeat(p["data_top"][: p["length"]], upsample) / upsample
-            )
+            if has_data_top:
+                buffer_top[i0 : i0 + n_after] = (
+                    np.repeat(p["data_top"][: p["length"]], upsample) / upsample
+                )
 
             # Handle the other peak attributes
             new_p["area"] += p["area"]
@@ -138,13 +143,13 @@ def _merge_peaks(
             new_p["min_diff"] = min(new_p["min_diff"], p["min_diff"])
         max_data = np.array(max_data)
 
-        # Downsample the buffers into
-        # new_p['data'], new_p['data_top'], and new_p['data_start']
+        # Downsample the buffers into new_p['data'], and optionally
+        # new_p['data_top'] and new_p['data_start'] if those fields exist
         strax.store_downsampled_waveform(
             new_p,
             buffer,
-            True,
-            True,
+            has_data_top,
+            has_data_start,
             buffer_top,
         )
 
