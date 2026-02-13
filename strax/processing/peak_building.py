@@ -184,12 +184,11 @@ def store_downsampled_waveform(
             p["data_top"][: p["length"]] = waveform_buffer_top[: p["length"]]
         p["data"][: p["length"]] = waveform_buffer[: p["length"]]
 
-    # If the waveform is downsampled, we can store the first samples of the waveform
+    # Store the first samples of the waveform if requested
     if store_data_start:
-        if p_length > len(p["data_start"]):
-            p["data_start"] = waveform_buffer[: len(p["data_start"])]
-        else:
-            p["data_start"][:p_length] = waveform_buffer[:p_length]
+        # Choose the appropriate copy based on available space
+        n_store = min(p_length, len(p["data_start"]))
+        p["data_start"][:n_store] = waveform_buffer[:n_store]
 
 
 @export
