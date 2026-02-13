@@ -36,6 +36,10 @@ def merge_peaks(
         constituent peaks, it being too time-consuming to revert to records/hits.
 
     """
+    # Check which optional waveform fields exist in the input dtype
+    # (must be done here, before calling numba-compiled function)
+    has_data_top = "data_top" in peaks.dtype.names
+    has_data_start = "data_start" in peaks.dtype.names
 
     new_peaks, endtime = _merge_peaks(
         peaks,
@@ -43,6 +47,8 @@ def merge_peaks(
         end_merge_at,
         merged=merged,
         max_buffer=max_buffer,
+        has_data_top=has_data_top,
+        has_data_start=has_data_start,
     )
     # If the endtime was in the peaks we have to recompute it here
     # because otherwise it will stay set to zero due to the buffer
@@ -60,6 +66,8 @@ def _merge_peaks(
     end_merge_at,
     merged=None,
     max_buffer=int(1e5),
+    has_data_top=True,
+    has_data_start=True,
 ):
     """Merge specified peaks with their neighbors, return merged peaks.
 
@@ -69,6 +77,8 @@ def _merge_peaks(
     :param max_buffer: Maximum number of samples in the sum_waveforms and other waveforms of the
         resulting peaks (after merging). Peaks must be constructed based on the properties of
         constituent peaks, it being too time-consuming to revert to records/hits.
+    :param has_data_top: Whether data_top field exists in peaks dtype
+    :param has_data_start: Whether data_start field exists in peaks dtype
 
     """
     assert len(start_merge_at) == len(end_merge_at)
@@ -119,9 +129,10 @@ def _merge_peaks(
             n_after = p["length"] * upsample
             i0 = (p["time"] - new_p["time"]) // common_dt
             buffer[i0 : i0 + n_after] = np.repeat(p["data"][: p["length"]], upsample) / upsample
-            buffer_top[i0 : i0 + n_after] = (
-                np.repeat(p["data_top"][: p["length"]], upsample) / upsample
-            )
+            if has_data_top:
+                buffer_top[i0 : i0 + n_after] = (
+                    np.repeat(p["data_top"][: p["length"]], upsample) / upsample
+                )
 
             # Handle the other peak attributes
             new_p["area"] += p["area"]
@@ -138,13 +149,13 @@ def _merge_peaks(
             new_p["min_diff"] = min(new_p["min_diff"], p["min_diff"])
         max_data = np.array(max_data)
 
-        # Downsample the buffers into
-        # new_p['data'], new_p['data_top'], and new_p['data_start']
+        # Downsample the buffers into new_p['data'], and optionally
+        # new_p['data_top'] and new_p['data_start'] if those fields exist
         strax.store_downsampled_waveform(
             new_p,
             buffer,
-            True,
-            True,
+            has_data_top,
+            has_data_start,
             buffer_top,
         )
 
