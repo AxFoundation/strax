@@ -189,7 +189,7 @@ def store_downsampled_waveform(
     if store_data_start:
         # Avoid accessing p["data_start"] to get length (fails if field missing)
         # data_start field is typically 200 samples in strax peak dtype
-        n_store = min(p_length, 200)  
+        n_store = min(p_length, 200)
         p["data_start"][:n_store] = waveform_buffer[:n_store]
 
 
