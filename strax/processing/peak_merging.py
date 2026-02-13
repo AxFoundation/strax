@@ -93,10 +93,6 @@ def _merge_peaks(
     # Do the merging. Could numbafy this to optimize, probably...
     buffer = np.zeros(max_buffer, dtype=np.float32)
     buffer_top = np.zeros(max_buffer, dtype=np.float32)
-    
-    # Check which optional waveform fields exist in the dtype
-    has_data_top = "data_top" in peaks.dtype.names
-    has_data_start = "data_start" in peaks.dtype.names
 
     for new_i, new_p in enumerate(new_peaks):
         new_p["min_diff"] = 2147483647  # inf of int32
