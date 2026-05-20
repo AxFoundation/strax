@@ -294,9 +294,21 @@ def {func_name}(source, result):
     for d in field_names:
         if d not in res_dtype.names:
             raise ValueError("This cannot happen")
-        if np.shape(res_dtype[d]):
-            # Copy array fields as arrays
-            code += f'\n        r["{d}"][:] = s["{d}"][:]'
+        field_shape = np.shape(res_dtype[d])
+        if field_shape:
+            # Copy fixed-size array fields element by element.
+            # This avoids numba lowering issues seen intermittently with
+            # nested structured setitem slice assignment.
+            if len(field_shape) == 1:
+                code += f'\n        for j0 in range({field_shape[0]}):'
+                code += f'\n            r["{d}"][j0] = s["{d}"][j0]'
+            elif len(field_shape) == 2:
+                code += f'\n        for j0 in range({field_shape[0]}):'
+                code += f'\n            for j1 in range({field_shape[1]}):'
+                code += f'\n                r["{d}"][j0, j1] = s["{d}"][j0, j1]'
+            else:
+                # Rare path; keep simple assignment for unexpected dimensions.
+                code += f'\n        r["{d}"] = s["{d}"]'
         else:
             code += f'\n        r["{d}"] = s["{d}"]'
     # pylint: disable=exec-used
