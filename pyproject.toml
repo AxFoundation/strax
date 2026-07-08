@@ -11,7 +11,6 @@ classifiers = [
   "Development Status :: 5 - Production/Stable",
   "License :: OSI Approved :: BSD License",
   "Natural Language :: English",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Intended Audience :: Science/Research",
@@ -40,6 +39,7 @@ packaging = "*"
 pandas = "*"
 psutil = "*"
 pymongo = "*"
+pytz = "*"
 scipy = "*"
 tqdm = ">=4.46.0"
 zarr = "<3.0.0"
