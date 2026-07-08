@@ -193,7 +193,7 @@ def scan_runs(
             docs = new_docs
         else:
             # Keep only new runs (not found by earlier frontends)
-            mask = ~np.in1d(new_docs["name"], docs["name"])
+            mask = ~np.isin(new_docs["name"], docs["name"])
             if np.any(mask):
                 docs = pd.concat([docs, new_docs[mask]], sort=False)
                 docs.reset_index(drop=True, inplace=True)
@@ -211,7 +211,7 @@ def scan_runs(
         desc="Checking data availability",
         disable=not len(check_available),
     ):
-        self.runs[d + "_available"] = np.in1d(self.runs.name.values, self.list_available(d))
+        self.runs[d + "_available"] = np.isin(self.runs.name.values, self.list_available(d))
 
     return self.runs
 
@@ -305,7 +305,7 @@ def select_runs(
         desc="Checking data availability",
         disable=not len(check_available),
     ):
-        dsets[d + "_available"] = np.in1d(
+        dsets[d + "_available"] = np.isin(
             dsets.name.values, self.list_available(target=d, runs=dsets.name.values)
         )
 
@@ -315,7 +315,7 @@ def select_runs(
     for d in have_available:
         if not d + "_available" in dsets.columns:
             # Get extra availability info from the run db
-            d_available = np.in1d(
+            d_available = np.isin(
                 dsets.name.values, self.list_available(target=d, runs=dsets.name.values)
             )
             # Save both in the context and for this selection using
