@@ -1,3 +1,12 @@
+2.2.3 / 2026-07-08
+---------------------
+* Updated dependencies
+* Dropped python3.10 support
+* Added python3.12 support
+* Updated numpy to support v2.4++
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.2...v2.2.3
+
 2.2.2 / 2025-12-23
 ---------------------
 * Better performance lineage `chunk_number` assignment by @dachengx in https://github.com/AxFoundation/strax/pull/1000
