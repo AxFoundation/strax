@@ -1,3 +1,31 @@
+2.2.2 / 2025-12-23
+---------------------
+* Better performance lineage `chunk_number` assignment by @dachengx in https://github.com/AxFoundation/strax/pull/1000
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.1...v2.2.2
+
+
+2.2.1 / 2025-07-18
+---------------------
+* Check the `data_type` of returned chunk of plugin by @dachengx in https://github.com/AxFoundation/strax/pull/995
+* Topological level and shortest dependency path of dependency tree (directed acyclic graph) by @dachengx in https://github.com/AxFoundation/strax/pull/996
+* Do not assign `_multi_output_topics` when the topic is from a loader by @dachengx in https://github.com/AxFoundation/strax/pull/997
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.0...v2.2.1
+
+
+
+2.2.0 / 2025-05-16
+---------------------
+* Fix a corner case where the chunk size is zero by @dachengx in https://github.com/AxFoundation/strax/pull/988
+* Do not initialize any saver when dropping columns by @dachengx in https://github.com/AxFoundation/strax/pull/989
+* Add more comments about `merge_arrs` by @dachengx in https://github.com/AxFoundation/strax/pull/991
+* Use numbered version of `docformatter` by @dachengx in https://github.com/AxFoundation/strax/pull/992
+* Constrain numcodecs to be less than 0.16.0 by @dachengx in https://github.com/AxFoundation/strax/pull/993
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.1.4...v2.2.0
+
+
 2.1.4 / 2025-03-09
 ---------------------
 * Allow changing chunk size and compressor in `merge_per_chunk_storage` by @dachengx in https://github.com/AxFoundation/strax/pull/986
