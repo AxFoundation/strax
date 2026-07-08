@@ -13,7 +13,7 @@ def test_cut_outside_hits(records):
     for r in records:
         r["data"] = 0
         r["data"][: r["length"]] = 1
-        assert np.all(np.in1d(r["data"], [0, 1]))
+        assert np.all(np.isin(r["data"], [0, 1]))
 
     left_extension = 2
     right_extension = 3

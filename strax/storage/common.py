@@ -222,6 +222,8 @@ class StorageFrontend:
         fuzzy_for=tuple(),
         fuzzy_for_options=tuple(),
         chunk_number=None,
+        rechunk=False,
+        source_size_mb=strax.DEFAULT_CHUNK_SIZE_MB,
         executor=None,
     ):
         """Return loader for data described by DataKey.
@@ -236,6 +238,8 @@ class StorageFrontend:
         :param fuzzy_for_options: list/tuple of configuration options for which no check is
             performed.
         :param chunk_number: Chunk number to load exclusively.
+        :param rechunk: If True, rechunk the data to the source size.
+        :param source_size_mb: Size of the source data in MB.
         :param executor: Executor for pushing load computation to
 
         """
@@ -247,7 +251,12 @@ class StorageFrontend:
             fuzzy_for_options=fuzzy_for_options,
         )
         return self._get_backend(backend).loader(
-            backend_key, time_range=time_range, executor=executor, chunk_number=chunk_number
+            backend_key,
+            time_range=time_range,
+            executor=executor,
+            chunk_number=chunk_number,
+            rechunk=rechunk,
+            source_size_mb=source_size_mb,
         )
 
     def saver(self, key, metadata, **kwargs):
@@ -473,7 +482,15 @@ class StorageBackend:
 
     """
 
-    def loader(self, backend_key, time_range=None, chunk_number=None, executor=None):
+    def loader(
+        self,
+        backend_key,
+        time_range=None,
+        chunk_number=None,
+        rechunk=False,
+        source_size_mb=strax.DEFAULT_CHUNK_SIZE_MB,
+        executor=None,
+    ):
         """Iterates over strax data in backend_key.
 
         :param time_range: 2-length arraylike of (start,exclusive end) of desired data. Will return
@@ -558,13 +575,50 @@ class StorageBackend:
                 time_range=time_range,
                 chunk_construction_kwargs=chunk_kwargs,
             )
-            if executor is None:
-                yield self._read_and_format_chunk(**read_chunk_kwargs)
-            else:
-                yield executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+
+            yield from self._read_format_split_chunk(
+                read_chunk_kwargs=read_chunk_kwargs,
+                rechunk=rechunk,
+                source_size_mb=source_size_mb,
+                executor=executor,
+            )
+
+    def _read_format_split_chunk(
+        self,
+        read_chunk_kwargs,
+        rechunk,
+        source_size_mb,
+        executor=None,
+    ):
+        """Read and format a chunk, possibly splitting it into smaller chunks."""
+        if executor is None:
+            chunk = self._read_and_format_chunk(**read_chunk_kwargs)
+        else:
+            chunk = executor.submit(self._read_and_format_chunk, **read_chunk_kwargs)
+
+        if not rechunk:
+            yield chunk
+        else:
+            split_indices = strax.Rechunker.get_splits(
+                chunk.data, source_size_mb * 1e6, strax.DEFAULT_CHUNK_SPLIT_NS
+            )
+            for index in np.diff(split_indices):
+                _chunk, chunk = chunk.split(
+                    t=chunk.data["time"][index] - int(strax.DEFAULT_CHUNK_SPLIT_NS // 2),
+                    allow_early_split=False,
+                )
+                yield _chunk
+            yield chunk
 
     def _read_and_format_chunk(
-        self, *, backend_key, dtype, metadata, chunk_info, time_range, chunk_construction_kwargs
+        self,
+        *,
+        backend_key,
+        dtype,
+        metadata,
+        chunk_info,
+        time_range,
+        chunk_construction_kwargs,
     ) -> strax.Chunk:
         if chunk_info["n"] == 0:
             # No data, no need to load
@@ -584,7 +638,7 @@ class StorageBackend:
         if chunk_info["run_id"].startswith("_") and subruns is None:
             raise ValueError(f"Superrun {chunk_info} has no subruns information!")
 
-        result = strax.Chunk(
+        chunk = strax.Chunk(
             start=chunk_info["start"],
             end=chunk_info["end"],
             run_id=chunk_info["run_id"],
@@ -594,15 +648,21 @@ class StorageBackend:
         )
 
         if time_range:
-            if result.start < time_range[0]:
-                _, result = result.split(t=time_range[0], allow_early_split=True)
-            if result.end > time_range[1]:
-                try:
-                    result, _ = result.split(t=time_range[1], allow_early_split=False)
-                except strax.CannotSplit:
-                    pass
+            return self.apply_time_range(chunk, time_range)
+        else:
+            return chunk
 
-        return result
+    @staticmethod
+    def apply_time_range(chunk, time_range):
+        """Apply time range to chunk, returning a new chunk."""
+        if chunk.start < time_range[0]:
+            _, chunk = chunk.split(t=time_range[0], allow_early_split=True)
+        if chunk.end > time_range[1]:
+            try:
+                chunk, _ = chunk.split(t=time_range[1], allow_early_split=False)
+            except strax.CannotSplit:
+                pass
+        return chunk
 
     def saver(self, key, metadata, **kwargs):
         """Return saver for data described by key."""

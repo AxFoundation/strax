@@ -28,7 +28,7 @@ def get_filled_peaks(peak_length, data_length, n_widths):
 
     # Fill the peaks with random length data
     for p in peaks:
-        length = np.random.randint(0, data_length)
+        length = np.random.randint(1, data_length)
         p["length"] = length
         wf = np.random.random(size=length)
         p["data"][:length] = wf

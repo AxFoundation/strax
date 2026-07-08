@@ -7,6 +7,7 @@ import json
 import numpy as np
 import blosc
 import zstd
+import zstandard
 import lz4.frame as lz4
 from ast import literal_eval
 
@@ -14,6 +15,9 @@ import strax
 from strax import RUN_METADATA_PATTERN
 
 export, __all__ = strax.exporter()
+__all__.extend(["DECOMPRESS_BUFFER_SIZE"])
+
+DECOMPRESS_BUFFER_SIZE = 64 * 1024 * 1024  # 64 MB
 
 # use tqdm as loaded in utils (from tqdm.notebook when in a jupyter env)
 tqdm = strax.utils.tqdm
@@ -21,21 +25,57 @@ tqdm = strax.utils.tqdm
 blosc.set_releasegil(True)
 blosc.set_nthreads(1)
 
+
+def _bz2_decompress(f, buffer_size=DECOMPRESS_BUFFER_SIZE):
+    decompressor = bz2.BZ2Decompressor()
+    data = bytearray()  # Efficient mutable storage
+    for d in iter(lambda: f.read(buffer_size), b""):
+        data.extend(decompressor.decompress(d))
+    return data
+
+
 # zstd's default compression level is 3:
 # https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L53
 # we also need to constraint the number of worker threads to 1
 # https://github.com/sergey-dryabzhinsky/python-zstd/blob/eba9e633e0bc0e9c9762c985d0433e08405fd097/src/python-zstd.h#L98
-zstd_compress = lambda data: zstd.compress(data, 3, 1)
+_zstd_compress = lambda data: zstd.compress(data, 3, 1)
+
+
+def _zstd_decompress(f, chunk_size=64 * 1024 * 1024):
+    decompressor = zstandard.ZstdDecompressor().decompressobj()
+    data = bytearray()  # Efficient mutable storage
+    for d in iter(lambda: f.read(chunk_size), b""):
+        data.extend(decompressor.decompress(d))
+    return data
+
+
+def _blosc_compress(data):
+    if data.nbytes >= blosc.MAX_BUFFERSIZE:
+        raise ValueError("Blosc's input buffer cannot exceed ~2 GB")
+    return blosc.compress(data, shuffle=False)
+
+
+def _blosc_decompress(f):
+    data = f.read()
+    data = blosc.decompress(data)
+    return data
+
+
+def _lz4_decompress(f, buffer_size=DECOMPRESS_BUFFER_SIZE):
+    decompressor = lz4.LZ4FrameDecompressor()
+    data = bytearray()  # Efficient mutable storage
+    for d in iter(lambda: f.read(buffer_size), b""):
+        data.extend(decompressor.decompress(d))
+    return data
 
 
 COMPRESSORS = dict(
-    bz2=dict(compress=bz2.compress, decompress=bz2.decompress),
-    zstd=dict(compress=zstd_compress, decompress=zstd.decompress),
+    bz2=dict(compress=bz2.compress, decompress=bz2.decompress, _decompress=_bz2_decompress),
+    zstd=dict(compress=_zstd_compress, decompress=zstd.decompress, _decompress=_zstd_decompress),
     blosc=dict(
-        compress=None,  # add special function to prevent overflow at bottom module
-        decompress=blosc.decompress,
+        compress=_blosc_compress, decompress=blosc.decompress, _decompress=_blosc_decompress
     ),
-    lz4=dict(compress=lz4.compress, decompress=lz4.decompress),
+    lz4=dict(compress=lz4.compress, decompress=lz4.decompress, _decompress=_lz4_decompress),
 )
 
 
@@ -58,11 +98,9 @@ def load_file(f, compressor, dtype):
 
 def _load_file(f, compressor, dtype):
     try:
-        data = f.read()
+        data = COMPRESSORS[compressor]["_decompress"](f)
         if not len(data):
             return np.zeros(0, dtype=dtype)
-
-        data = COMPRESSORS[compressor]["decompress"](data)
         try:
             return np.frombuffer(data, dtype=dtype)
         except ValueError as e:
@@ -101,15 +139,6 @@ def _save_file(f, data, compressor="zstd"):
     return len(d_comp)
 
 
-def _compress_blosc(data):
-    if data.nbytes >= blosc.MAX_BUFFERSIZE:
-        raise ValueError("Blosc's input buffer cannot exceed ~2 GB")
-    return blosc.compress(data, shuffle=False)
-
-
-COMPRESSORS["blosc"]["compress"] = _compress_blosc
-
-
 @export
 def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
     prefix = strax.storage.files.dirname_to_prefix(dirname)
@@ -133,7 +162,9 @@ def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
                     f"Chunk {chunk_info['chunk_i']:06d} has {len(data)} "
                     f"items, but metadata says {chunk_info['n']}."
                 )
-        return data if len(data) else np.empty(0, dtype)
+        else:
+            data = np.empty(0, dtype)
+        return data
 
     # Load all chunks if chunk_numbers is None, otherwise load the specified chunk
     if chunk_numbers is None:
@@ -155,5 +186,10 @@ def dry_load_files(dirname, chunk_numbers=None, disable=False, **kwargs):
         x = load_chunk(chunk_info)
         x = strax.apply_selection(x, **kwargs)
         results.append(x)
-    results = np.hstack(results)
+
+    # No need to hstack if only one chunk is loaded
+    if len(results) == 1:
+        results = results[0]
+    else:
+        results = np.hstack(results)
     return results if len(results) else np.empty(0, dtype)
