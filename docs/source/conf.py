@@ -301,7 +301,7 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 def write_contributing():
     """Convert contributing to rst."""
-    from m2r import convert
+    from m2r2 import convert
     import os
 
     this_dir = os.path.dirname(os.path.realpath(__file__))
