@@ -77,7 +77,6 @@ def compute_widths(peaks):
     :param peaks: single strax peak(let) or other data-bearing dtype
 
     """
-
     desired_widths = np.linspace(0, 1, len(peaks[0]["width"]))
     # 0% are width is 0 by definition, and it messes up the calculation below
     desired_widths = desired_widths[1:]
@@ -137,8 +136,8 @@ def compute_area_fraction_top(peaks, n_top_channels):
 
 @export
 def compute_properties(peaks, n_top_channels=0, select_peaks_indices=None):
-    """Compute properties: median_time, width, area_decile_from_midpoint,
-    center_time, and area_fraction_top for peaks.
+    """Compute properties: median_time, width, area_decile_from_midpoint, center_time, and
+    area_fraction_top for peaks.
 
     :param peaks: single strax peak(let) or other data-bearing dtype
     :param select_peaks_indices: array of integers informing which peaks to compute default to None

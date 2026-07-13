@@ -26,7 +26,6 @@ def list_available(self, target, runs=None, **kwargs) -> list:
     :param runs: Runs to check. If None, check all runs.
 
     """
-
     if len(kwargs):
         # noinspection PyMethodFirstArgAssignment
         self = self.new_context(**kwargs)
@@ -53,8 +52,10 @@ def list_available(self, target, runs=None, **kwargs) -> list:
 def keys_for_runs(
     self, target: str, run_ids: ty.Union[np.ndarray, list, tuple, str]
 ) -> ty.List[strax.DataKey]:
-    """Get the data-keys for a multitude of runs. If use_per_run_defaults is False which it
-    preferably is (#246), getting many keys should be fast as we only compute the lineage once.
+    """Get the data-keys for a multitude of runs.
+
+    If use_per_run_defaults is False which it preferably is (#246), getting many keys should be fast
+    as we only compute the lineage once.
 
     :param run_ids: Runs to get datakeys for
     :param target: datatype requested
@@ -467,8 +468,9 @@ def available_for_run(
     exclude_targets: ty.Union[None, list, tuple, str] = None,
     pattern_type: str = "fnmatch",
 ) -> pd.DataFrame:
-    """For a given single run, check all the targets if they are stored. Excludes the target if
-    never stored anyway.
+    """For a given single run, check all the targets if they are stored.
+
+    Excludes the target if never stored anyway.
 
     :param run_id: requested run
     :param include_targets: targets to include e.g. raw_records, raw_records* or *_nv. If multiple

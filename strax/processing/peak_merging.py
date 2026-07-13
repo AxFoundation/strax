@@ -36,7 +36,6 @@ def merge_peaks(
         constituent peaks, it being too time-consuming to revert to records/hits.
 
     """
-
     new_peaks, endtime = _merge_peaks(
         peaks,
         start_merge_at,

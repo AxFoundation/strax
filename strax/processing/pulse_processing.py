@@ -20,8 +20,9 @@ NO_RECORD_LINK = -1
 def baseline(
     records, baseline_samples=40, flip=True, allow_sloppy_chunking=False, fallback_baseline=16000
 ):
-    """Determine baseline as the average of the first baseline_samples of each pulse. Subtract the
-    pulse data from int(baseline), and store the baseline mean and rms.
+    """Determine baseline as the average of the first baseline_samples of each pulse.
+
+    Subtract the pulse data from int(baseline), and store the baseline mean and rms.
 
     :param baseline_samples: number of samples at start of pulse to average to determine the
         baseline.
@@ -165,8 +166,9 @@ def find_hits(
     min_amplitude: ty.Union[int, np.ndarray] = 15,
     min_height_over_noise: ty.Union[int, np.ndarray] = 0,
 ):
-    """Return hits (intervals >= threshold) found in records. Hits that straddle record boundaries
-    are split (perhaps we should fix this?)
+    """Return hits (intervals >= threshold) found in records.
+
+    Hits that straddle record boundaries are split (perhaps we should fix this?)
 
     NB: returned hits are NOT sorted yet!
 
@@ -316,8 +318,9 @@ def _waveforms_to_float(wv, bl):
 
 @export
 def filter_records(r, ir):
-    """Apply filter with impulse response ir over the records r. Assumes the filter origin is at the
-    impulse response maximum.
+    """Apply filter with impulse response ir over the records r.
+
+    Assumes the filter origin is at the impulse response maximum.
 
     :param ws: Waveform matrix, must be float
     :param ir: Impulse response, must have odd length. Will normalize.
@@ -338,8 +341,9 @@ def filter_records(r, ir):
 
 @export
 def filter_waveforms(ws, ir, prev_r, next_r):
-    """Convolve filter with impulse response ir over each row of ws. Assumes the filter origin is at
-    the impulse response maximum.
+    """Convolve filter with impulse response ir over each row of ws.
+
+    Assumes the filter origin is at the impulse response maximum.
 
     :param ws: Waveform matrix, must be float
     :param ir: Impulse response, must have odd length.

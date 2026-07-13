@@ -42,8 +42,9 @@ def _loop_test_inner(
     force_value_error=False,
     processor=None,
 ):
-    """Test loop plugins for random data. For this test we are going to setup two plugins that will
-    be looped over and combined into a loop plugin (depending on the target, this may be a multi
+    """Test loop plugins for random data.
+
+    For this test we are going to setup two plugins that will be looped over and combined into a loop plugin (depending on the target, this may be a multi
     output plugin).
 
     We are going to setup as follows:
@@ -52,7 +53,6 @@ def _loop_test_inner(
        we will add to the big data in the loop plugin
 
     """
-
     if len(big_data) or force_value_error:
         # Generate some random amount of chunks for the big-data
         big_chunks = list(rechunk_array_to_arrays(big_data, nchunks))
