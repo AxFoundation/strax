@@ -18,7 +18,6 @@ import pandas as pd
 import strax
 from strax import CutList
 
-
 export, __all__ = strax.exporter()
 __all__.extend(["RUN_DEFAULTS_KEY"])
 
@@ -1460,8 +1459,9 @@ class Context:
         target_plugin: strax.Plugin,
         combining: bool = False,
     ):
-        """Adds savers to already existing savers. Checks if data_type can be stored in any storage
-        frontend.
+        """Adds savers to already existing savers.
+
+        Checks if data_type can be stored in any storage frontend.
 
         :param savers: Dictionary of already existing savers.
         :param d_to_save: String of the data_type to be saved.
@@ -1576,7 +1576,6 @@ class Context:
         :param full_range: If True returns full time_range of the run.
 
         """
-
         selection = (
             (time_range is None)
             + (seconds_range is None)
@@ -1624,9 +1623,8 @@ class Context:
     ) -> ty.Iterator[strax.Chunk]:
         """Compute target for run_id and iterate over results.
 
-        Do NOT interrupt the iterator (i.e. break): it will keep running stuff
-        in background threads...
-        {get_docs}
+        Do NOT interrupt the iterator (i.e. break): it will keep running stuff in background
+        threads... {get_docs}
 
         """
         if hasattr(run_id, "decode"):
@@ -1837,9 +1835,9 @@ class Context:
         combining=False,
         **kwargs,
     ) -> None:
-        """Compute target for run_id. Returns nothing (None).
+        """Compute target for run_id.
 
-        {get_docs}
+        Returns nothing (None).         {get_docs}
 
         """
         kwargs.setdefault("progress_bar", False)
@@ -2035,9 +2033,11 @@ class Context:
         overwrite=True,
         **kwargs,
     ):
-        """Get persistent arrays using zarr. This is useful when loading large amounts of data that
-        cannot fit in memory zarr is very compatible with dask. Targets are loaded into separate
-        arrays and runs are merged. the data is added to any existing data in the storage location.
+        """Get persistent arrays using zarr.
+
+        This is useful when loading large amounts of data that cannot fit in memory zarr is very
+        compatible with dask. Targets are loaded into separate arrays and runs are merged. the data
+        is added to any existing data in the storage location.
 
         :param run_ids: (Iterable) run ids you wish to load.
         :param targets: (Iterable) targets to load.
@@ -2087,9 +2087,10 @@ class Context:
         return group
 
     def key_for(self, run_id, target, chunk_number=None, combining=False):
-        """Get the DataKey for a given run and a given target plugin. The DataKey is inferred from
-        the plugin lineage. The lineage can come either from the _fixed_plugin_cache or computed on
-        the fly.
+        """Get the DataKey for a given run and a given target plugin.
+
+        The DataKey is inferred from the plugin lineage. The lineage can come either from the
+        _fixed_plugin_cache or computed on the fly.
 
         :param run_id: run id to get
         :param target: data type to get
@@ -2510,7 +2511,6 @@ class Context:
         check_is_stored: bool = True,
     ):
         """Merge the per-chunked data from the per-chunked dependency into the target storage."""
-
         if check_is_stored and self.is_stored(run_id, target):
             raise ValueError(f"Data {target} for {run_id} already exists.")
 
@@ -2894,7 +2894,6 @@ class Context:
         'class': 'Peaks', 'index': 0, 'order': 1}}
 
         """
-
         context_hash = self._context_hash()
         if self._fixed_level_cache is not None and context_hash in self._fixed_level_cache:
             return self._fixed_level_cache[context_hash]

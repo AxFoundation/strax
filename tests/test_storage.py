@@ -200,9 +200,8 @@ class TestStorageType(TestCase):
         """It can happen that the pre-defined remoteness identifiers in strax.StorageType are not
         sufficient, e.g. you have 10 similar but not quite the same performing frontends.
 
-        You can set `sf.storage_type` as a float to fix this issue such
-        that you can order an infinite amount of frontends (the intnum
-        is only for readability).
+        You can set `sf.storage_type` as a float to fix this issue such that you can order an
+        infinite amount of frontends (the intnum is only for readability).
 
         """
 

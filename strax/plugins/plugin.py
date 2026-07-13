@@ -408,8 +408,9 @@ class Plugin:
         raise RuntimeError("source_finished called on a regular plugin")
 
     def _fetch_chunk(self, d, iters, check_end_not_before=None):
-        """Add a chunk of the datatype d to the input buffer. Return True if this succeeded, False
-        if the source is exhausted.
+        """Add a chunk of the datatype d to the input buffer.
+
+        Return True if this succeeded, False if the source is exhausted.
 
         :param d: data type to fetch
         :param iters: iterators that produce data

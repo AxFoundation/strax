@@ -123,8 +123,9 @@ class NoBreakFound(Exception):
 @export
 @numba.njit(nogil=True, cache=True)
 def _find_break_i(data, safe_break, not_before):
-    """Return first index of element right of the first gap larger than safe_break in data. Assumes
-    all x have the same length and are sorted!
+    """Return first index of element right of the first gap larger than safe_break in data.
+
+    Assumes all x have the same length and are sorted!
 
     :param tolerant: if no break found, yield an as good as possible break anyway.
 
@@ -211,8 +212,9 @@ def _fc_in(a_starts, b_starts, a_ends, b_ends, result):
 
 @export
 def split_by_containment(things, containers):
-    """Return list of thing-arrays contained in each container. Result is returned as a
-    numba.typed.List or list if containers are empty.
+    """Return list of thing-arrays contained in each container.
+
+    Result is returned as a numba.typed.List or list if containers are empty.
 
     Assumes everything is sorted, and containers are non-overlapping.
 

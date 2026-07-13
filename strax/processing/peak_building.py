@@ -157,7 +157,6 @@ def store_downsampled_waveform(
         waveform in the peak.
 
     """
-
     n_samples = len(p["data"])
 
     p_length = p["length"]
@@ -255,9 +254,11 @@ def sum_waveform(
     store_data_start=False,
     select_peaks_indices=None,
 ):
-    """Compute sum waveforms for all peaks in peaks. Only builds summed waveform other regions in
-    which hits were found. This is required to avoid any bias due to zero-padding and baselining.
-    Will downsample sum waveforms if they do not fit in per-peak buffer.
+    """Compute sum waveforms for all peaks in peaks.
+
+    Only builds summed waveform other regions in which hits were found. This is required to avoid
+    any bias due to zero-padding and baselining. Will downsample sum waveforms if they do not fit in
+    per-peak buffer.
 
     :param peaks: Peaks for which the summed waveform should be build.
     :param hits: Hits which are inside peaks. Must be sorted according to record_i.
@@ -401,8 +402,9 @@ def sum_waveform(
 
 @numba.njit(cache=True, nogil=True)
 def _build_hit_waveform(hit, record, hit_waveform):
-    """Adds information for overlapping record and hit to hit_waveform. Updates hit_waveform
-    inplace. Result is still in ADC counts.
+    """Adds information for overlapping record and hit to hit_waveform.
+
+    Updates hit_waveform inplace. Result is still in ADC counts.
 
     :return: Boolean if record saturated within the hit.
 
@@ -477,8 +479,9 @@ def find_hit_integration_bounds(
     n_channels,
     allow_bounds_beyond_records=False,
 ):
-    """Update (lone) hits to include integration bounds. Please note that time and length of the
-    original hit are not changed!
+    """Update (lone) hits to include integration bounds.
+
+    Please note that time and length of the original hit are not changed!
 
     :param hits: Hits or lone hits which should be extended by integration bounds.
     :param excluded_intervals: Regions in which hits should not extend to. E.g. Peaks for lone hits.
