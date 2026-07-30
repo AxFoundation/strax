@@ -118,7 +118,8 @@ _________________________
 
 
 strax.LoopPlugin
-__________
+----------------
+
 .. code-block:: python
 
     class LoopData(strax.LoopPlugin):
@@ -144,7 +145,8 @@ __________
 
 
 strax.CutPlugin
-_________________________
+---------------
+
 .. code-block:: python
 
     class CutData(strax.CutPlugin):
@@ -164,7 +166,8 @@ _________________________
 
 
 strax.MergeOnlyPlugin
-________
+---------------------
+
 .. code-block:: python
 
     class MergeData(strax.MergeOnlyPlugin):

@@ -37,14 +37,6 @@ strax.context module
    :undoc-members:
    :show-inheritance:
 
-strax.corrections module
-------------------------
-
-.. automodule:: strax.corrections
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 strax.dtypes module
 -------------------
 

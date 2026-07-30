@@ -515,8 +515,8 @@ def multi_run(
     log=None,
     **kwargs,
 ):
-    """Execute exec_function(run_id, *args, **kwargs) over multiple runs, then return list of result
-    arrays, each with a run_id column added.
+    """Execute ``exec_function(run_id, *args, **kwargs)`` over multiple runs, then return a list of
+    result arrays, each with a run_id column added.
 
     :param exec_function: Function to run
     :param run_ids: list/tuple of run_ids

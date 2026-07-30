@@ -348,11 +348,11 @@ def split_touching_windows(things, containers, window=0):
     :param window: threshold distance for touching check.
 
     For example:
-        - window = 0: things must overlap one sample
-        - window = -1: things can start right after container ends
-            (i.e. container endtime equals the thing starttime, since strax
-            endtimes are exclusive)
-    :return:
+
+    - window = 0: things must overlap one sample
+    - window = -1: things can start right after container ends
+      (i.e. container endtime equals the thing starttime, since strax
+      endtimes are exclusive)
 
     """
     windows = touching_windows(things, containers, window)

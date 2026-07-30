@@ -21,12 +21,11 @@ def split_peaks(
 ):
     """Return peaks split according to algorithm, with waveforms summed and widths computed.
 
-    Note:
-        Can also be used for hitlets splitting with local_minimum
-        splitter. Just put hitlets instead of peaks.
+    This can also be used for hitlets splitting with the ``local_minimum``
+    splitter. Pass hitlets instead of peaks.
 
     :param peaks: Original peaks. Sum waveform must have been built
-    and properties must have been computed (if you use them)
+        and properties must have been computed (if you use them)
     :param hits: Hits found in records. (or None in case of hitlets
         splitting.)
     :param records: Records from which peaks were built

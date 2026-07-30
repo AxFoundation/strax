@@ -250,15 +250,14 @@ def select_runs(
         Otherwise, runs are cached after the first time they are loaded in self.runs.
 
     Examples:
-     - `run_selection(include_tags='blinded')`
-        select all datasets with a blinded or _blinded tag.
-     - `run_selection(include_tags='*blinded')`
-        ... with blinded or _blinded, unblinded, blablinded, etc.
-     - `run_selection(include_tags=['blinded', 'unblinded'])`
-        ... with blinded OR unblinded, but not blablinded.
-     - `run_selection(include_tags='blinded',
-                      exclude_tags=['bad', 'messy'])`
-        ... select blinded dsatasets that aren't bad or messy
+
+    - ``select_runs(include_tags="blinded")`` selects all datasets with a blinded or
+      ``_blinded`` tag.
+    - ``select_runs(include_tags="*blinded")`` also selects unblinded, blablinded, etc.
+    - ``select_runs(include_tags=["blinded", "unblinded"])`` selects datasets with blinded
+      OR unblinded, but not blablinded.
+    - ``select_runs(include_tags="blinded", exclude_tags=["bad", "messy"])`` selects blinded
+      datasets that are not bad or messy.
 
     """
     if self.runs is None or force_reload:
@@ -471,10 +470,12 @@ def available_for_run(
     never stored anyway.
 
     :param run_id: requested run
-    :param include_targets: targets to include e.g. raw_records, raw_records* or *_nv. If multiple
-        targets (e.g. a list) is provided, the target should match any of the arguments!
-    :param exclude_targets: targets to exclude e.g. raw_records, raw_records* or *_nv. If multiple
-        targets (e.g. a list) is provided, the target should match none of the arguments!
+    :param include_targets: targets to include, e.g. ``raw_records``, ``raw_records*`` or
+        ``*_nv``. If multiple targets (e.g. a list) are provided, the target should match any
+        of the arguments.
+    :param exclude_targets: targets to exclude, e.g. ``raw_records``, ``raw_records*`` or
+        ``*_nv``. If multiple targets (e.g. a list) are provided, the target should match none
+        of the arguments.
     :param pattern_type: either 'fnmatch' (Unix filename pattern matching) or 're' (Regular
         expression operations).
     :return: Table of available data per target

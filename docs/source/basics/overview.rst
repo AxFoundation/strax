@@ -146,6 +146,7 @@ Let's have a look what this looks like for our current context:
 
 
 .. code-block:: python
+
     >>> peak_processing = context.get_single_plugin(run_id='some_run', data_name='peaks')
     >>> peak_processing.lineage
     {'peaks': ('PeakProcessing', '0.0.0', {'peak_type': 1}),

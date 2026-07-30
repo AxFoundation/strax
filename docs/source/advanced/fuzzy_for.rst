@@ -29,6 +29,7 @@ How to use
 ----------
 There are two ways of ignoring the lineage. Both are set in the context config
 (see context.context_config):
+
  - ``fuzzy_for_options`` a tuple of options to specify that each option with a
    name in the tuple can be ignored
  - ``fuzzy_for`` a tuple of data-types to ignore.
