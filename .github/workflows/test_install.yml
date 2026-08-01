@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install strax
         run: pip install .
       - name: Test import
