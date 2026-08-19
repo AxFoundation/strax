@@ -2,6 +2,7 @@ import typing as ty
 from warnings import warn
 
 import numpy as np
+import pandas as pd
 import numba
 
 import strax
@@ -21,7 +22,7 @@ class Chunk:
     data_type: str
     data_kind: str
     dtype: np.dtype
-
+    
     # run_id is not superfluous to track:
     # this could change during the run in superruns (in the future)
     run_id: str
@@ -30,6 +31,7 @@ class Chunk:
 
     data: np.ndarray
     target_size_mb: int
+    _index: pd.IntervalIndex = None
 
     def __init__(
         self,
@@ -115,6 +117,12 @@ class Chunk:
     @property
     def duration(self):
         return self.end - self.start
+        
+    @property
+    def index(self):
+        if self._index is None:
+            self._index = pd.IntervalIndex.from_arrays(self.data['time'], strax.endtime(self.data))
+        return self._index
 
     @property
     def is_superrun(self):
@@ -375,6 +383,28 @@ class Chunk:
             target_size_mb=max([c.target_size_mb for c in chunks]),
         )
 
+    def overlaps(self, start,end=None):
+        """
+        Return data that overlaps the interval (start, end]
+
+        Args:
+            start ([type]): interval start time or pd.Interval
+            end ([type], optional): interval end time. Defaults to None.
+
+        Raises:
+            ValueError: if end is not given and start is not an interval.
+
+        Returns:
+            [type]: array or overlapping data
+        """
+        
+        if isinstance(start, pd.Interval):
+            dt = start
+        elif end is not None:
+            dt = pd.Interval(start,end)
+        else:
+            raise ValueError("Must supply interval of start and end times.")
+        return self.data[self.index.overlaps(dt)]
 
 @export
 def continuity_check(chunk_iter):
