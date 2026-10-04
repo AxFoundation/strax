@@ -183,9 +183,47 @@ class PeakSplitter:
             if np.any(new_peaks["length"] == 0):
                 raise ValueError("Want to add a new zero-length peak after splitting!")
 
-            peaks = strax.sort_by_time(np.concatenate([peaks[~is_split], new_peaks]))
+            # peaks = strax.sort_by_time(np.concatenate([peaks[~is_split], new_peaks]))
+            peaks = self.combine_unsplit_and_new(
+                peaks,
+                is_split,
+                new_peaks,
+            )
+            strax.stable_sort_by_time_in_place(peaks)
 
         return peaks
+
+    # Numba helper for concatenate replacement
+    @staticmethod
+    @numba.njit(nogil=True, cache=True)
+    def combine_unsplit_and_new(
+        peaks,
+        is_split,
+        new_peaks,
+    ):
+        n_unsplit = 0
+
+        for i in range(len(peaks)):
+            if not is_split[i]:
+                n_unsplit += 1
+
+        result = np.empty(
+            n_unsplit + len(new_peaks),
+            dtype=peaks.dtype,
+        )
+
+        j = 0
+
+        for i in range(len(peaks)):
+            if not is_split[i]:
+                result[j] = peaks[i]
+                j += 1
+
+        for i in range(len(new_peaks)):
+            result[j] = new_peaks[i]
+            j += 1
+
+        return result
 
     # this function can not be cached due to some unknown reasons
     # maybe because the split_finder is a function and numba does not like it
