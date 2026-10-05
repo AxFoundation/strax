@@ -36,7 +36,6 @@ class MongoBackend(StorageBackend):
         :param col_name: collection name (str) to look for data
 
         """
-
         self.client = MongoClient(uri)
         self.db = self.client[database]
         self.col_name = col_name
@@ -95,15 +94,15 @@ class MongoBackend(StorageBackend):
         raise strax.DataNotAvailable
 
     def _build_chunk_registry(self, backend_key, dtype):
-        """Build chunk info in a single registry using only one query to the database. This is much
-        faster as one does not have to do n-chunk queries to the database. Just one will do. As the
-        documents-size is limited to 16 MB, it's unlikely that we will run into memory issues (that
-        we otherwise would not run into).
+        """Build chunk info in a single registry using only one query to the database.
+
+        This is much faster as one does not have to do n-chunk queries to the database. Just one
+        will do. As the documents-size is limited to 16 MB, it's unlikely that we will run into
+        memory issues (that we otherwise would not run into).
 
         :param backend_key: strax.DataKey to query the collection for
 
         """
-
         query = backend_key_to_query(backend_key)
         chunks_registry = self.db[self.col_name].find(
             {**query, "provides_meta": False}, {"chunk_i": 1, "data": 1}
@@ -166,7 +165,6 @@ class MongoFrontend(StorageFrontend):
         :param kwargs: init for StorageFrontend
 
         """
-
         super().__init__(*args, **kwargs)
         self.client = MongoClient(uri)
         self.db = self.client[database]

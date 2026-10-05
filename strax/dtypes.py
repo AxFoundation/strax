@@ -1,8 +1,7 @@
 """Fundamental dtypes for use in strax.
 
-Note that if you change the dtype titles (comments), numba will crash if
-there is an existing numba cache. Clear __pycache__ and restart.
-TODO: file numba issue.
+Note that if you change the dtype titles (comments), numba will crash if there is an existing numba
+cache. Clear __pycache__ and restart. TODO: file numba issue.
 
 """
 
@@ -11,7 +10,6 @@ from typing import Optional, Tuple
 import numpy as np
 import numba  # noqa: F401
 import strax
-
 
 __all__ = (
     "interval_dtype raw_record_dtype record_dtype hit_dtype peak_dtype "
@@ -134,8 +132,9 @@ def hitlet_dtype():
 
 
 def hitlet_with_data_dtype(n_samples=2):
-    """Hitlet dtype with data field. Required within the plugins to compute hitlet properties.
+    """Hitlet dtype with data field.
 
+    Required within the plugins to compute hitlet properties.
     :param n_samples: Buffer length of the data field. Make sure it can hold the longest hitlet.
 
     """
@@ -246,8 +245,9 @@ def peak_dtype(
 def copy_to_buffer(
     source: np.ndarray, buffer: np.ndarray, func_name: str, field_names: Optional[Tuple[str]] = None
 ):
-    """Copy the data from the source to the destination e.g. raw_records to records. To this end, we
-    dynamically create the njitted function with the name 'func_name' (should start with "_").
+    """Copy the data from the source to the destination e.g. raw_records to records.
+
+    To this end, we dynamically create the njitted function with the name 'func_name' (should start with "_").
 
     :param source: array of input
     :param buffer: array of buffer to fill with values from input

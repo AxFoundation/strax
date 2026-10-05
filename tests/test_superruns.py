@@ -136,7 +136,6 @@ class TestSuperRuns(unittest.TestCase):
         Loads and compare data afterwards. Also tests "add_run_id_field" option.
 
         """
-
         subrun_data = self.context.get_array(
             self.subrun_ids, "peaks", progress_bar=False, add_run_id_field=False
         )
@@ -247,7 +246,6 @@ class TestSuperRuns(unittest.TestCase):
         chunk.continuity_check in context.get_iter.
 
         """
-
         self.context.set_config({"recs_per_chunk": 500})  # Make chunks > 1 MB
 
         rr = self.context.get_array(self.subrun_ids, "peaks")
