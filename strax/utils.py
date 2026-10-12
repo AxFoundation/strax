@@ -24,7 +24,6 @@ import click
 import deepdiff
 import copy
 
-
 # Change numba's caching backend from pickle to dill
 # I'm sure they don't mind...
 # Otherwise we get strange errors while caching the @growing_result functions
@@ -187,8 +186,9 @@ def merged_dtype(dtypes):
 
 @export
 def merge_arrs(arrs, dtype=None, replacing=False):
-    """Merge structured arrays of equal length. On field name collisions, data from later arrays is
-    kept.
+    """Merge structured arrays of equal length.
+
+    On field name collisions, data from later arrays is kept.
 
     replacing=True is usually used when you want to convert arrs into a new dtype
 
@@ -842,7 +842,6 @@ def convert_structured_array_to_df(structured_array, log=None):
     pandas.DataFrame: The converted DataFrame.
 
     """
-
     if log is None:
         import logging
 

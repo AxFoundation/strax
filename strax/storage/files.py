@@ -17,10 +17,10 @@ RUN_METADATA_PATTERN = "%s-metadata.json"
 
 @export
 class DataDirectory(StorageFrontend):
-    """Simplest registry: single directory with FileStore data
-    sitting in subdirectories.
+    """Simplest registry: single directory with FileStore data sitting in subdirectories.
 
     Run-level metadata is stored in loose json files in the directory.
+
     """
 
     can_define_runs = True
