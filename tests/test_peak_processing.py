@@ -176,7 +176,6 @@ def test_peak_overflow(
     :return: None
 
     """
-
     # Set this here, no need to test left and right independently
     left_extension = 0
     # Make a single big peak to contain all the records
