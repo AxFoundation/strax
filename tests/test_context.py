@@ -116,8 +116,10 @@ def test_apply_drop_data():
 
 
 def test_accumulate():
-    """Test the st.accumulate function. Should add the results and accumulate per chunk. Lets add
-    channels and verify the results are correct.
+    """Test the st.accumulate function.
+
+    Should add the results and accumulate per chunk. Lets add channels and verify the results are
+    correct.
 
     :return: None
 

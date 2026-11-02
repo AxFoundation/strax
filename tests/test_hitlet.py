@@ -388,7 +388,6 @@ def test_conditional_entropy(data, size_template_and_ind_max_template):
     the maximum.
 
     """
-
     hitlet = np.zeros(1, dtype=strax.hitlet_with_data_dtype(n_samples=10))
     ind_max_template, size_template = strax.stable_sort(size_template_and_ind_max_template)
 

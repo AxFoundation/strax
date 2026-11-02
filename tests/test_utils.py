@@ -37,8 +37,9 @@ def test_to_numpy_dtype():
 
 @hst.composite
 def get_dummy_data(draw, data_length=(0, 10), dt=(1, 10), max_time=(1, 20)):
-    """Create some dummy array for testing apply selection. Data may be overlapping.
+    """Create some dummy array for testing apply selection.
 
+    Data may be overlapping.
     :param data_length: desired length of the data
     :param dt: duration of each sample
     :return: data
@@ -96,13 +97,14 @@ def test_time_selection(d, second_time, second_dt):
 @settings(deadline=None)
 @given(get_dummy_data(data_length=(1, 10), dt=(1, 10), max_time=(1, 20)))
 def test_selection_str(d):
-    """
-    Test selection string. We are going for this example check that
-        selecting the data based on the data field is the same as if we
+    """Test selection string.
+
+        We are going for this example check that selecting the data based on the data field is the same as if we
         were to use a mask NB: data must have some length!
 
     :param d: test-data from get_dummy_data
     :return: None
+
     """
     mean_data = np.mean(d["data"])
     max_data = np.max(d["data"])
@@ -115,13 +117,14 @@ def test_selection_str(d):
 @settings(deadline=None)
 @given(get_dummy_data(data_length=(1, 10), dt=(1, 10), max_time=(1, 20)))
 def test_selection_function(d):
-    """
-    Test selection string. We are going for this example check that
-        selecting the data based on the data field is the same as if we
+    """Test selection string.
+
+        We are going for this example check that selecting the data based on the data field is the same as if we
         were to use a mask NB: data must have some length!
 
     :param d: test-data from get_dummy_data
     :return: None
+
     """
     mean_data = np.mean(d["data"])
     max_data = np.max(d["data"])
@@ -136,8 +139,10 @@ def test_selection_function(d):
     get_dummy_data(data_length=(0, 10), dt=(1, 10), max_time=(1, 20)),
 )
 def test_keep_drop_columns(d):
-    """Test that the keep/drop_columns option of apply selection works. Also test that it does not
-    affect the original array (e.g. if it were to use a view instead of a copy).
+    """Test that the keep/drop_columns option of apply selection works.
+
+    Also test that it does not affect the original array (e.g. if it were to use a view instead of a
+    copy).
 
     :param d: test-data from get_dummy_data
     :return: None
