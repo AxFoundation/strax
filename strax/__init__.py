@@ -17,6 +17,7 @@ from .storage.mongo import *
 from .storage.zipfiles import *
 
 from .config import *
+from .url_config import *
 from .plugins import *
 
 from .mailbox import *
