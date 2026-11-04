@@ -7,6 +7,7 @@ import inspect
 from functools import wraps
 import json
 import re
+import reprlib
 import sys
 import traceback
 import typing as ty
@@ -946,7 +947,7 @@ def total_size(o, handlers=None, verbose=False):
         s = sys.getsizeof(o, default_size)
 
         if verbose:
-            print(s, type(o), repr(o), file=sys.stderr)
+            print(s, type(o), reprlib.repr(o), file=sys.stderr)
 
         for typ, handler in all_handlers.items():
             if isinstance(o, typ):
