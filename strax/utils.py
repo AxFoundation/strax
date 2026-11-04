@@ -3,6 +3,7 @@ import collections
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import itertools
 import contextlib
+import inspect
 from functools import wraps
 import json
 import re
@@ -867,3 +868,90 @@ def convert_structured_array_to_df(structured_array, log=None):
         )
 
     return pd.DataFrame(data_dict)
+
+
+@export
+def filter_kwargs(func, kwargs):
+    """Filter out keyword arguments that are not in the call signature of func and return filtered
+    kwargs dictionary."""
+    params = inspect.signature(func).parameters
+    if any([str(p).startswith("**") for p in params.values()]):
+        # if func accepts wildcard kwargs, return all
+        return kwargs
+    return {k: v for k, v in kwargs.items() if k in params}
+
+
+@export
+class CacheDict(collections.OrderedDict):
+    """Dict with a limited length, ejecting LRUs as needed.
+
+    copied from
+    https://gist.github.com/davesteele/44793cd0348f59f8fadd49d7799bd306
+
+    """
+
+    def __init__(self, *args, cache_len: int = 10, **kwargs):
+        assert cache_len > 0
+        self.cache_len = cache_len
+
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        super().move_to_end(key)
+
+        while len(self) > self.cache_len:
+            oldkey = next(iter(self))
+            super().__delitem__(oldkey)
+
+    def __getitem__(self, key):
+        val = super().__getitem__(key)
+        super().move_to_end(key)
+
+        return val
+
+
+@export
+def total_size(o, handlers=None, verbose=False):
+    """Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses: tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    from: https://code.activestate.com/recipes/577504/
+
+    """
+    dict_handler = lambda d: itertools.chain.from_iterable(d.items())
+    all_handlers = {
+        tuple: iter,
+        list: iter,
+        collections.deque: iter,
+        dict: dict_handler,
+        set: iter,
+        frozenset: iter,
+    }
+    if handlers is not None:
+        all_handlers.update(handlers)  # user handlers take precedence
+    seen = set()  # track which object id's have already been seen
+    default_size = sys.getsizeof(0)  # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:  # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = sys.getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=sys.stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)
