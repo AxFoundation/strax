@@ -560,8 +560,7 @@ def integrate_lone_hits(lone_hits, records, peaks, save_outside_hits, n_channels
     :param records: Records in which hits and peaks were found
     :param peaks: Peaks
     :param save_outside_hits: (left, right) *TIME* with wich we should extend
-    the integration window of hits
-    the integration region
+        the integration window of hits and the integration region
     :param n_channels: number of channels
 
     TODO: this doesn't extend the integration range beyond record boundaries

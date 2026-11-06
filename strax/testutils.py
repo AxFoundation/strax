@@ -91,12 +91,12 @@ def bounds_to_records(bs, single=False, single_channel=False):
     The pulses are put in different channels, first in 0, second in 1, etc.
 
     :param single: if True, instead create a single pulse in channel 0
-    whose data is 1 inside the given bounds and zero outside.
-    TODO: length etc. is not properly set in the single=True mode!
-    TODO: this probably needs tests itself...
+        whose data is 1 inside the given bounds and zero outside.
+        TODO: length etc. is not properly set in the single=True mode!
+        TODO: this probably needs tests itself...
 
     :param single_channel: if True, instead create all pulses in channel 0
-    You should only feed in disjoint bounds when using this.
+        You should only feed in disjoint bounds when using this.
 
     """
     if not len(bs):

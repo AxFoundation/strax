@@ -35,7 +35,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
-    "nbsphinx",
+    "myst_parser",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -44,10 +44,6 @@ templates_path = ["_templates"]
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 source_suffix = [".rst", ".md"]
-
-source_parsers = {
-    ".md": "recommonmark.parser.CommonMarkParser",
-}
 
 
 # The encoding of source files.
@@ -75,7 +71,7 @@ release = "2.2.3"
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
@@ -299,22 +295,6 @@ texinfo_documents = [
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 
-def write_contributing():
-    """Convert contributing to rst."""
-    from m2r import convert
-    import os
-
-    this_dir = os.path.dirname(os.path.realpath(__file__))
-    source = os.path.join(this_dir, "developer", "contributing.md")
-    with open(source, "r") as f:
-        source = f.read()
-    rst = convert(source)
-    target = os.path.join(this_dir, "developer", "contributing.rst")
-
-    with open(target, "w") as f:
-        f.write(rst)
-
-
 def setup(app):
     # Hack to import something from this dir. Apparently we're in a weird
     # situation where you get a __name__  is not in globals KeyError
@@ -326,4 +306,3 @@ def setup(app):
     import build_release_notes
 
     build_release_notes.convert_release_notes()
-    write_contributing()

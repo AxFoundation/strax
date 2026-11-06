@@ -1925,12 +1925,14 @@ class Context:
             results. Will be called as function(array), where array is
             a chunk of the get_array result.
             Should return either:
+
                * A scalar or 1d array -> accumulated result saved under 'result'
                * A record array or dict -> fields accumulated individually
                * None -> nothing accumulated
+
             If not provided, the identify function is used.
 
-            NB: Additionally and independently, if there are any functions registered
+            Additionally and independently, if there are any functions registered
             under context_config['apply_data_function'] these are applied first directly
             after loading the data.
 
@@ -1949,10 +1951,11 @@ class Context:
         :return dictionary: Dictionary with the accumulated result;
             see function and store_first_for_others arguments.
             Four fields are always added:
-                start: start time of the first processed chunk
-                end: end time of the last processed chunk
-                n_chunks: number of chunks in run
-                n_rows: number of data entries in run
+
+            * start: start time of the first processed chunk
+            * end: end time of the last processed chunk
+            * n_chunks: number of chunks in run
+            * n_rows: number of data entries in run
 
         """
         if kwargs.get("allow_multiple", False):
@@ -2137,21 +2140,22 @@ class Context:
     def compare_metadata(self, data1, data2, return_results=False):
         """Compare the metadata between two strax data.
 
-        :param data1, data2: either a list (tuple) of runid + target pair, or path to metadata to
-        compare,     or a dictionary of the metadata
+        :param data1: either a list (tuple) of runid + target pair, a path to metadata, or a
+            dictionary containing metadata
+        :param data2: same accepted inputs as data1
         :param return_results: bool, if True, returns a dictionary with metadata and lineages that
             are found for the inputs does not do the comparison
 
-        example usage:
+        Example usage::
+
             context.compare_metadata(("053877", "peak_basics"), "./my_path_to/JSONfile.json")
             first_metadata = context.get_metadata(run_id, "events")
-            context.compare_metadata(
-                 ("053877", "peak_basics"), first_metadata)
-            context.compare_metadata(
-                ("053877", "records"), ("053899", "records") )
+            context.compare_metadata(("053877", "peak_basics"), first_metadata)
+            context.compare_metadata(("053877", "records"), ("053899", "records"))
             results_dict = context.compare_metadata(
                 ("053877", "peak_basics"), ("053877", "events_info"),
-                 return_results=True)
+                return_results=True,
+            )
 
         """
 
