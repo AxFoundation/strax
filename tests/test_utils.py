@@ -1,6 +1,7 @@
 import numpy as np
 import tempfile
 import unittest
+import pytest
 import shutil
 import hypothesis.strategies as hst
 from hypothesis import given, settings
@@ -242,3 +243,40 @@ class TestMultiRun(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tempdir)
+
+
+def test_filter_kwargs():
+    all_kwargs = dict(a=1, b=2, c=3)
+
+    def func1(a=None, b=None):
+        return
+
+    def func2(a=None, **kwargs):
+        return
+
+    assert strax.filter_kwargs(func1, all_kwargs) == dict(a=1, b=2)
+    # func2 accepts wildcard kwargs, so nothing is filtered
+    assert strax.filter_kwargs(func2, all_kwargs) == all_kwargs
+
+
+def test_cache_dict():
+    cache = strax.CacheDict(cache_len=2)
+    cache["a"] = 1
+    cache["b"] = 2
+    # accessing "a" makes "b" the least recently used entry
+    assert cache["a"] == 1
+    cache["c"] = 3
+    assert list(cache) == ["a", "c"]
+    assert "b" not in cache
+
+    with pytest.raises(AssertionError):
+        strax.CacheDict(cache_len=0)
+
+
+def test_total_size():
+    small = strax.total_size([1])
+    big = strax.total_size([list(range(1000))])
+    assert 0 < small < big
+    # shared objects are counted only once
+    shared = list(range(1000))
+    assert strax.total_size([shared, shared]) < 2 * strax.total_size([shared])
