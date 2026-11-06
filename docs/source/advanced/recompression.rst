@@ -127,7 +127,8 @@ from the fact that `bz2` compresses the data much more than the default
 compressor `blosc`.
 
 How does this work?
-__________________
+___________________
+
 Strax knows from the metadata stored with the data with witch
 compressor the data was written. It is possible to use a different
 compressor when re-writing the data to disk (as done for `strax` knows
@@ -171,7 +172,8 @@ will output:
             dest_mb                 0.349218
 
 Using script to profile write/read rates for compressors
---------------------------------------------------------
+________________________________________________________
+
 This script can easily be used to profile different compressors:
 
 .. code-block:: bash
