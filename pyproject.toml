@@ -3,7 +3,7 @@ name = "strax"
 version = "2.2.3"
 description = "Streaming analysis for xenon TPCs"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.14"
 authors = [
   { name = "strax developers" },
 ]
