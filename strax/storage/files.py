@@ -40,7 +40,16 @@ class DataDirectory(StorageFrontend):
         self.backends = [strax.FileSytemBackend()]
         self.path = path
         self.deep_scan = deep_scan
+
+
         if not self.readonly and not osp.exists(self.path):
+            os.makedirs(self.path)
+
+        _dir_provides_run_metadata = (
+            self.provide_run_metadata 
+            and not osp.exists(self.path)
+        )
+        if _dir_provides_run_metadata:
             os.makedirs(self.path)
 
     def _run_meta_path(self, run_id):
