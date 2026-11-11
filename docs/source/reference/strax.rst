@@ -93,6 +93,14 @@ strax.testutils module
    :undoc-members:
    :show-inheritance:
 
+strax.url\_config module
+------------------------
+
+.. automodule:: strax.url_config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 strax.utils module
 ------------------
 
