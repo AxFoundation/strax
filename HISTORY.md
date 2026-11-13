@@ -1,3 +1,11 @@
+2.3.0 / 2026-11-13
+---------------------
+* Move URL configs from straxen to strax
+* Remove legacy packages
+
+**Full Changelog**: https://github.com/AxFoundation/strax/compare/v2.2.3...v2.3.0
+
+
 2.2.3 / 2026-07-08
 ---------------------
 * Updated dependencies

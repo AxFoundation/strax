@@ -1,6 +1,6 @@
 [project]
 name = "strax"
-version = "2.2.3"
+version = "2.3.0"
 description = "Streaming analysis for xenon TPCs"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
